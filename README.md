@@ -18,6 +18,12 @@ A Powerpoint comparison of performance (speed, memory, sensitivity, specificity)
 
 ## Compiling
 
+````bash
+
+brew install --with-java open-mpi
+ant -Dmpijar=/usr/local/lib/mpi.jar
+````
+
 ## Running
 
 There is documentation in the docs folder and displayed by shellscripts when run with no arguments. But for example:
