@@ -61,23 +61,17 @@ public class ChromosomeArray implements Serializable {
 	
 	public static ChromosomeArray read(String fname){
 		
-		if(fname.endsWith(".chrom") || fname.endsWith(".chrom.gz")){
-			ChromosomeArray ca=ReadWrite.read(ChromosomeArray.class, fname);
-			if(UNDEFINED_TO_N){
-				ca.changeUndefinedToN();
-			}
-			return ca;
-		}else{
-			assert(fname.endsWith(".chromC") || fname.endsWith(".chromC.gz"));
-			
-			ChromosomeArrayCompressed cac=ReadWrite.read(ChromosomeArrayCompressed.class, fname);
-			return cac.toChromosomeArray();
+//		if(fname.endsWith(".chrom") || fname.endsWith(".chrom.gz")){}
+		ChromosomeArray ca=ReadWrite.read(ChromosomeArray.class, fname, false);
+		if(CHANGE_UNDEFINED_TO_N_ON_READ){
+			ca.changeUndefinedToN();
 		}
+		return ca;
 	}
 	
 	public void changeUndefinedToN(){
-		assert(!colorspace);
 		for(int i=0; i<array.length; i++){
+//			array[i]=AminoAcid.numberToBase[AminoAcid.baseToNumberACGTother[array[i]]];
 			if(!AminoAcid.isACGTN(array[i])){array[i]='N';}
 		}
 	}
@@ -86,26 +80,8 @@ public class ChromosomeArray implements Serializable {
 		this((byte)-1, Gene.PLUS);
 	}
 	
-	public ChromosomeArray toColorspace(){
-		assert(!colorspace);
-		ChromosomeArray ca=new ChromosomeArray(chromosome, strand, 0, maxIndex, true);
-		
-		for(int i=0; i<maxIndex; i++){
-			byte a=AminoAcid.baseToColor(get(i), get(i+1));
-			ca.set(i, a);
-		}
-		
-//		System.err.println(maxIndex+", "+ca.maxIndex+", "+ca.array.length);
-		
-//		assert(ca.maxIndex==maxIndex-1);
-//		assert(ca.array.length==ca.maxIndex+1);
-		
-		return ca;
-	}
-	
 	/** Actually does reverse complement */
 	public ChromosomeArray complement(){
-		assert(!colorspace) : "Needs different method";
 		byte otherStrand=(strand==Gene.MINUS ? Gene.PLUS : Gene.MINUS);
 		ChromosomeArray ca=new ChromosomeArray(chromosome, otherStrand, 0, maxIndex);
 		for(int i=0; i<=maxIndex; i++){
@@ -117,40 +93,25 @@ public class ChromosomeArray implements Serializable {
 	}
 	
 	public ChromosomeArray(int chrom, byte strnd){
-		this(chrom, strnd, false);
-	}
-	
-	public ChromosomeArray(int chrom, byte strnd, boolean cs){
 		chromosome=chrom;
 		strand=strnd;
 		array=new byte[1<<25];
-		colorspace=cs;
 	}
 	
 	public ChromosomeArray(int chrom, byte strnd, int min, int max){
-		this(chrom, strnd, min, max, false);
-	}
-	
-	public ChromosomeArray(int chrom, byte strnd, int min, int max, boolean cs){
 		chromosome=chrom;
 		strand=strnd;
 		array=new byte[max+1];
 		minIndex=min;
 		maxIndex=max;
-		colorspace=cs;
 	}
 	
 	public ChromosomeArray(int chrom, byte strnd, String s){
-		this(chrom, strnd, s, false);
-	}
-	
-	public ChromosomeArray(int chrom, byte strnd, String s, boolean cs){
 		chromosome=chrom;
 		strand=strnd;
 		array=s.getBytes();
 		minIndex=0;
 		maxIndex=s.length()-1;
-		colorspace=cs;
 	}
 	
 	
@@ -163,8 +124,12 @@ public class ChromosomeArray implements Serializable {
 			assert(array.length==newlen);
 //			System.err.println("Resized array to "+newlen);
 		}
-		char c=Character.toUpperCase((char)val);
-		if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
+		if(CHANGE_U_TO_T && CHANGE_DEGENERATE_TO_N){
+			val=AminoAcid.baseToACGTN[val];
+		}else{
+			val=Character.toUpperCase((char)val);
+			if(AminoAcid.baseToNumberExtended[val]<0){val='N';}	
+		}
 		array[loc]=(val>Byte.MAX_VALUE ? Byte.MAX_VALUE : (byte)val);
 		minIndex=min(loc, minIndex);
 		maxIndex=max(loc, maxIndex);
@@ -181,47 +146,36 @@ public class ChromosomeArray implements Serializable {
 //			System.err.println("Resized array to "+newlen);
 		}
 		
-		for(int i=0; i<s.length(); i++, loc++){
-			char c=Character.toUpperCase(s.charAt(i));
-			if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
-			assert(Character.isLetter(c));
-			assert(c<=Byte.MAX_VALUE);
-			array[loc]=(byte)c;
+		if(CHANGE_U_TO_T && CHANGE_DEGENERATE_TO_N){
+			for(int i=0; i<s.length(); i++, loc++){
+				array[loc]=AminoAcid.baseToACGTN[s.charAt(i)];
+			}
+		}else{
+			for(int i=0; i<s.length(); i++, loc++){
+				char c=Character.toUpperCase(s.charAt(i));
+				if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
+				assert(Character.isLetter(c));
+				assert(c<=Byte.MAX_VALUE);
+				array[loc]=(byte)c;
+			}
 		}
+		
 		loc--;
 		assert(loc==loc2-1) : "loc="+loc+", loc2="+loc2+", s.len="+s.length();
 		minIndex=min(loc, minIndex);
 		maxIndex=max(loc, maxIndex);
 	}
 	
-	
 	public void set(int loc, byte[] s){
-		int loc2=loc+s.length;
-		if(loc2>array.length){//Increase size
-			int newlen=(int)(1+(3L*max(array.length, loc2))/2);
-			assert(newlen>loc2) : newlen+", "+loc2+", "+array.length;
-			resize(newlen);
-			assert(array.length==newlen);
-//			System.err.println("Resized array to "+newlen);
-		}
-		
-		for(int i=0; i<s.length; i++, loc++){
-			char c=Character.toUpperCase((char)s[i]);
-			if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
-			assert(Character.isLetter(c));
-			assert(c<=Byte.MAX_VALUE);
-			array[loc]=(byte)c;
-		}
-		loc--;
-		assert(loc==loc2-1) : "loc="+loc+", loc2="+loc2+", s.len="+s.length;
-		minIndex=min(loc, minIndex);
-		maxIndex=max(loc, maxIndex);
+		set(loc, s, s.length);
 	}
 	
-	
 	public void set(int loc, ByteBuilder bb){
-		byte[] s=bb.array;
-		final int slen=bb.length();
+		set(loc, bb.array, bb.length());
+	}
+	
+	public void set(int loc, byte[] s, final int slen){
+		assert(slen<=s.length && slen>=0);
 		int loc2=loc+slen;
 		if(loc2>array.length){//Increase size
 			int newlen=(int)(1+(3L*max(array.length, loc2))/2);
@@ -231,12 +185,18 @@ public class ChromosomeArray implements Serializable {
 //			System.err.println("Resized array to "+newlen);
 		}
 		
-		for(int i=0; i<slen; i++, loc++){
-			char c=Character.toUpperCase((char)s[i]);
-			if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
-			assert(Character.isLetter(c));
-			assert(c<=Byte.MAX_VALUE);
-			array[loc]=(byte)c;
+		if(CHANGE_U_TO_T && CHANGE_DEGENERATE_TO_N){
+			for(int i=0; i<slen; i++, loc++){
+				array[loc]=AminoAcid.baseToACGTN[s[i]];
+			}
+		}else{
+			for(int i=0; i<slen; i++, loc++){
+				char c=Character.toUpperCase((char)s[i]);
+				if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
+				assert(Character.isLetter(c));
+				assert(c<=Byte.MAX_VALUE);
+				array[loc]=(byte)c;
+			}
 		}
 		loc--;
 		assert(loc==loc2-1) : "loc="+loc+", loc2="+loc2+", s.len="+slen;
@@ -309,15 +269,6 @@ public class ChromosomeArray implements Serializable {
 		return AminoAcid.baseToNumber[array[loc]];
 	}
 	
-	public byte getNumber(int loc, boolean colorspace){
-		final byte b=array[loc];
-		if(colorspace){
-			return b>3 ? -1 : b;
-		}else{
-			return AminoAcid.baseToNumber[b];
-		}
-	}
-	
 	public boolean isFullyDefined(int a, int b){
 		for(int i=a; i<=b; i++){
 			int x=AminoAcid.baseToNumber[array[i]];
@@ -349,22 +300,6 @@ public class ChromosomeArray implements Serializable {
 	
 	public int getNumber(int a, int b){
 		return toNumber(a, b, array);
-	}
-	
-	public int getNumber(int a, int b, boolean colorspace){
-		return colorspace ? toNumberColorspace(a, b, array) : toNumber(a, b, array);
-	}
-	
-	public static int toNumberColorspace(int a, int b, byte[] bases){
-		assert(b>=a);
-		assert(b-a<17); //<17 for unsigned, <16 for signed
-		int out=0;
-		for(int i=a; i<=b; i++){
-			int x=bases[i];
-			if(x<0 || x>3){return -1;}
-			out=((out<<2)|x);
-		}
-		return out;
 	}
 	
 	public static int toNumber(int a, int b, byte[] bases){
@@ -491,10 +426,10 @@ public class ChromosomeArray implements Serializable {
 	public int maxIndex=-1;
 	public int minIndex=Integer.MAX_VALUE;
 	
-	public final boolean colorspace;
+	public static boolean CHANGE_UNDEFINED_TO_N_ON_READ=false;
+	public static boolean CHANGE_U_TO_T=true;
+	public static boolean CHANGE_DEGENERATE_TO_N=true;
 	
-	public static boolean UNDEFINED_TO_N=false;
-
 	/** Translation array for tracking base counts */
 	private static final byte[] charToNum=AssemblyStats2.makeCharToNum();
 	

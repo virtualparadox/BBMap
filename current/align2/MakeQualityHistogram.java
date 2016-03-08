@@ -2,7 +2,7 @@ package align2;
 
 import java.util.ArrayList;
 
-import stream.ConcurrentReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
@@ -19,7 +19,7 @@ public class MakeQualityHistogram {
 		
 		long maxReads=0;
 		RTextInputStream rtis=new RTextInputStream(fname1, fname2, maxReads);
-		ConcurrentReadInputStream cris=new ConcurrentReadInputStream(rtis, maxReads);
+		ConcurrentLegacyReadInputStream cris=new ConcurrentLegacyReadInputStream(rtis, maxReads);
 		
 		int[][][] counts=process(cris);
 		printMappedHistogram(counts[0]);
@@ -50,9 +50,9 @@ public class MakeQualityHistogram {
 		}
 	}
 	
-	public static int[][][] process(ConcurrentReadInputStream cris){
+	public static int[][][] process(ConcurrentLegacyReadInputStream cris){
 		
-		new Thread(cris).start();
+		cris.start();
 
 		int[][] mapped=new int[2][50];
 		int[][] paired=new int[2][50];
@@ -63,7 +63,7 @@ public class MakeQualityHistogram {
 			
 			processList(readlist, mapped, paired);
 			
-			cris.returnList(ln, readlist.isEmpty());
+			cris.returnList(ln.id, readlist.isEmpty());
 			//System.err.println("Waiting on a list...");
 			ln=cris.nextList();
 			readlist=ln.list;
@@ -71,7 +71,7 @@ public class MakeQualityHistogram {
 		
 		//System.err.println("Returning a list... (final)");
 		assert(readlist.isEmpty());
-		cris.returnList(ln, readlist.isEmpty());
+		cris.returnList(ln.id, readlist.isEmpty());
 		ReadWrite.closeStream(cris);
 		
 		return new int[][][] {mapped, paired};
@@ -87,13 +87,6 @@ public class MakeQualityHistogram {
 	}
 
 	private static void processRead(Read r, int[][] mapped, int[][] paired) {
-
-//		if(!r.paired()){return;}
-		
-//		if(TranslateColorspaceRead.containsIndels(r.match)){return;}
-//		
-//		if(r.countMismatches()>4){return;}
-//		if(r.avgQuality()<8){return;}
 		
 		if(r.chrom<1 && r.numSites()>0){
 			SiteScore ss=r.topSite(); //Should not be necessary
@@ -103,7 +96,7 @@ public class MakeQualityHistogram {
 			r.setStrand(ss.strand);
 		}
 		
-		int avgQ=r.avgQuality();
+		int avgQ=r.avgQuality(true, 0);
 		if(r.chrom>0){
 			mapped[0][avgQ]++;
 		}else{

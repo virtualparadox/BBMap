@@ -8,14 +8,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-import kmer.KCountArray;
-import kmer.KmerCount7MTA;
+import bloom.KCountArray;
+import bloom.KmerCount7MTA;
+import bloom.KmerCountAbstract;
+
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import align2.ListNum;
@@ -60,9 +62,9 @@ public class KmerCoverage {
 			}
 		}
 		
-		FASTQ.PARSE_CUSTOM=false;
-		KmerCount7MTA.minQuality=4;
-		KmerCount7MTA.minProb=0.1f;
+		Parser parser=new Parser();
+		KmerCountAbstract.minQuality=4;
+		KmerCountAbstract.minProb=0.1f;
 		
 		int k=31;
 		int cbits=16;
@@ -80,13 +82,12 @@ public class KmerCoverage {
 		String histFile=null;
 		int threads=-1;
 		
-		int minq=KmerCount7MTA.minQuality;
-		KmerCount7MTA.CANONICAL=true;
+		int minq=KmerCountAbstract.minQuality;
+		KmerCountAbstract.CANONICAL=true;
 		
 		boolean auto=true;
 		
 		FastaReadInputStream.TARGET_READ_LEN=Integer.MAX_VALUE;
-		FASTQ.PARSE_CUSTOM=false;
 		
 		List<String> extra=null;
 		
@@ -104,7 +105,15 @@ public class KmerCoverage {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
@@ -138,7 +147,7 @@ public class KmerCoverage {
 			}else if(a.startsWith("minaverage")){
 				MIN_AVERAGE=Integer.parseInt(b);
 			}else if(a.startsWith("minprob")){
-				KmerCount7MTA.minProb=Float.parseFloat(b);
+				KmerCountAbstract.minProb=Float.parseFloat(b);
 			}else if(a.startsWith("hashes")){
 				hashes=Integer.parseInt(b);
 			}else if(a.startsWith("prehashes") || a.startsWith("prefilterhashes")){
@@ -174,45 +183,24 @@ public class KmerCoverage {
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("auto") || a.equals("automatic")){
 				auto=Tools.parseBoolean(b);
-			}else if(a.startsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				System.out.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				System.out.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					System.out.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
-			}else if(a.startsWith("fastareadlen")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.startsWith("fastaminread") || a.startsWith("fastaminlen")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("samplewhenreadingtable") || a.equals("sampleoutput")){
 				DONT_SAMPLE_OUTPUT=!Tools.parseBoolean(b);
 			}else if(a.equals("dontsamplewhenreadingtable") || a.equals("dontsampleoutput")){
 				DONT_SAMPLE_OUTPUT=Tools.parseBoolean(b);
 			}else if(a.startsWith("kmersample")){
 				kmersamplerate=Integer.parseInt(b);
-				KmerCount7MTA.kmersamplerate=kmersamplerate;
+				KmerCountAbstract.kmersamplerate=kmersamplerate;
 			}else if(a.startsWith("sample") || a.startsWith("readsample")){
 				readsamplerate=Integer.parseInt(b);
-				KmerCount7MTA.readsamplerate=readsamplerate;
+				KmerCountAbstract.readsamplerate=readsamplerate;
 			}else if(a.startsWith("canonical")){
-				CANONICAL=KmerCount7MTA.CANONICAL=Tools.parseBoolean(b);
+				CANONICAL=KmerCountAbstract.CANONICAL=Tools.parseBoolean(b);
 			}else if(a.startsWith("fixspikes")){
 				FIX_SPIKES=Tools.parseBoolean(b);
 			}else if(a.equals("printzerocoverage") || a.equals("pzc")){
 				PRINT_ZERO_COVERAGE=Tools.parseBoolean(b);
 			}else if(a.equals("removeduplicatekmers") || a.equals("rdk")){
-				KmerCount7MTA.KEEP_DUPLICATE_KMERS=!Tools.parseBoolean(b);
+				KmerCountAbstract.KEEP_DUPLICATE_KMERS=!Tools.parseBoolean(b);
 			}else if(a.startsWith("extra")){
 				if(b!=null && !b.equalsIgnoreCase("null")){
 					if(new File(b).exists()){
@@ -228,9 +216,13 @@ public class KmerCoverage {
 			}
 		}
 		
+		{//Process parser fields
+			Parser.processQuality();
+		}
+		
 		assert(FastaReadInputStream.settingsOK());
-		if(k>31){CANONICAL=KmerCount7MTA.CANONICAL=false;}
-		assert(CANONICAL==KmerCount7MTA.CANONICAL);
+		if(k>31){CANONICAL=KmerCountAbstract.CANONICAL=false;}
+		assert(CANONICAL==KmerCountAbstract.CANONICAL);
 		
 //		if(output!=null && reads1.contains(",")){
 //			throw new RuntimeException("\nLists of input files can only be used with histogram output, not full output.\n" +
@@ -275,10 +267,10 @@ public class KmerCoverage {
 		}else{
 			THREADS=threads;
 		}
-//		KmerCount7MTA.THREADS=Tools.min(THREADS,6);
-		KmerCount7MTA.THREADS=THREADS;
+//		KmerCountAbstract.THREADS=Tools.min(THREADS,6);
+		KmerCountAbstract.THREADS=THREADS;
 		
-//		System.err.println("THREADS="+THREADS+", KmerCount7MTA.THREADS="+KmerCount7MTA.THREADS);
+//		System.err.println("THREADS="+THREADS+", KmerCountAbstract.THREADS="+KmerCountAbstract.THREADS);
 		
 		if(auto && cells==-1){
 			final long usable=(long)Tools.max(((memory-96000000)*.73), memory*0.45);
@@ -321,11 +313,11 @@ public class KmerCoverage {
 				outstream.println("prefilter cells:  \t"+(precells>0 && prehashes>0 ? Tools.toKMG(precells) : "?"));
 				outstream.println("prefilter hashes: \t"+(precells>0 && prehashes>0 ? ""+prehashes : "?"));
 			}
-			outstream.println("base min quality: \t"+KmerCount7MTA.minQuality);
-			outstream.println("kmer min prob:    \t"+KmerCount7MTA.minProb);
+			outstream.println("base min quality: \t"+KmerCountAbstract.minQuality);
+			outstream.println("kmer min prob:    \t"+KmerCountAbstract.minProb);
 			
 			outstream.println();
-			outstream.println("remove duplicates:\t"+!KmerCount7MTA.KEEP_DUPLICATE_KMERS);
+			outstream.println("remove duplicates:\t"+!KmerCountAbstract.KEEP_DUPLICATE_KMERS);
 			outstream.println("fix spikes:       \t"+FIX_SPIKES);
 			if(USE_HISTOGRAM && HIST_LEN>0){
 				outstream.println("histogram length: \t"+(USE_HISTOGRAM ? HIST_LEN : 0));
@@ -340,7 +332,7 @@ public class KmerCoverage {
 		if(!prefilter && k<32 && cells>(1L<<(2*k))){cells=(1L<<(2*k));}
 		assert(cells>0);
 		
-//		KmerCount7MTA.THREADS=Tools.max(THREADS/2, KmerCount7MTA.THREADS);  //Seems like 4 is actually optimal...
+//		KmerCountAbstract.THREADS=Tools.max(THREADS/2, KmerCountAbstract.THREADS);  //Seems like 4 is actually optimal...
 		
 		FastaReadInputStream.MIN_READ_LEN=k;
 		
@@ -352,10 +344,10 @@ public class KmerCoverage {
 		KCountArray prefilterArray=null;
 		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, tablereads, 1, buildStepsize, 1, 1, null);
+			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 		}
-		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray);
+		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray);
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));
@@ -438,13 +430,12 @@ public class KmerCoverage {
 
 	public static long count(String reads1, String reads2, KCountArray kca, int k, long maxReads, 
 			String output, boolean ordered, boolean overwrite, String histFile, long estUnique) {
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(reads1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(reads2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
-			Thread th=new Thread(cris);
-			th.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
+			cris.start(); //4567
 		}
 		
 		assert(cris!=null) : reads1;
@@ -457,7 +448,7 @@ public class KmerCoverage {
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Paired: "+paired);}
 		
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(output!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
@@ -477,7 +468,7 @@ public class KmerCoverage {
 			
 			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
 			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
-			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
+			ros=ConcurrentReadOutputStream.getStream(ff1, ff2, buff, null, true);
 			
 			ros.start();
 			outstream.println("Started output threads.");
@@ -496,7 +487,7 @@ public class KmerCoverage {
 	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads, 
 			String output, boolean ordered, boolean overwrite, String histFile, long estUnique) {
 		
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		String[] out1=null, out2=null;
 		
 
@@ -528,7 +519,7 @@ public class KmerCoverage {
 					
 					FileFormat ff1=FileFormat.testOutput(out1[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
 					FileFormat ff2=FileFormat.testOutput(out2[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
-					ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
+					ros=ConcurrentReadOutputStream.getStream(ff1, ff2, buff, null, true);
 					
 					ros.start();
 					outstream.println("Started output threads.");
@@ -540,14 +531,13 @@ public class KmerCoverage {
 			String reads1=list1[x];
 			String reads2=(list2==null || list2.length<=x ? null : list2[x]);
 
-			final ConcurrentReadStreamInterface cris;
+			final ConcurrentReadInputStream cris;
 			{
 				FileFormat ff1=FileFormat.testInput(reads1, FileFormat.FASTQ, null, true, true);
 				FileFormat ff2=FileFormat.testInput(reads2, FileFormat.FASTQ, null, true, true);
-				cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+				cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 				if(verbose){System.err.println("Started cris");}
-				Thread th=new Thread(cris);
-				th.start();
+				cris.start(); //4567
 				if(ff1.fasta()){ADD_CARROT=false;}
 			}
 			boolean paired=cris.paired();
@@ -569,7 +559,7 @@ public class KmerCoverage {
 	
 
 	
-	public static long calcCoverage(ConcurrentReadStreamInterface cris, KCountArray kca, int k, long maxReads, RTextOutputStream3 ros, 
+	public static long calcCoverage(ConcurrentReadInputStream cris, KCountArray kca, int k, long maxReads, ConcurrentReadOutputStream ros, 
 			String histFile, boolean overwrite, long estUnique) {
 		Timer tdetect=new Timer();
 		tdetect.start();
@@ -826,22 +816,22 @@ public class KmerCoverage {
 	public static int[] generateCoverage(Read r, KCountArray kca, int k) {
 		if(k>31){return generateCoverageLong(r, kca, k);}
 		if(kca.gap>0){throw new RuntimeException();}
-		if(r==null || r.bases==null || r.bases.length<k){return new int[] {0};}
+		if(r==null || r.bases==null || r.length()<k){return new int[] {0};}
 		
 		final int kbits=2*k;
 		final long mask=~((-1L)<<(kbits));
 		final int gap=kca.gap;
 		
-		if(r.bases==null || r.bases.length<k+gap){return null;} //Read is too short to detect errors
+		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
 		
 		int len=0;
 		long kmer=0;
 		final byte[] bases=r.bases;
 		final int[] out;
-		final long[] kmers=(FIX_SPIKES ? new long[r.bases.length-k+1] : null);
+		final long[] kmers=(FIX_SPIKES ? new long[r.length()-k+1] : null);
 		
 		if(kmersamplerate<2 || DONT_SAMPLE_OUTPUT){
-			out=new int[r.bases.length-k+1];
+			out=new int[r.length()-k+1];
 			Arrays.fill(out, -1);
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
@@ -862,7 +852,7 @@ public class KmerCoverage {
 				}
 			}
 		}else{
-			out=new int[(r.bases.length-k+1+(kmersamplerate-1))/kmersamplerate];
+			out=new int[(r.length()-k+1+(kmersamplerate-1))/kmersamplerate];
 			Arrays.fill(out, -1);
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
@@ -901,11 +891,11 @@ public class KmerCoverage {
 //		assert(false) : "todo";
 //		assert(k>31);
 		if(kca.gap>0){throw new RuntimeException();}
-		if(r==null || r.bases==null || r.bases.length<k){return new int[] {0};}
+		if(r==null || r.bases==null || r.length()<k){return new int[] {0};}
 		
 		final int gap=kca.gap;
 		
-		if(r.bases==null || r.bases.length<k+gap){return null;} //Read is too short to detect errors
+		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
 		
 		int len=0;
 		long kmer=0;
@@ -916,7 +906,7 @@ public class KmerCoverage {
 		int tailshiftbits=tailshift*2;
 		
 		if(kmersamplerate<2 || DONT_SAMPLE_OUTPUT){
-			out=new int[r.bases.length-k+1];
+			out=new int[r.length()-k+1];
 			Arrays.fill(out, -1);
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
@@ -940,7 +930,7 @@ public class KmerCoverage {
 				}
 			}
 		}else{
-			out=new int[(r.bases.length-k+1+(kmersamplerate-1))/kmersamplerate];
+			out=new int[(r.length()-k+1+(kmersamplerate-1))/kmersamplerate];
 			Arrays.fill(out, -1);
 			for(int i=0; i<bases.length; i++){
 				byte b=bases[i];
@@ -973,7 +963,7 @@ public class KmerCoverage {
 	
 	private static class ProcessThread extends Thread{
 		
-		ProcessThread(ConcurrentReadStreamInterface cris_, KCountArray kca_, int k_, RTextOutputStream3 ros_){
+		ProcessThread(ConcurrentReadInputStream cris_, KCountArray kca_, int k_, ConcurrentReadOutputStream ros_){
 			cris=cris_;
 			kca=kca_;
 			k=k_;
@@ -1003,7 +993,7 @@ public class KmerCoverage {
 							if(verbose){outstream.println();}
 							if(OUTPUT_ATTACHMENT && ros!=null){
 //								assert(false) : ros.FASTA+", "+ros.FASTQ+", "+ros.ATTACHMENT;
-								r.obj=(ros.FASTQ ? toFastqString(r) : toFastaString(r));
+								r.obj=(ros.ff1.fastq() ? toFastqString(r) : toFastaString(r));
 								toss1=r.discarded();
 							}else{
 								 int[] cov=getCoverageAndIncrementHistogram(r);
@@ -1018,7 +1008,7 @@ public class KmerCoverage {
 							totalReads++;
 							if(verbose){outstream.println();}
 							if(OUTPUT_ATTACHMENT && ros!=null){
-								r2.obj=(ros.FASTQ ? toFastqString(r2) : toFastaString(r2));
+								r2.obj=(ros.ff1.fastq() ? toFastqString(r2) : toFastaString(r2));
 								toss2=r.discarded();
 							}else{
 								 int[] cov=getCoverageAndIncrementHistogram(r2);
@@ -1038,21 +1028,21 @@ public class KmerCoverage {
 					ros.add(reads, ln.id);
 				}
 				
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			if(verbose){System.err.println("Returned list");}
 		}
 		
 		private int[] getCoverageAndIncrementHistogram(Read r){
-			if(r.bases==null || r.bases.length<k){
+			if(r.bases==null || r.length()<k){
 				return null;
 			}else{
-				totalBases+=r.bases.length;
+				totalBases+=r.length();
 
 				int[] cov=generateCoverage(r, kca, k);
 				
@@ -1067,7 +1057,7 @@ public class KmerCoverage {
 		}
 		
 		private String toFastaString(Read r){
-			if(r.bases==null || r.bases.length<k){
+			if(r.bases==null || r.length()<k){
 				if(MIN_MEDIAN>0 || MIN_AVERAGE>0){r.setDiscarded(true);}
 				if(USE_HEADER){
 					return (ADD_CARROT ? ">" : "")+r.id+";0;0 0 0 0 0\n"+r.bases==null ? "" : new String(r.bases);
@@ -1075,7 +1065,7 @@ public class KmerCoverage {
 					return (ADD_CARROT ? ">" : "")+r.id+"\n"+(r.bases==null ? "" : new String(r.bases))+"\n0\n0 0 0 0 0";
 				}
 			}else{
-				totalBases+=r.bases.length;
+				totalBases+=r.length();
 
 				int[] cov=generateCoverage(r, kca, k);
 				
@@ -1086,7 +1076,7 @@ public class KmerCoverage {
 					}
 				}
 				
-				StringBuilder sb=new StringBuilder(cov.length*4+r.bases.length+(r.id==null ? 4 : r.id.length())+10);
+				StringBuilder sb=new StringBuilder(cov.length*4+r.length()+(r.id==null ? 4 : r.id.length())+10);
 				
 				if(USE_HEADER){
 					if(ADD_CARROT || r.id.charAt(0)!='>'){sb.append('>');}
@@ -1143,12 +1133,12 @@ public class KmerCoverage {
 		
 		private StringBuilder toFastqString(Read r){
 			StringBuilder sb=r.toFastq();
-			if(r.bases==null || r.bases.length<k){
+			if(r.bases==null || r.length()<k){
 				if(MIN_MEDIAN>0 || MIN_AVERAGE>0){r.setDiscarded(true);}
 				sb.append("\n0\n0 0 0 0 0");
 				return sb;
 			}else{
-				totalBases+=r.bases.length;
+				totalBases+=r.length();
 
 				int[] cov=generateCoverage(r, kca, k);
 				
@@ -1183,10 +1173,10 @@ public class KmerCoverage {
 			}
 		}
 		
-		private final ConcurrentReadStreamInterface cris;
+		private final ConcurrentReadInputStream cris;
 		private final KCountArray kca; 
 		private final int k; 
-		private final RTextOutputStream3 ros;
+		private final ConcurrentReadOutputStream ros;
 		public final long[] hist=new long[HIST_LEN];//(USE_HISTOGRAM ? new long[HIST_LEN] : null);
 		
 		private long totalBases=0;

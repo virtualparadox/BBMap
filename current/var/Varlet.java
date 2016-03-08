@@ -14,7 +14,7 @@ public class Varlet extends var.Variation {
 	
 	public Varlet(int chrom_, byte strand_, int start_, int stop_, int matchStart_, int matchStop_, byte vType, String rf, String ca,
 			 int varQuality_, int readQuality_, int mapScore_, int errors_, float expectedErrors_, int paired_, long readID_, 
-			 int readLen_, int readMapLen_,
+			 int readLen_,
 			 int readStart_, int readStop_, int readCopies_, int headDist_, int tailDist_, int endDist_, int pairnum){
 		super(chrom_, start_, stop_, vType, rf, ca);
 		strand=strand_;
@@ -31,7 +31,6 @@ public class Varlet extends var.Variation {
 		
 		readID=readID_;
 		readLen=readLen_;
-		readMapLen=readMapLen_;
 		
 		readStart=readStart_;
 		readStop=readStop_;
@@ -83,7 +82,6 @@ public class Varlet extends var.Variation {
 		sb.append("expectedErrors").append('\t');
 		sb.append("readID").append('\t');
 		sb.append("readLen").append('\t');
-		sb.append("readMapLen").append('\t');
 		sb.append("headDist").append('\t');
 		sb.append("tailDist").append('\t');
 		sb.append("endDist").append('\t');
@@ -123,7 +121,6 @@ public class Varlet extends var.Variation {
 		sb.append(String.format("%.1f", expectedErrors)).append('\t');
 		sb.append(readID).append('\t');
 		sb.append(readLen).append('\t');
-		sb.append(readMapLen).append('\t');
 		sb.append(headDist).append('\t');
 		sb.append(tailDist).append('\t');
 		sb.append(endDist).append('\t');
@@ -181,7 +178,6 @@ public class Varlet extends var.Variation {
 		
 		long readID=Integer.parseInt(split[10]);
 		int readLen=Integer.parseInt(split[11]);
-		int readMapLen=Integer.parseInt(split[12]);
 		int headDist=Integer.parseInt(split[13]);
 		int tailDist=Integer.parseInt(split[14]);
 		int endDist=Integer.parseInt(split[15]);
@@ -207,7 +203,7 @@ public class Varlet extends var.Variation {
 		
 		
 		Varlet v=new Varlet(chrom, strand, start, stop, -1, -1, varType, ref, call, avgVarQuality, avgReadQuality, 
-				mapScore, errors, expectedErrors, paired, readID, readLen, readMapLen, readStart, readStop, numReads,
+				mapScore, errors, expectedErrors, paired, readID, readLen, readStart, readStop, numReads,
 				headDist, tailDist, endDist, 1);
 		
 		v.setQvector(avgVarQuality, avgReadQuality, maxVarQuality, maxReadQuality);
@@ -281,12 +277,11 @@ public class Varlet extends var.Variation {
 		score+=(200-400/(numReads+2));
 		score+=(50*Tools.min(20, tailDist));
 		score+=(50*Tools.min(10, endDist));
-//		score+=(10*mapScore)/readMapLen;
 		
 		int lenFactor=Tools.min(readLen, 100);
 		score+=(1000*lenFactor)/(lenFactor+100);
 		
-		score+=Tools.min(1000, (10*mapScore)/readMapLen); //TODO: This is temporary, until Read correctly supports mapLen in toText()
+		score+=Tools.min(1000, (10*mapScore)/readLen); //TODO: This is temporary, until Read correctly supports mapLen in toText()
 		score+=(1000-1000/(1+minStrandReads()));
 		return score;
 	}
@@ -342,8 +337,6 @@ public class Varlet extends var.Variation {
 	
 	/** Length of read when used for calling vars; ie, after being trimmed, and after colorspace conversion. */
 	public int readLen;
-	/** Length of read when mapping */
-	public int readMapLen;
 	
 	public int numReads;
 	public int numSemiUniqueReads=1;

@@ -31,6 +31,7 @@ public class CorrelateIdentity {
 	 */
 	public static void main(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -81,6 +82,8 @@ public class CorrelateIdentity {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -98,6 +101,10 @@ public class CorrelateIdentity {
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 

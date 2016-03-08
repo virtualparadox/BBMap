@@ -11,7 +11,7 @@ import java.util.zip.ZipOutputStream;
 import pacbio.CalcCoverageFromSites;
 import pacbio.SiteR;
 
-import stream.ConcurrentReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
@@ -117,7 +117,7 @@ public class GenerateVarlets {
 			printArray[i].println("#Chromosome "+i);
 			printArray[i].println(Varlet.textHeader());
 		}
-		cris=(USE_CRIS ? new ConcurrentReadInputStream(stream, maxReads) : null);
+		cris=(USE_CRIS ? new ConcurrentLegacyReadInputStream(stream, maxReads) : null);
 		if(CONDENSE_SNPS){assert(!SPLIT_SUBS);}
 	}
 	
@@ -164,7 +164,7 @@ public class GenerateVarlets {
 			sitemap=loadSites(sitesfile);
 		}
 		
-		new Thread(cris).start();
+		cris.start();
 		ProcessThread[] threadHandles=new ProcessThread[THREADS];
 		for(int i=0; i<THREADS; i++){
 			threadHandles[i]=new ProcessThread();
@@ -309,11 +309,11 @@ public class GenerateVarlets {
 				
 				while(!terminate && reads!=null && reads.size()>0){
 					if(processReads){processReads(reads);}
-					cris.returnList(ln, ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list.isEmpty());
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 			}else{
 				ArrayList<Read> reads=stream.nextList();
 				while(!terminate && reads!=null && reads.size()>0){
@@ -446,59 +446,45 @@ public class GenerateVarlets {
 		}
 		
 
-		private void processRead(Read r_){
+		private void processRead(Read r){
 			
 			boolean flag=false;
-			if(false && (/*r_.numericID==30719442 ||  r_.numericID==107055007  || */ r_.numericID==42829556) /*&& r_.bases.length<=35*/){
+			if(false && (/*r.numericID==30719442 ||  r.numericID==107055007  || */ r.numericID==42829556) /*&& r.length()<=35*/){
 				System.err.println("Processing read:");
-				System.err.println("\n"+r_.toText(false));
-				System.err.println("\n"+r_.strand());
+				System.err.println("\n"+r.toText(false));
+				System.err.println("\n"+r.strand());
 				System.err.println("\n");
-				System.err.println(new String(r_.bases));
-				System.err.println(r_.match==null ? "null" : new String(r_.match));
+				System.err.println(new String(r.bases));
+				System.err.println(r.match==null ? "null" : new String(r.match));
 				System.err.println("\n");
 				tcr.verbose=true;
 				flag=true;
-				System.err.println("Mapped Length: "+(r_.stop-r_.start+1));
+				System.err.println("Mapped Length: "+(r.stop-r.start+1));
 			}
 			
 			
-//			if(r_.chrom<1 && r_.list!=null && r_.list.size()>0){
-//				SiteScore ss=r_.list.get(0); //Should not be necessary
-//				r_.start=ss.start;
-//				r_.stop=ss.stop;
-//				r_.chrom=ss.chrom;
-//				r_.setStrand(ss.strand);
+//			if(r.chrom<1 && r.list!=null && r.list.size()>0){
+//				SiteScore ss=r.list.get(0); //Should not be necessary
+//				r.start=ss.start;
+//				r.stop=ss.stop;
+//				r.chrom=ss.chrom;
+//				r.setStrand(ss.strand);
 //			}
-			assert((r_.chrom>=1)==r_.mapped()) : r_.toText(false);
-			if(!r_.mapped()){//Unmapped.
-				assert(r_.sites==null || r_.sites.isEmpty()) : r_.toText(false);
+			assert((r.chrom>=1)==r.mapped()) : r.toText(false);
+			if(!r.mapped()){//Unmapped.
+				assert(r.sites==null || r.sites.isEmpty()) : r.toText(false);
 				return;
 			}
-			if(r_.invalid()){return;} //Probably trimmed too short to be used.
+			if(r.invalid()){return;} //Probably trimmed too short to be used.
 			
-			if(r_.match!=null){
-				if(r_.perfect()){//Hopefully this will be set correctly...
-					assert(TranslateColorspaceRead.perfectMatch(r_.match));
+			if(r.match!=null){
+				if(r.perfect()){//Hopefully this will be set correctly...
+					assert(TranslateColorspaceRead.perfectMatch(r.match));
 					return;
-				}else if(TranslateColorspaceRead.perfectMatch(r_.match)){
+				}else if(TranslateColorspaceRead.perfectMatch(r.match)){
 					return;
 				}
 			}
-			
-			final Read r;
-			
-			if(r_.colorspace()){
-				r=tcr.translateToBasespace(r_);
-				if(r==null){
-//					System.err.println("Decoder broke from read "+r_.toText(false));
-					return;
-				}
-			}else{
-				r=r_;
-//				r.errors=r.estimateErrors();
-			}
-			r_=null;
 			
 			if(flag){
 				System.err.println("r.match = "+(r.match==null ? null : new String(r.match)));
@@ -565,8 +551,7 @@ public class GenerateVarlets {
 					assert(v.numReads>=1);
 					//				assert(!TranslateColorspaceReadPacBio.COUNT_DUPLICATES_WHEN_MAKING_VARLETS || v.numReads==1);
 					assert(v.numReads==r.copies);
-					assert(v.readMapLen==r.mapLength);
-					assert(v.readLen==r.bases.length);
+					assert(v.readLen==r.length());
 					varsMade++;
 					if(v.varType==Variation.NOREF){norefsMade++;}
 					else if(v.varType==Variation.SNP){snpMade++;}
@@ -630,7 +615,7 @@ public class GenerateVarlets {
 		protected void terminate(){terminate=true;}
 		
 		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ? 
-				new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS, false) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS, false));
+				new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS));
 		private final ArrayList<Varlet> lists[]=new ArrayList[Gene.chromCodes.length];
 		private boolean finished=false;
 		private boolean terminate=false;
@@ -652,7 +637,7 @@ public class GenerateVarlets {
 //	private HashMap<Long, ArrayList<SiteScoreR>> sitemap=null;
 	private HashMap<Long, SiteR> sitemap=null;
 	private final RTextInputStream stream;
-	private final ConcurrentReadInputStream cris;
+	private final ConcurrentLegacyReadInputStream cris;
 	private final OutputStream[] outArray;
 	private final PrintWriter[] printArray;
 	

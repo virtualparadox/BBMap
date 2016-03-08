@@ -18,7 +18,7 @@ public abstract class ByteFile {
 	}
 	
 	public static final ByteFile makeByteFile(FileFormat ff, boolean tryAllExtensions){
-		if(FORCE_MODE_BF2 || (!FORCE_MODE_BF1 && Shared.THREADS>4/* && (ReadWrite.isCompressed(fname) || ReadWrite.isSam(fname))*/)){
+		if(!Shared.LOW_MEMORY && (FORCE_MODE_BF2 || (!FORCE_MODE_BF1 && Shared.threads()>4/* && (ReadWrite.isCompressed(fname) || ReadWrite.isSam(fname))*/))){
 //			if(allowSubprocess && ((ReadWrite.USE_UNPIGZ || ReadWrite.USE_GUNZIP) && (fname.endsWith(".gz") || fname.endsWith(".gzip")))){}
 			return new ByteFile2(ff, tryAllExtensions);
 		}
@@ -78,14 +78,11 @@ public abstract class ByteFile {
 	
 	public abstract byte[] nextLine();
 	
-	public abstract byte[] readLine();
-	
 	public abstract boolean isOpen();
 	
 	public final String name(){return ff.name();}
 	public final boolean allowSubprocess(){return ff.allowSubprocess();}
-
-//	public final String name;
+	
 	public final FileFormat ff;
 
 	public static boolean FORCE_MODE_BF1=false;

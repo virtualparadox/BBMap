@@ -3,9 +3,9 @@
 
 usage(){
 echo "
-BBMap v33.x
+BBMap v34.x
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified November 14, 2014
+Last modified May 19, 2015
 
 Description:  Fast and accurate short-read aligner for DNA and RNA.
 
@@ -35,6 +35,7 @@ usemodulo=f             Throw away ~80% of kmers based on remainder modulo a
                         number (reduces RAM by 50% and sensitivity slightly).
                         Should be enabled both when building the index AND 
                         when mapping.
+rebuild=f               Force a rebuild of the index (ref= should be set).
 
 Input Parameters:
 
@@ -75,8 +76,6 @@ strictmaxindel=f        When enabled, do not allow indels longer than 'maxindel'
                         By default these are not sought, but may be found anyway.
 minid=0.76              Approximate minimum alignment identity to look for. 
                         Higher is faster and less sensitive.
-idfilter=0              Independant of minid; sets exact minimum identity 
-                        allowed for alignments to be printed.  Range 0 to 1.
 minhits=1               Minimum number of seed hits required for candidate sites.
                         Higher is faster.
 k=13                    Kmer length of index.  Lower is slower, more sensitive,
@@ -113,6 +112,9 @@ usejni=f                (jni) Do alignments faster, in C code.  Requires
                         compiling the C code; details are in /jni/README.txt.
 maxsites2=800           Don't analyze (or print) more than this many alignments 
                         per read.
+monitor=f               Kill this process if CPU usage drops to zero for
+                        a long time.  monitor=600,0.01 would kill after 600
+                        seconds under 1% usage.
 
 Quality and Trimming Parameters:
 
@@ -124,26 +126,26 @@ qtrim=f                 Quality-trim ends before mapping.  Options are:
                         'f' (false), 'l' (left), 'r' (right), and 'lr' (both).
 untrim=f                Undo trimming after mapping.  Untrimmed bases will be 
                         soft-clipped in cigar strings.
-trimq=7                 Trim regions with average quality below this 
+trimq=6                 Trim regions with average quality below this 
                         (phred algorithm).
 mintrimlength=60        (mintl) Don't trim reads to be shorter than this.
-fakequality=-1          Set to a positive number 1-50 to generate fake quality 
-                        strings for fasta input reads.
+fakefastaquality=-1     (ffq) Set to a positive number 1-50 to generate fake
+                        quality strings for fasta input reads.
 ignorebadquality=f      (ibq) Keep going, rather than crashing, if a read has 
                         out-of-range quality values.
 usequality=t            Use quality scores when determining which read kmers
                         to use as seeds.
 minaveragequality=0     (maq) Discard reads with average quality below this.
+maqb=0                  If positive, calculate maq from this many initial bases.
 
 Output Parameters:
 
-outputunmapped=t        Set to false if unmapped reads should not be printed to 
-                        'out=' target (saves time and disk space).
-out=<file>              Write all reads to this file (unless outputunmapped=t).
+out=<file>              Write all reads to this file.
 outu=<file>             Write only unmapped reads to this file.  Does not 
                         include unmapped paired reads with a mapped mate.
 outm=<file>             Write only mapped reads to this file.  Includes 
                         unmapped paired reads with a mapped mate.
+mappedonly=f            If true, treats 'out' like 'outm'.
 bamscript=<file>        (bs) Write a shell script to <file> that will turn 
                         the sam output into a sorted, indexed bam file.
 ordered=f               Set to true to output reads in same order as input.  
@@ -164,9 +166,25 @@ pigz=f                  Spawn a pigz (parallel gzip) process for faster
                         compression than Java.  Requires pigz to be installed.
 machineout=f            Set to true to output statistics in machine-friendly 
                         'key=value' format.
+printunmappedcount=f    Print the total number of unmapped reads and bases.
+                        If input is paired, the number will be of pairs
+                        for which both reads are unmapped.
+
+Post-Filtering Parameters:
+
+idfilter=0              Independant of minid; sets exact minimum identity 
+                        allowed for alignments to be printed.  Range 0 to 1.
+subfilter=-1            Ban alignments with more than this many substitutions.
+insfilter=-1            Ban alignments with more than this many insertions.
+delfilter=-1            Ban alignments with more than this many deletions.
+indelfilter=-1          Ban alignments with more than this many indels.
+editfilter=-1           Ban alignments with more than this many edits.
+inslenfilter=-1         Ban alignments with an insertion longer than this.
+dellenfilter=-1         Ban alignments with a deletion longer than this.
 
 Sam flags and settings:
 
+noheader=f              Disable generation of header lines.
 sam=1.4                 Set to 1.4 to write Sam version 1.4 cigar strings, 
                         with = and X, or 1.3 to use M.
 saa=t                   (secondaryalignmentasterisks) Use asterisks instead of
@@ -189,12 +207,16 @@ stoptag=f               Write a tag indicating read stop location, prefixed by Y
 idtag=f                 Write a tag indicating percent identity, prefixed by YI:f:
 inserttag=f             Write a tag indicating insert size, prefixed by X8:Z:
 scoretag=f              Write a tag indicating BBMap's raw score, prefixed by YR:i:
-noheader=f              Disable generation of header lines.
+timetag=f               Write a tag indicating this read's mapping time, prefixed by X0:i:
+boundstag=f             Write a tag indicating whether either read in the pair goes off the end of the reference, prefixed by XB:Z:
+notags=f                Turn off all optional tags.
 
 Histogram and statistics output parameters:
 
-scafstats=<file>        Statistics on how many reads mapped to which scaffold 
-                        to this file.
+scafstats=<file>        Statistics on how many reads mapped to which scaffold.
+refstats=<file>         Statistics on how many reads mapped to which reference
+                        file; only for BBSplit.
+sortscafs=t             Sort scaffolds or references by read count.
 bhist=<file>            Base composition histogram by position.
 qhist=<file>            Quality histogram by position.
 aqhist=<file>           Histogram of average read quality.
@@ -208,13 +230,14 @@ indelhist=<file>        Indel length histogram.
 mhist=<file>            Histogram of match, sub, del, and ins rates by 
                         read location.
 gchist=<file>           Read GC content histogram.
-gcbins=100              Set the number of bins in the GC histogram.
+gcbins=100              Number gchist bins.  Set to 'auto' to use read length.
 idhist=<file>           Histogram of read count versus percent identity.
-idbins=100              Set the number of bins in the identity histogram.
+idbins=100              Number idhist bins.  Set to 'auto' to use read length.
 
 Coverage output parameters (these may reduce speed and use more RAM):
 
 covstats=<file>         Per-scaffold coverage info.
+rpkm=<file>             Per-scaffold RPKM/FPKM counts.
 covhist=<file>          Histogram of # occurrences of each depth level.
 basecov=<file>          Coverage per base location.
 bincov=<file>           Print binned coverage per location (one line per X bases).
@@ -222,10 +245,12 @@ covbinsize=1000         Set the binsize for binned coverage output.
 nzo=f                   Only print scaffolds with nonzero coverage.
 twocolumn=f             Change to true to print only ID and Avg_fold instead of 
                         all 6 columns to the 'out=' file.
-uscov=t                 Include secondary alignments when calculating coverage.
 32bit=f                 Set to true if you need per-base coverage over 64k.
 strandedcov=f           Track coverage for plus and minus strand independently.
 startcov=f              Only track start positions of reads.
+secondarycov=t          Include coverage of secondary alignments.
+physcov=f               Calculate physical coverage for paired reads.
+                        This includes the unsequenced bases.
 
 Java Parameters:
 -Xmx                    This will be passed to Java to set memory usage, 
@@ -278,7 +303,7 @@ bbmap() {
 	#module load samtools
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 bbmap "$@"

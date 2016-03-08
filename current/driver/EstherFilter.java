@@ -10,7 +10,7 @@ import java.util.Collections;
 import align2.ListNum;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
 
@@ -142,9 +142,8 @@ public class EstherFilter {
 		Collections.sort(names);
 		
 		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, false, true);
-		ConcurrentReadStreamInterface cris=ConcurrentGenericReadInputStream.getReadInputStream(-1L, false, false, ff, null);
-		Thread cristhread=new Thread(cris);
-		cristhread.start();
+		ConcurrentReadInputStream cris=ConcurrentReadInputStream.getReadInputStream(-1L, false, ff, null);
+		cris.start(); //4567
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		
@@ -158,12 +157,12 @@ public class EstherFilter {
 			}
 			
 			/* Dispose of the old list and fetch a new one */
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		/* Cleanup */
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 	}
 	
 	

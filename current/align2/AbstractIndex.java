@@ -30,7 +30,7 @@ public abstract class AbstractIndex {
 		if(COUNTS!=null){return COUNTS[key];} //TODO: Benchmark speed and memory usage with counts=null.  Probably only works for single-block genomes.
 //		assert(false);
 		final Block b=index[0];
-		final int rkey=KeyRing.reverseComplementKey(key, KEYLEN, COLORSPACE);
+		final int rkey=KeyRing.reverseComplementKey(key, KEYLEN);
 		int a=b.length(key);
 		return key==rkey ? a : a+b.length(rkey);
 	}
@@ -193,7 +193,6 @@ public abstract class AbstractIndex {
 	static final int MINGAP=Shared.MINGAP;
 	static final int MINGAP2=(MINGAP+128); //Depends on read length...
 	
-	static boolean COLORSPACE=false;
 	static boolean USE_CAMELWALK=false;
 	
 	static final boolean ADD_LIST_SIZE_BONUS=false;

@@ -92,7 +92,7 @@ public class GenerateConsensusVariations {
 	/** Now removes overlapping vars by retaining better quality one. */
 	public static void process(final String invars, final String incov, final String outfile, final int chrom, final int mincov){
 		TextFile tf=new TextFile(invars, true, false);
-		CoverageArray ca=ReadWrite.read(CoverageArray.class, incov);
+		CoverageArray ca=ReadWrite.read(CoverageArray.class, incov, true);
 		TextStreamWriter tsw=new TextStreamWriter(outfile, true, false, true);
 		tsw.start();
 		

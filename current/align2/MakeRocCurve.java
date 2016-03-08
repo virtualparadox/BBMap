@@ -38,8 +38,8 @@ public class MakeRocCurve {
 				reads=Tools.parseKMG(b);
 			}else if(a.equals("parsecustom")){
 				parsecustom=Tools.parseBoolean(b);
-			}else if(a.equals("ssaha2") || a.equals("subtractleadingclip")){
-				SamLine.SUBTRACT_LEADING_SOFT_CLIP=Tools.parseBoolean(b);
+//			}else if(a.equals("ssaha2") || a.equals("subtractleadingclip")){
+//				SamLine.SUBTRACT_LEADING_SOFT_CLIP=Tools.parseBoolean(b);
 			}else if(a.equals("blasr")){
 				BLASR=Tools.parseBoolean(b);
 			}else if(a.equals("bitset")){

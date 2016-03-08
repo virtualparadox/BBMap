@@ -97,7 +97,7 @@ public class ApplyVarsToReference {
 		t.stop();
 		
 		{
-			String path=IndexMaker4.fname(1, 1, 12, 1, false);
+			String path=IndexMaker4.fname(1, 1, 12, 1);
 			int lastSlash=path.lastIndexOf('/');
 			path=path.substring(0, lastSlash);
 			File dir=new File(path);

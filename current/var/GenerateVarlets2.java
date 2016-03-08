@@ -9,7 +9,7 @@ import java.util.HashMap;
 import pacbio.CalcCoverageFromSites;
 import pacbio.SiteR;
 
-import stream.ConcurrentReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
@@ -58,6 +58,8 @@ public class GenerateVarlets2 {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("condense")){
 				CONDENSE=Tools.parseBoolean(b);
 			}else if(a.equals("condensesnps")){
@@ -85,24 +87,6 @@ public class GenerateVarlets2 {
 				BLOCKSIZE=(Integer.parseInt(b));
 			}else if(a.startsWith("sites") || a.startsWith("sitesfile")){
 				sitesfile=b;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
@@ -127,7 +111,7 @@ public class GenerateVarlets2 {
 		assert(outname==null || outname.contains("#")) : "Output file name must contain the character '#' to be used for key number.";
 		makeKeyMap();
 		
-		cris=(USE_CRIS ? new ConcurrentReadInputStream(stream, maxReads) : null);
+		cris=(USE_CRIS ? new ConcurrentLegacyReadInputStream(stream, maxReads) : null);
 		if(CONDENSE_SNPS){assert(!SPLIT_SUBS);}
 	}
 	
@@ -155,7 +139,7 @@ public class GenerateVarlets2 {
 			sitemap=loadSites(sitesfile);
 		}
 		
-		new Thread(cris).start();
+		cris.start();
 		ProcessThread[] threadHandles=new ProcessThread[THREADS];
 		for(int i=0; i<THREADS; i++){
 			threadHandles[i]=new ProcessThread();
@@ -277,11 +261,11 @@ public class GenerateVarlets2 {
 				
 				while(!terminate && reads!=null && reads.size()>0){
 					if(processReads){processReads(reads);}
-					cris.returnList(ln, ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list.isEmpty());
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 			}else{
 				ArrayList<Read> reads=stream.nextList();
 				while(!terminate && reads!=null && reads.size()>0){
@@ -403,60 +387,46 @@ public class GenerateVarlets2 {
 		}
 		
 
-		private void processRead(Read r_){
+		private void processRead(Read r){
 			sitesProcessed++;
 			
 			boolean flag=false;
-			if(false && (/*r_.numericID==30719442 ||  r_.numericID==107055007  || */ r_.numericID==42829556) /*&& r_.bases.length<=35*/){
+			if(false && (/*r.numericID==30719442 ||  r.numericID==107055007  || */ r.numericID==42829556) /*&& r.length()<=35*/){
 				System.err.println("Processing read:");
-				System.err.println("\n"+r_.toText(false));
-				System.err.println("\n"+r_.strand());
+				System.err.println("\n"+r.toText(false));
+				System.err.println("\n"+r.strand());
 				System.err.println("\n");
-				System.err.println(new String(r_.bases));
-				System.err.println(r_.match==null ? "null" : new String(r_.match));
+				System.err.println(new String(r.bases));
+				System.err.println(r.match==null ? "null" : new String(r.match));
 				System.err.println("\n");
 				tcr.verbose=true;
 				flag=true;
-				System.err.println("Mapped Length: "+(r_.stop-r_.start+1));
+				System.err.println("Mapped Length: "+(r.stop-r.start+1));
 			}
 			
 			
-//			if(r_.chrom<1 && r_.list!=null && r_.list.size()>0){
-//				SiteScore ss=r_.list.get(0); //Should not be necessary
-//				r_.start=ss.start;
-//				r_.stop=ss.stop;
-//				r_.chrom=ss.chrom;
-//				r_.setStrand(ss.strand);
+//			if(r.chrom<1 && r.list!=null && r.list.size()>0){
+//				SiteScore ss=r.list.get(0); //Should not be necessary
+//				r.start=ss.start;
+//				r.stop=ss.stop;
+//				r.chrom=ss.chrom;
+//				r.setStrand(ss.strand);
 //			}
-			assert((r_.chrom>=1)==r_.mapped()) : r_.toText(false);
-			if(!r_.mapped()){//Unmapped.
-				assert(r_.sites==null || r_.sites.isEmpty()) : r_.toText(false);
+			assert((r.chrom>=1)==r.mapped()) : r.toText(false);
+			if(!r.mapped()){//Unmapped.
+				assert(r.sites==null || r.sites.isEmpty()) : r.toText(false);
 				return;
 			}
-			if(r_.invalid()){return;} //Probably trimmed too short to be used.
+			if(r.invalid()){return;} //Probably trimmed too short to be used.
 			
-			if(r_.match!=null){
-				if(r_.perfect()){//Hopefully this will be set correctly...
-					assert(TranslateColorspaceRead.perfectMatch(r_.match));
+			if(r.match!=null){
+				if(r.perfect()){//Hopefully this will be set correctly...
+					assert(TranslateColorspaceRead.perfectMatch(r.match));
 					return;
-				}else if(TranslateColorspaceRead.perfectMatch(r_.match)){
+				}else if(TranslateColorspaceRead.perfectMatch(r.match)){
 					return;
 				}
 			}
-			
-			final Read r;
-			
-			if(r_.colorspace()){
-				r=tcr.translateToBasespace(r_);
-				if(r==null){
-//					System.err.println("Decoder broke from read "+r_.toText(false));
-					return;
-				}
-			}else{
-				r=r_;
-//				r.errors=r.estimateErrors();
-			}
-			r_=null;
 			
 			if(flag){
 				System.err.println("r.match = "+(r.match==null ? null : new String(r.match)));
@@ -522,8 +492,7 @@ public class GenerateVarlets2 {
 					assert(v.numReads>=1);
 					//				assert(!TranslateColorspaceReadPacBio.COUNT_DUPLICATES_WHEN_MAKING_VARLETS || v.numReads==1);
 					assert(v.numReads==r.copies);
-					assert(v.readMapLen==r.mapLength);
-					assert(v.readLen==r.bases.length);
+					assert(v.readLen==r.length());
 					varsMade++;
 					if(v.varType==Variation.NOREF){norefsMade++;}
 					else if(v.varType==Variation.SNP){snpMade++;}
@@ -592,7 +561,7 @@ public class GenerateVarlets2 {
 		protected void terminate(){terminate=true;}
 		
 		private final TranslateColorspaceRead tcr=new TranslateColorspaceRead(PAC_BIO_MODE ? 
-				new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS, false) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS, false));
+				new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS) :  new MultiStateAligner9ts(ALIGN_ROWS, ALIGN_COLUMNS));
 		private boolean finished=false;
 		private boolean terminate=false;
 		private long varsMade=0;
@@ -652,7 +621,7 @@ public class GenerateVarlets2 {
 //	private HashMap<Long, ArrayList<SiteScoreR>> sitemap=null;
 	private HashMap<Long, SiteR> sitemap=null;
 	private final RTextInputStream stream;
-	private final ConcurrentReadInputStream cris;
+	private final ConcurrentLegacyReadInputStream cris;
 	
 	
 	public static boolean USE_CRIS=true; //Similar speed either way.  "true" may be better with many threads.

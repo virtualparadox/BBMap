@@ -6,14 +6,12 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.zip.ZipOutputStream;
 
 import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.ConcurrentReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.ConcurrentSolidInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.FastqReadInputStream;
@@ -34,6 +32,7 @@ public class SortReadsTopologically {
 	
 	public static void main(String[] args){
 		
+		Parser parser=new Parser();
 		String in1=null;
 		String in2=null;
 		String out="raw_tsorted#.txt.gz";
@@ -49,6 +48,14 @@ public class SortReadsTopologically {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
 			}else if(a.equals("i") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 				if(b.indexOf('#')>=0){
@@ -59,25 +66,8 @@ public class SortReadsTopologically {
 				in2=b;
 			}else if(a.equals("o") || a.equals("out") || a.equals("output")){
 				out=b;
-			}else if(a.endsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				Data.sysout.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.endsWith("merge")){
 				MERGE_DUPLICATES=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				Data.sysout.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				Data.sysout.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					Data.sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -109,13 +99,13 @@ public class SortReadsTopologically {
 		
 		SortReadsTopologically srt;
 		if(fasta){
-			FastaReadInputStream fris1=new FastaReadInputStream(in1, false, (FASTQ.FORCE_INTERLEAVED && in2==null), true, in2==null ? Shared.READ_BUFFER_MAX_DATA : -1);
+			FastaReadInputStream fris1=new FastaReadInputStream(in1, (FASTQ.FORCE_INTERLEAVED && in2==null), false, true, in2==null ? Shared.READ_BUFFER_MAX_DATA : -1);
 			FastaReadInputStream fris2=(in2==null ? null : new FastaReadInputStream(in2, false, false, true, -1));
 			ConcurrentGenericReadInputStream cris=new ConcurrentGenericReadInputStream(fris1, fris2, -1);
 			srt=new SortReadsTopologically(cris, out, prefix);
 		}else if(fastq){
-			FastqReadInputStream fris1=new FastqReadInputStream(in1, false, true);
-			FastqReadInputStream fris2=(in2==null ? null : new FastqReadInputStream(in2, false, true));
+			FastqReadInputStream fris1=new FastqReadInputStream(in1, true);
+			FastqReadInputStream fris2=(in2==null ? null : new FastqReadInputStream(in2, true));
 			ConcurrentGenericReadInputStream cris=new ConcurrentGenericReadInputStream(fris1, fris2, -1);
 			srt=new SortReadsTopologically(cris, out, prefix);
 		}else{
@@ -138,7 +128,7 @@ public class SortReadsTopologically {
 		RTextInputStream rtis=new RTextInputStream(fname1, fname2, -1);
 		outname=outname_;
 		paired=rtis.paired();
-		cris=new ConcurrentReadInputStream(rtis, -1);
+		cris=new ConcurrentLegacyReadInputStream(rtis, -1);
 		prefix=prefix_;
 		assert(prefix<=5);
 
@@ -146,19 +136,7 @@ public class SortReadsTopologically {
 		blockwriter2=(fname2==null ? null : new ReadStreamStringWriter(null, false, 4, false));
 	}
 	
-	public SortReadsTopologically(String fname1, String q1, String fname2, String q2, String outname_, int prefix_){
-		assert(fname2==null || !fname1.equals(fname2)) : "Error - input files have same name.";
-		outname=outname_;
-		cris=new ConcurrentSolidInputStream(fname1, q1, fname2, q2, -1);
-		paired=cris.paired();
-		prefix=prefix_;
-		assert(prefix<=5);
-
-		blockwriter1=(fname1==null ? null : new ReadStreamStringWriter(null, true, 4, false));
-		blockwriter2=(fname2==null ? null : new ReadStreamStringWriter(null, false, 4, false));
-	}
-	
-	public SortReadsTopologically(ConcurrentReadStreamInterface cris_, String outname_, int prefix_){
+	public SortReadsTopologically(ConcurrentReadInputStream cris_, String outname_, int prefix_){
 		cris=cris_;
 		outname=outname_;
 		paired=cris.paired();
@@ -189,7 +167,7 @@ public class SortReadsTopologically {
 		
 //		assert(false) : fname1+", "+fname2+", "+outname+", "+prefix;
 
-		new Thread(cris).start();
+		cris.start();
 		System.err.println("Started cris");
 		
 		Thread bwt1=null, bwt2=null;
@@ -210,24 +188,21 @@ public class SortReadsTopologically {
 			if(reads!=null && !reads.isEmpty()){
 				Read r=reads.get(0);
 				assert(paired==(r.mate!=null));
-				if(r.colorspace()){
-					assert(prefix<=6);
-				}else{
-					assert(prefix<=5);
-				}
+				
+				assert(prefix<=5);
 			}
 			
 			while(reads!=null && reads.size()>0){
 				//System.err.println("reads.size()="+reads.size());
 				for(Read r : reads){addRead(r);}
 				//System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			System.err.println("Returned list");
 			ReadWrite.closeStream(cris);
 			System.err.println("Closed stream");
@@ -385,7 +360,7 @@ public class SortReadsTopologically {
 		for(int i=1; i<list.size(); i++){
 			Read r=list.get(i);
 			boolean keep=false;
-			if(current.bases.length==r.bases.length && ((current.mate==null && r.mate==null) || (current.mate.bases.length==r.mate.bases.length)) && 
+			if(current.length()==r.length() && ((current.mate==null && r.mate==null) || (current.mateLength()==r.mateLength())) && 
 					current.isDuplicateByBases(r, nmax, mmax, qmax, true, false)){
 				Read r2=r.mate;
 				Read c2=current.mate;
@@ -437,7 +412,7 @@ public class SortReadsTopologically {
 	private void addRead(Read r){
 		StringBuilder sb=new StringBuilder(prefix);
 		boolean bad=false;
-		for(int i=0; i<prefix && i<r.bases.length; i++){
+		for(int i=0; i<prefix && i<r.length(); i++){
 			byte b=r.bases[i];
 			
 			if(b>=0 && b<=3){
@@ -599,7 +574,7 @@ public class SortReadsTopologically {
 	}
 	
 	public final String outname;
-	private final ConcurrentReadStreamInterface cris;
+	private final ConcurrentReadInputStream cris;
 	public long merged=0;
 	public long processed=0;
 

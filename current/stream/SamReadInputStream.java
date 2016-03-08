@@ -12,9 +12,7 @@ public class SamReadInputStream extends ReadInputStream {
 	
 	public static void main(String[] args){
 		
-		FASTQ.PARSE_CUSTOM=false;
-		
-		SamReadInputStream sris=new SamReadInputStream(args[0], false, false, false, true);
+		SamReadInputStream sris=new SamReadInputStream(args[0], false, false, true);
 		
 		Read r=sris.next();
 		System.out.println(r.toText(false));
@@ -23,13 +21,11 @@ public class SamReadInputStream extends ReadInputStream {
 		System.out.println();
 	}
 	
-	public SamReadInputStream(String fname, boolean colorspace_, boolean loadHeader_, boolean interleaved_, boolean allowSubprocess_){
-		this(FileFormat.testInput(fname, FileFormat.SAM, null, allowSubprocess_, false), colorspace_, loadHeader_, interleaved_);
+	public SamReadInputStream(String fname, boolean loadHeader_, boolean interleaved_, boolean allowSubprocess_){
+		this(FileFormat.testInput(fname, FileFormat.SAM, null, allowSubprocess_, false), loadHeader_, interleaved_);
 	}
 		
-	public SamReadInputStream(FileFormat ff, boolean colorspace_, boolean loadHeader_, boolean interleaved_){
-
-		colorspace=colorspace_;
+	public SamReadInputStream(FileFormat ff, boolean loadHeader_, boolean interleaved_){
 		loadHeader=loadHeader_;
 		
 //		interleaved=((tf.is==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : true);
@@ -47,7 +43,7 @@ public class SamReadInputStream extends ReadInputStream {
 
 	@Override
 	public void start() {
-//		if(cris!=null){new Thread(cris).start();}
+//		if(cris!=null){cris.start();}
 	}
 	
 	
@@ -99,7 +95,7 @@ public class SamReadInputStream extends ReadInputStream {
 		buffer=null;
 		next=0;
 		
-		buffer=toReadList(tf, BUF_LEN, colorspace, nextReadID, FASTQ.PARSE_CUSTOM);
+		buffer=toReadList(tf, BUF_LEN, nextReadID, FASTQ.PARSE_CUSTOM);
 		nextReadID+=buffer.size();
 		generated+=buffer.size();
 		
@@ -109,20 +105,18 @@ public class SamReadInputStream extends ReadInputStream {
 	/**
 	 * @param tf2
 	 * @param bUF_LEN2
-	 * @param colorspace2
 	 * @param nextReadID2
 	 * @param interleaved2
 	 * @return
 	 */
-	private final ArrayList<Read> toReadList(ByteFile tf2, int buflen,
-			boolean colorspace2, long nextReadID2, boolean parseCustom) {
+	private final ArrayList<Read> toReadList(ByteFile tf2, int buflen, long nextReadID2, boolean parseCustom) {
 		ArrayList<Read> list=new ArrayList<Read>(buflen);
 		while(list.size()<buflen){
-			byte[] line=tf2.readLine();
+			byte[] line=tf2.nextLine();
 //			System.out.println("A: Read line "+new String(line));
 			while(line!=null && line[0]=='@'){
 				if(loadHeader){header.add(line);}
-				line=tf2.readLine();
+				line=tf2.nextLine();
 //				System.out.println("B: Read line "+new String(line));
 			}
 			if(loadHeader && nextReadID2==0){setSharedHeader(header);}
@@ -134,7 +128,7 @@ public class SamReadInputStream extends ReadInputStream {
 			list.add(r1);
 			if(interleaved && (sl1.flag&0x1)!=0){
 				assert((sl1.flag&0x40)!=0) : r1+"\n\n"+sl1;
-				byte[] line2=tf2.readLine();
+				byte[] line2=tf2.nextLine();
 				SamLine sl2=null;
 				Read r2=null;
 				if(line2!=null){
@@ -200,6 +194,7 @@ public class SamReadInputStream extends ReadInputStream {
 	}
 	
 	private static ArrayList<byte[]> SHARED_HEADER;
+//	private static boolean SET_SHARED_HEADER;
 	
 	@Override
 	public boolean paired() {return interleaved;}
@@ -218,7 +213,6 @@ public class SamReadInputStream extends ReadInputStream {
 	public long consumed=0;
 	private long nextReadID=0;
 	
-	public final boolean colorspace;
 	public final boolean stdin;
 
 }

@@ -9,10 +9,10 @@ import java.util.Date;
 import java.util.TimeZone;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.Data;
@@ -51,6 +51,7 @@ public class DecontaminateByNormalization {
 	
 	public DecontaminateByNormalization(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -66,8 +67,9 @@ public class DecontaminateByNormalization {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 //		Shared.READ_BUFFER_NUM_BUFFERS=Shared.READ_BUFFER_NUM_BUFFERS;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		CoveragePileup.USE_WINDOW=true;
 
 		final ArrayList<String> readNameFiles=new ArrayList<String>();
 		final ArrayList<String> refNameFiles=new ArrayList<String>();
@@ -123,6 +125,12 @@ public class DecontaminateByNormalization {
 				assert(minprob>=0 && minprob<=1) : "minprob must be between 0 and 1.";
 			}else if(a.equals("minratio") || a.equals("ratio")){
 				minRatio=Double.parseDouble(b);
+			}else if(a.equals("basesundermin")){
+				basesUnderMin=Integer.parseInt(b);
+			}else if(a.equals("window")){
+				CoveragePileup.LOW_COV_WINDOW=Integer.parseInt(b);
+			}else if(a.equals("windowcov")){
+				CoveragePileup.LOW_COV_DEPTH=Double.parseDouble(b);
 			}else if(a.equals("mapraw")){
 				mapRawReads=Tools.parseBoolean(b);
 			}else if(a.equals("target")){
@@ -131,6 +139,10 @@ public class DecontaminateByNormalization {
 				normHashes=Integer.parseInt(b);
 			}else if(a.equals("passes")){
 				normPasses=Integer.parseInt(b);
+			}else if(a.equals("kfilter")){
+				kfilter=Integer.parseInt(b);
+			}else if(a.equals("ambig") || a.equals("ambiguous")){
+				ambigMode=b;
 			}else if(a.equals("ecc")){
 				ecc=Tools.parseBoolean(b);
 			}else if(a.equals("cecc")){
@@ -173,14 +185,6 @@ public class DecontaminateByNormalization {
 				for(String name : split2){
 					readNameFiles.add(name);
 				}
-			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
-				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -188,56 +192,30 @@ public class DecontaminateByNormalization {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
 			overwrite=ReadStats.overwrite=parser.overwrite;
-			append=ReadStats.append=parser.append;
 
 			setInterleaved=parser.setInterleaved;
 		}
-//		System.err.println("\n************ 1\n"+readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles);
 
 		parseStringsFromFiles(readNameFiles);
-//		System.err.println("\n************ 2\n"+readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles);
 		parseStringsFromFiles(refNameFiles);
-//		System.err.println("\n************ 3\n"+readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles);
 		
 		readNames.addAll(readNameFiles);
-//		System.err.println("\n************ 4\n"+readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles);
 		refNames.addAll(refNameFiles);
 //		System.err.println("\n************ 5\n"+readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles);
-
-//		assert(false) : readNames+"\n\n"+refNames+"\n\n"+readNameFiles+"\n\n"+refNameFiles;
 		
 		if(outdir!=null && outdir.length()>0 && !outdir.endsWith("/")){outdir=outdir+"/";}
 		if(tempdir!=null && tempdir.length()>0 && !tempdir.endsWith("/")){tempdir=tempdir+"/";}
 		
-//		if(outdir!=null && outdir.length()>0){ //Not needed.
-//			File f=new File(outdir);
-//			if(!f.exists()){f.mkdirs();}
-//		}
-		
 		assert(FastaReadInputStream.settingsOK());
 		
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
-		}
-		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
 		}
 	}
 	
@@ -298,18 +276,16 @@ public class DecontaminateByNormalization {
 		for(String in : readPaths){
 			
 			final FileFormat ffin=FileFormat.testInput(in, FileFormat.FASTQ, null, true, true);
-			final ConcurrentReadStreamInterface cris;
-			final Thread cristhread;
+			final ConcurrentReadInputStream cris;
 			final String core=ReadWrite.stripToCore(in);
 			{
-				cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin, null);
+				cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin, null);
 				if(verbose){outstream.println("Started cris");}
-				cristhread=new Thread(cris);
-				cristhread.start();
+				cris.start(); //4567
 			}
 			boolean paired=cris.paired();
-			outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
-			final RTextOutputStream3 ros;
+			if(!ffin.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
+			final ConcurrentReadOutputStream ros;
 			
 			final int buff=4;
 
@@ -319,7 +295,7 @@ public class DecontaminateByNormalization {
 
 			assert(!in.equalsIgnoreCase(fnameOut)) : "Input file and output file have same name.";
 
-			ros=new RTextOutputStream3(ffout, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout, null, buff, null, false);
 			ros.start();
 			
 			{
@@ -339,7 +315,7 @@ public class DecontaminateByNormalization {
 						final Read r2=r1.mate;
 						
 						final int initialLength1=r1.length();
-						final int initialLength2=(r2==null ? 0 : r2.length());
+						final int initialLength2=(r1.mateLength());
 						
 						{
 							readsProcessed++;
@@ -359,12 +335,12 @@ public class DecontaminateByNormalization {
 					
 					if(ros!=null){ros.add(listOut, ln.id);}
 
-					cris.returnList(ln, ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list.isEmpty());
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				if(ln!=null){
-					cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 				}
 			}
 			
@@ -472,11 +448,13 @@ public class DecontaminateByNormalization {
 				argList.add("in="+infile);
 				argList.add("ref="+ref);
 				argList.add("covstats="+dir+core+"_covstats"+pass+".txt");
+				argList.add("arrays=t");
 				argList.add("nodisk");
-				argList.add("ambig=random");
+				argList.add("ambig="+ambigMode);
 				if(kfilter>1){argList.add("kfilter="+kfilter);}
 				argList.add("fast");
 				argList.add("ow="+overwrite);
+				argList.add("minscaf=0");
 			}
 
 			String[] args=argList.toArray(new String[0]);
@@ -525,6 +503,7 @@ public class DecontaminateByNormalization {
 				argList.add("minp="+minp);
 				argList.add("minr="+minr);
 				argList.add("minl="+minl);
+				argList.add("basesundermin="+basesUnderMin);
 				if(stats0!=null){argList.add("minratio="+minRatio);}
 				argList.add("ow="+overwrite);
 			}
@@ -578,7 +557,7 @@ public class DecontaminateByNormalization {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
@@ -599,6 +578,10 @@ public class DecontaminateByNormalization {
 	
 	/*--------------------------------------------------------------*/
 
+
+	private int kfilter=55;
+	private String ambigMode="random";
+	
 	private long maxReads=-1;
 
 	private float minc=3.5f;
@@ -606,19 +589,21 @@ public class DecontaminateByNormalization {
 	private int minr=20;
 	private int minl=500;
 	
+	/** Scaffolds will be discarded if there are at least this many bases in windows below a coverage cutoff. */
+	private int basesUnderMin=-1;
+	
 	private float depthPercentile=0.75f;
 	private float minprob=0.5f;
 	private int minDepth=2;
 	private int normTarget=20;
 	private int normHashes=4;
 	private int normPasses=1;
-	private int kfilter=55;
 	private int filterBits=32;
 	private int prefilterBits=2;
 	private boolean ecc=false;
 	private boolean cecc=false;
 	private boolean aecc=false;
-	private boolean prefilter=false;
+	private boolean prefilter=true;
 	private boolean normalizeByLowerDepth=false;
 
 	private double minRatio=1.2f;
@@ -632,6 +617,5 @@ public class DecontaminateByNormalization {
 	public static boolean verbose=false;
 	public boolean errorState=false;
 	private boolean overwrite=true;
-	private boolean append=false;
 	
 }

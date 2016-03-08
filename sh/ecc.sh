@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified November 4, 2014"
+	echo "Last modified April 10, 2015"
 	echo ""
 	echo "Description:  Corrects substitution errors in reads using kmer depth information."
 	echo "Can also normalize and/or bin reads by kmer depth."
@@ -16,7 +16,7 @@ usage(){
 	echo "Optional parameters (and their defaults)"
 	echo ""
 	echo "Input parameters:"
-	echo "in2=null		Second input file for paired reads"
+	echo "in=null 		Primary input.  Use in2 for paired reads in a second file"
 	echo "extra=null		Additional files to use for input (generating hash table) but not for output"
 	echo "fastareadlen=2^31	Break up FASTA reads longer than this.  Can be useful when processing scaffolded genomes"
 	echo "tablereads=-1		Use at most this many reads when building the hashtable (-1 means all)"
@@ -26,7 +26,7 @@ usage(){
 	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
 	echo ""
 	echo "Output parameters:"
-	echo "out=<file>        	File for corrected reads"
+	echo "out=<file>        	File for corrected reads.  Use out2 for paired reads in a second file"
 	echo "outt=<file>      	(outtoss) File for reads that were excluded from primary output"
 	echo "reads=-1		Only process this number of reads, then quit (-1 means all)"
 	echo "sampleoutput=t		Use sampling on output as well as input (not used if sample rates are 1)"
@@ -69,7 +69,7 @@ usage(){
 	echo "Error detection parameters:"
 	echo "hdp=90.0 		(highdepthpercentile) Position in sorted kmer depth array used as proxy of a read's high kmer depth."
 	echo "ldp=25.0    		(lowdepthpercentile) Position in sorted kmer depth array used as proxy of a read's low kmer depth."
-	echo "tossbadreads=f		(tbr) Throw away reads detected as containing errors.  Only controls behavior of final pass."
+	echo "tossbadreads=f		(tbr) Throw away reads detected as containing errors."
 	echo "errordetectratio=125	(edr) Reads with a ratio of at least this much between their high and low depth kmers will be classified as error reads."
 	echo "highthresh=12		(ht) Threshold for high kmer.  A high kmer at this or above are considered non-error."
 	echo "lowthresh=3		(lt) Threshold for low kmer.  Kmers at this and below are always considered errors."
@@ -85,6 +85,7 @@ usage(){
 	echo "cec=f			(conservativeErrorCorrection) Sets more conservative values of ecr=180, ecclimit=2, echt=30, eclt=1, sl=4, pl=4."
 	echo "meo=f			(markErrorsOnly) Marks errors by reducing quality value of suspected errors; does not correct anything."
 	echo "mue=t			(markUncorrectableErrors) Marks errors only on uncorrectable reads; requires 'ecc=t'."
+	echo "overlap=auto		Error correct by read overlap."
 	echo ""	
 	echo "Depth binning parameters:"
 	echo "lowbindepth=10		(lbd) Cutoff for low depth bin."
@@ -148,7 +149,7 @@ correct() {
 	#module load pigz
 	local CMD="java $EA $z $z2 -cp $CP jgi.KmerNormalize bits=16 ecc=t passes=1 keepall dr=f prefilter $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 correct "$@"

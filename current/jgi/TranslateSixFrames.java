@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SamLine;
 
@@ -43,6 +43,7 @@ public class TranslateSixFrames {
 	
 	public TranslateSixFrames(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -56,9 +57,9 @@ public class TranslateSixFrames {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		int frames=6;
 		
@@ -92,12 +93,19 @@ public class TranslateSixFrames {
 			}else if(a.equals("frames")){
 				frames=Integer.parseInt(b);
 				assert(frames>=0 && frames<=6) : "Frames must be in the range of 0 to 6";
+			}else if(a.equals("aain")){
+				NT_IN=!Tools.parseBoolean(b);
+			}else if(a.equals("ntin")){
+				NT_IN=Tools.parseBoolean(b);
+			}else if(a.equals("aaout")){
+				NT_OUT=!Tools.parseBoolean(b);
+			}else if(a.equals("ntout")){
+				NT_OUT=Tools.parseBoolean(b);
+			}else if(a.equals("frames")){
+				frames=Integer.parseInt(b);
+				assert(frames>=0 && frames<=6) : "Frames must be in the range of 0 to 6";
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -107,8 +115,10 @@ public class TranslateSixFrames {
 			}
 		}
 		FRAMES=frames;
+		Shared.AMINO_IN=!NT_IN;
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;	
 			samplerate=parser.samplerate;
@@ -133,9 +143,6 @@ public class TranslateSixFrames {
 			extout=parser.extout;
 		}
 		
-		
-		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
-		
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
 			in2=in1.replace("#", "2");
 			in1=in1.replace("#", "1");
@@ -156,7 +163,7 @@ public class TranslateSixFrames {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -192,54 +199,28 @@ public class TranslateSixFrames {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTA, extout, true, overwrite, append, false);  
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTA, extout, true, overwrite, append, false);
 		
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTA, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTA, extin, true, true);
-
-		if(ffin1!=null && ffout1!=null && ffin1.samOrBam()){
-			if(ffout1.samOrBam()){
-				useSharedHeader=true;
-				SamLine.CONVERT_CIGAR_TO_MATCH=true;
-			}else if(ffout1.bread()){
-				SamLine.CONVERT_CIGAR_TO_MATCH=true;
-			}
-		}
 		
 		if((ffout1!=null && ffout1.fasta()) || (ffin1!=null && ffin1.fasta())){skipquality=true;}
 	}
 	
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
 			cris.setSampleRate(samplerate, sampleseed);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
 
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -250,8 +231,8 @@ public class TranslateSixFrames {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-//			System.err.println("Calling RTextOutputStream3 with out1="+out1+", out2="+out2+", qfout1="+qfout1+", qfout2="+qfout2);
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
+//			System.err.println("Calling ConcurrentReadOutputStream with out1="+out1+", out2="+out2+", qfout1="+qfout1+", qfout2="+qfout2);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
 			ros.start();
 		}
 		
@@ -278,41 +259,21 @@ public class TranslateSixFrames {
 
 			while(reads!=null && reads.size()>0){
 				
-				final ArrayList<Read> listOut=new ArrayList<Read>(reads.size()*FRAMES);
+				final ArrayList<Read> listOut=new ArrayList<Read>(reads.size()*(NT_IN ? FRAMES : 1));
 				
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
 					final Read r2=r1.mate;
 					
 					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
+					final int initialLength2=(r1.mateLength());
 					
-
-					final byte[][] bm1=AminoAcid.toAAsSixFrames(r1.bases);
-					final byte[][] qm1=(skipquality ? QNULL : AminoAcid.toQualitySixFrames(r1.quality, 0));
-					final byte[][] bm2=(r2==null ? null : AminoAcid.toAAsSixFrames(r2.bases));
-					final byte[][] qm2=(r2==null ? null : (skipquality ? QNULL : AminoAcid.toQualitySixFrames(r2.quality, 0)));
-					
-					for(int i=0; i<FRAMES; i++){
-						Read aa1=new Read(bm1[i], r1.chrom, r1.start, r1.stop, (addTag ? r1.id+frametag[i] : r1.id), qm1[i], r1.numericID, r1.flags|Read.AAMASK);
-						Read aa2=null;
-						if(r2!=null){
-							aa2=new Read(bm2[i], r2.chrom, r2.start, r2.stop, (addTag ? r2.id+frametag[i] : r2.id), qm2[i], r2.numericID, r2.flags|Read.AAMASK);
-							aa1.mate=aa2;
-							aa2.mate=aa1;
-						}
-						if(aa1.bases!=null || (aa2!=null && aa2.bases!=null)){
-							listOut.add(aa1);
-							
-							readsOut1++;
-							basesOut1+=(aa1.bases==null ? 0 : aa1.bases.length);
-							
-							if(aa2!=null){
-								readsOut2++;
-								basesOut2+=(aa2.bases==null ? 0 : aa2.bases.length);
-							}
-						}
+					if(NT_IN){//Translate to amino acids
+						toFrames(r1, skipquality, addTag, FRAMES, listOut);
+					}else{
+						listOut.add(r1);
 					}
+					
 					
 					{
 						readsProcessed++;
@@ -323,27 +284,49 @@ public class TranslateSixFrames {
 						basesProcessed+=initialLength2;
 					}
 					
-					boolean remove=false;
-					
-					if(remove){reads.set(idx, null);}
-					else if(addslash){
-						if(r1.id==null){r1.id=" "+r1.numericID;}
+					if(addslash){
+						if(r1.id==null){r1.id=""+r1.numericID;}
 						if(!r1.id.contains(" /1")){r1.id+=" /1";}
 						if(r2!=null){
-							if(r2.id==null){r2.id=" "+r2.numericID;}
+							if(r2.id==null){r2.id=""+r2.numericID;}
 							if(!r2.id.contains(" /2")){r2.id+=" /2";}
 						}
 					}
 				}
 				
+				if(NT_OUT){//Translate to nucleotides
+					for(int i=0; i<listOut.size(); i++){
+						final Read aa1=listOut.get(i);
+						final Read aa2=aa1.mate;
+						final Read nt1=aa1.aminoToNucleic();
+						if(aa2!=null){
+							final Read nt2=aa2.aminoToNucleic();
+							nt1.mate=nt2;
+							nt2.mate=nt1;
+						}
+						listOut.set(i, nt1);
+					}
+				}
+				
+				for(Read r1 : listOut){
+					Read r2=r1.mate;
+					readsOut1++;
+					basesOut1+=r1.length();
+
+					if(r2!=null){
+						readsOut2++;
+						basesOut2+=r2.length();
+					}
+				}
+				
 				if(ros!=null){ros.add(listOut, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -366,28 +349,40 @@ public class TranslateSixFrames {
 		while(bpstring.length()<8){bpstring=" "+bpstring;}
 		while(rostring.length()<8){rostring=" "+rostring;}
 		while(aastring.length()<8){aastring=" "+aastring;}
-
-//		if(qtrim || forceTrimLeft>0 || forceTrimRight>0 || trimBadSequence){
-//			outstream.println("QTrimmed:               \t"+readsTrimmedT+" reads ("+String.format("%.2f",readsTrimmedT*100.0/readsProcessed)+"%) \t"+
-//					basesTrimmedT+" bases ("+String.format("%.2f",basesTrimmedT*100.0/basesProcessed)+"%)");
-//		}else if(minReadLength>0){
-//			outstream.println("Short Read Discards:    \t"+readShortDiscardsT+" reads ("+String.format("%.2f",readShortDiscardsT*100.0/readsProcessed)+"%) \t"+
-//					baseShortDiscardsT+" bases ("+String.format("%.2f",baseShortDiscardsT*100.0/basesProcessed)+"%)");
-//		}
-//		if(minAvgQuality>0){
-//			outstream.println("Low quality discards:   \t"+lowqReadsT+" reads ("+String.format("%.2f",lowqReadsT*100.0/readsProcessed)+"%) \t"+
-//					lowqBasesT+" bases ("+String.format("%.2f",lowqBasesT*100.0/basesProcessed)+"%)");
-//		}
 		
 		outstream.println("Time:                         \t"+t);
 		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		outstream.println("Reads Out:          "+rostring);
-		outstream.println("Amino Acids Out:    "+aastring);
+		outstream.println((NT_OUT ? "Bases Out:          " : "Amino Acids Out:    ")+aastring);
 		
 		if(errorState){
 			throw new RuntimeException("TranslateSixFrames terminated in an error state; the output may be corrupt.");
 		}
+	}
+	
+	public static final ArrayList<Read> toFrames(Read r1, boolean skipquality, boolean addTag, int frames){
+		return toFrames(r1, skipquality, addTag, frames, new ArrayList<Read>(frames));
+	}
+	
+	public static final ArrayList<Read> toFrames(Read r1, boolean skipquality, boolean addTag, int frames, ArrayList<Read> listOut){
+		final Read r2=r1.mate;
+		final byte[][] bm1=AminoAcid.toAAsSixFrames(r1.bases);
+		final byte[][] qm1=(skipquality ? QNULL : AminoAcid.toQualitySixFrames(r1.quality, 0));
+		final byte[][] bm2=(r2==null ? null : AminoAcid.toAAsSixFrames(r2.bases));
+		final byte[][] qm2=(r2==null ? null : (skipquality ? QNULL : AminoAcid.toQualitySixFrames(r2.quality, 0)));
+
+		for(int i=0; i<frames; i++){
+			Read aa1=new Read(bm1[i], r1.chrom, r1.start, r1.stop, (addTag ? r1.id+frametag[i] : r1.id), qm1[i], r1.numericID, r1.flags|Read.AAMASK);
+			Read aa2=null;
+			if(r2!=null){
+				aa2=new Read(bm2[i], r2.chrom, r2.start, r2.stop, (addTag ? r2.id+frametag[i] : r2.id), qm2[i], r2.numericID, r2.flags|Read.AAMASK);
+				aa1.mate=aa2;
+				aa2.mate=aa1;
+			}
+			if(aa1.bases!=null || (aa2!=null && aa2.bases!=null)){listOut.add(aa1);}
+		}
+		return listOut;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -400,7 +395,7 @@ public class TranslateSixFrames {
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
@@ -429,6 +424,9 @@ public class TranslateSixFrames {
 	private boolean addslash=false;
 
 	private boolean skipquality=false;
+	
+	private boolean NT_IN=true;
+	private boolean NT_OUT=false;
 
 	private long maxReads=-1;
 	private float samplerate=1f;
@@ -444,7 +442,7 @@ public class TranslateSixFrames {
 	private final FileFormat ffout1;
 	private final FileFormat ffout2;
 	
-	private static final String[] frametag= new String[] {" fr1", " fr2", " fr3", " fr4", " fr5", " fr6"};
+	private static final String[] frametag=new String[] {" fr1", " fr2", " fr3", " fr4", " fr5", " fr6"};
 	private static final byte[][] QNULL=new byte[6][];
 	private boolean addTag=true;
 	

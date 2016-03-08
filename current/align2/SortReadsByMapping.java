@@ -6,18 +6,15 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import stream.ConcurrentLegacyReadInputStream;
 import stream.ConcurrentReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.ConcurrentSolidInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.ReadStreamStringWriter;
 import stream.ReadStreamWriter;
-import stream.SiteScore;
 
 import dna.AminoAcid;
 import dna.Data;
@@ -29,8 +26,6 @@ public class SortReadsByMapping {
 	
 	
 	public static void main(String[] args){
-		
-		Data.GENOME_BUILD=-1;
 		
 		for(String s_ : args){
 			String s=s_.toLowerCase();
@@ -63,9 +58,6 @@ public class SortReadsByMapping {
 			}else if(s.startsWith("readlimit=")){
 				READ_LIMIT=Long.parseLong(split[1]);
 				Data.sysout.println("Set READ_LIMIT to "+READ_LIMIT);
-			}else if(s.startsWith("build=") || s.startsWith("genome=")){
-				Data.setGenome(Integer.parseInt(split[1]));
-				Data.sysout.println("Set GENOME_BUILD to "+Data.GENOME_BUILD);
 			}else if(s.startsWith("threads=")){
 				REGEN_THREADS=Integer.parseInt(split[1]);
 			}else if(s.startsWith("overwrite=")){
@@ -76,25 +68,15 @@ public class SortReadsByMapping {
 		Read.DECOMPRESS_MATCH_ON_LOAD=true;
 		
 		SortReadsByMapping srt;
-		if(args[0].contains(".csfasta") && args[1].contains(".qual")){
-			String reads1=args[0];
-			String q1=args[1];
-			String reads2=args[2].equalsIgnoreCase("null") ?  null : args[2];
-			String q2=args[3].equalsIgnoreCase("null") ?  null : args[3];
-			String outname=args[4].equalsIgnoreCase("null") ?  ReadWrite.parseRoot(reads1)+"mapped_sorted#.txt.gz" : args[4];
-			assert(outname.contains("#"));
-			int blocksize=Integer.parseInt(args[5]);
-			
-			srt=new SortReadsByMapping(reads1, q1, reads2, q2, outname, blocksize);
-		}else{
-			String reads1=args[0];
-			String reads2=args[1].equalsIgnoreCase("null") ?  null : args[1];
-			String outname=args[2].equalsIgnoreCase("null") ?  ReadWrite.parseRoot(reads1)+"mapped_sorted#.txt.gz" : args[2];
-			assert(outname.contains("#"));
-			int blocksize=Integer.parseInt(args[3]);
-			
-			srt=new SortReadsByMapping(reads1, reads2, outname, blocksize);
-		}
+		
+		String reads1=args[0];
+		String reads2=args[1].equalsIgnoreCase("null") ?  null : args[1];
+		String outname=args[2].equalsIgnoreCase("null") ?  ReadWrite.parseRoot(reads1)+"mapped_sorted#.txt.gz" : args[2];
+		assert(outname.contains("#"));
+		int blocksize=Integer.parseInt(args[3]);
+
+		srt=new SortReadsByMapping(reads1, reads2, outname, blocksize);
+		
 		
 		srt.process();
 
@@ -137,19 +119,7 @@ public class SortReadsByMapping {
 		RTextInputStream rtis=new RTextInputStream(fname1, fname2, limit);
 		outname=outname_;
 		paired=rtis.paired();
-		cris=new ConcurrentReadInputStream(rtis, limit);
-		blocksize=blocksize_;
-		assert(blocksize>200000);
-
-		blockwriter1=(fname1==null ? null : new ReadStreamStringWriter(null, true, 4, false));
-		blockwriter2=(fname2==null ? null : new ReadStreamStringWriter(null, false, 4, false));
-	}
-	
-	public SortReadsByMapping(String fname1, String q1, String fname2, String q2, String outname_, int blocksize_){
-		assert(fname2==null || !fname1.equals(fname2)) : "Error - input files have same name.";
-		outname=outname_;
-		cris=new ConcurrentSolidInputStream(fname1, q1, fname2, q2, 0);
-		paired=cris.paired();
+		cris=new ConcurrentLegacyReadInputStream(rtis, limit);
 		blocksize=blocksize_;
 		assert(blocksize>200000);
 
@@ -172,8 +142,7 @@ public class SortReadsByMapping {
 		total.start();
 		
 
-		Thread tcris=new Thread(cris);
-		tcris.start();
+		cris.start();
 		System.err.println("Started cris");
 		
 		Thread bwt1=null, bwt2=null;
@@ -195,7 +164,7 @@ public class SortReadsByMapping {
 				Read r=reads.get(0);
 				assert(paired==(r.mate!=null));
 				if(paired){
-					asymmetricReads=(r.bases.length!=r.mate.bases.length);
+					asymmetricReads=(r.length()!=r.mateLength());
 				}
 			}
 			
@@ -207,8 +176,8 @@ public class SortReadsByMapping {
 					for(Read r : reads){
 						
 						if(r.isBadPair(REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, 20000)){
-							int x=r.mapScore/r.mapLength;
-							int y=r.mate.mapScore/r.mate.mapLength;
+							int x=r.mapScore/r.length();
+							int y=r.mate.mapScore/r.mateLength();
 							if(x>=y){
 								r.mate.clearAnswers(false);
 							}else{
@@ -225,13 +194,13 @@ public class SortReadsByMapping {
 				
 				
 				//System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			System.err.println("Returned list");
 			ReadWrite.closeStream(cris);
 			System.err.println("Closed stream");
@@ -381,8 +350,8 @@ public class SortReadsByMapping {
 				}else{
 					for(Read r : list){
 						if(r!=null){
-							if(r.mapped()){basesInitiallyMapped+=r.mapLength;}
-							if(r.mate!=null && r.mate.mapped()){basesInitiallyMapped+=r.mate.mapLength;}
+							if(r.mapped()){basesInitiallyMapped+=r.length();}
+							if(r.mate!=null && r.mate.mapped()){basesInitiallyMapped+=r.mate.length();}
 						}
 					}
 				}
@@ -401,8 +370,8 @@ public class SortReadsByMapping {
 				}else{
 					for(Read r : list){
 						if(r!=null){
-							if(r.mapped() && !r.invalid()){basesMapped+=r.bases.length;}
-							if(r.mate!=null  && !r.mate.invalid() && r.mate.mapped()){basesMapped+=r.mate.bases.length;}
+							if(r.mapped() && !r.invalid()){basesMapped+=r.length();}
+							if(r.mate!=null  && !r.mate.invalid() && r.mate.mapped()){basesMapped+=r.mateLength();}
 						}
 					}
 				}
@@ -648,7 +617,7 @@ public class SortReadsByMapping {
 			if(r!=null){
 				final Read r2=r.mate;
 				if(r.mapped() && !r.invalid()){
-					basesMapped+=r.bases.length;
+					basesMapped+=r.length();
 					basesRemoved+=trimTail(r, thresh, minq);
 					if(r.match==null && r.valid()){needRegen++;}
 					else{
@@ -656,7 +625,7 @@ public class SortReadsByMapping {
 					}
 				}
 				if(r2!=null && r2.mapped() && !r2.invalid()){
-					basesMapped+=r2.bases.length;
+					basesMapped+=r2.length();
 					basesRemoved+=trimTail(r2, thresh, minq);
 					if(r2.match==null && r2.valid()){needRegen++;}
 					else{
@@ -693,13 +662,13 @@ public class SortReadsByMapping {
 			final Read r2=(r==null ? null : r.mate);
 			
 			if(r!=null){
-				if(r.mapped()){basesMapped+=r.mapLength;}
-				if(r2!=null && r2.mapped()){basesMapped+=r2.mapLength;}
+				if(r.mapped()){basesMapped+=r.length();}
+				if(r2!=null && r2.mapped()){basesMapped+=r2.length();}
 			}
 			
 			if(r!=null && r2!=null && r.mapped() && r.paired() && r2.mapped()){
 
-				final int expectedMinLengthOuter=r.bases.length+r2.bases.length;
+				final int expectedMinLengthOuter=r.length()+r2.length();
 
 				final int refLengthOuter;
 				final int refLengthInner;
@@ -724,26 +693,26 @@ public class SortReadsByMapping {
 				if(false && refLengthOuter<expectedMinLengthOuter){
 					//Short read type 1: outer distance is too short
 					
-					if(refLengthOuter<Tools.max(r.bases.length/2, 35)){
+					if(refLengthOuter<Tools.max(r.length()/2, 35)){
 						r.setInvalid(true);
 						r2.setInvalid(true);
-						basesRemoved+=(r.bases.length+r2.bases.length);
+						basesRemoved+=(r.length()+r2.length());
 					}else{
 						int dif=expectedMinLengthOuter-refLengthOuter;
 						int rem1=dif/2;
 						int rem2=dif-rem1;
-						if(r2.bases.length-rem2<10){
+						if(r2.length()-rem2<10){
 							r2.setInvalid(true);
 							r.setPaired(false);
 							r2.setPaired(false);
-							basesRemoved+=r2.bases.length;
+							basesRemoved+=r2.length();
 							rem1=dif;
 							rem2=0;
-						}else if(r.bases.length-rem1<10){
+						}else if(r.length()-rem1<10){
 							r.setInvalid(true);
 							r.setPaired(false);
 							r2.setPaired(false);
-							basesRemoved+=r.bases.length;
+							basesRemoved+=r.length();
 							rem1=0;
 							rem2=dif;
 						}
@@ -772,12 +741,12 @@ public class SortReadsByMapping {
 					int overlap=Tools.max(cOverlap1, cOverlap2);
 					
 					if(overlap>0){
-						int toRemain=r.bases.length+r2.bases.length-overlap;
+						int toRemain=r.length()+r2.length()-overlap;
 
-						if(toRemain<Tools.max(r.bases.length/2, 34)){
+						if(toRemain<Tools.max(r.length()/2, 34)){
 							r.setInvalid(true);
 							r2.setInvalid(true);
-							basesRemoved+=(r.bases.length+r2.bases.length);
+							basesRemoved+=(r.length()+r2.length());
 //							System.err.println("Removed read. refLengthOuter="+refLengthOuter+", refLengthInner="+
 //									refLengthInner+", cOverlap1="+cOverlap1+", cOverlap2="+cOverlap2+", toRemain="+toRemain+
 //									"\n"+new String(r.match)+"\n"+new String(r2.match)+"\n"+
@@ -788,18 +757,18 @@ public class SortReadsByMapping {
 //							System.err.println((cOverlap1==cOverlap2 ? "" : "****\t")+cOverlap1+", "+cOverlap2);
 							int rem1=overlap/2;
 							int rem2=overlap-rem1;
-							if(r2.bases.length-rem2<10){
+							if(r2.length()-rem2<10){
 								r2.setInvalid(true);
 								r.setPaired(false);
 								r2.setPaired(false);
-								basesRemoved+=r2.bases.length;
+								basesRemoved+=r2.length();
 								rem1=overlap;
 								rem2=0;
-							}else if(r.bases.length-rem1<10){
+							}else if(r.length()-rem1<10){
 								r.setInvalid(true);
 								r.setPaired(false);
 								r2.setPaired(false);
-								basesRemoved+=r.bases.length;
+								basesRemoved+=r.length();
 								rem1=0;
 								rem2=overlap;
 							}
@@ -939,7 +908,7 @@ public class SortReadsByMapping {
 		r.bases=bases;
 		
 		assert(trimmed>0);
-		assert(r.quality.length==r.bases.length);
+		assert(r.quality.length==r.length());
 		assert(r.match==null || r.match.length>=r.quality.length);
 		
 //		System.err.println("After:\n"+r.toText(false));
@@ -1019,7 +988,7 @@ public class SortReadsByMapping {
 		r.bases=bases;
 		
 		assert(trimmed>0);
-		assert(r.quality.length==r.bases.length);
+		assert(r.quality.length==r.length());
 		assert(r.match==null || r.match.length>=r.quality.length);
 		
 //		System.err.println("After:\n"+r.toText(false));
@@ -1029,7 +998,7 @@ public class SortReadsByMapping {
 	
 	
 	private static int countCalledBasesOnOrAfterRefLoc(Read r, final int rlimit){
-		final int clen=r.bases.length;
+		final int clen=r.length();
 		byte[] match=r.match;
 		
 		if(r.strand()==Gene.PLUS){
@@ -1123,12 +1092,12 @@ public class SortReadsByMapping {
 			final boolean dupeLoose=current.isDuplicateByMapping(r, false, false);
 			final boolean mdupeLoose=(current.mate==null ? false : current.mate.isDuplicateByMapping(r.mate, false, false));
 			final boolean lengthOK=(mergeDifferentLengthReads || 
-					(r.bases.length==current.bases.length && (!paired || r2.bases.length==current.mate.bases.length)));
+					(r.length()==current.length() && (!paired || r2.length()==current.mateLength())));
 			
 			if(lengthOK && (dupeLoose || mdupeLoose)){
 				if(paired){
 
-					if(r.bases.length==current.bases.length){
+					if(r.length()==current.length()){
 						//Normal case
 
 						if(dupeLoose && mdupeLoose){
@@ -1419,19 +1388,19 @@ public class SortReadsByMapping {
 			Read r=list.get(i);
 			if(r.paired()){current=r;}
 			else if(current!=null && !r.paired()){
-				assert(r.bases.length==current.bases.length) : "Merging different-length reads is supported but seems to be not useful.";
+				assert(r.length()==current.length()) : "Merging different-length reads is supported but seems to be not useful.";
 				if(r.mapped() && !r.mate.mapped()){
-					final boolean sameLength=current.bases.length==r.bases.length;
+					final boolean sameLength=current.length()==r.length();
 					if(current.isDuplicateByMapping(r, sameLength, true)){
-						if(current.mate.isDuplicateByBases(r.mate, r.mate.bases.length/5, r.mate.bases.length/5, (byte)14, false, true)){
+						if(current.mate.isDuplicateByBases(r.mate, r.mateLength()/5, r.mateLength()/5, (byte)14, false, true)){
 							list.set(i, null);
 							removedSingletonDupe++;
 						}
 					}
 				}else{
-					final boolean sameLength=current.mate.bases.length==r.mate.bases.length;
+					final boolean sameLength=current.mateLength()==r.mateLength();
 					if(current.mate.isDuplicateByMapping(r.mate, sameLength, true)){
-						if(!sameLength || current.isDuplicateByBases(r, r.bases.length/5, r.bases.length/5, (byte)14, false, true)){
+						if(!sameLength || current.isDuplicateByBases(r, r.length()/5, r.length()/5, (byte)14, false, true)){
 							list.set(i, null);
 							removedSingletonDupe++;
 						}
@@ -1465,22 +1434,19 @@ public class SortReadsByMapping {
 			if(list.size()==1){return list.get(0);}
 		}
 		
-		final boolean cs=list.get(0).colorspace();
 		int len=0;
-		for(Read r : list){len=Tools.max(len, r.bases.length);}
+		for(Read r : list){len=Tools.max(len, r.length());}
 		
-		assert(len==list.get(0).bases.length);
+		assert(len==list.get(0).length());
 		
 		int[][] count=new int[4][len];
 		int[][] qual=new int[4][len];
 		byte[][] maxQual=new byte[4][len];
 		
 		for(Read r : list){
-			for(int i=0; i<r.bases.length; i++){
-				byte b_=r.bases[i];
-				assert(!cs || (b_!='A' && b_!='C' && b_!='G' && b_!='T'));
-				assert(cs || (b_!=0 && b_!=1 && b_!=2 && b_!=3));
-				byte b=(cs ? b_ : AminoAcid.baseToNumber[b_]);
+			for(int i=0; i<r.length(); i++){
+				byte b=r.bases[i];
+				assert((b!='A' && b!='C' && b!='G' && b!='T'));
 				byte q=r.quality[i];
 				if(b>=0 && b<=3){
 					count[b][i]+=r.copies;
@@ -1511,7 +1477,7 @@ public class SortReadsByMapping {
 				bases[i]='N';
 				quality[i]=0;
 			}else{
-				bases[i]=(cs ? best : AminoAcid.numberToBase[best]);
+				bases[i]=AminoAcid.numberToBase[best];
 				int q=2*qarray[best];
 				for(int j=0; j<4; j++){q-=qarray[j];}
 				q=Tools.min(48, Tools.max(q, 1));
@@ -1520,9 +1486,6 @@ public class SortReadsByMapping {
 		}
 		
 		final Read r=list.get(0);
-
-		assert(checkColorspace(bases, cs)): r.toText(false)+"\n"+Arrays.toString(bases)+"\n"+new String(bases);
-		assert(checkColorspace(r.bases, cs)): r.toText(false)+"\n"+Arrays.toString(bases)+"\n"+new String(bases);
 		
 //		if(r.match!=null){
 //			for(int i=0; i<len; i++){
@@ -1576,26 +1539,10 @@ public class SortReadsByMapping {
 				}
 			}
 		}
-		assert(checkColorspace(r.bases, cs)): r.toText(false)+"\n"+Arrays.toString(bases)+"\n"+new String(bases);
 		
 		if(killMatch){r.match=null;}
 		
 		return r;
-	}
-	
-	private static boolean checkColorspace(byte[] bases, boolean cs){
-		if(cs){
-			for(int i=0; i<bases.length; i++){
-				byte b=bases[i];
-				if(b!='N' && b!=0 && b!=1 && b!=2 && b!=3){return false;}
-			}
-		}else{
-			for(int i=0; i<bases.length; i++){
-				byte b=bases[i];
-				if(b!='N' && b!='A' && b!='C' && b!='G' && b!='T'){return false;}
-			}
-		}
-		return true;
 	}
 	
 	private static final byte findBest(int[] count, int[] qual, byte[] maxqual){
@@ -1935,7 +1882,7 @@ public class SortReadsByMapping {
 			assert(false) : "TODO: move ss locs back to read.";
 			
 			r.setPerfectFlag(Integer.MAX_VALUE);
-			assert(!r.perfect() || r.stop-r.start==(r.bases.length-1)) : 
+			assert(!r.perfect() || r.stop-r.start==(r.length()-1)) : 
 				"\n"+r.toText(false)+"\n"+new String(r.bases)+"\n"+new String(AminoAcid.reverseComplementBases(r.bases))+
 				"\n"+Data.getChromosome(r.chrom).getString(r.topSite().start, r.topSite().stop)+"\n";
 			
@@ -1962,7 +1909,7 @@ public class SortReadsByMapping {
 	}
 	
 	public final String outname;
-	private final ConcurrentReadStreamInterface cris;
+	private final ConcurrentReadInputStream cris;
 	private final ArrayBlockingQueue<ArrayList<Read>> REGEN_PIPE=new ArrayBlockingQueue<ArrayList<Read>>(40);
 	public long merged=0;
 	public long merged2=0;
@@ -2016,7 +1963,7 @@ public class SortReadsByMapping {
 	public static byte TRIM_WINDOW=3;
 	
 	public static boolean REGENERATE_MATCH_STRING=false;
-	public static int REGEN_THREADS=Shared.THREADS;
+	public static int REGEN_THREADS=Shared.threads();
 	
 	private final ReadStreamWriter blockwriter1;
 	private final ReadStreamWriter blockwriter2;

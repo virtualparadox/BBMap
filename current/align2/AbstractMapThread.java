@@ -7,8 +7,8 @@ import java.util.Collections;
 import jgi.CoveragePileup;
 import jgi.ReformatReads;
 
-import stream.ConcurrentReadStreamInterface;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
@@ -27,15 +27,15 @@ import dna.Gene;
  */
 public abstract class AbstractMapThread extends Thread {
 	
-	AbstractMapThread(ConcurrentReadStreamInterface cris_, 
-			RTextOutputStream3 outStream_, RTextOutputStream3 outStreamMapped_, RTextOutputStream3 outStreamUnmapped_, RTextOutputStream3 outStreamBlack_,
-			CoveragePileup pileup_, boolean colorspace_, boolean SLOW_ALIGN_, boolean LOCAL_ALIGN_, boolean AMBIGUOUS_TOSS_, 
+	AbstractMapThread(ConcurrentReadInputStream cris_, 
+			ConcurrentReadOutputStream outStream_, ConcurrentReadOutputStream outStreamMapped_, ConcurrentReadOutputStream outStreamUnmapped_, ConcurrentReadOutputStream outStreamBlack_,
+			CoveragePileup pileup_, boolean SLOW_ALIGN_, boolean LOCAL_ALIGN_, boolean AMBIGUOUS_TOSS_, 
 			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int MIN_TRIM_LEN_, int THRESH_, 
 			int minChrom_, int maxChrom_, int KFILTER_, float IDFILTER_, boolean KILL_BAD_PAIRS_, boolean SAVE_AMBIGUOUS_XY_,
-			boolean translateToBaseSpace_, boolean REQUIRE_CORRECT_STRANDS_PAIRS_,
+			boolean REQUIRE_CORRECT_STRANDS_PAIRS_,
 			boolean SAME_STRAND_PAIRS_, boolean DO_RESCUE_, boolean STRICT_MAX_INDEL_, int SLOW_ALIGN_PADDING_, int SLOW_RESCUE_PADDING_,
 			String MSA_TYPE_, int keylen_, boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, boolean RCOMP_MATE_, 
-			boolean MAKE_MATCH_STRING_, boolean DONT_OUTPUT_UNMAPPED_READS_, boolean DONT_OUTPUT_BLACKLISTED_READS_, boolean PRINT_SECONDARY_ALIGNMENTS_, 
+			boolean MAKE_MATCH_STRING_, boolean OUTPUT_MAPPED_ONLY_, boolean DONT_OUTPUT_BLACKLISTED_READS_, boolean PRINT_SECONDARY_ALIGNMENTS_, 
 			boolean QUICK_MATCH_STRINGS_, int MAX_SITESCORES_TO_PRINT_, float MINIMUM_ALIGNMENT_SCORE_RATIO_,
 			float keyDensity_, float maxKeyDensity_, float minKeyDensity_, int maxDesiredKeys_,
 			int MIN_APPROX_HITS_TO_KEEP_, boolean USE_EXTENDED_SCORE_, int BASE_HIT_SCORE_, boolean USE_AFFINE_SCORE_, int MAX_INDEL_,
@@ -49,7 +49,6 @@ public abstract class AbstractMapThread extends Thread {
 		outStreamBlack=outStreamBlack_;
 		pileup=pileup_;
 		
-		colorspace=colorspace_;
 		SLOW_ALIGN=SLOW_ALIGN_;
 		LOCAL_ALIGN=LOCAL_ALIGN_;
 		AMBIGUOUS_TOSS=AMBIGUOUS_TOSS_;
@@ -69,7 +68,6 @@ public abstract class AbstractMapThread extends Thread {
 		KILL_BAD_PAIRS=KILL_BAD_PAIRS_;
 		SAVE_AMBIGUOUS_XY=SAVE_AMBIGUOUS_XY_;
 //		GEN_MATCH_FAST=GEN_MATCH_FAST_;
-		translateToBaseSpace=translateToBaseSpace_;
 		SLOW_ALIGN_PADDING=SLOW_ALIGN_PADDING_;
 		SLOW_RESCUE_PADDING=SLOW_RESCUE_PADDING_;
 		DO_RESCUE=DO_RESCUE_;
@@ -110,7 +108,7 @@ public abstract class AbstractMapThread extends Thread {
 		MAKE_MATCH_STRING=(MAKE_MATCH_STRING_ || STRICT_MAX_INDEL_);
 		assert(SLOW_ALIGN_PADDING>=0);
 		
-		DONT_OUTPUT_UNMAPPED_READS=DONT_OUTPUT_UNMAPPED_READS_;
+		OUTPUT_MAPPED_ONLY=OUTPUT_MAPPED_ONLY_;
 		DONT_OUTPUT_BLACKLISTED_READS=DONT_OUTPUT_BLACKLISTED_READS_;
 		MAX_SITESCORES_TO_PRINT=MAX_SITESCORES_TO_PRINT_;
 		PRINT_SECONDARY_ALIGNMENTS=PRINT_SECONDARY_ALIGNMENTS_;
@@ -130,14 +128,14 @@ public abstract class AbstractMapThread extends Thread {
 				EXTRA_PADDING : Tools.min(EXTRA_PADDING, Tools.max(BANDWIDTH/4, (int)(MSA.bandwidthRatio*60))));
 		
 		if(SLOW_ALIGN || MAKE_MATCH_STRING){
-			msa=MSA.makeMSA(ALIGN_ROWS(), ALIGN_COLUMNS(), colorspace, MSA_TYPE);
+			msa=MSA.makeMSA(ALIGN_ROWS(), ALIGN_COLUMNS(), MSA_TYPE);
 			POINTS_MATCH=msa.POINTS_MATCH();
 			POINTS_MATCH2=msa.POINTS_MATCH2();
 //			CLEARZONE1=(int)(CLEARZONE_RATIO1*POINTS_MATCH2);
 //			CLEARZONE1b=(int)(CLEARZONE_RATIO1b*POINTS_MATCH2);
 //			CLEARZONE1c=(int)(CLEARZONE_RATIO1c*POINTS_MATCH2);
 //			CLEARZONEP=(int)(CLEARZONE_RATIOP*POINTS_MATCH2);
-//			CLEARZONE3=(int)(CLEARZONE_RATIO3*POINTS_MATCH2);
+//			CLEARZONE3=PENALIZE_AMBIG ? (int)(CLEARZONE_RATIO3*POINTS_MATCH2) : 0;
 			CLEARZONE1e=(int)(2*POINTS_MATCH2-POINTS_MATCH-msa.POINTS_SUB())+1;
 		}else{
 			POINTS_MATCH=70;
@@ -155,18 +153,11 @@ public abstract class AbstractMapThread extends Thread {
 //		CLEARZONE1c_CUTOFF_FLAT=CLEARZONE1c_CUTOFF_FLAT_RATIO*POINTS_MATCH2;
 //		INV_CLEARZONE3=(CLEARZONE3==0 ? 0 : 1f/CLEARZONE3);
 		
-		if(translateToBaseSpace){
-			tcr=new TranslateColorspaceRead(MSA.makeMSA(ALIGN_ROWS(), ALIGN_COLUMNS()+500, false, MSA_TYPE));
-			if(msa!=null){assert(msa.colorspace);}
-		}else{
-			tcr=null;
-		}
-		
 //		index=new BBIndex(KEYLEN, minChrom, maxChrom, KFILTER, msa);
 		GENERATE_KEY_SCORES_FROM_QUALITY=AbstractIndex.GENERATE_KEY_SCORES_FROM_QUALITY;
 		readstats=(ReadStats.collectingStats() ? new ReadStats() : null);
 		
-//		assert(false) : "READ_BUFFER_NUM_BUFFERS="+Shared.READ_BUFFER_NUM_BUFFERS+", READ_BUFFER_LENGTH="+Shared.READ_BUFFER_LENGTH;
+		PROCESS_EDIT_FILTER=(SUBFILTER>=0 || DELFILTER>=0 || INSFILTER>=0 || INDELFILTER>=0 || DELLENFILTER>=0 || INSLENFILTER>=0 || EDITFILTER>=0);
 	}
 	
 	public abstract int ALIGN_COLUMNS();
@@ -175,19 +166,121 @@ public abstract class AbstractMapThread extends Thread {
 	
 	abstract AbstractIndex index();
 	
-	public final void processIDFilter(Read r){
-		if(IDFILTER<=0 || !r.mapped() || r.match==null || r.perfect()){return;}
-		if(Read.identityFlat(r.match)<IDFILTER){r.clearMapping();}
-		if(r.sites!=null){
-			int removed=0;
-			for(int i=r.sites.size()-1; i>0; i--){
-				SiteScore ss=r.sites.get(i);
-				if(ss.match!=null && !ss.perfect() && Read.identityFlat(ss.match)<IDFILTER){
+	public final void postFilterRead(Read r, byte[] basesM, int maxImperfectSwScore, int maxSwScore){
+		processIDFilter(r, basesM, maxImperfectSwScore, maxSwScore);
+		processEditFilter(r, basesM, maxImperfectSwScore, maxSwScore);
+	}
+	
+	final int ensureMatchStringsOnSiteScores(Read r, byte[] basesM, int maxImperfectSwScore, int maxSwScore){
+		if(!r.mapped() || r.numSites()<1){return 0;}
+		int removed=0;
+		for(int i=1, lim=MAX_SITESCORES_TO_PRINT; i<lim+removed && i<r.numSites(); i++){
+			SiteScore ss=r.sites.get(i);
+			if(ss.match==null){
+				genMatchStringForSite(r.numericID, ss, r.bases, basesM, maxImperfectSwScore, maxSwScore, r.mate, PRINT_SECONDARY_ALIGNMENTS);
+				if(ss.match==null){
 					r.sites.set(i, null);
 					removed++;
 				}
 			}
+		}
+		if(removed>0){Tools.condenseStrict(r.sites);}
+		return removed;
+	}
+
+	
+	public final void processIDFilter(Read r, byte[] basesM, int maxImperfectSwScore, int maxSwScore){
+		if(!r.mapped() || r.match==null || r.perfect()){return;}
+		if(IDFILTER<=0){return ;}
+		if(!r.paired() && Read.identityFlat(r.match)<IDFILTER){
+			r.clearMapping();
+			if(r.mate!=null){
+				r.setPaired(false);
+				r.mate.setPaired(false);
+			}
+		}
+		boolean removedTop=false;
+		if(r.sites!=null){
+			int removed=0;
+			for(int i=r.sites.size()-1; i>0; i--){
+				SiteScore ss=r.sites.get(i);
+				if(removedTop && ss.match==null){
+					genMatchStringForSite(r.numericID, ss, r.bases, basesM, maxImperfectSwScore, maxSwScore, r.mate, PRINT_SECONDARY_ALIGNMENTS);
+				}
+				if(ss.match!=null && !ss.perfect() && Read.identityFlat(ss.match)<IDFILTER){
+					r.sites.set(i, null);
+					removed++;
+					if(i==0){removedTop=true;}
+				}
+			}
 			if(removed>0){Tools.condenseStrict(r.sites);}
+		}
+		if(removedTop){
+			if(r.mate!=null){
+				r.setPaired(false);
+				r.mate.setPaired(false);
+			}
+			if(r.sites==null || r.sites.isEmpty() || r.topSite().match==null){
+				r.clearMapping();
+			}else{
+				r.setFromTopSite();
+			}
+		}
+	}
+	
+	public final void processEditFilter(Read r, byte[] basesM, int maxImperfectSwScore, int maxSwScore){
+		if(!PROCESS_EDIT_FILTER || !r.mapped() || r.match==null || r.perfect()){return;}
+		boolean removedTop=false;
+		if(r.sites!=null){
+			int removed=0;
+			for(int i=r.sites.size()-1; i>=0; i--){
+				SiteScore ss=r.sites.get(i);
+				if(removedTop && ss.match==null){
+					genMatchStringForSite(r.numericID, ss, r.bases, basesM, maxImperfectSwScore, maxSwScore, r.mate, PRINT_SECONDARY_ALIGNMENTS);
+				}
+				if(ss.match!=null && !ss.semiperfect()){
+					final int sub=Read.countSubs(ss.match);
+					final int ins=Read.countInsertions(ss.match);
+					final int del=Read.countDeletions(ss.match);
+					final int inscount=Read.countInsertionEvents(ss.match);
+					final int delcount=Read.countDeletionEvents(ss.match);
+					
+					boolean bad=false;
+					bad=bad||(SUBFILTER>=0 && sub>SUBFILTER);
+//					System.err.println(SUBFILTER>=0 && sub>SUBFILTER);
+					bad=bad||(INSFILTER>=0 && inscount>INSFILTER);
+//					System.err.println(INSFILTER>=0 && ins>INSFILTER);
+					bad=bad||(DELFILTER>=0 && delcount>DELFILTER);
+//					System.err.println(DELFILTER>=0 && del>DELFILTER);
+					bad=bad||(INSLENFILTER>=0 && hasLongInsertion(ss.match, INSLENFILTER));
+//					System.err.println(INSLENFILTER>=0 && hasLongInsertion(ss.match, INSLENFILTER));
+					bad=bad||(DELLENFILTER>=0 && hasLongDeletion(ss.match, DELLENFILTER));
+//					System.err.println(DELLENFILTER>=0 && hasLongDeletion(ss.match, DELLENFILTER));
+					bad=bad||(INDELFILTER>=0 && inscount+delcount>INDELFILTER);
+//					System.err.println(EDITFILTER>=0 && sub+ins+del>DELFILTER);
+					bad=bad||(EDITFILTER>=0 && sub+ins+del>EDITFILTER);
+//					System.err.println(EDITFILTER>=0 && sub+ins+del>DELFILTER);
+					if(bad){
+						r.sites.set(i, null);
+						removed++;
+						if(i==0){removedTop=true;}
+					}
+					
+//					assert(false) : SUBFILTER+", "+PROCESS_EDIT_FILTER+", "+sub+", "+ins+", "+del+", "+bad;
+				}
+			}
+			if(removed>0){Tools.condenseStrict(r.sites);}
+		}
+		if(removedTop){
+			if(r.mate!=null){
+				r.setPaired(false);
+				r.mate.setPaired(false);
+			}
+			if(r.sites==null || r.sites.isEmpty()){
+				r.clearMapping();
+			}else{
+				r.setFromTopSite();
+			}
 		}
 	}
 	
@@ -217,6 +310,7 @@ public abstract class AbstractMapThread extends Thread {
 		final boolean MAKE_LHIST=(readstats==null ? false : ReadStats.COLLECT_LENGTH_STATS);
 		final boolean MAKE_GCHIST=(readstats==null ? false : ReadStats.COLLECT_GC_STATS);
 		final boolean MAKE_IDHIST=(readstats==null ? false : ReadStats.COLLECT_IDENTITY_STATS);
+		final boolean MAKE_TIMEHIST=(readstats==null ? false : ReadStats.COLLECT_TIME_STATS);
 		final boolean MAKE_COVERAGE=(pileup==null ? false : true);
 		
 		if(SKIP_INITIAL>0){
@@ -231,9 +325,9 @@ public abstract class AbstractMapThread extends Thread {
 				
 				writeList(new ArrayList<Read>(1), black, ln.id);
 
-				cris.returnList(ln, readlist.isEmpty());
+				cris.returnList(ln.id, readlist.isEmpty());
 //				if(count>0){
-//					cris.returnList(ln, readlist.isEmpty());
+//					cris.returnList(ln.id, readlist.isEmpty());
 //					count--;
 //				}
 				
@@ -251,17 +345,15 @@ public abstract class AbstractMapThread extends Thread {
 
 			//System.err.println("Got a list of size "+readlist.size());
 			for(int i=0; i<readlist.size(); i++){
+				
+				long startTime=0;
+				if(TIME_TAG){startTime=System.nanoTime();}
+				
 				Read r=readlist.get(i);
 				assert(r.mate==null || (r.pairnum()==0 && r.mate.pairnum()==1)) : r.pairnum()+", "+r.mate.pairnum();
 
 				//				System.out.println("Got read: "+r.toText(false));
 				//				System.out.println("Synthetic: "+r.synthetic());
-
-				assert(r.colorspace()==colorspace) : "\n"+colorspace+", "+r.colorspace()+"\n"+r.toText(false)+"\n";
-
-				//if(r.mapLength!=r.bases.length){r.mapLength=r.bases.length;}
-				//if(r.mate!=null && r.mate.mapLength!=r.mate.bases.length){r.mate.mapLength=r.mate.bases.length;}
-				assert(r.mapLength==r.bases.length) : "Incorrect length: "+r.mapLength+"!="+r.bases.length;
 
 
 
@@ -280,7 +372,7 @@ public abstract class AbstractMapThread extends Thread {
 				//Clear these in case output is being re-used
 				r.clearAnswers(true);
 
-				assert(r.bases==null || r.bases.length<=maxReadLength()) : "Read "+r.numericID+", length "+r.bases.length+", exceeds the limit of "+maxReadLength()+"\n"+
+				assert(r.bases==null || r.length()<=maxReadLength()) : "Read "+r.numericID+", length "+r.length()+", exceeds the limit of "+maxReadLength()+"\n"+
 				"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
 				final Read r2=r.mate;
 
@@ -297,20 +389,20 @@ public abstract class AbstractMapThread extends Thread {
 				
 				if(r2==null){
 					final byte[] basesP=r.bases;
-					final byte[] basesM=AminoAcid.reverseComplementBases(basesP, colorspace);
+					final byte[] basesM=AminoAcid.reverseComplementBases(basesP);
 					basesUsed1+=(basesM==null ? 0 : basesM.length);
 					processRead(r, basesM);
 					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
 					assert(Read.CHECKSITES(r, basesM));
 				}else{
 					final byte[] basesP1=r.bases;
-					final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1, colorspace);
+					final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1);
 					final byte[] basesP2=r2.bases;
-					final byte[] basesM2=AminoAcid.reverseComplementBases(basesP2, colorspace);
+					final byte[] basesM2=AminoAcid.reverseComplementBases(basesP2);
 					basesUsed1+=(basesM1==null ? 0 : basesM1.length);
 					basesUsed2+=(basesM2==null ? 0 : basesM2.length);
-					assert(r2.bases==null || r2.bases.length<maxReadLength()) : 
-						"Read "+r2.numericID+", length "+r2.bases.length+", exceeds the limit of "+maxReadLength()+"\n"+
+					assert(r2.bases==null || r2.length()<maxReadLength()) : 
+						"Read "+r2.numericID+", length "+r2.length()+", exceeds the limit of "+maxReadLength()+"\n"+
 						"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
 					if(RCOMP_MATE){r2.reverseComplement();}
 					processReadPair(r, basesM1, basesM2);
@@ -335,24 +427,18 @@ public abstract class AbstractMapThread extends Thread {
 				if(MAKE_INDELHIST){readstats.addToIndelHistogram(r);}
 				if(MAKE_IDHIST){readstats.addToIdentityHistogram(r);}
 				
-
-				if(translateToBaseSpace && r.numSites()>0){
-					SiteScore ss=r.topSite();
-					r.start=ss.start();
-					r.stop=ss.stop();
-					r.chrom=ss.chrom;
-					r.setStrand(ss.strand);
-					r.mapScore=ss.score;
-					Read rt=tcr.translateToBasespace(r);
-					if(rt!=null){
-						readlist.set(i, rt);
-					}
+				if(TIME_TAG){
+					final Long time=(System.nanoTime()-startTime+500)/1000;
+					r.obj=time;
+					if(r2!=null){r2.obj=time;}
+					assert(r.obj!=null && r.obj.getClass()==Long.class);
+					if(MAKE_TIMEHIST){readstats.addToTimeHistogram(r);}
 				}
 			}
 			
-
+			
 			if(MAKE_COVERAGE){
-				synchronized(pileup){
+				synchronized(pileup){//TODO: Potential bottleneck
 					for(Read r : readlist){
 						pileup.processRead(r);
 						if(r.mate!=null){pileup.processRead(r.mate);}
@@ -367,9 +453,9 @@ public abstract class AbstractMapThread extends Thread {
 			
 					//System.err.println("Left from adding list "+readlist.get(0).numericID);
 			
-			cris.returnList(ln, false);
+			cris.returnList(ln.id, false);
 //			if(count>0){
-//				cris.returnList(ln, readlist.isEmpty());
+//				cris.returnList(ln.id, readlist.isEmpty());
 //				count--;
 //			}
 			//System.err.println("Waiting on a list...");
@@ -381,7 +467,7 @@ public abstract class AbstractMapThread extends Thread {
 		
 		//System.err.println("Returning a list... (final)");
 		assert(readlist.isEmpty());
-		cris.returnList(ln, true);
+		cris.returnList(ln.id, true);
 		finish();
 	}
 	
@@ -426,11 +512,11 @@ public abstract class AbstractMapThread extends Thread {
 		
 //		System.err.println("outputStream = "+outputStream==null ? "null" : "real");
 		if(outStream!=null){ //Important to send all lists to output, even empty ones, to keep list IDs straight.
-			if(DONT_OUTPUT_UNMAPPED_READS){removeUnmapped(readlist);}
+			if(OUTPUT_MAPPED_ONLY){removeUnmapped(readlist);}
 			if(black && DONT_OUTPUT_BLACKLISTED_READS){removeBlacklisted(readlist);}
 			for(Read r : readlist){
 				if(r!=null){
-					r.obj=null;
+					if(CLEAR_ATTACHMENT){r.obj=null;}
 					assert(r.bases!=null);
 					if(r.sites!=null && r.sites.isEmpty()){r.sites=null;}
 				}
@@ -455,7 +541,7 @@ public abstract class AbstractMapThread extends Thread {
 			if(n>25 && basesP.length-n<n){return -1;}
 		}
 		if(MIN_AVERAGE_QUALITY>0){
-			if(r.avgQualityByProbability()<MIN_AVERAGE_QUALITY){return -1;}
+			if(r.avgQualityByProbability(false, MIN_AVERAGE_QUALITY_BASES)<MIN_AVERAGE_QUALITY){return -1;}
 		}
 		
 		final int keyProbLen=basesP.length-KEYLEN+1;
@@ -482,10 +568,10 @@ public abstract class AbstractMapThread extends Thread {
 			
 			boolean offsetsMode3=true;
 			if(offsetsMode3){
-				offsets=KeyRing.makeOffsets3(keyProbs, r.bases.length, KEYLEN, keyDen2, keyDen3, 2, (PERFECTMODE || SEMIPERFECTMODE));
+				offsets=KeyRing.makeOffsets3(keyProbs, r.length(), KEYLEN, keyDen2, keyDen3, 2, (PERFECTMODE || SEMIPERFECTMODE));
 			}else{
 				//Old version; usually worse.
-				offsets=KeyRing.makeOffsets2(keyProbs, r.bases.length, KEYLEN, keyDen2, keyDen3, 2);
+				offsets=KeyRing.makeOffsets2(keyProbs, r.length(), KEYLEN, keyDen2, keyDen3, 2);
 				int numKeys=(offsets==null ? 0 : offsets.length+1);
 				int maxRounds=0;//(PERFECTMODE || SEMIPERFECTMODE) ? 0 : 9999;//(numKeys)/2;
 				while(maxRounds>0 && offsets!=null && offsets.length<numKeys){
@@ -499,7 +585,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 		if(verbose){System.err.println("Made offsets: "+Arrays.toString(offsets));}
 
-		if(offsets==null || offsets.length<AbstractIndex.MIN_APPROX_HITS_TO_KEEP || (r.quality!=null && r.avgQuality()<2)){return -1;}
+		if(offsets==null || offsets.length<AbstractIndex.MIN_APPROX_HITS_TO_KEEP || (r.quality!=null && r.avgQuality(false, 0)<2)){return -1;}
 		
 		
 		final byte[] baseScoresP=index.getBaseScoreArray(basesP.length, 0);
@@ -539,7 +625,7 @@ public abstract class AbstractMapThread extends Thread {
 		if(verbose){System.err.println("list: "+list);}
 		
 		r.sites=list;
-		removeOutOfBounds(r, DONT_OUTPUT_UNMAPPED_READS, (outStream!=null && outStream.SAM), EXPECTED_LEN_LIMIT);
+		removeOutOfBounds(r, OUTPUT_MAPPED_ONLY, OUTPUT_SAM, EXPECTED_LEN_LIMIT);
 		assert(Read.CHECKSITES(list, r.bases, basesM, r.numericID));
 		if(FORBID_SELF_MAPPING){forbidSelfMapping(list, r.originalSite);}
 		
@@ -581,8 +667,8 @@ public abstract class AbstractMapThread extends Thread {
 			final byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
 			
 			if(AbstractIndex.USE_AFFINE_SCORE && ss.quickScore==maxSwScore){
-				assert(ss.stop()==ss.start()+r.bases.length-1) : ss.toText()+", "+maxSwScore+", "+maxImperfectSwScore+
-					", "+r.bases.length+", "+(ss.start()+r.bases.length-1);
+				assert(ss.stop()==ss.start()+r.length()-1) : ss.toText()+", "+maxSwScore+", "+maxImperfectSwScore+
+					", "+r.length()+", "+(ss.start()+r.length()-1);
 			}
 			
 			if(verbose){System.err.print("C) Changing SiteScore from "+ss+"\n");}
@@ -946,7 +1032,7 @@ public abstract class AbstractMapThread extends Thread {
 		}
 		
 		final int maxLooseSwScore=msa.maxQuality(basesP.length);
-		final int maxAnchorSwScore=msa.maxQuality(anchor.bases.length);
+		final int maxAnchorSwScore=msa.maxQuality(anchor.length());
 		final int maxImperfectScore=msa.maxImperfectScore(basesP.length);
 		
 		final int bestLooseScore=loose.sites.isEmpty() ? 0 : loose.topSite().slowScore;
@@ -959,23 +1045,23 @@ public abstract class AbstractMapThread extends Thread {
 //		int retainScoreLimit=(int)(bestLooseScore>0 ? 0.58f*bestLooseScore : 0.58f*maxLooseSwScore);
 		int retainScoreLimit=Tools.max((int)(0.68f*bestLooseScore), (int)(0.4f*maxLooseSwScore));
 		int retainScoreLimit2=Tools.max((int)(0.95f*bestLooseScore), (int)(0.55f*maxLooseSwScore));
-		final int maxMismatches=PERFECTMODE ? 0 : (bestLooseScore>maxImperfectScore) ? 5 : (int)(0.60f*basesP.length-1); //Higher number is more lenient
-		assert(PERFECTMODE || maxMismatches>1 || loose.bases.length<16) : loose; //Added the <16 qualifier when a 4bp read failed this assertion
+		final int maxMismatches=(PERFECTMODE || SEMIPERFECTMODE) ? 0 : (bestLooseScore>maxImperfectScore) ? 5 : (int)(0.60f*basesP.length-1); //Higher number is more lenient
+		assert(PERFECTMODE || SEMIPERFECTMODE || maxMismatches>1 || loose.length()<16) : loose; //Added the <16 qualifier when a 4bp read failed this assertion
 		
 		final boolean findTipDeletions=FIND_TIP_DELETIONS && bestLooseScore<maxImperfectScore;
 		
 		//Data for finding tip deletions
-		final boolean findRight=findTipDeletions && loose.quality==null || (loose.minQualityLastNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_MIN_QUALITY
-				&& loose.avgQualityLastNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_AVG_QUALITY);
-		final boolean findLeft=findTipDeletions && loose.quality==null || (loose.minQualityFirstNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_MIN_QUALITY
-				&& loose.avgQualityFirstNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_AVG_QUALITY);
+		final boolean findRight=findTipDeletions && (loose.quality==null || (loose.minQualityLastNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_MIN_QUALITY
+				&& loose.avgQualityLastNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_AVG_QUALITY));
+		final boolean findLeft=findTipDeletions && (loose.quality==null || (loose.minQualityFirstNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_MIN_QUALITY
+				&& loose.avgQualityFirstNBases(TIP_DELETION_MAX_TIPLEN)>=TIP_DELETION_AVG_QUALITY));
 		
-//		int searchIntoAnchor=Tools.max(20, Tools.min(anchor.bases.length, loose.bases.length));
+//		int searchIntoAnchor=Tools.max(20, Tools.min(anchor.length(), loose.length()));
 		for(SiteScore ssa : anchor.sites){
 			if(ssa.slowScore<rescueScoreLimit){break;}
 			if(ssa.pairedScore==0 && !ssa.rescued){
-//				int searchIntoAnchor=ssa.stop-ssa.start-1+(anchor.bases.length/2); //Allows rescue of fragments half the length of a read
-				int searchIntoAnchor=ssa.stop()-ssa.start()-1+(anchor.bases.length*11/16); //Allows rescue of fragments 68% the length of a read
+//				int searchIntoAnchor=ssa.stop-ssa.start-1+(anchor.length()/2); //Allows rescue of fragments half the length of a read
+				int searchIntoAnchor=ssa.stop()-ssa.start()-1+(anchor.length()*11/16); //Allows rescue of fragments 68% the length of a read
 				int loc;
 				int idealStart;
 				byte[] bases;
@@ -1332,7 +1418,7 @@ public abstract class AbstractMapThread extends Thread {
 				inner=Tools.max(MIN_PAIR_DIST, inner);
 				innerLengthSum+=inner;
 				outerLengthSum+=outer;
-				insertSizeSum+=(inner+r.bases.length+r2.bases.length);
+				insertSizeSum+=(inner+r.length()+r2.length());
 			}else if(r2!=null && r2.mapped()/*&& r.list!=null && r.list.size()>0*/){
 				badPairs++;
 				badPairBases+=(len1+len2);
@@ -1543,10 +1629,6 @@ public abstract class AbstractMapThread extends Thread {
 		}
 	}
 	
-	
-//	/** Assumes list is sorted */
-//	public abstract void genMatchString(final Read r, final byte[] basesP, final byte[] basesM, final int maxImperfectSwScore, final int maxSwScore, boolean setSSScore, boolean recur);
-	
 	public abstract void processRead(Read r, final byte[] basesM);
 	
 	@Deprecated
@@ -1628,8 +1710,8 @@ public abstract class AbstractMapThread extends Thread {
 		if(sub<=0){return false;}
 		
 		float sub2;
-//		float asymptote=8f+0.0267f*r.bases.length;
-		float asymptote=4f+0.03f*r.bases.length;
+//		float asymptote=8f+0.0267f*r.length();
+		float asymptote=4f+0.03f*r.length();
 		sub=sub*1.8f;
 		sub2=CLEARZONE3*((asymptote*sub)/(sub+asymptote));
 //		sub2=CLEARZONE3*sub;
@@ -1728,14 +1810,14 @@ public abstract class AbstractMapThread extends Thread {
 //			System.out.println();
 //		}
 		
-		final float mult1=Tools.min(1/2f, Tools.max(1/4f, (r.bases.length/(4f*r2.bases.length))));
-		final float mult2=Tools.min(1/2f, Tools.max(1/4f, (r2.bases.length/(4f*r.bases.length))));
+		final float mult1=Tools.min(1/2f, Tools.max(1/4f, (r.length()/(4f*r2.length()))));
+		final float mult2=Tools.min(1/2f, Tools.max(1/4f, (r2.length()/(4f*r.length()))));
 		
 		final int ilimit=r.sites.size()-1;
 		final int jlimit=r2.sites.size()-1;
 		
-		final int outerDistLimit=(Tools.max(r.bases.length, r2.bases.length)*OUTER_DIST_MULT)/OUTER_DIST_DIV; //Minimum pairing distance
-		final int expectedFragLength=AVERAGE_PAIR_DIST+r.bases.length+r2.bases.length;
+		final int outerDistLimit=(Tools.max(r.length(), r2.length())*OUTER_DIST_MULT)/OUTER_DIST_DIV; //Minimum pairing distance
+		final int expectedFragLength=AVERAGE_PAIR_DIST+r.length()+r2.length();
 		
 		if(verboseS){
 			System.err.println("**************************   PAIRING   ********************************");
@@ -2247,7 +2329,7 @@ public abstract class AbstractMapThread extends Thread {
 				int expectedLen=GapTools.calcGrefLen(ss);
 				if(expectedLen>=EXPECTED_LEN_LIMIT){
 					//TODO: Alternately, I could kill the site.
-					ss.setStop(ss.start()+Tools.min(r.bases.length+40, EXPECTED_LEN_LIMIT));
+					ss.setStop(ss.start()+Tools.min(r.length()+40, EXPECTED_LEN_LIMIT));
 					if(ss.gaps!=null){GapTools.fixGaps(ss);}
 				}
 			}
@@ -2277,12 +2359,12 @@ public abstract class AbstractMapThread extends Thread {
 
 	/** Generate a score penalty based on the presence of errors near the read tips. */
 	public static int calcTipScorePenalty(final Read r, final int maxScore, final int tiplen){
-		if(!r.mapped() || r.match==null || r.bases.length<2*tiplen){return 0;}
+		if(!r.mapped() || r.match==null || r.length()<2*tiplen){return 0;}
 		
 		int points=0;
 		final byte[] match=r.match;
 		final byte[] bases=r.bases;
-		final int last=r.bases.length-1;
+		final int last=r.length()-1;
 		byte prev='m';
 		for(int i=0, cpos=0; cpos<=tiplen; i++){
 			byte b=match[i];
@@ -2563,6 +2645,40 @@ public abstract class AbstractMapThread extends Thread {
 		return false;
 	}
 	
+	protected static final boolean hasLongInsertion(byte[] match, int maxlen){
+		if(match==null || match.length<maxlen){return false;}
+		byte prev='0';
+		int len=0;
+		for(byte b : match){
+			if(b=='I' || b=='X' || b=='Y'){
+				if(b==prev){len++;}
+				else{len=1;}
+				if(len>maxlen){return true;}
+			}else{
+				len=0;
+			}
+			prev=b;
+		}
+		return false;
+	}
+	
+	protected static final boolean hasLongDeletion(byte[] match, int maxlen){
+		if(match==null || match.length<maxlen){return false;}
+		byte prev='0';
+		int len=0;
+		for(byte b : match){
+			if(b=='D'){
+				if(b==prev){len++;}
+				else{len=1;}
+				if(len>maxlen){return true;}
+			}else{
+				len=0;
+			}
+			prev=b;
+		}
+		return false;
+	}
+	
 	/** TODO */
 	final void processReadSplit(Read r, byte[] basesM, int minlen, int maxlen){
 		assert(minlen>=KEYLEN && maxlen>=minlen) : KEYLEN+", "+maxlen+", "+minlen;
@@ -2591,18 +2707,18 @@ public abstract class AbstractMapThread extends Thread {
 	/*--------------------------------------------------------------*/
 	
 	/** Input read source. */
-	protected final ConcurrentReadStreamInterface cris;
+	protected final ConcurrentReadInputStream cris;
 
 	
 	/** All reads go here. <br>  
 	 * If outputunmapped=false, omit unmapped single reads and double-unmapped paired reads. */
-	protected final RTextOutputStream3 outStream;
+	protected final ConcurrentReadOutputStream outStream;
 	/** All mapped reads (and half-mapped pairs) go here except reads that only map to the blacklist. */
-	protected final RTextOutputStream3 outStreamMapped;
+	protected final ConcurrentReadOutputStream outStreamMapped;
 	/** All unmapped reads (and double-unmapped pairs) go here. */
-	protected final RTextOutputStream3 outStreamUnmapped;
+	protected final ConcurrentReadOutputStream outStreamUnmapped;
 	/** All reads (and half-mapped pairs) that map best to the blacklist go here. */
-	protected final RTextOutputStream3 outStreamBlack;
+	protected final ConcurrentReadOutputStream outStreamBlack;
 	
 	
 	/*--------------------------------------------------------------*/
@@ -2610,7 +2726,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	public final String MSA_TYPE;
 	final MSA msa;
-	final TranslateColorspaceRead tcr;
+//	final TranslateColorspaceRead tcr;
 	public final ReadStats readstats;
 	public final CoveragePileup pileup;
 	public final int POINTS_MATCH, POINTS_MATCH2;
@@ -2623,7 +2739,7 @@ public abstract class AbstractMapThread extends Thread {
 	/** True if this thread should generate a match string for the best match */
 	protected final boolean MAKE_MATCH_STRING;
 	
-	protected final boolean DONT_OUTPUT_UNMAPPED_READS;
+	protected final boolean OUTPUT_MAPPED_ONLY;
 	protected final boolean DONT_OUTPUT_BLACKLISTED_READS;
 	protected final boolean PRINT_SECONDARY_ALIGNMENTS;
 	protected final boolean QUICK_MATCH_STRINGS;
@@ -2665,8 +2781,6 @@ public abstract class AbstractMapThread extends Thread {
 	/*--------------------------------------------------------------*/
 	
 	
-	/** Deprecated.  Must be set to false.  Reads and index are in SOLiD colorspace. */
-	protected final boolean colorspace;
 	/** Use dynamic programming slow-alignment phase to increase quality.  Program may not run anymore if this is disabled. */
 	protected final boolean SLOW_ALIGN;
 	/** Produce local alignments instead of global alignments */
@@ -2697,6 +2811,8 @@ public abstract class AbstractMapThread extends Thread {
 	protected final int KFILTER;
 	/** Disallow sites with identity below this. */
 	protected final float IDFILTER;
+	/** Do advanced filtering on number of specific types of edits */
+	protected final boolean PROCESS_EDIT_FILTER;
 	
 	
 	/** When reads are not in valid pairing orientation, eliminate (mark unmapped) the lower-scoring read. */
@@ -2705,8 +2821,6 @@ public abstract class AbstractMapThread extends Thread {
 	protected final boolean SAVE_AMBIGUOUS_XY;
 	/** Deprecated.  Must be set to true. */
 	protected final boolean GEN_MATCH_FAST=true;
-	/** For colorspace reads, translate to base space before outputting them. */
-	protected final boolean translateToBaseSpace;
 	
 	/** Padding for dynamic-programming slow alignment. */
 	protected final int SLOW_ALIGN_PADDING;
@@ -2734,6 +2848,17 @@ public abstract class AbstractMapThread extends Thread {
 	
 	/*--------------------------------------------------------------*/
 	
+	protected static boolean PENALIZE_AMBIG=true;
+	protected static int SUBFILTER=-1;
+	protected static int DELFILTER=-1;
+	protected static int INSFILTER=-1;
+	protected static int INDELFILTER=-1;
+	protected static int DELLENFILTER=-1;
+	protected static int INSLENFILTER=-1;
+	protected static int EDITFILTER=-1;
+	
+	protected static boolean OUTPUT_SAM=false;
+	
 	protected static float SECONDARY_SITE_SCORE_RATIO=.95f;
 	protected static boolean PRINT_SECONDARY_ALIGNMENTS_ONLY_FOR_AMBIGUOUS_READS=false;
 	
@@ -2745,6 +2870,9 @@ public abstract class AbstractMapThread extends Thread {
 	/** Counts undefined bases. */
 	protected static final boolean DISCARD_MOSTLY_UNDEFINED_READS=true;
 	protected static byte MIN_AVERAGE_QUALITY=0;
+	protected static int MIN_AVERAGE_QUALITY_BASES=0;
+	protected static boolean TIME_TAG=false;
+	protected static boolean CLEAR_ATTACHMENT=true;
 
 	protected static final byte TIP_DELETION_MIN_QUALITY=6;
 	protected static final byte TIP_DELETION_AVG_QUALITY=14;

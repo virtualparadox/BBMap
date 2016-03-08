@@ -8,8 +8,7 @@ import align2.MSA;
 import align2.Tools;
 
 import stream.ByteBuilder;
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
@@ -39,6 +38,7 @@ public class FindPrimers {
 	
 	public FindPrimers(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -60,6 +60,10 @@ public class FindPrimers {
 				//do nothing
 			}else if(a.equals("primer") || a.equals("query") || a.equals("literal")){
 				query_=b;
+			}else if(a.equals("msa")){
+				msaType=b;
+			}else if(a.equals("columns")){
+				columns=Integer.parseInt(b);
 			}else if(a.equals("parse_flag_goes_here")){
 				//Set a variable here
 			}else{
@@ -69,14 +73,30 @@ public class FindPrimers {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
+			
 			maxReads=parser.maxReads;
 			in1=parser.in1;
 			out1=parser.out1;
 		}
-
-		query=(query_==null ? null : query_.getBytes());
-		rquery=AminoAcid.reverseComplementBases(query);
+		
+		
+		if(query_==null){
+			querys=rquerys=null;
+			maxqlen=0;
+		}else{
+			int max=0;
+			String[] s2=query_.split(",");
+			querys=new byte[s2.length][];
+			rquerys=new byte[s2.length][];
+			for(int i=0; i<s2.length; i++){
+				max=Tools.max(max, s2[i].length());
+				querys[i]=s2[i].getBytes();
+				rquerys[i]=AminoAcid.reverseComplementBases(querys[i]);
+			}
+			maxqlen=max;
+		}
 		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, true, false, false);
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
@@ -84,15 +104,14 @@ public class FindPrimers {
 	
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			//Distributed version
-//			ConcurrentReadStreamInterface cris0=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, null);
+//			ConcurrentReadInputStream cris0=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null);
 //			cris=new ConcurrentReadInputStreamD(cris0, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null);
 			if(verbose){outstream.println("Started cris");}
-			final Thread cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		
@@ -106,9 +125,9 @@ public class FindPrimers {
 		}else{bsw=null;}
 		
 		
-		MSA msa=MSA.makeMSA(query.length+3, 2000, false, "MultiStateAligner11ts");
+		MSA msa=MSA.makeMSA(maxqlen+3, columns, msaType);
 		
-		final Read queryRead=new Read(query, null, 1);
+		final Read queryRead=new Read(querys[0], null, 1);
 		queryRead.sites=new ArrayList<SiteScore>();
 		
 		long readsProcessed=0;
@@ -129,36 +148,53 @@ public class FindPrimers {
 					final Read r=reads.get(idx);
 					
 					if(r.length()+2>msa.maxColumns){
-						msa=MSA.makeMSA(query.length+3, r.length()+2+r.length()/2, false, "MultiStateAligner11ts");
+						msa=MSA.makeMSA(maxqlen+3, r.length()+2+r.length()/2, "MultiStateAligner11ts");
 					}
 					
-					final SiteScore ssf, ssr;
-					int score1=-99999, score2=-99999;
+					SiteScore ss=null;
+					int score1=-999999, score2=-999999;
 					
 					final int a=0, b=r.length()-1;
-					int[] max=msa.fillLimited(query, r.bases, a, b, -9999, null);
-					if(max!=null){
-						int[] score=msa.score(query, r.bases, a, b, max[0], max[1], max[2], false);
-						ssf=new SiteScore(1, (byte)0, score[1], score[2], 1, score[0]);
-						score1=ssf.slowScore=ssf.quickScore;
-//						assert(false) : Arrays.toString(score)+"\n"+Arrays.toString(max);
-						ssf.match=msa.traceback(query, r.bases, a, b, score[3], score[4], score[5], false);
-					}else{ssf=null;}
+					int[] max;
 					
-					max=msa.fillLimited(rquery, r.bases,a, b, -9999, null);
-					if(max!=null){
-						int[] score=msa.score(rquery, r.bases, a, b, max[0], max[1], max[2], false);
-						ssr=new SiteScore(1, (byte)1, score[1], score[2], 1, score[0]);
-						score2=ssr.slowScore=ssr.quickScore;
-						ssr.match=msa.traceback(rquery, r.bases, a, b, score[3], score[4], score[5], false);
-					}else{ssr=null;}
+					SiteScore ssf=null;
+					for(int qnum=0; qnum<querys.length; qnum++){
+						final byte[] query=querys[qnum];
+						max=msa.fillLimited(query, r.bases, a, b, -9999, null);
+						if(max!=null){
+							int[] score=msa.score(query, r.bases, a, b, max[0], max[1], max[2], false);
+							ss=new SiteScore(1, (byte)0, score[1], score[2], 1, score[0]);
+							if(ssf==null || ss.quickScore>ssf.quickScore){
+								score1=ss.score=ss.slowScore=ss.quickScore;
+								ss.match=msa.traceback(query, r.bases, a, b, score[3], score[4], score[5], false);
+								ss.hits=qnum;
+								ssf=ss;
+							}
+						}
+					}
+					
+					SiteScore ssr=null;
+					for(int qnum=0; qnum<rquerys.length; qnum++){
+						final byte[] rquery=rquerys[qnum];
+						max=msa.fillLimited(rquery, r.bases,a, b, -9999, null);
+						if(max!=null){
+							int[] score=msa.score(rquery, r.bases, a, b, max[0], max[1], max[2], false);
+							ss=new SiteScore(1, (byte)1, score[1], score[2], 1, score[0]);
+							if(ssr==null || ss.quickScore>ssr.quickScore){
+								score2=ss.score=ss.slowScore=ss.quickScore;
+								ss.match=msa.traceback(rquery, r.bases, a, b, score[3], score[4], score[5], false);
+								ss.hits=qnum;
+								ssr=ss;
+							}
+						}
+					}
 					
 					if(ssf==null && ssr==null){}
 					else{
 						if(score1>=score2 && ssf!=null){
 							bsw.println(toBytes(null, r, ssf));
 						}
-						if(score2>=score1 && ssr!=null){
+						if(score2>score1 && ssr!=null){
 							bsw.println(toBytes(null, r, ssr));
 						}
 					}
@@ -166,13 +202,13 @@ public class FindPrimers {
 					readsProcessed++;
 				}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -197,6 +233,8 @@ public class FindPrimers {
 	
 	private ByteBuilder toBytes(ByteBuilder bb, Read r, SiteScore ss){
 		
+		final byte[] query=querys[ss.hits], rquery=rquerys[ss.hits];
+		
 		if(bb==null){bb=new ByteBuilder(80);}
 		bb.append("query").append('\t');
 		bb.append(makeFlag(ss)).append('\t');
@@ -211,6 +249,10 @@ public class FindPrimers {
 		
 		bb.append(ss.strand()==Gene.MINUS ? rquery : query).append('\t');
 		bb.append('*').append('\t');
+		
+		float f=Read.identity(ss.match);
+		bb.append(String.format("YI:f:%.2f", (100*f)));
+		
 		return bb;
 	}
 	
@@ -237,7 +279,10 @@ public class FindPrimers {
 	
 	private final FileFormat ffin1;
 	private final FileFormat ffout1;
-	private final byte[] query, rquery;
+	private final byte[][] querys, rquerys;
+	private final int maxqlen;
+	private int columns=2000;
+	private String msaType="MultiStateAligner11ts";
 	
 	/*--------------------------------------------------------------*/
 

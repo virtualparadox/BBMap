@@ -11,7 +11,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = -8138626768937480215L;
+	private static final long serialVersionUID = -4216985130070239610L;
 	
 	public static void main(String[] args){
 		runSpeedTest(args);
@@ -55,6 +55,8 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		
 	}
 	
+	@Deprecated
+	/** Legacy human code */
 	public static void translateGenomeBuild(String[] args){
 
 		Timer t=new Timer();
@@ -71,6 +73,8 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		
 	}
 	
+	@Deprecated
+	/** Legacy human code */
 	public static void translateGenomeBuild(int inBuild, int outBuild, String root){
 		root=root.replace('\\', '/');
 		if(!root.endsWith("/")){root+="/";}
@@ -78,14 +82,14 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		CoverageArray3[] out=new CoverageArray3[27];
 		
 		for(int chrom=1; chrom<out.length; chrom++){
-			out[chrom]=new CoverageArray3(chrom);
+			out[chrom]=new CoverageArray3(chrom, 500);
 		}
 		
 		final byte PLUS=Gene.PLUS;
 		
 		for(int chrom=1; chrom<=25; chrom++){
 			String infile=root+"coverage-chr"+Gene.chromCodes[chrom]+"-build"+inBuild+".ca.zip";
-			CoverageArray3 ca1=ReadWrite.read(CoverageArray3.class, infile);
+			CoverageArray3 ca1=ReadWrite.read(CoverageArray3.class, infile, true);
 			for(int loc1=ca1.minIndex; loc1<=ca1.maxIndex; loc1++){
 				int cov=(int)ca1.get(loc1);
 				int[] xform=Translator2.translate(inBuild, outBuild, chrom, PLUS, loc1);
@@ -109,13 +113,13 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		
 	}
 	
-	public CoverageArray3(){
-		this((int)-1);
-	}
-	
-	public CoverageArray3(int chrom){
-		this(chrom, 1<<24);
-	}
+//	public CoverageArray3(){
+//		this((int)-1);
+//	}
+//	
+//	public CoverageArray3(int chrom){
+//		this(chrom, 1<<24);
+//	}
 	
 	public CoverageArray3(int chrom, int initialLen){
 		super(chrom);

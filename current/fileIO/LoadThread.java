@@ -27,13 +27,14 @@ public class LoadThread<X> extends Thread{
 	@Override
 	public void run(){
 		addRunningThread(1);
-		output=ReadWrite.read(c, fname);
+		output=ReadWrite.read(c, fname, false);
 		addRunningThread(-1);
 		synchronized(this){this.notify();}
 	}
 	
 	
 	private static final int addThread(int x){
+		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
 			assert(x!=0);
 			if(x>0){
@@ -43,18 +44,19 @@ public class LoadThread<X> extends Thread{
 				addRunningThread(x);
 			}
 			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
-					activeThreads[2]>=0 && activeThreads[2]<=LIMIT) : Arrays.toString(activeThreads);
+					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 					
 			return activeThreads[0];
 		}
 	}
 	
 	private static final int addRunningThread(int x){
+		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
 			assert(x!=0);
 			if(x>0){
 				assert(activeThreads[1]>=x);
-				while(activeThreads[2]>=LIMIT){
+				while(activeThreads[2]>=lim){
 					try {
 						activeThreads.wait();
 					} catch (InterruptedException e) {
@@ -69,33 +71,42 @@ public class LoadThread<X> extends Thread{
 			activeThreads[2]+=x; //Change number running
 			
 			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
-					activeThreads[2]>=0 && activeThreads[2]<=LIMIT) : Arrays.toString(activeThreads);
+					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 			
-			if(activeThreads[2]==0 || (activeThreads[2]<LIMIT && activeThreads[1]>0)){activeThreads.notify();}
+			if(activeThreads[2]==0 || (activeThreads[2]<lim && activeThreads[1]>0)){activeThreads.notify();}
+//			System.err.println(activeThreads[2]);
+//			try {
+//				activeThreads.wait(5000);
+//			} catch (InterruptedException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
 			return activeThreads[2];
 		}
 	}
 	
 	public static final int countActiveThreads(){
+		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
 			assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
-					activeThreads[2]>=0 && activeThreads[2]<=LIMIT) : Arrays.toString(activeThreads);
+					activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 			return activeThreads[0];
 		}
 	}
 	
 	public static final void waitForReadingToFinish(){
+		final int lim=(Shared.LOW_MEMORY ? 1 : LIMIT);
 		synchronized(activeThreads){
 			while(activeThreads[0]>0){
 				assert(activeThreads[0]==(activeThreads[1]+activeThreads[2]) && activeThreads[0]>=0 && activeThreads[1]>=0 && 
-						activeThreads[2]>=0 && activeThreads[2]<=LIMIT) : Arrays.toString(activeThreads);
+						activeThreads[2]>=0 && activeThreads[2]<=lim) : Arrays.toString(activeThreads);
 				try {
 					activeThreads.wait(8000);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				if(activeThreads[2]==0 || (activeThreads[2]<LIMIT && activeThreads[1]>0)){activeThreads.notify();}
+				if(activeThreads[2]==0 || (activeThreads[2]<lim && activeThreads[1]>0)){activeThreads.notify();}
 			}
 		}
 	}
@@ -123,6 +134,6 @@ public class LoadThread<X> extends Thread{
 	public X output=null;
 	
 	private static final int[] RUNNING=new int[1];
-	public static int LIMIT=Tools.min(8, Tools.max(Shared.THREADS, 1));
+	public static int LIMIT=Tools.min(8, Tools.max(Shared.threads(), 1));
 	
 }

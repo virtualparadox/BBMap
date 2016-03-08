@@ -37,8 +37,8 @@ public final class TrimRead implements Serializable {
 		TrimRead tr=trim(r, true, true, minq, 1);
 		System.out.println("\nAfter trim:\n"+r.toFastq()+(r.match==null ? "" : "\n"+new String(r.match)));
 		if(r.match==null){
-			r.match=new byte[r.bases.length];
-			for(int i=0; i<r.bases.length; i++){r.match[i]='m';}
+			r.match=new byte[r.length()];
+			for(int i=0; i<r.length(); i++){r.match[i]='m';}
 		}
 		tr.untrim();
 		System.out.println("\nAfter untrim:\n"+r.toFastq()+(r.match==null ? "" : "\n"+new String(r.match)));
@@ -52,6 +52,9 @@ public final class TrimRead implements Serializable {
 			long packed=testOptimal(r.bases, r.quality, QualityTools.PROB_ERROR[trimq]);
 			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
 			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
+		}else if(windowMode){
+			a=0;
+			b=(trimRight ? testRightWindow(r.bases, r.quality, (byte)trimq, windowLength) : 0);
 		}else{
 			a=(trimLeft ? testLeft(r.bases, r.quality, (byte)trimq) : 0);
 			b=(trimRight ? testRight(r.bases, r.quality, (byte)trimq) : 0);
@@ -76,6 +79,9 @@ public final class TrimRead implements Serializable {
 			long packed=testOptimal(bases, qual, QualityTools.PROB_ERROR[trimq]);
 			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
 			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
+		}else if(windowMode){
+			a=0;
+			b=(trimRight ? testRightWindow(bases, qual, (byte)trimq, windowLength) : 0);
 		}else{
 			a=(trimLeft ? testLeft(bases, qual, (byte)trimq) : 0);
 			b=(trimRight ? testRight(bases, qual, (byte)trimq) : 0);
@@ -107,7 +113,6 @@ public final class TrimRead implements Serializable {
 			assert(bases2==null || bases2.length>=minlen_ || bases1.length<minlen_) : bases1.length+", "+bases2.length+", "+minlen_+", "+trimLeft+", "+trimRight;
 			r.bases=bases2;
 			r.quality=qual2;
-			r.mapLength=(bases2==null ? 0 : bases2.length);
 			r.obj=this;
 			trimMatch(r);
 		}
@@ -234,8 +239,6 @@ public final class TrimRead implements Serializable {
 		if(bases==null || bases.length==0){return 0;}
 		if(qual==null){return avgErrorRate<1 ? 0 : ((((long)testLeftN(bases))<<32) | (((long)testRightN(bases))&0xFFFFFFFFL));}
 		
-		assert(!ADJUST_QUALITY) : "Needs to be recompiled to support adjusting quality.";
-		
 		float maxScore=0;
 		float score=0;
 		int maxLoc=-1;
@@ -312,6 +315,25 @@ public final class TrimRead implements Serializable {
 //			assert(false);
 		}
 		return lastBad+1;
+	}
+	
+	/** Count number of bases that need trimming on right side using a sliding window */
+	private static int testRightWindow(byte[] bases, byte[] qual, final byte trimq, final int window){
+		if(bases==null || bases.length==0){return 0;}
+		if(qual==null || qual.length<window){return trimq>0 ? 0 : testRightN(bases);}
+		final int thresh=Tools.max(window*trimq, 1);
+		int sum=0;
+		for(int i=0, j=-window; i<qual.length; i++, j++){
+			final byte q=qual[i];
+			sum+=q;
+			if(j>=-1){
+				if(j>=0){sum-=qual[j];}
+				if(sum<thresh){
+					return qual.length-j-1;
+				}
+			}
+		}
+		return 0;
 	}
 	
 	/** Count number of bases that need trimming on right side */
@@ -506,11 +528,13 @@ public final class TrimRead implements Serializable {
 	
 	public static boolean verbose=false;
 	public static boolean optimalMode=true;
+	public static boolean windowMode=false;
 	public static float optimalBias=-1f;
+	
+	public static int windowLength=4;
 	
 	private static final float NPROB=0.75f;
 //	public static float PROB1=QualityTools.PROB_ERROR[1];
-	public static boolean ADJUST_QUALITY=false;
 	
 	
 }

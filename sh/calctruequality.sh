@@ -2,46 +2,47 @@
 #calctruequality in=<infile> out=<outfile>
 
 usage(){
-	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
-	echo ""
-	echo "Description:  Calculates the observed quality scores from a sam file."
-	echo ""
-	echo "Usage:	calctruequality.sh in=<file> out=<file> sam=<file,file,...file>"
-	echo ""
-	echo "Input may be stdin or a fasta or fastq file, raw or gzipped."
-	echo "Output may be stdout or a file."
-	echo "sam is optional, but may be a comma-delimited list of sam files to mask."
-	echo "If you pipe via stdin/stdout, please include the file type; e.g. for gzipped fasta input, set in=stdin.fa.gz"
-	echo ""
-	echo ""
-	echo "Optional parameters (and their defaults)"
-	echo ""
-	echo "Input parameters:"
-	echo "in=<file>        	Sam file.  Must be in 1.4 format (with = and X cigar symbols, not M)."
-	echo "reads=-1        	Stop after processing this many reads (if positive)."
-	echo ""
-	echo "Output parameters:"
-	echo "overwrite=f      	(ow) Set to true to allow overwriting of existing files."
-	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
-	echo ""
-	echo "Other parameters:"
-	echo "pigz=t    	  	Use pigz to compress.  If argument is a number, that will set the number of pigz threads."
-	echo "unpigz=t    	  	Use pigz to decompress."
-	echo ""
-	echo "Java Parameters:"
-	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
-	echo ""
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
-	echo ""
+echo "
+Written by Brian Bushnell
+Last modified May 6, 2015
+
+Description:  Calculates the observed quality scores from a sam file.
+Generates matrices for use in recalibrating quality scores.
+
+Usage:     calctruequality.sh in=<file,file,...file> path=<directory>
+
+
+Parameters (and their defaults)
+
+Input parameters:
+in=<file,file>      Sam file or comma-delimited list of files.  Must use = and X cigar symbols.
+reads=-1            Stop after processing this many reads (if positive).
+
+Output parameters:
+overwrite=t         (ow) Set to true to allow overwriting of existing files.
+path=.              Directory to write quality matrices (within /ref subdir).
+
+Other parameters:
+pigz=f              Use pigz to compress.  If argument is a number, that will set the number of pigz threads.
+unpigz=t            Use pigz to decompress.
+recpasses=1         Generate matrices for 1-pass recalibration only.  Max is 2.
+recalqmax=42        Adjust max quality scores tracked.
+loadq102=           For each recalibration matrix, enable or disable that matrix with t/f.
+                    You can specify pass1 or pass2 like this: loadq102_p1=f loadq102_p2=t.
+
+Java Parameters:
+-Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
+                    -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
-z="-Xmx400m"
-z2="-Xms400m"
+z="-Xmx1g"
+z2="-Xms1g"
 EA="-ea"
 set=0
 
@@ -63,9 +64,10 @@ calctruequality() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
+	#module load samtools
 	local CMD="java $EA $z -cp $CP jgi.CalcTrueQuality $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 calctruequality "$@"

@@ -2,9 +2,7 @@ package pacbio;
 
 import java.io.File;
 
-import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
-import dna.ChromosomeArrayCompressed;
 import dna.Data;
 import dna.FastaToChromArrays2;
 import dna.Gene;
@@ -46,12 +44,7 @@ public class RemoveNFromChromosome {
 			for(int i=0; i<padding; i++){
 				chb.set(chb.maxIndex+1, 'N');
 			}
-			if(Data.CHROMC){
-				ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(chb);
-				ReadWrite.write(cac, outRoot+"chr"+chrom+Data.chromExtension(), false);
-			}else{
-				ReadWrite.write(chb, outRoot+"chr"+chrom+Data.chromExtension(), false);
-			}
+			ReadWrite.write(chb, outRoot+"chr"+chrom+Data.chromExtension(), false);
 			
 		}
 		

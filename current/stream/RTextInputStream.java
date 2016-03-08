@@ -59,8 +59,8 @@ public class RTextInputStream extends ReadInputStream {
 //		assert(false) : (mate_fnames_!=null)+", "+(textfiles[0].is==System.in)+", "+interleaved+", "+FASTQ.FORCE_INTERLEAVED+", "+isInterleaved(fnames[0]);
 		
 		mateStream=(mate_fnames_==null ? null : new RTextInputStream(mate_fnames_, null, crisReadLimit));
-		cris=((!USE_CRIS || mateStream==null) ? null : new ConcurrentReadInputStream(mateStream, crisReadLimit));
-		if(cris!=null){new Thread(cris).start();}
+		cris=((!USE_CRIS || mateStream==null) ? null : new ConcurrentLegacyReadInputStream(mateStream, crisReadLimit));
+		if(cris!=null){cris.start();}
 	}
 	
 	public static boolean isInterleaved(String fname){
@@ -75,7 +75,7 @@ public class RTextInputStream extends ReadInputStream {
 	@Override
 	public void start() {
 		assert(false); //Not fully implemented everywhere...
-		if(cris!=null){new Thread(cris).start();}
+		if(cris!=null){cris.start();}
 	}
 	
 //	@Override
@@ -149,7 +149,7 @@ public class RTextInputStream extends ReadInputStream {
 					
 				}
 			}
-			cris.returnList(mates0, mates0.list.isEmpty());
+			cris.returnList(mates0.id, mates0.list.isEmpty());
 		}else if(mateStream!=null){
 			//			System.out.println((mateStream==null ? "F5: " : "F3: ")+"Grabbing a mate list: finished="+mateStream.finished);
 			ArrayList<Read> mates=mateStream.readList();
@@ -241,7 +241,7 @@ public class RTextInputStream extends ReadInputStream {
 	public static final int READS_PER_LIST=Shared.READ_BUFFER_LENGTH;
 
 	private final RTextInputStream mateStream;
-	private final ConcurrentReadInputStream cris;
+	private final ConcurrentLegacyReadInputStream cris;
 	public static boolean USE_CRIS=true; //Doubles read speed for zipped paired files
 
 	@Override
@@ -282,7 +282,7 @@ public class RTextInputStream extends ReadInputStream {
 		for(TextFile tf : textfiles){tf.reset();}
 		if(cris!=null){
 			cris.restart();
-			new Thread(cris).start();
+			cris.start();
 		}else if(mateStream!=null){mateStream.restart();}
 	}
 

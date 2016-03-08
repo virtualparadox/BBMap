@@ -3,18 +3,281 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
+import java.util.regex.Pattern;
 
+import stream.Read;
+import stream.SamLine;
 import stream.SiteScore;
 
+import dna.AminoAcid;
 import dna.CoverageArray;
 import dna.Data;
+import fileIO.ByteFile;
+import fileIO.FileFormat;
+import fileIO.ReadWrite;
 
 public final class Tools {
+
+	public static int secondHighestPosition(int[] array) {
+		int maxP, maxP2;
+		if(array[0]>=array[1]){
+			maxP=0;
+			maxP2=1;
+		}else{
+			maxP=1;
+			maxP2=0;
+		}
+		for(int i=2; i<array.length; i++){
+			int x=array[i];
+			if(x>array[maxP2]){
+				if(x>=array[maxP]){
+					maxP2=maxP;
+					maxP=i;
+				}else{
+					maxP2=i;
+				}
+			}
+		}
+		return maxP2;
+	}
+	
+	/**
+	 * @param probError
+	 * @return
+	 */
+	public static float[] inverse(float[] array) {
+		float[] out=new float[array.length];
+		for(int i=0; i<array.length; i++){
+			out[i]=1/max(array[i], 1000000000f);
+		}
+		return out;
+	}
+	
+	public static boolean checkHeader(String s){
+		if(s==null){return true;}
+		boolean ok=true;
+		for(int i=0; i<s.length() && ok; i++){
+			char c=s.charAt(i);
+			ok=(c>=32 && c<=126);
+		}
+		return ok;
+	}
+	
+	public static String fixHeader(String s){
+//		assert(false) : new String(specialChars);
+		if(checkHeader(s)){return s;}
+		StringBuilder sb=new StringBuilder(s.length());
+		for(int i=0; i<s.length(); i++){
+			final char c=s.charAt(i), d;
+			
+			if(c>=0 && c<=255){
+				d=specialChars[c];
+			}else{
+				d='X';
+			}
+//			System.err.println(c+"="+(int)c);
+			sb.append(d);
+		}
+		return sb.toString();
+	}
+	
+	
+	/**
+	 * Returns this file name if it is a file, or all the files in the directory if it is a directory.
+	 * @param b
+	 * @param fasta
+	 * @param fastq
+	 * @param sam
+	 * @param any
+	 * @return
+	 */
+	public static ArrayList<String> getFileOrFiles(String b, ArrayList<String> list, boolean fasta, boolean fastq, boolean sam, boolean any){
+		if(list==null){list=new ArrayList<String>();}
+		String[] split=b.split(",");
+		for(String s : split){
+			File f=new File(s);
+			if(f.isDirectory()){
+				for(File f2 : f.listFiles()){
+					if(f2.isFile()){
+						String name=f2.getName().toLowerCase();
+						String ext=ReadWrite.rawExtension(name);
+						
+						boolean pass=any || (fasta && FileFormat.isFasta(ext)) || (fastq && FileFormat.isFastq(ext)) || (sam && FileFormat.isSamOrBam(ext));
+						
+						if(pass){
+							String s2=f2.getAbsolutePath();
+							list.add(s2);
+						}
+					}
+				}
+			}else{
+				list.add(s);
+			}
+		}
+		return list;
+	}
+	
+	/** Add names to a collection.
+	 * This can be a literal name, or a text file with one name per line, 
+	 * or a fastq, fasta, or sam file, in which case the read names will be added.
+	 * @param s
+	 * @param names
+	 * @return
+	 */
+	public static final int addNames(String s, Collection<String> names){
+		int added=0;
+		if(new File(s).exists()){
+
+			int[] vector=FileFormat.testFormat(s, false, false);
+			final int type=vector[0];
+			ByteFile bf=ByteFile.makeByteFile(s, false, false);
+			
+			if(type==FileFormat.FASTQ){
+				int num=0;
+				for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine(), num++){
+					if((num&3)==0 && line.length>0){
+						names.add(new String(line, 1, line.length-1));
+					}
+				}
+			}else if(type==FileFormat.FASTA){
+				for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
+					if(line.length>0 && line[0]=='>'){
+						names.add(new String(line, 1, line.length-1));
+					}
+				}
+			}else if(type==FileFormat.SAM){
+				for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
+					if(line.length>0 && line[0]!='@'){
+						String name=SamLine.parseNameOnly(line);
+						if(name!=null && name.length()>0){names.add(name);}
+					}
+				}
+			}else{
+				for(byte[] line=bf.nextLine(); line!=null; line=bf.nextLine()){
+					if(line.length>0){
+						names.add(new String(line));
+					}
+				}
+			}
+			bf.close();
+		}else{
+			added++;
+			names.add(s);
+		}
+		return added;
+	}
+	
+	/**
+	 * Make copies of any read with ambiguous bases to represent all possible non-ambiguous representations.
+	 * @param reads A list of reads
+	 * @param k minimum length of reads to replicate
+	 * @return A list of reads with no ambiguity codes.
+	 */
+	public static ArrayList<Read> replicateAmbiguous(ArrayList<Read> reads, int minlen) {
+		ArrayList<Read> out=new ArrayList<Read>();
+		for(Read r1 : reads){
+			final Read r2=r1.mate;
+			r1.mate=null;
+			
+			if(r1.containsUndefined() && r1.length()>=minlen){
+				ArrayList<Read> temp=makeReplicates(r1);
+				out.addAll(temp);
+			}else{
+				out.add(r1);
+			}
+			if(r2!=null){
+				r2.mate=null;
+				if(r2.containsUndefined() && r2.length()>=minlen){
+					ArrayList<Read> temp=makeReplicates(r2);
+					out.addAll(temp);
+				}else{
+					out.add(r2);
+				}
+			}
+		}
+		return out;
+	}
+	
+	/**
+	 * Make copies of this read to represent all possible non-ambiguous representations.
+	 * Return a list of all fully-defined versions.
+	 * @param r A read to replicate
+	 * @return A list of reads with no ambiguity codes.
+	 */
+	public static ArrayList<Read> makeReplicates(final Read r) {
+//		System.err.println("\n***Called makeReplicates("+new String(r.bases)+")");
+		ArrayList<Read> temp=null;
+		if(!r.containsUndefined()){
+			temp=new ArrayList<Read>();
+			temp.add(r);
+			return temp;
+		}
+		final byte[] bases=r.bases;
+		for(int i=0; i<r.bases.length; i++){
+			byte b=bases[i];
+			if(!AminoAcid.isFullyDefined(b)){
+				temp=replicateAtPosition(r, i);
+				break;
+			}
+		}
+		assert(temp!=null);
+		final ArrayList<Read> out;
+		if(temp.get(0).containsUndefined()){
+			out=new ArrayList<Read>();
+			for(Read rr : temp){
+				out.addAll(makeReplicates(rr));
+			}
+		}else{
+			out=temp;
+		}
+		return out;
+	}
+	
+	/**
+	 * @param r A read
+	 * @param pos The position of an ambiguous base
+	 * @param out A list of replicates
+	 */
+	private static ArrayList<Read> replicateAtPosition(final Read r, final int pos) {
+//		System.err.println("Called replicateAtPosition("+new String(r.bases)+", "+pos+")");
+		if(r.quality!=null){
+			r.quality[pos]=Shared.FAKE_QUAL;
+		}
+		final byte[] bases=r.bases;
+		final byte b=bases[pos];
+		final int num=AminoAcid.baseToNumberExtended[b]&0xF;
+		assert(num>0 && Integer.bitCount(num)>1 && Integer.bitCount(num)<=4) : b+", "+num;
+		ArrayList<Read> out=new ArrayList<Read>(4);
+		for(int i=0; i<4; i++){
+			int mask=(1<<i);
+			if((num&mask)==mask){
+				Read rr=r.clone();
+				rr.bases=rr.bases.clone();
+				rr.bases[pos]=AminoAcid.numberToBase[i];
+//				System.err.println("Added clone ("+new String(rr.bases)+")");
+				out.add(rr);
+			}
+		}
+		return out;
+	}
+	
+	/** Checks for permission to read files, and input name collisions. */
+	public static boolean testOutputFiles(boolean overwrite, boolean append, boolean allowDuplicates, ArrayList<String>...args){
+		if(args==null || args.length==0){return true;}
+		ArrayList<String> list=new ArrayList<String>();
+		for(ArrayList<String> als : args){
+			if(als!=null){
+				list.addAll(als);
+			}
+		}
+		return testOutputFiles(overwrite, append, allowDuplicates, list.toArray(new String[list.size()]));
+	}
 	
 	/** Checks for permission to overwrite files, and output name collisions. */
 	public static boolean testOutputFiles(boolean overwrite, boolean append, boolean allowDuplicates, String...args){
@@ -41,6 +304,18 @@ public final class Tools {
 			}
 		}
 		return true;
+	}
+	
+	/** Checks for permission to read files, and input name collisions. */
+	public static boolean testInputFiles(boolean allowDuplicates, boolean throwException, ArrayList<String>...args){
+		if(args==null || args.length==0){return true;}
+		ArrayList<String> list=new ArrayList<String>();
+		for(ArrayList<String> als : args){
+			if(als!=null){
+				list.addAll(als);
+			}
+		}
+		return testInputFiles(allowDuplicates, throwException, list.toArray(new String[list.size()]));
 	}
 	
 	/** Checks for permission to read files, and input name collisions. */
@@ -736,7 +1011,7 @@ public final class Tools {
 			int minSitesToRetain, int maxSitesToRetain){
 //		assert(false);
 		assert(minSitesToRetain>=1);
-		assert(maxSitesToRetain>minSitesToRetain);
+		assert(maxSitesToRetain>minSitesToRetain) : maxSitesToRetain+", "+minSitesToRetain+"\nError - maxsites2 must be greater than "+minSitesToRetain+"!";
 		if(ssl==null || ssl.size()<=minSitesToRetain){return;}
 		while(ssl.size()>maxSitesToRetain){ssl.remove(ssl.size()-1);}
 		
@@ -798,6 +1073,19 @@ public final class Tools {
 //		}
 //	}
 	
+	public static CharSequence toStringSafe(byte[] array){
+		if(array==null){return "null";}
+		StringBuilder sb=new StringBuilder();
+		sb.append(Arrays.toString(array));
+		if(array.length<1 || array[0]<32 || array[0]>126){return sb;}
+		sb.append('\n');
+		for(int i=0; i<array.length; i++){
+			byte b=array[i];
+			if(b<32 || b>126){break;}
+			sb.append((char)b);
+		}
+		return sb;
+	}
 	
 	public static boolean equals(int[] a, int[] b){
 		if(a==b){return true;}
@@ -830,9 +1118,22 @@ public final class Tools {
 		return a.length-b.length;
 	}
 
-	public static int sum(byte[] array){
-		int x=0;
+	public static int sumInt(byte[] array){
+		long x=0;
 		for(byte y : array){x+=y;}
+		assert(x<=Integer.MAX_VALUE && x>=Integer.MIN_VALUE) : x;
+		return (int)x;
+	}
+
+	public static long sum(byte[] array){
+		long x=0;
+		for(byte y : array){x+=y;}
+		return x;
+	}
+
+	public static long sum(char[] array){
+		long x=0;
+		for(char y : array){x+=y;}
 		return x;
 	}
 	
@@ -1180,6 +1481,23 @@ public final class Tools {
 		return String.format("%.2f", x/div)+ext;
 	}
 	
+	public static byte[] parseRemap(String b){
+		final byte[] remap;
+		if(b==null || ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){
+			remap=null;
+		}else{
+			assert((b.length()&1)==0) : "Length of remap argument must be even.  No whitespace is allowed.";
+			
+			remap=new byte[128];
+			for(int j=0; j<remap.length; j++){remap[j]=(byte)j;}
+			for(int j=0; j<b.length(); j+=2){
+				char x=b.charAt(j), y=b.charAt(j+1);
+				remap[x]=(byte)y;
+			}
+		}
+		return remap;
+	}
+	
 	public static long parseKMG(String b){
 		if(b==null){return 0;}
 		char c=Character.toLowerCase(b.charAt(b.length()-1));
@@ -1201,6 +1519,12 @@ public final class Tools {
 		return ((long)Double.parseDouble(b))*mult;
 	}
 	
+	public static boolean isNumber(String s){
+		if(s==null || s.length()==0){return false;}
+		char c=s.charAt(0);
+		return Character.isDigit(c) || c=='.' || c=='-';
+	}
+	
 	public static boolean parseBoolean(String s){
 		if(s==null || s.length()<1){return true;}
 		if(s.length()==1){
@@ -1211,9 +1535,56 @@ public final class Tools {
 		return Boolean.parseBoolean(s);
 	}
 	
+	public static int[] parseIntArray(String s, String regex){
+		if(s==null){return null;}
+		String[] split=s.split(regex);
+		int[] array=new int[split.length];
+		for(int i=0; i<split.length; i++){
+			array[i]=Integer.parseInt(split[i]);
+		}
+		return array;
+	}
+	
+	public static byte[] parseByteArray(String s, String regex){
+		if(s==null){return null;}
+		String[] split=s.split(regex);
+		byte[] array=new byte[split.length];
+		for(int i=0; i<split.length; i++){
+			array[i]=Byte.parseByte(split[i]);
+		}
+		return array;
+	}
+	
+	public static int parseIntHexDecOctBin(final String s){
+		if(s==null || s.length()<1){return 0;}
+		int radix=10;
+		if(s.length()>1 && s.charAt(1)=='0'){
+			final char c=s.charAt(1);
+			if(c=='x' || c=='X'){radix=16;}
+			else if(c=='b' || c=='B'){radix=2;}
+			else if(c=='o' || c=='O'){radix=8;}
+		}
+		return Integer.parseInt(s, radix);
+	}
+	
 	public static int parseInt(byte[] array, int a, int b){
 		assert(b>a);
 		int r=0;
+		final byte z='0';
+		boolean negative=false;
+		if(array[a]=='-'){negative=true; a++;}
+		for(; a<b; a++){
+			int x=(array[a]-z);
+			assert(x<10 && x>=0) : x+" = "+(char)array[a]+"\narray="+new String(array)+", start="+a+", stop="+b;
+			r=(r*10)+x;
+		}
+		if(negative){r*=-1;}
+		return r;
+	}
+	
+	public static long parseLong(byte[] array, int a, int b){
+		assert(b>a);
+		long r=0;
 		final byte z='0';
 		boolean negative=false;
 		if(array[a]=='-'){negative=true; a++;}
@@ -1467,11 +1838,22 @@ public final class Tools {
 		while(x>llens[i]){i++;}
 		return i;
 	}
-	
+
 	public static final int max(int[] array){return array[maxIndex(array)];}
 	
 	public static final int maxIndex(int[] array){
 		int max=array[0], maxIndex=0;
+		for(int i=1; i<array.length; i++){
+			if(array[i]>max){max=array[i];maxIndex=i;}
+		}
+		return maxIndex;
+	}
+
+	public static final long max(long[] array){return array[maxIndex(array)];}
+	
+	public static final int maxIndex(long[] array){
+		long max=array[0];
+		int maxIndex=0;
 		for(int i=1; i<array.length; i++){
 			if(array[i]>max){max=array[i];maxIndex=i;}
 		}
@@ -1515,6 +1897,19 @@ public final class Tools {
 		return Math.sqrt(sumdev2/numbers.length);
 	}
 	
+	public static final double standardDeviation(char[] numbers){
+		if(numbers==null || numbers.length<1){return 0;}
+		long sum=sum(numbers);
+		double avg=sum/(double)numbers.length;
+		double sumdev2=0;
+		for(int i=0; i<numbers.length; i++){
+			long x=numbers[i];
+			double dev=avg-x;
+			sumdev2+=(dev*dev);
+		}
+		return Math.sqrt(sumdev2/numbers.length);
+	}
+	
 	public static final double standardDeviation(short[] numbers){
 		if(numbers==null || numbers.length<1){return 0;}
 		long sum=sum(numbers);
@@ -1536,6 +1931,38 @@ public final class Tools {
 		}
 		double avg=sum2/(double)sum;
 		return avg;
+	}
+	
+	public static final double standardDeviationHistogram(char[] histogram){
+		long sum=max(1, sum(histogram));
+		long sum2=0;
+		for(int i=0; i<histogram.length; i++){
+			sum2+=(histogram[i]*i);
+		}
+		double avg=sum2/(double)sum;
+		double sumdev2=0;
+		for(int i=0; i<histogram.length; i++){
+			double dev=avg-i;
+			double dev2=dev*dev;
+			sumdev2+=(histogram[i]*dev2);
+		}
+		return Math.sqrt(sumdev2/sum);
+	}
+	
+	public static final double standardDeviationHistogram(int[] histogram){
+		long sum=max(1, sum(histogram));
+		long sum2=0;
+		for(int i=0; i<histogram.length; i++){
+			sum2+=(histogram[i]*i);
+		}
+		double avg=sum2/(double)sum;
+		double sumdev2=0;
+		for(int i=0; i<histogram.length; i++){
+			double dev=avg-i;
+			double dev2=dev*dev;
+			sumdev2+=(histogram[i]*dev2);
+		}
+		return Math.sqrt(sumdev2/sum);
 	}
 	
 	public static final double standardDeviationHistogram(long[] histogram){
@@ -1642,26 +2069,28 @@ public final class Tools {
 	//Median of 3
 	public static final int mid(int x, int y, int z){return x<y ? (x<z ? min(y, z) : x) : (y<z ? min(x, z) : y);}
 
-	public static final byte min(byte x, byte y){return x<y ? x : y;}
-	public static final byte max(byte x, byte y){return x>y ? x : y;}
-
 	public static final char min(char x, char y){return x<y ? x : y;}
 	public static final char max(char x, char y){return x>y ? x : y;}
 
+	public static final byte min(byte x, byte y){return x<y ? x : y;}
+	public static final byte max(byte x, byte y){return x>y ? x : y;}
 	public static final byte min(byte x, byte y, byte z){return x<y ? min(x, z) : min(y, z);}
 	public static final byte max(byte x, byte y, byte z){return x>y ? max(x, z) : max(y, z);}
-
 	public static final byte min(byte x, byte y, byte z, byte a){return min(min(x, y), min(z, a));}
 	public static final byte max(byte x, byte y, byte z, byte a){return max(max(x, y), max(z, a));}
 	
 	public static final long min(long x, long y){return x<y ? x : y;}
 	public static final long max(long x, long y){return x>y ? x : y;}
-	
 	public static final long min(long x, long y, long z){return x<y ? (x<z ? x : z) : (y<z ? y : z);}
 	public static final long max(long x, long y, long z){return x>y ? (x>z ? x : z) : (y>z ? y : z);}
+	public static final long min(long x, long y, long z, long z2){return min(min(x,y), min(z,z2));}
+	public static final long max(long x, long y, long z, long z2){return max(max(x,y), max(z,z2));}
+	public static final long mid(long x, long y, long z){return x<y ? (x<z ? min(y, z) : x) : (y<z ? min(x, z) : y);}
+	public static final int longToInt(long x){return x<Integer.MIN_VALUE ? Integer.MIN_VALUE : x>Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)x;}
 	
 	public static final double min(double x, double y){return x<y ? x : y;}
 	public static final double max(double x, double y){return x>y ? x : y;}
+	public static final double mid(double x, double y, double z){return x<y ? (x<z ? min(y, z) : x) : (y<z ? min(x, z) : y);}
 	
 	public static final float min(float x, float y){return x<y ? x : y;}
 	public static final float max(float x, float y){return x>y ? x : y;}
@@ -1725,8 +2154,15 @@ public final class Tools {
 	private static final double log1point2=Math.log(1.2);
 	private static final double invlog1point2=1/log1point2;
 	
+	public static final char[] specialChars;
+	
 	public static final int[] ilens;
 	public static final long[] llens;
+	
+	/** A single whitespace */
+	public static final Pattern whitespace = Pattern.compile("\\s");
+	/** Multiple whitespace */
+	public static final Pattern whitespacePlus = Pattern.compile("\\s+");
 	
 	static{
 		ilens=new int[Integer.toString(Integer.MAX_VALUE).length()+1];
@@ -1741,5 +2177,61 @@ public final class Tools {
 			x=(x*10)+9;
 		}
 		llens[llens.length-1]=Long.MAX_VALUE;
+		
+		specialChars=new char[256];
+		Arrays.fill(specialChars, 'X');
+		for(int i=0; i<32; i++){
+			specialChars[i]=' ';
+		}
+		for(int i=32; i<127; i++){
+			specialChars[i]=(char)i;
+		}
+		specialChars[127]=' ';
+		specialChars[128]='C';
+		specialChars[129]='u';
+		specialChars[130]='e';
+		specialChars[131]='a';
+		specialChars[132]='a';
+		specialChars[133]='a';
+		specialChars[134]='a';
+		specialChars[135]='c';
+		specialChars[136]='e';
+		specialChars[137]='e';
+		specialChars[138]='e';
+		specialChars[139]='i';
+		specialChars[140]='i';
+		specialChars[141]='i';
+		specialChars[142]='S';
+		specialChars[143]='S';
+		specialChars[144]='E';
+		specialChars[145]='a';
+		specialChars[146]='a';
+		specialChars[147]='o';
+		specialChars[148]='o';
+		specialChars[149]='o';
+		specialChars[150]='u';
+		specialChars[151]='u';
+		specialChars[152]='y';
+		specialChars[153]='O';
+		specialChars[154]='U';
+		specialChars[155]='c';
+		specialChars[156]='L';
+		specialChars[157]='Y';
+		specialChars[158]='P';
+		specialChars[159]='f';
+		specialChars[160]='a';
+		specialChars[161]='i';
+		specialChars[162]='o';
+		specialChars[163]='u';
+		specialChars[164]='n';
+		specialChars[165]='N';
+		specialChars[166]='a';
+		specialChars[167]='o';
+		specialChars[168]='?';
+		specialChars[224]='a';
+		specialChars[224]='B';
+		specialChars[230]='u';
+		specialChars[252]='n';
+		specialChars[253]='2';
 	}
 }

@@ -3,6 +3,8 @@ package stream;
 import java.io.Serializable;
 import java.util.Arrays;
 
+import dna.AminoAcid;
+
 import align2.Tools;
 
 /**
@@ -55,6 +57,20 @@ public final class ByteBuilder implements Serializable {
 		if(length>=array.length){expand();}
 		array[length]=x;
 		length++;
+		return this;
+	}
+	
+	/**
+	 * @param key
+	 * @param k
+	 */
+	public ByteBuilder appendKmer(long kmer, int k) {
+		kmer=AminoAcid.reverseComplementBinaryFast(~kmer, k);
+		for(int i=0; i<k; i++){
+			int x=(int)(kmer&3);
+			append((char)AminoAcid.numberToBase[x]);
+			kmer>>=2;
+		}
 		return this;
 	}
 	
@@ -290,16 +306,36 @@ public final class ByteBuilder implements Serializable {
 	}
 	
 	private final void expand(){
-		int x=Tools.min(Integer.MAX_VALUE, array.length*2);
-		array=Arrays.copyOf(array, x);
+		long x=Tools.min(Integer.MAX_VALUE, array.length*2L);
+		if(x<=array.length){
+			throw new RuntimeException("Array overflow: "+x+"<="+array.length);
+		}
+		assert(((int)x)>array.length) : "Array overflow: "+x+"<="+array.length;
+		array=Arrays.copyOf(array, (int)x);
 	}
 	
 	private final void expand(int extra){
 		long x=array.length;
 		while(x-length<extra){x<<=1;}
+		x=Tools.min(Integer.MAX_VALUE, x);
+		if(x<array.length){
+			throw new RuntimeException("Array overflow: "+x+"<"+array.length+", "+extra);
+		}
+		assert(((int)x)>=array.length) : "Array overflow: "+x+"<"+array.length;
 		if(x!=array.length){
 			array=Arrays.copyOf(array, (int)Tools.min(Integer.MAX_VALUE, x));
+//			try {
+//				array=Arrays.copyOf(array, (int)Tools.min(Integer.MAX_VALUE, x));
+//			} catch (Throwable e) {
+//				System.err.println(array.length+", "+x+", "+extra+", "+Tools.min(Integer.MAX_VALUE, x));
+//				e.printStackTrace();
+//				throw new RuntimeException(e);
+//			}
 		}
+	}
+	
+	public void reverseComplementInPlace() {
+		AminoAcid.reverseComplementBasesInPlace(array, length);
 	}
 	
 	public final void ensureExtra(int extra){
@@ -307,18 +343,20 @@ public final class ByteBuilder implements Serializable {
 	}
 
 	public int length(){return length;}
+	public void clear(){setLength(0);}
 	public void setLength(int x){
 		assert(x>=0 && x<=array.length);
 		length=x;
 	}
+	
+	public byte[] array;
+	public int length=0;
+	private final byte[] numbuffer=new byte[19];
 
 	public static final byte[] numbers=new byte[] {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 	public static final byte[] nullBytes="null".getBytes();
 	public static final byte[] fbool="false".getBytes();
 	public static final byte[] tbool="true".getBytes();
-	public byte[] array;
-	public int length=0;
-	private final byte[] numbuffer=new byte[19];
 
 	public static final byte[] ones100, tens100;
 	

@@ -356,7 +356,7 @@ public class FASTQ {
 			bb.append('\n').append('+').append('\n');
 			if(verbose){System.err.println("B:\n"+bb);}
 			if(quals==null){
-				final byte q=(byte)(FAKE_QUAL+ASCII_OFFSET_OUT);
+				final byte q=(byte)(Shared.FAKE_QUAL+ASCII_OFFSET_OUT);
 				final int blen=bases.length;
 				bb.ensureExtra(blen);
 				for(int i=0, j=bb.length; i<blen; i++, j++){bb.array[j]=q;}
@@ -450,8 +450,8 @@ public class FASTQ {
 	}
 	
 	
-	public static Read[] toReads(TextFile tf, int maxReadsToReturn, boolean colorspace, long numericID, boolean interleaved){
-		ArrayList<Read> list=toReadList(tf, maxReadsToReturn, colorspace, numericID, interleaved);
+	public static Read[] toReads(TextFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
+		ArrayList<Read> list=toReadList(tf, maxReadsToReturn, numericID, interleaved);
 		assert(list.size()<=maxReadsToReturn);
 		return list.toArray(new Read[list.size()]);
 	}
@@ -488,7 +488,7 @@ public class FASTQ {
 		return stop<=start ? null : new String(s, start, stop-start);
 	}
 	
-	public static ArrayList<Read> toReadList(TextFile tf, int maxReadsToReturn, boolean colorspace, long numericID, boolean interleaved){
+	public static ArrayList<Read> toReadList(TextFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
 		String s=null;
 		ArrayList<Read> list=new ArrayList<Read>(Data.min(16384, maxReadsToReturn));
 		
@@ -566,13 +566,13 @@ public class FASTQ {
 							byte trueStrand=Byte.parseByte(answer[2]);
 							int trueLoc=Integer.parseInt(answer[3]);
 							int trueStop=Integer.parseInt(answer[4]);
-							r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, colorspace, numericID);
+							r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, numericID);
 							r.setSynthetic(true);
 						} catch (NumberFormatException e) {}
 					}
 				}
 				if(r==null){
-					r=new Read(bases, 0, (byte)0, 0, 0, id, quals, colorspace, numericID);
+					r=new Read(bases, 0, (byte)0, 0, 0, id, quals, numericID);
 				}
 				
 				cntr=0;
@@ -605,10 +605,9 @@ public class FASTQ {
 		return list;
 	}
 	
-	public static ArrayList<Read> toReadList(ByteFile tf, int maxReadsToReturn, boolean colorspace, long numericID, boolean interleaved){
+	public static ArrayList<Read> toReadList(ByteFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
 		byte[] s=null;
-		ArrayList<Read> list=new ArrayList<Read>(Data.min(16384, maxReadsToReturn));
-		
+		ArrayList<Read> list=new ArrayList<Read>(Data.min(8192, maxReadsToReturn));
 //		long numericID=numericID0;
 		byte[][] quad=new byte[4][];
 		
@@ -624,7 +623,7 @@ public class FASTQ {
 			cntr++;
 			if(cntr==4){
 				
-				Read r=quadToRead(quad, true, false, colorspace, tf, numericID);
+				Read r=quadToRead(quad, true, false, tf, numericID);
 				cntr=0;
 				
 //				longest=Tools.max(longest, r.length());
@@ -681,7 +680,7 @@ public class FASTQ {
 		return quad;
 	}
 	
-	public static Read quadToRead(final byte[][] quad, boolean fastq, boolean scarf, boolean colorspace, ByteFile tf, long numericID){
+	public static Read quadToRead(final byte[][] quad, boolean fastq, boolean scarf, ByteFile tf, long numericID){
 
 		if(verbose){
 			System.err.println("\nASCII offset is "+ASCII_OFFSET);
@@ -692,10 +691,10 @@ public class FASTQ {
 			System.err.println(new String(quad[3]));
 		}
 
-		assert(scarf || quad[0][0]==(byte)'@') : "\nError in "+tf.name()+", line "+tf.lineNum()+"\n"+
-		new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
-		assert(scarf || quad[2][0]==(byte)'+') : "\nError in "+tf.name()+", line "+tf.lineNum()+"\n"+
-		new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
+		assert(scarf || (quad[0].length>0 && quad[0][0]==(byte)'@')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
+			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
+		assert(scarf || (quad[0].length>0 && quad[2][0]==(byte)'+')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
+			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
 
 		//			if(quad[0].startsWith("@HW") || quad[0].startsWith("@FC")){ascii_offset=66;} //TODO: clumsy
 
@@ -761,7 +760,7 @@ public class FASTQ {
 						byte trueStrand=Byte.parseByte(answer[2]);
 						int trueLoc=Integer.parseInt(answer[3]);
 						int trueStop=Integer.parseInt(answer[4]);
-						r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, colorspace, numericID);
+						r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, numericID);
 						r.setSynthetic(true);
 					} catch (NumberFormatException e) {
 						PARSE_CUSTOM=false;
@@ -777,12 +776,12 @@ public class FASTQ {
 			}
 		}
 		if(r==null){
-			r=new Read(bases, 0, (byte)0, 0, 0, id, quals, colorspace, numericID);
+			r=new Read(bases, 0, (byte)0, 0, 0, id, quals, numericID);
 		}
 		return r;
 	}
 	
-	public static ArrayList<Read> toScarfReadList(ByteFile tf, int maxReadsToReturn, boolean colorspace, long numericID, boolean interleaved){
+	public static ArrayList<Read> toScarfReadList(ByteFile tf, int maxReadsToReturn, long numericID, boolean interleaved){
 		byte[] s=null;
 		ArrayList<Read> list=new ArrayList<Read>(Data.min(16384, maxReadsToReturn));
 		
@@ -794,7 +793,7 @@ public class FASTQ {
 		
 		for(s=tf.nextLine(); s!=null && added<maxReadsToReturn; s=tf.nextLine()){
 			scarfToQuad(s, quad);
-			Read r=quadToRead(quad, false, true, colorspace, tf, numericID);
+			Read r=quadToRead(quad, false, true, tf, numericID);
 
 			if(interleaved){
 				if(prev==null){prev=r;}
@@ -842,7 +841,6 @@ public class FASTQ {
 	public static boolean DELETE_OLD_NAME=false;
 	public static byte ASCII_OFFSET=33;
 	public static byte ASCII_OFFSET_OUT=33;
-	public static byte FAKE_QUAL=30;
 	public static boolean TEST_INTERLEAVED=true;
 	public static boolean FORCE_INTERLEAVED=false;
 	public static boolean DETECT_QUALITY=true;

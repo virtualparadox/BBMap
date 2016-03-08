@@ -4,12 +4,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 
-import kmer.KCountArray;
-import kmer.KmerCount6;
+import bloom.KCountArray;
+import bloom.KmerCount6;
+
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.AminoAcid;
@@ -61,6 +62,8 @@ public class ErrorCorrect extends Thread{
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
@@ -110,6 +113,10 @@ public class ErrorCorrect extends Thread{
 			}
 		}
 		
+		{//Process parser fields
+			Parser.processQuality();
+		}
+		
 		KCountArray kca=makeTable(reads1, reads2, k, cbits, gap, hashes, buildpasses, matrixbits, tablereads, buildStepsize, thresh1, thresh2);
 		
 		detect(reads1, reads2, kca, k, thresh2, maxReads, output, ordered, append, overwrite);
@@ -132,7 +139,7 @@ public class ErrorCorrect extends Thread{
 		assert(gap==0) : "TODO";
 		if(buildpasses==1){
 			
-			KmerCount6.countFastq(reads1, reads2, k, cbits, gap, true, kca);
+			KmerCount6.count(reads1, reads2, k, cbits, gap, true, kca);
 			kca.shutdown();
 			
 		}else{
@@ -144,7 +151,7 @@ public class ErrorCorrect extends Thread{
 //				if(!conservative){step=(step+3)/4;}
 				if(!conservative){step=Tools.min(3, (step+3)/4);}
 				
-				KmerCount6.countFastq(reads1, reads2, k, cbits, true, kca, trusted, maxreads, thresh1, step, conservative);
+				KmerCount6.count(reads1, reads2, k, cbits, true, kca, trusted, maxreads, thresh1, step, conservative);
 				
 				kca.shutdown();
 				Data.sysout.println("Trusted:   \t"+kca.toShortString());
@@ -153,7 +160,7 @@ public class ErrorCorrect extends Thread{
 				
 			}
 			
-			KmerCount6.countFastq(reads1, reads2, k, cbits, true, kca, trusted, maxreads, thresh2, stepsize, true);
+			KmerCount6.count(reads1, reads2, k, cbits, true, kca, trusted, maxreads, thresh2, stepsize, true);
 			
 			kca.shutdown();
 		}
@@ -169,20 +176,20 @@ public class ErrorCorrect extends Thread{
 	public static void detect(String reads1, String reads2, KCountArray kca, int k, int thresh, long maxReads, String output, boolean ordered, boolean append, boolean overwrite) {
 
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(reads1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(reads2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 		}
 		assert(cris!=null) : reads1;
 		
-		new Thread(cris).start();
+		cris.start();
 		if(verbose){System.err.println("Started cris");}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Paired: "+paired);}
 		
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(output!=null){
 			String out1=output.replaceFirst("#", "1"), out2=null;
 			
@@ -198,7 +205,7 @@ public class ErrorCorrect extends Thread{
 			
 			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, append, ordered);
 			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, append, ordered);
-			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
+			ros=ConcurrentReadOutputStream.getStream(ff1, ff2, buff, null, true);
 			
 			assert(!ff1.sam()) : "Sam files need reference info for the header.";
 		}
@@ -215,7 +222,7 @@ public class ErrorCorrect extends Thread{
 		if(verbose){System.err.println("Closed stream");}
 	}
 	
-	public static void detect(ConcurrentReadStreamInterface cris, KCountArray kca, int k, int thresh, long maxReads, RTextOutputStream3 ros) {
+	public static void detect(ConcurrentReadInputStream cris, KCountArray kca, int k, int thresh, long maxReads, ConcurrentReadOutputStream ros) {
 		Timer tdetect=new Timer();
 		tdetect.start();
 		
@@ -244,26 +251,26 @@ public class ErrorCorrect extends Thread{
 					
 					totalReads++;
 					if(verbose){System.err.println();}
-					totalBases+=r.bases.length;
+					totalBases+=r.length();
 //					BitSet bs=detectErrors(r, kca, k, thresh);
 					BitSet bs=detectErrorsBulk(r, kca, k, thresh, 1);
-					if(verbose){System.err.println(toString(bs, r.bases.length));}
-//					Data.sysout.println(toString(detectErrorsTips(r, kca, k, thresh), r.bases.length));
-					if(verbose){System.err.println(toString(detectErrors(r, kca, k, thresh), r.bases.length-k+1));}
+					if(verbose){System.err.println(toString(bs, r.length()));}
+//					Data.sysout.println(toString(detectErrorsTips(r, kca, k, thresh), r.length()));
+					if(verbose){System.err.println(toString(detectErrors(r, kca, k, thresh), r.length()-k+1));}
 					if(bs==null){//No errors, or can't detect errors
 						assert(false);
 					}else{
 						int x=bs.cardinality();
 						covered+=x;
-						uncovered+=(r.bases.length-x);
-						if(x<r.bases.length){
+						uncovered+=(r.length()-x);
+						if(x<r.length()){
 							bs=correctErrors(r, kca, k, thresh, bs, ERROR_CORRECTION_LIMIT, MAX_ERROR_BURST);
 						}
 						int y=bs.cardinality();
 						coveredFinal+=y;
-						uncoveredFinal+=(r.bases.length-y);
-						if(x<r.bases.length){
-							if(y==r.bases.length){
+						uncoveredFinal+=(r.length()-y);
+						if(x<r.length()){
+							if(y==r.length()){
 								fullyCorrected++;
 							}else{
 								failed++;
@@ -273,25 +280,25 @@ public class ErrorCorrect extends Thread{
 				}
 				if(r2!=null){
 					totalReads++;
-					totalBases+=r2.bases.length;
+					totalBases+=r2.length();
 //					BitSet bs=detectErrors(r2, kca, k, thresh);
 					BitSet bs=detectErrorsBulk(r2, kca, k, thresh, 1);
-					if(verbose){System.err.println(toString(bs, r2.bases.length));}
-//					Data.sysout.println(toString(detectErrorsTips(r2, kca, k, thresh), r2.bases.length));
-					if(verbose){System.err.println(toString(detectErrors(r2, kca, k, thresh), r2.bases.length-k+1));}
+					if(verbose){System.err.println(toString(bs, r2.length()));}
+//					Data.sysout.println(toString(detectErrorsTips(r2, kca, k, thresh), r2.length()));
+					if(verbose){System.err.println(toString(detectErrors(r2, kca, k, thresh), r2.length()-k+1));}
 					if(bs==null){//No errors, or can't detect errors
 					}else{
 						int x=bs.cardinality();
 						covered+=x;
-						uncovered+=(r2.bases.length-x);
-						if(x<r2.bases.length){
+						uncovered+=(r2.length()-x);
+						if(x<r2.length()){
 							bs=correctErrors(r2, kca, k, thresh, bs, ERROR_CORRECTION_LIMIT, MAX_ERROR_BURST);
 						}
 						int y=bs.cardinality();
 						coveredFinal+=y;
-						uncoveredFinal+=(r2.bases.length-y);
-						if(x<r2.bases.length){
-							if(y==r2.bases.length){
+						uncoveredFinal+=(r2.length()-y);
+						if(x<r2.length()){
+							if(y==r2.length()){
 								fullyCorrected++;
 							}else{
 								failed++;
@@ -314,13 +321,13 @@ public class ErrorCorrect extends Thread{
 				ros.add(reads, ln.id);
 			}
 			
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			//System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		if(verbose){System.err.println("Finished reading");}
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 		if(verbose){System.err.println("Returned list");}
 		
 		tdetect.stop();
@@ -339,21 +346,21 @@ public class ErrorCorrect extends Thread{
 		Data.sysout.println("Uncovered:      \t"+uncoveredFinal);
 	}
 	
-	
-	public static BitSet detectErrors(Read r, KCountArray kca, int k, int thresh){
-		if(kca.gap>0){return detectErrorsSplit(r, kca, k, thresh);}
+	/** Sets a 1 bit at start of each kmer with count at least thresh */
+	public static BitSet detectErrors(final Read r, final KCountArray kca, final int k, final int thresh){
 		
 		final int kbits=2*k;
 		final long mask=~((-1L)<<(kbits));
 		final int gap=kca.gap;
+		final byte[] bases=r.bases;
+		assert(kca.gap==0);
 		
-		int bslen=r.bases.length-k-gap+1;
+		int bslen=r.length()-k-gap+1;
 		if(bslen<1){return null;} //Read is too short to detect errors
 		BitSet bs=new BitSet(bslen);
 		
 		int len=0;
 		long kmer=0;
-		byte[] bases=r.bases;
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
 			int x=AminoAcid.baseToNumber[b];
@@ -372,26 +379,25 @@ public class ErrorCorrect extends Thread{
 				}
 			}
 		}
+		
 		return bs;
 	}
 	
-	public static BitSet detectErrorsBulk(final Read r, final KCountArray kca, final int k, final int thresh, final int stepsize/*, final int offset*/){
-		if(kca.gap>0){return detectErrorsSplit(r, kca, k, thresh);}
+	/** Sets a 1 bit for every base covered by a kmer with count at least thresh */
+	public static BitSet detectErrorsBulk(final Read r, final KCountArray kca, final int k, final int thresh, final int stepsize){
 		
 		final int kbits=2*k;
 		final long mask=~((-1L)<<(kbits));
 		final int gap=kca.gap;
+		final byte[] bases=r.bases;
+		assert(gap==0);
 		
-		if(r.bases==null || r.bases.length<k+gap){return null;} //Read is too short to detect errors
-		BitSet bs=new BitSet(r.bases.length);
+		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
+		BitSet bs=new BitSet(r.length());
 		final int setlen=k+gap;
 		
 		int len=0;
 		long kmer=0;
-		byte[] bases=r.bases;
-		
-//		final int sub=
-		
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
 			int x=AminoAcid.baseToNumber[b];
@@ -410,28 +416,28 @@ public class ErrorCorrect extends Thread{
 				}
 			}
 		}
+		r.errors=bs.cardinality()-r.length();
 		
-		r.errors=bs.cardinality()-r.bases.length;
-		
-//		assert(bases.length==r.bases.length);
 		return bs;
 	}
 	
+	/** Sets 1 for all bases.
+	 * Then clears all bits covered by incorrect kmers. */
 	public static BitSet detectTrusted(final Read r, final KCountArray kca, final int k, final int thresh, final int detectStepsize){
-		if(kca.gap>0){throw new RuntimeException("TODO");}
 		
 		final int kbits=2*k;
 		final long mask=~((-1L)<<(kbits));
 		final int gap=kca.gap;
+		final byte[] bases=r.bases;
+		assert(gap==0);
 		
-		if(r.bases==null || r.bases.length<k+gap){return null;} //Read is too short to detect errors
-		BitSet bs=new BitSet(r.bases.length);
-		bs.set(0, r.bases.length);
+		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
+		BitSet bs=new BitSet(r.length());
+		bs.set(0, r.length());
 		final int setlen=k+gap;
 		
 		int len=0;
 		long kmer=0;
-		byte[] bases=r.bases;
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
 			int x=AminoAcid.baseToNumber[b];
@@ -453,24 +459,25 @@ public class ErrorCorrect extends Thread{
 				}
 			}
 		}
-//		assert(bases.length==r.bases.length);
+//		assert(bases.length==r.length());
 		return bs;
 	}
 	
 	public static BitSet detectErrorsTips(final Read r, final KCountArray kca, final int k, final int thresh){
-		if(kca.gap>0){return detectErrorsSplit(r, kca, k, thresh);}
+//		if(kca.gap>0){return detectErrorsSplit(r, kca, k, thresh);}
 		
 		final int kbits=2*k;
 		final long mask=~((-1L)<<(kbits));
 		final int gap=kca.gap;
+		final byte[] bases=r.bases;
+		assert(gap==0);
 		
-		if(r.bases==null || r.bases.length<k+gap){return null;} //Read is too short to detect errors
-		BitSet bs=new BitSet(r.bases.length);
+		if(r.bases==null || r.length()<k+gap){return null;} //Read is too short to detect errors
+		BitSet bs=new BitSet(r.length());
 		final int setlen=k+gap;
 		
 		int len=0;
 		long kmer=0;
-		byte[] bases=r.bases;
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
 			int x=AminoAcid.baseToNumber[b];
@@ -492,19 +499,6 @@ public class ErrorCorrect extends Thread{
 		}
 		return bs;
 	}
-
-	/**
-	 * @param r
-	 * @param kca
-	 * @param k
-	 * @param thresh
-	 * @return
-	 */
-	private static BitSet detectErrorsSplit(Read r, KCountArray kca, int k,
-			int thresh) {
-		assert(false) : "TODO";
-		return null;
-	}
 	
 
 	/** Assumes bulk mode was used; e.g., any '0' bit is covered by no correct kmers */
@@ -517,16 +511,16 @@ public class ErrorCorrect extends Thread{
 		r.errors=0;
 		
 		if(bs.cardinality()==0){//Cannot be corrected
-			r.errors=r.bases.length;
+			r.errors=r.length();
 			return bs;
 		}
 
 //		verbose=!bs.get(0);
 		if(verbose){
 			Data.sysout.println();
-			Data.sysout.println(toString(bs, r.bases.length));
-			Data.sysout.println(toString(detectErrorsTips(r, kca, k, thresh), r.bases.length));
-			Data.sysout.println(toString(detectErrors(r, kca, k, thresh), r.bases.length-k+1));
+			Data.sysout.println(toString(bs, r.length()));
+			Data.sysout.println(toString(detectErrorsTips(r, kca, k, thresh), r.length()));
+			Data.sysout.println(toString(detectErrors(r, kca, k, thresh), r.length()-k+1));
 		}
 		
 		
@@ -543,10 +537,10 @@ public class ErrorCorrect extends Thread{
 			if(success){
 				corrections++;
 				bs=detectErrorsBulk(r, kca, k, thresh, 1);
-				if(verbose){System.err.println(">\n"+toString(bs, r.bases.length));}
+				if(verbose){System.err.println(">\n"+toString(bs, r.length()));}
 			}else{
-				r.errors=r.bases.length-bs.cardinality();
-				r.errorsCorrected+=corrections;
+				r.errors=r.length()-bs.cardinality();
+//				r.errorsCorrected+=corrections;
 				if(verbose){System.err.println("Could not correct.");}
 				r.bases[errorLoc]='N';
 				r.quality[errorLoc]=0;
@@ -555,7 +549,7 @@ public class ErrorCorrect extends Thread{
 		}
 		
 		burst=1;
-		while(bs.cardinality()<r.bases.length && corrections<maxCorrections){
+		while(bs.cardinality()<r.length() && corrections<maxCorrections){
 			if(bs.get(0)){//First bit is a "1", can correct from the left
 				int errorLoc=bs.nextClearBit(0);//Location to left of first '0'
 				if(Tools.absdif(errorLoc,lastloc)<=BURST_THRESH){burst++;}
@@ -565,10 +559,10 @@ public class ErrorCorrect extends Thread{
 				if(success){
 					corrections++;
 					bs=detectErrorsBulk(r, kca, k, thresh, 1);
-					if(verbose){System.err.println(">\n"+toString(bs, r.bases.length));}
+					if(verbose){System.err.println(">\n"+toString(bs, r.length()));}
 				}else{
-					r.errors=r.bases.length-bs.cardinality();
-					r.errorsCorrected+=corrections;
+					r.errors=r.length()-bs.cardinality();
+//					r.errorsCorrected+=corrections;
 					r.bases[errorLoc]='N';
 					r.quality[errorLoc]=0;
 					if(verbose){System.err.println("Could not correct.");}
@@ -577,8 +571,8 @@ public class ErrorCorrect extends Thread{
 			}
 		}
 
-		r.errors=r.bases.length-bs.cardinality();
-		r.errorsCorrected+=corrections;
+		r.errors=r.length()-bs.cardinality();
+//		r.errorsCorrected+=corrections;
 		assert(corrections<=maxCorrections);
 		return bs;
 	}

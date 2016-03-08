@@ -6,6 +6,8 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import align2.Shared;
+
 import dna.Data;
 
 import fileIO.ReadWrite;
@@ -19,7 +21,8 @@ public abstract class ReadStreamWriter extends Thread {
 	/*--------------------------------------------------------------*/
 	
 	
-	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, boolean makeWriter, boolean buffered, boolean useSharedHeader){
+	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, 
+			boolean makeWriter, boolean buffered, boolean useSharedHeader){
 //		assert(false) : useSharedHeader+", "+header;
 		assert(ff!=null);
 		assert(ff.write()) : "FileFormat is not in write mode for "+ff.name();
@@ -33,6 +36,7 @@ public abstract class ReadStreamWriter extends Thread {
 		OUTPUT_ATTACHMENT=ff.attachment();
 		SITES_ONLY=ff.sites();
 		OUTPUT_STANDARD_OUT=ff.stdio();
+		FASTA_WRAP=Shared.FASTA_WRAP;
 		assert(((OUTPUT_SAM ? 1 : 0)+(OUTPUT_FASTQ ? 1 : 0)+(OUTPUT_FASTA ? 1 : 0)+(OUTPUT_ATTACHMENT ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) : 
 			OUTPUT_SAM+", "+SITES_ONLY+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT;
 		
@@ -70,7 +74,8 @@ public abstract class ReadStreamWriter extends Thread {
 			
 			myWriter=(makeWriter ? new PrintWriter(myOutstream) : null);
 			
-			boolean supressHeader=(SUPPRESS_HEADER || (ff.append() && ff.exists()));
+			final boolean supressHeader=(NO_HEADER || (ff.append() && ff.exists()));
+			final boolean supressHeaderSequences=(NO_HEADER_SEQUENCES);
 //			assert(false) : ff.append()+", "+ff.exists();
 			
 			if(header!=null && !supressHeader){
@@ -88,15 +93,26 @@ public abstract class ReadStreamWriter extends Thread {
 				}
 			}else if(OUTPUT_SAM && !supressHeader){
 				if(useSharedHeader){
+//					assert(false);
 					ArrayList<byte[]> list=SamReadInputStream.getSharedHeader(true);
 					if(list==null){
 						System.err.println("Header was null.");
 					}else{
 						try {
-							for(byte[] line : list){
-								myOutstream.write(line);
-								myOutstream.write('\n');
-								//myWriter.println(new String(line));
+							if(supressHeaderSequences){
+								for(byte[] line : list){
+									boolean sq=(line!=null && line.length>2 && line[0]=='@' && line[1]=='S' && line[2]=='Q' && line[3]=='\t');
+									if(!sq){
+										myOutstream.write(line);
+										myOutstream.write('\n');
+									}
+								}
+							}else{
+								for(byte[] line : list){
+									myOutstream.write(line);
+									myOutstream.write('\n');
+									//myWriter.println(new String(line));
+								}
 							}
 						} catch (IOException e) {
 							// TODO Auto-generated catch block
@@ -119,8 +135,10 @@ public abstract class ReadStreamWriter extends Thread {
 						bb.append('\n');
 						int a=(MINCHROM==-1 ? 1 : MINCHROM);
 						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
-						for(int chrom=a; chrom<=b; chrom++){
-							SamHeader.printHeader1B(chrom, chrom, bb, myOutstream);
+						if(!supressHeaderSequences){
+							for(int chrom=a; chrom<=b; chrom++){
+								SamHeader.printHeader1B(chrom, chrom, bb, myOutstream);
+							}
 						}
 						SamHeader.header2B(bb);
 						bb.append('\n');
@@ -202,32 +220,42 @@ public abstract class ReadStreamWriter extends Thread {
 	/*--------------------------------------------------------------*/
 	
 	
-	protected static final StringBuilder toQualitySB(byte[] quals, int len){
-		if(quals==null){return fakeQualitySB(30, len);}
+	protected static final StringBuilder toQualitySB(final byte[] quals, final int len, final int wrap){
+		if(quals==null){return fakeQualitySB(30, len, wrap);}
 		assert(quals.length==len);
 		StringBuilder sb=new StringBuilder(NUMERIC_QUAL ? len*3+1 : len+1);
 		if(NUMERIC_QUAL){
-			if(quals.length>0){sb.append(quals[0]);}
-			for(int i=1; i<quals.length; i++){
-				sb.append(' ');
+			if(len>0){sb.append(quals[0]);}
+			for(int i=1, w=1; i<len; i++, w++){
+				if(w>=wrap){
+					sb.append('\n');
+					w=0;
+				}else{
+					sb.append(' ');
+				}
 				sb.append(quals[i]);
 			}
 		}else{
 			final byte b=FASTQ.ASCII_OFFSET_OUT;
-			for(int i=0; i<quals.length; i++){
+			for(int i=0; i<len; i++){
 				sb.append((char)(b+quals[i]));
 			}
 		}
 		return sb;
 	}
 	
-	protected static final StringBuilder fakeQualitySB(int q, int len){
+	protected static final StringBuilder fakeQualitySB(final int q, final int len, final int wrap){
 		StringBuilder sb=new StringBuilder(NUMERIC_QUAL ? len*3+1 : len+1);
 		char c=(char)(q+FASTQ.ASCII_OFFSET_OUT);
 		if(NUMERIC_QUAL){
 			if(len>0){sb.append(q);}
-			for(int i=1; i<len; i++){
-				sb.append(' ');
+			for(int i=1, w=1; i<len; i++, w++){
+				if(w>=wrap){
+					sb.append('\n');
+					w=0;
+				}else{
+					sb.append(' ');
+				}
 				sb.append(q);
 			}
 		}else{
@@ -236,32 +264,42 @@ public abstract class ReadStreamWriter extends Thread {
 		return sb;
 	}
 	
-	protected static final ByteBuilder toQualityB(byte[] quals, int len, ByteBuilder bb){
-		if(quals==null){return fakeQualityB(30, len, bb);}
+	protected static final ByteBuilder toQualityB(final byte[] quals, final int len, final int wrap, final ByteBuilder bb){
+		if(quals==null){return fakeQualityB(30, len, wrap, bb);}
 		assert(quals.length==len);
 		bb.ensureExtra(NUMERIC_QUAL ? len*3+1 : len+1);
 		if(NUMERIC_QUAL){
-			if(quals.length>0){bb.append((int)quals[0]);}
-			for(int i=1; i<quals.length; i++){
-				bb.append(' ');
+			if(len>0){bb.append((int)quals[0]);}
+			for(int i=1, w=1; i<len; i++, w++){
+				if(w>=wrap){
+					bb.append('\n');
+					w=0;
+				}else{
+					bb.append(' ');
+				}
 				bb.append((int)quals[i]);
 			}
 		}else{
 			final byte b=FASTQ.ASCII_OFFSET_OUT;
-			for(int i=0; i<quals.length; i++){
+			for(int i=0; i<len; i++){
 				bb.append(b+quals[i]);
 			}
 		}
 		return bb;
 	}
 	
-	protected static final ByteBuilder fakeQualityB(int q, int len, ByteBuilder bb){
+	protected static final ByteBuilder fakeQualityB(final int q, final int len, final int wrap, final ByteBuilder bb){
 		bb.ensureExtra(NUMERIC_QUAL ? len*3+1 : len+1);
 		if(NUMERIC_QUAL){
 			int c=(q+FASTQ.ASCII_OFFSET_OUT);
 			if(len>0){bb.append(q);}
-			for(int i=1; i<len; i++){
-				bb.append(' ');
+			for(int i=1, w=1; i<len; i++, w++){
+				if(w>=wrap){
+					bb.append('\n');
+					w=0;
+				}else{
+					bb.append(' ');
+				}
 				bb.append(q);
 			}
 		}else{
@@ -296,7 +334,7 @@ public abstract class ReadStreamWriter extends Thread {
 	/** TODO */
 	protected boolean errorState=false;
 	protected boolean finishedSuccessfully=false;
-
+	
 	public final boolean OUTPUT_SAM;
 	public final boolean OUTPUT_BAM;
 	public final boolean OUTPUT_FASTQ;
@@ -305,6 +343,8 @@ public abstract class ReadStreamWriter extends Thread {
 	public final boolean OUTPUT_STANDARD_OUT;
 	public final boolean SITES_ONLY;
 	public boolean OUTPUT_INTERLEAVED=false;
+	
+	protected final int FASTA_WRAP;
 	
 	protected final boolean allowSubprocess;
 	
@@ -335,7 +375,9 @@ public abstract class ReadStreamWriter extends Thread {
 	
 	public static boolean ignorePairAssertions=false;
 	public static boolean ASSERT_CIGAR=false;
-	public static boolean SUPPRESS_HEADER=false;
+	public static boolean NO_HEADER=false;
+	public static boolean NO_HEADER_SEQUENCES=false;
+	public static boolean USE_ATTACHED_SAMLINE=false;
 	
 	
 	/*--------------------------------------------------------------*/

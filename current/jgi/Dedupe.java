@@ -16,11 +16,11 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import stream.ConcurrentCollectionReadInputStream;
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.FastqReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import align2.BandedAligner;
@@ -34,11 +34,11 @@ import align2.TrimRead;
 import dna.AminoAcid;
 import dna.Parser;
 import dna.Timer;
-import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
 /**
@@ -55,6 +55,27 @@ public final class Dedupe {
 			printOptions();
 			System.exit(0);
 		}
+		
+		//Preparse to see if Dedupe2 should be used instead
+		{
+			int nam=1;
+			for(int i=0; i<args.length; i++){
+				final String arg=args[i];
+				String[] split=arg.split("=");
+				String a=split[0].toLowerCase();
+				String b=split.length>1 ? split[1] : null;
+				if("null".equalsIgnoreCase(b)){b=null;}
+				while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
+				if(a.equals("nam") || a.equals("numaffixmaps")){
+					if(b!=null){nam=Integer.parseInt(b);}
+				}
+			}
+			if(nam>2){
+				Dedupe2.main(args);
+				return;
+			}
+		}
+		
 		Dedupe dd=new Dedupe(args);
 		dd.process();
 	}
@@ -134,9 +155,12 @@ public final class Dedupe {
 		ReadWrite.ZIPLEVEL=2;
 		//ReadWrite.USE_UNPIGZ=true;
 		FastaReadInputStream.SPLIT_READS=false;
+		
+		Parser parser=new Parser();
 		boolean setOut=false, setMcsfs=false;
 		int bandwidth_=-1;
 		int k_=31;
+		int subset_=0, subsetCount_=1;
 		
 		{
 			boolean b=false;
@@ -144,9 +168,10 @@ public final class Dedupe {
 			EA=b;
 		}
 		
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
-
+		Read.TO_UPPER_CASE=true;
+		
 		for(int i=0; i<args.length; i++){
 
 			final String arg=args[i];
@@ -156,7 +181,6 @@ public final class Dedupe {
 			if("null".equalsIgnoreCase(b)){b=null;}
 			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			//Parser parser=new Parser();
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
@@ -164,6 +188,10 @@ public final class Dedupe {
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				if(b.indexOf(',')>=0 && !new File(b).exists()){
@@ -181,8 +209,7 @@ public final class Dedupe {
 				out=b;
 				setOut=true;
 			}else if(a.equals("out2")){
-				assert(false) : "Dedupe does not allow 'out2'; for paired reads, output is interleaved.";
-//				out2=b;
+				throw new RuntimeException("Dedupe does not allow 'out2'; for paired reads, output is interleaved.");
 			}else if(a.equals("clusterfilepattern") || a.equals("pattern")){
 				clusterFilePattern=b;
 				assert(clusterFilePattern==null || clusterFilePattern.contains("%")) : "pattern must contain the % symbol.";
@@ -215,12 +242,6 @@ public final class Dedupe {
 					ascending=false;
 				}else{
 					sort=Tools.parseBoolean(b);
-				}
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				}
 			}else if(a.equals("arc") || a.equals("absorbrc") || a.equals("trc") || a.equals("testrc")){
 				ignoreReverseComplement=!Tools.parseBoolean(b);
@@ -261,10 +282,10 @@ public final class Dedupe {
 				REQUIRE_MATCHING_NAMES=Tools.parseBoolean(b);
 			}else if(a.equals("ngn") || a.equals("numbergraphnodes")){
 				NUMBER_GRAPH_NODES=Tools.parseBoolean(b);
+			}else if(a.equals("addpairnum")){
+				ADD_PAIRNUM_TO_NAME=Tools.parseBoolean(b);
 			}else if(a.equals("pn") || a.equals("prefixname")){
 //				PREFIX_NAME=Tools.parseBoolean(b);
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(a.equals("k")){
 				k_=Integer.parseInt(b);
 				assert(k_>0 && k_<32) : "k must be between 1 and 31; default is 31, and lower values are slower.";
@@ -296,7 +317,7 @@ public final class Dedupe {
 				minIdentity=Float.parseFloat(b);
 				minIdentityMult=(minIdentity==100f ? 0 : (100f-minIdentity)/100f);
 			}else if(a.equals("threads") || a.equals("t")){
-				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
+				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.threads() : Integer.parseInt(b));
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -322,6 +343,8 @@ public final class Dedupe {
 				ignoreAffix1=Tools.parseBoolean(b);
 			}else if(a.equals("parsedepth") || a.equals("pd")){
 				parseDepth=Tools.parseBoolean(b);
+			}else if(a.equals("printlengthinedges") || a.equals("ple")){
+				printLengthInEdges=Tools.parseBoolean(b);
 			}else if(a.equals("depthmult") || a.equals("depthratio") || a.equals("dr")){
 				depthRatio=Float.parseFloat(b);
 				if(depthRatio<=0){
@@ -337,12 +360,14 @@ public final class Dedupe {
 				exact=Tools.parseBoolean(b);
 			}else if(a.equals("uniquenames") || a.equals("un")){
 				uniqueNames=Tools.parseBoolean(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("ftl") || a.equals("forcetrimleft")){
 				forceTrimLeft=Integer.parseInt(b);
 			}else if(a.equals("ftr") || a.equals("forcetrimright")){
 				forceTrimRight=Integer.parseInt(b);
+			}else if(a.equals("subset") || a.equals("sst")){
+				subset_=Integer.parseInt(b);
+			}else if(a.equals("subsets") || a.equals("subsetcount") || a.equals("sstc")){
+				subsetCount_=Integer.parseInt(b);
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				String c=args[i];
 				if(c.indexOf(',')>=0 && !new File(c).exists()){
@@ -358,13 +383,20 @@ public final class Dedupe {
 			}
 		}
 		
-		if(verbose){
-			ReadWrite.verbose=ConcurrentGenericReadInputStream.verbose=RTextOutputStream3.verbose=ByteFile1.verbose=ByteFile2.verbose=FastqReadInputStream.verbose=true;
+		{//Process parser fields
+			Parser.processQuality();
 		}
-//		verbose=false;
+		
+		if(verbose){
+			ReadWrite.verbose=ConcurrentGenericReadInputStream.verbose=ConcurrentReadOutputStream.verbose=ByteFile1.verbose=ByteFile2.verbose=FastqReadInputStream.verbose=true;
+		}
 		
 		k=k_;
 		k2=k-1;
+		subset=subset_;
+		subsetCount=subsetCount_;
+		subsetMode=subsetCount>1;
+		assert(subset>=0 && subset<subsetCount) : "subset="+subset+", subsetCount="+subsetCount;
 		
 		BandedAligner.penalizeOffCenter=true;
 
@@ -426,7 +458,7 @@ public final class Dedupe {
 			dupeWriter=null;
 		}else{
 			FileFormat ff=FileFormat.testOutput(outdupe, FileFormat.FASTA, null, true, overwrite, append, false);
-			dupeWriter=new TextStreamWriter(ff);
+			dupeWriter=new ByteStreamWriter(ff);
 		}
 	}
 	
@@ -561,23 +593,41 @@ public final class Dedupe {
 		affixMaps=null;
 	}
 	
-	private void processMatches(Timer t){
-		crisa=new ConcurrentGenericReadInputStream[in1.length];
-		multipleInputFiles=crisa.length>1;
-		for(int i=0; i<in1.length; i++){
-			if(verbose){System.err.println("Creating cris for "+in1[i]);}
-			
-			final ConcurrentReadStreamInterface cris;
-			{
-				FileFormat ff1=FileFormat.testInput(in1[i], FileFormat.FASTA, null, !multipleInputFiles || ReadWrite.USE_UNPIGZ, true);
-				FileFormat ff2=(in2==null || in2.length<=i ? null : FileFormat.testInput(in2[i], FileFormat.FASTA, null, !multipleInputFiles || ReadWrite.USE_UNPIGZ, true));
-				cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ff1, ff2);
-				Thread cristhread=new Thread(cris);
-				cristhread.start();
-			}
-			crisa[i]=cris;
-		}
+	private ConcurrentReadInputStream[] makeCrisArray(ArrayList<Read> list){
+		final ConcurrentReadInputStream[] array;
+		
+		if(list!=null){
+			array=new ConcurrentReadInputStream[] {new ConcurrentCollectionReadInputStream(list, null, -1)};
+			array[0].start(); //This deadlocks if ConcurrentReadInputStream extends Thread rather than spawning a new thread.
+		}else{
+			array=new ConcurrentReadInputStream[in1.length];
+			multipleInputFiles=array.length>1;
+			for(int i=0; i<in1.length; i++){
+				if(verbose){System.err.println("Creating cris for "+in1[i]);}
 
+				final ConcurrentReadInputStream cris;
+				{
+					FileFormat ff1=FileFormat.testInput(in1[i], FileFormat.FASTA, null, !multipleInputFiles || ReadWrite.USE_UNPIGZ, true);
+					FileFormat ff2=(in2==null || in2.length<=i ? null : FileFormat.testInput(in2[i], FileFormat.FASTA, null, !multipleInputFiles || ReadWrite.USE_UNPIGZ, true));
+					cris=ConcurrentReadInputStream.getReadInputStream(maxReads, ff1.samOrBam(), ff1, ff2);
+					cris.start();
+					if(cris.paired()){
+						THREADS=1;//Temp fix for losing reads when multithreaded and paired
+						if(absorbContainment){
+							System.err.println("Set absorbContainment to false because it is not currently supported for paired reads.");
+							absorbContainment=false;
+						}
+					}
+				}
+				array[i]=cris;
+			}
+		}
+		return array;
+	}
+	
+	private void processMatches(Timer t){
+		crisa=makeCrisArray(null);
+		
 		ArrayList<HashThread> alht=new ArrayList<HashThread>(THREADS);
 		for(int i=0; i<THREADS; i++){alht.add(new HashThread(true, (absorbContainment|findOverlaps), absorbMatch, false, false));}
 		for(HashThread ht : alht){ht.start();}
@@ -603,7 +653,7 @@ public final class Dedupe {
 		alht.clear();
 		
 		if(verbose){System.err.println("Attempting to close input streams (1).");}
-		for(ConcurrentReadStreamInterface cris : crisa){
+		for(ConcurrentReadInputStream cris : crisa){
 			errorState|=ReadWrite.closeStream(cris);
 		}
 		crisa=null;
@@ -632,13 +682,11 @@ public final class Dedupe {
 		//		if(verbose){System.err.println("Sorting.");}
 		//		Collections.sort(list, ReadLengthComparator.comparator);
 		//		Collections.reverse(list);
-		//		assert(list.isEmpty() || list.get(0).bases.length<=list.get(list.size()-1).bases.length) : 
-		//			list.get(0).bases.length+", "+list.get(list.size()-1).bases.length;
+		//		assert(list.isEmpty() || list.get(0).length()<=list.get(list.size()-1).length()) : 
+		//			list.get(0).length()+", "+list.get(list.size()-1).length();
 		//	}
 		
-		crisa=new ConcurrentCollectionReadInputStream[] {new ConcurrentCollectionReadInputStream(list, null, -1)};
-		Thread cristhread=new Thread(crisa[0]);
-		cristhread.start();
+		crisa=makeCrisArray(subsetMode ? null : list);
 
 		ArrayList<HashThread> alht=new ArrayList<HashThread>(THREADS);
 		for(int i=0; i<THREADS; i++){alht.add(new HashThread(false, false, false, true, false));}
@@ -671,7 +719,7 @@ public final class Dedupe {
 		}
 		alht.clear();
 		if(verbose){System.err.println("Attempting to close input streams (2).");}
-		for(ConcurrentReadStreamInterface cris : crisa){
+		for(ConcurrentReadInputStream cris : crisa){
 			errorState|=ReadWrite.closeStream(cris);
 		}
 
@@ -726,9 +774,7 @@ public final class Dedupe {
 			}
 		}
 		
-		crisa=new ConcurrentCollectionReadInputStream[] {new ConcurrentCollectionReadInputStream(list, null, -1)};
-		Thread cristhread=new Thread(crisa[0]);
-		cristhread.start();
+		crisa=makeCrisArray(subsetMode ? null : list);
 		
 		ArrayList<HashThread> alht=new ArrayList<HashThread>(THREADS);
 		for(int i=0; i<THREADS; i++){alht.add(new HashThread(false, false, false, false, true));}
@@ -754,7 +800,7 @@ public final class Dedupe {
 		}
 		alht.clear();
 		if(verbose){System.err.println("Attempting to close input streams (3).");}
-		for(ConcurrentReadStreamInterface cris : crisa){
+		for(ConcurrentReadInputStream cris : crisa){
 			errorState|=ReadWrite.closeStream(cris);
 		}
 		
@@ -1339,11 +1385,11 @@ public final class Dedupe {
 			Collections.sort(list, ReadLengthComparator.comparator);
 			if(ascending){
 				Collections.reverse(list);
-				assert(list.isEmpty() || list.get(0).bases.length<=list.get(list.size()-1).bases.length) : 
-					list.get(0).bases.length+", "+list.get(list.size()-1).bases.length;
+				assert(list.isEmpty() || list.get(0).length()<=list.get(list.size()-1).length()) : 
+					list.get(0).length()+", "+list.get(list.size()-1).length();
 			}else{
-				assert(list.isEmpty() || list.get(0).bases.length>=list.get(list.size()-1).bases.length) : 
-					list.get(0).bases.length+", "+list.get(list.size()-1).bases.length;
+				assert(list.isEmpty() || list.get(0).length()>=list.get(list.size()-1).length()) : 
+					list.get(0).length()+", "+list.get(list.size()-1).length();
 			}
 		}
 		assert(list.size()==outNum || list.size()*2L==outNum || UNIQUE_ONLY) : list.size()+", "+outNum;
@@ -1394,7 +1440,7 @@ public final class Dedupe {
 	
 	private void writeOutput(ArrayList<Read> list){
 		
-		final TextStreamWriter tsw=(out==null ? null : new TextStreamWriter(out, overwrite, append, true));
+		final ByteStreamWriter tsw=(out==null ? null : new ByteStreamWriter(out, overwrite, append, true));
 		
 		if(verbose){System.err.println("Writing from array.");}
 		tsw.start();
@@ -1407,6 +1453,8 @@ public final class Dedupe {
 			list.set(x, null);
 			
 			if(r.mate!=null && r.pairnum()!=0){r=r.mate;}
+			
+			assert(r.mate==null || r.mate.discarded()==r.discarded());
 			
 			if(!r.discarded()){
 				rid++;
@@ -1446,13 +1494,13 @@ public final class Dedupe {
 		
 		if(verbose){System.err.println("Writing clusters.");}
 		
-		final TextStreamWriter tswAll=(out==null ? null : new TextStreamWriter(out, overwrite, append, true));
+		final ByteStreamWriter tswAll=(out==null ? null : new ByteStreamWriter(out, overwrite, append, true));
 		if(tswAll!=null){tswAll.start();}
-		TextStreamWriter tswCluster=null;
-		TextStreamWriter tswBest=null;
+		ByteStreamWriter tswCluster=null;
+		ByteStreamWriter tswBest=null;
 		
 		if(outbest!=null){
-			tswBest=new TextStreamWriter(outbest, overwrite, append, true);
+			tswBest=new ByteStreamWriter(outbest, overwrite, append, true);
 			tswBest.start();
 		}
 		
@@ -1500,7 +1548,7 @@ public final class Dedupe {
 						tswCluster.poisonAndWait();
 						tswCluster=null;
 					}
-					tswCluster=new TextStreamWriter(clusterFilePattern.replaceFirst("%", ""+cnum), overwrite, append, true);
+					tswCluster=new ByteStreamWriter(clusterFilePattern.replaceFirst("%", ""+cnum), overwrite, append, true);
 					if(verbose){System.err.println("Starting tswCluster "+tswCluster.fname);}
 					tswCluster.start();
 				}
@@ -1661,7 +1709,7 @@ public final class Dedupe {
 	
 	private static String toGraphName(Read r){
 		if(NUMBER_GRAPH_NODES || r.id==null){
-			return r.numericID+"."+(r.pairnum()+1);
+			return r.numericID+((ADD_PAIRNUM_TO_NAME || r.mate!=null) ? "."+(r.pairnum()+1) : "");
 		}else{
 			return r.id.replace(' ','_').replace('\t','_');
 		}
@@ -1673,8 +1721,8 @@ public final class Dedupe {
 		int[] lengths=new int[alu.size()];
 		for(int i=0; i<alu.size(); i++){
 			Unit u=alu.get(i);
-			int len=u.r.bases.length;
-			quality[i]=u.r.expectedErrors()/len;
+			int len=u.r.length();
+			quality[i]=u.r.expectedErrors(true, 0)/len;
 			lengths[i]=len;
 		}
 		Arrays.sort(quality);
@@ -1686,10 +1734,10 @@ public final class Dedupe {
 		Unit best=null;
 		for(int i=0; i<alu.size(); i++){
 			Unit u=alu.get(i);
-			int len=u.r.bases.length;
+			int len=u.r.length();
 			float deviation=Tools.absdif(len, medianLength)*1f/(medianLength+1);
 			if(deviation<0.05){
-				float qual=u.r.expectedErrors()/len;
+				float qual=u.r.expectedErrors(true, 0)/len;
 				qual=(qual+.001f)*(1+10*deviation);
 				if(qual<currentBestQuality || best==null){
 					currentBestQuality=qual;
@@ -1780,8 +1828,13 @@ public final class Dedupe {
 	
 	private void addDupe(Read r){
 		if(dupeWriter==null){return;}
-		synchronized(dupeWriter){
-			dupeWriter.println(r);
+		if(r.mate==null || r.pairnum()==0){
+			synchronized(dupeWriter){
+				dupeWriter.println(r);
+				if(r.mate!=null){
+					dupeWriter.println(r.mate);
+				}
+			}
 		}
 	}
 	
@@ -2902,7 +2955,7 @@ public final class Dedupe {
 			findOverlapsT=findOverlaps_;
 			findMatchesT=findMatches_;
 			tid=getTid();
-			crisq=new ArrayDeque<ConcurrentReadStreamInterface>(crisa.length);
+			crisq=new ArrayDeque<ConcurrentReadInputStream>(crisa.length);
 			for(int i=0; i<crisa.length; i++){
 //				if(verbose){System.err.println("Adding to crisq.");}
 				crisq.add(crisa[(i+tid)%crisa.length]);
@@ -2915,34 +2968,29 @@ public final class Dedupe {
 		
 		public void run(){
 			
-			ConcurrentReadStreamInterface cris=crisq.poll();
+			ConcurrentReadInputStream cris=crisq.poll();
 			
 			while(cris!=null){
 				ListNum<Read> ln=cris.nextList();
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
 				//			long xx=0;
 				while(reads!=null && reads.size()>0){
-
+					
 					for(Read r : reads){
-						assert(r.pairnum()==0);
-						processRead(r);
-						if(r.mate!=null){
-							assert(r.mate.pairnum()==1) : cris.getClass()+", "+cris.producers()[0].getClass();
-							processRead(r.mate);
-						}
+						processReadOuter(r);
 					}
-
+					
 					if(codeMapT!=null && (codeMapT.size()>threadMaxReadsToBuffer || basesStoredT>threadMaxBasesToBuffer)){
 						assert(addToCodeMapT);
 						long added=mergeMaps();
 						addedToMainT+=added;
 					}
-
-					cris.returnList(ln, ln.list.isEmpty());
+					
+					cris.returnList(ln.id, ln.list.isEmpty());
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				if(codeMapT!=null && !codeMapT.isEmpty()){
 					long added=mergeMaps();
 					addedToMainT+=added;
@@ -2955,144 +3003,167 @@ public final class Dedupe {
 			sharedConflictList=null;
 		}
 		
-		private void processRead(Read r){
-
-			if(r.bases!=null && r.bases.length>=MINSCAF){
-				if(!storeName){r.id=null;}
-				if(!storeQuality){r.quality=null;}
-				
-				if(forceTrimLeft>0 || forceTrimRight>0){//Added at request of RQC team
-					if(r!=null && r.length()>0){
-						TrimRead.trimToPosition(r, forceTrimLeft>0 ? forceTrimLeft : 0, forceTrimRight>0 ? forceTrimRight : r.length(), 1);
-					}
-				}
-				
-//				if(convertToUpperCaseT){
-//					if(r.obj==null && r.bases!=null){
-//						for(int i=0; i<r.bases.length; i++){
-//							r.bases[i]=(byte)Character.toUpperCase(r.bases[i]);
-//						}
-//					}
-//					if(r.mate!=null && r.mate.obj==null && r.mate.bases!=null){
-//						for(int i=0; i<r.mate.bases.length; i++){
-//							r.mate.bases[i]=(byte)Character.toUpperCase(r.mate.bases[i]);
-//						}
-//					}
-//				}
-				readsProcessedT++;
-				//					xx++;
-				//					outstream.println("Processing read "+r.id+", "+xx);
-				basesProcessedT+=r.length();
-
-//				final long code;
-//				final Unit u;
-//				if(r.obj==null){
-//					final boolean canonical=isCanonical(r.bases);
-//					code=(canonical ? hash(r.bases) : hashReversed(r.bases));
-//					u=(r.obj!=null ? (Unit)r.obj : new Unit(r, canonical, code));
-//					u=(r.obj!=null ? (Unit)r.obj : new Unit(r));
-//					r.obj=u;
-//				}else{
-//					u=(Unit)r.obj;
-//					code=u.code;
-//				}
-//				assert(u.r==r && r.obj==u);
-
-				final Unit u=(r.obj!=null ? (Unit)r.obj : new Unit(r));
-				assert(u.r==r && (r.obj==u || r.obj==null));
-				final long code=u.code1;
-				r.obj=u;
-				assert(u.r==r && r.obj==u);
-				if(r.mate!=null && r.mate.obj==null){r.mate.obj=new Unit(r.mate);}
-
-				if(verbose){System.err.println("Generated "+code+" for sequence "+u.name()+"\t"+new String(r.bases, 0, Tools.min(40, r.bases.length)));}
-
-				if(addToCodeMapT){
-					final Long codeL=code;
-					ArrayList<Unit> list=codeMapT.get(codeL);
-					if(list==null){
-						if(verbose){System.err.println("Unique.");}
-						list=new ArrayList<Unit>(1);
-						list.add(u);
-						basesStoredT+=r.bases.length;
-						codeMapT.put(codeL, list);
-					}else{
-						if(verbose){System.err.println("Exists.");}
-						boolean match=false;
-						if(findMatchesT){
-							for(Unit u2 : list){
-								if(pairedEqualsRC(u, u2)){
-//									if(u.r.mate!=null){
-//										verbose=true;
-//
-//										Unit um=(Unit)u.r.mate.obj;
-//										Unit u2m=(Unit)u2.r.mate.obj;
-//										
-//										if(verbose){
-//											System.err.println("********");
-//											System.err.println(u.r.toFastq());
-//											System.err.println(u.r.mate.toFastq());
-//											System.err.println("********");
-//											System.err.println(u2.r.toFastq());
-//											System.err.println(u2.r.mate.toFastq());
-//											System.err.println("********");
-//											System.err.println(u);
-//											System.err.println(u2);
-//											System.err.println(um);
-//											System.err.println(u2m);
-//											System.err.println("********");
-//											System.err.println(u.equals(u2));
-//											System.err.println(u.compareTo(u2));
-//											System.err.println("********");
-//											System.err.println(um.equals(u2m));
-//											System.err.println(um.compareTo(u2m));
-//											System.err.println("********");
-//										}
-//										
-//										verbose=false;
-//									}
-									assert(u.r.mate==null || pairedEqualsRC((Unit)u.r.mate.obj, (Unit)u2.r.mate.obj)) : 
-										u.r.toFastq()+"\n"+u2.r.toFastq()+"\n"+u.r.mate.toFastq()+"\n"+u2.r.mate.toFastq()+
-										"\n"+u+"\n"+u2+"\n"+u.r.mate.obj+"\n"+u2.r.mate.obj;
-									//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.bases.length)));}
-									match=true;
-									u2.absorbMatch(u);
-									if(UNIQUE_ONLY){
-										synchronized(u2){
-											if(u2.valid()){
-												matchesT++;
-												baseMatchesT+=u2.length();
-												u2.setValid(false);
-												addDupe(u2.r);
-											}
-										}
-									}
-									break;
-								}
+		/** Return true if this read was a member of this subset. */
+		private boolean processReadOuter(Read r1){
+			if(r1.length()<MINSCAF){return false;}
+			Read r2=r1.mate;
+			
+			assert(r1.pairnum()==0);
+			assert(r2==null || r2.pairnum()==1);
+			
+			if(!addToCodeMapT && r1.obj==null){
+				if(r1.bases!=null && r1.length()>=MINSCAF){
+					final Unit u=(r1.obj!=null ? (Unit)r1.obj : new Unit(r1));
+					assert(u.r==r1 && (r1.obj==u || r1.obj==null));
+					final long code=u.code1;
+					r1.obj=u;
+					assert(u.r==r1 && r1.obj==u);
+					if(r2!=null && r2.obj==null){r2.obj=new Unit(r2);}
+					
+					//Check for subset membership
+					final boolean inSet=u.inSet();
+					if(inSet){
+						final Long codeL=code;
+						ArrayList<Unit> list=codeMap.get(codeL);
+						boolean found=false;
+						for(Unit u0 : list){
+							//Replace with existing read
+							if(u0.equals(u) && u0.r.numericID==r1.numericID){
+								r1=u0.r;
+								r2=r1.mate;
+								found=true;
+								break;
 							}
 						}
-						if(match){
-							addDupe(r);
-							matchesT++;
-							baseMatchesT+=r.bases.length;
-							//							if(verbose){System.err.println("matchesT="+matchesT+", baseMatchesT="+baseMatchesT);}
-						}else{
-							collisionsT++;
-							if(verbose){System.err.println("False collision; count = "+collisionsT);}
-							list.add(u);
-							basesStoredT+=r.bases.length;
+						assert(list!=null);
+						if(!found){
+							return false;
 						}
 					}
 				}
+			}
+			boolean b=processRead(r1);
+			if(r2!=null){processRead(r2);}
+			return b;
+		}
+		
+		/** Return true if this read was a member of this subset. */
+		private boolean processRead(Read r){
+			if(r.length()<MINSCAF){return false;}
 
-				if(findContainmentsT){
-					int x=findContainments(u);
-				}
+			final boolean inSet;
+			if(!storeName){r.id=null;}
+			if(!storeQuality){r.quality=null;}
 
-				if(findOverlapsT){
-					int x=findOverlaps(u);
+			if(forceTrimLeft>0 || forceTrimRight>0){//Added at request of RQC team
+				if(r!=null && r.length()>0){
+					TrimRead.trimToPosition(r, forceTrimLeft>0 ? forceTrimLeft : 0, forceTrimRight>0 ? forceTrimRight : r.length(), 1);
 				}
 			}
+
+			readsProcessedT++;
+			basesProcessedT+=r.length();
+
+			final Unit u=(r.obj!=null ? (Unit)r.obj : new Unit(r));
+			assert(u.r==r && (r.obj==u || r.obj==null));
+			final long code=u.code1;
+
+			//Check for subset membership
+			inSet=u.inSet();
+
+			r.obj=u;
+			assert(u.r==r && r.obj==u);
+			if(r.mate!=null && r.mate.obj==null){r.mate.obj=new Unit(r.mate);}
+
+			if(verbose){System.err.println("Generated "+code+" for sequence "+u.name()+"\t"+new String(r.bases, 0, Tools.min(40, r.length())));}
+
+			if(addToCodeMapT && inSet){
+				final Long codeL=code;
+				ArrayList<Unit> list=codeMapT.get(codeL);
+				if(list==null){
+					if(verbose){System.err.println("Unique.");}
+					list=new ArrayList<Unit>(1);
+					list.add(u);
+					basesStoredT+=r.length();
+					codeMapT.put(codeL, list);
+				}else{
+					if(verbose){System.err.println("Exists.");}
+					boolean match=false;
+					if(findMatchesT){
+						for(Unit u2 : list){
+							if(pairedEqualsRC(u, u2)){
+//								if(u.r.mate!=null){
+//									verbose=true;
+//
+//									Unit um=(Unit)u.r.mate.obj;
+//									Unit u2m=(Unit)u2.r.mate.obj;
+//
+//									if(verbose){
+//										System.err.println("********");
+//										System.err.println(u.r.toFastq());
+//										System.err.println(u.r.mate.toFastq());
+//										System.err.println("********");
+//										System.err.println(u2.r.toFastq());
+//										System.err.println(u2.r.mate.toFastq());
+//										System.err.println("********");
+//										System.err.println(u);
+//										System.err.println(u2);
+//										System.err.println(um);
+//										System.err.println(u2m);
+//										System.err.println("********");
+//										System.err.println(u.equals(u2));
+//										System.err.println(u.compareTo(u2));
+//										System.err.println("********");
+//										System.err.println(um.equals(u2m));
+//										System.err.println(um.compareTo(u2m));
+//										System.err.println("********");
+//									}
+//
+//									verbose=false;
+//								}
+								assert(u.r.mate==null || pairedEqualsRC((Unit)u.r.mate.obj, (Unit)u2.r.mate.obj)) : 
+									u.r.toFastq()+"\n"+u2.r.toFastq()+"\n"+u.r.mate.toFastq()+"\n"+u2.r.mate.toFastq()+
+									"\n"+u+"\n"+u2+"\n"+u.r.mate.obj+"\n"+u2.r.mate.obj;
+//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.length())));}
+								match=true;
+								u2.absorbMatch(u);
+								if(UNIQUE_ONLY){
+									synchronized(u2){
+										if(u2.valid()){
+											matchesT++;
+											baseMatchesT+=u2.length();
+											u2.setValid(false);
+											addDupe(u2.r);
+										}
+									}
+								}
+								break;
+							}
+						}
+					}
+					if(match){
+						addDupe(r);
+						matchesT++;
+						baseMatchesT+=r.length();
+						//							if(verbose){System.err.println("matchesT="+matchesT+", baseMatchesT="+baseMatchesT);}
+					}else{
+						collisionsT++;
+						if(verbose){System.err.println("False collision; count = "+collisionsT);}
+						list.add(u);
+						basesStoredT+=r.length();
+					}
+				}
+			}
+
+			if(findContainmentsT){
+				int x=findContainments(u);
+			}
+
+			if(findOverlapsT){
+				int x=findOverlaps(u);
+			}
+
+			return inSet;
 		}
 		
 		private int findContainments(final Unit u){
@@ -3333,6 +3404,8 @@ public final class Dedupe {
 			return hits;
 		}
 		
+		/** Insert reads processed by a thread into the shared code and affix maps. 
+		 * If operating in subset mode, only store reads with code equal to subset mod subsetCount. */
 		private long mergeMaps(){
 			if(verbose){System.err.println("Merging maps.");}
 			long novelReads=0, novelKeys=0;
@@ -3369,7 +3442,7 @@ public final class Dedupe {
 						if(findMatchesT){
 							for(Unit u2 : list){
 								if(pairedEqualsRC(u, u2)){
-									//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.bases.length)));}
+									//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.length())));}
 									u2.absorbMatch(u);
 									if(UNIQUE_ONLY){
 										synchronized(u2){
@@ -3516,7 +3589,7 @@ public final class Dedupe {
 		private final boolean findMatchesT;
 //		private final boolean convertToUpperCaseT;
 		private final int tid;
-		private final ArrayDeque<ConcurrentReadStreamInterface> crisq;
+		private final ArrayDeque<ConcurrentReadInputStream> crisq;
 		private final BandedAligner bandy;
 	}
 	
@@ -3704,6 +3777,7 @@ public final class Dedupe {
 	
 	
 	private class Overlap implements Comparable<Overlap>{
+		
 		public Overlap(Unit u1_, Unit u2_, int type_, int start1_, int start2_, int stop1_, int stop2_, int len_, int mismatches_, int edits_, BandedAligner bandy){
 			assert(u1_!=u2_);
 			if(verbose){System.err.println("\nCreating an overlap.");}
@@ -3754,7 +3828,7 @@ public final class Dedupe {
 				swap();
 				if(verbose){System.err.println(this);}
 				
-				if(EA && !test(bandy, edits+maxEdits)){
+				if(EA && !customBandwidth && !test(bandy, edits+maxEdits)){
 					System.err.println("\n"+this);
 					swap();
 					System.err.println("\n"+this);
@@ -3768,7 +3842,7 @@ public final class Dedupe {
 					System.err.println("Passed test 2b, "+bandy.lastEdits+" edits.\n");
 				}
 				
-				assert(test(bandy, edits+maxEdits)) : "\n"+this+"\n>1\n"+new String(u1.r.bases)+"\n>2\n"+new String(u2.r.bases)
+				assert(customBandwidth || test(bandy, edits+maxEdits)) : "\n"+this+"\n>1\n"+new String(u1.r.bases)+"\n>2\n"+new String(u2.r.bases)
 					+"\n>1a\n"+new String(u1.r.bases, Tools.min(start1, stop1), Tools.max(start1, stop1)-Tools.min(start1, stop1)+1)
 					+"\n>2a\n"+new String(u2.r.bases, Tools.min(start2, stop2), Tools.max(start2, stop2)-Tools.min(start2, stop2)+1);
 				if(verbose){System.err.println("Passed test 2.");}
@@ -3779,10 +3853,10 @@ public final class Dedupe {
 				reverseDirection();
 				if(verbose){System.err.println(this);}
 				
-				if(EA && !Shared.anomaly && !customBandwidth && !test(bandy, edits+maxEdits)){
+				if(EA && !Shared.anomaly && !customBandwidth && bandy!=null && !test(bandy, edits+maxEdits)){
 					Shared.anomaly=true;
-					bandy.verbose=true;
-					System.err.println("\n********** Failed test 3, "+bandy.lastEdits+" edits. ***************\n");
+					BandedAligner.verbose=true;
+					System.err.println("\n********** Failed test 3, "+bandy.lastEdits+" edits. **********\n");
 					reverseDirection();
 					System.err.println(this);
 					assert(test(bandy, edits+maxEdits)) : "\n"+this+"\n>1\n"+new String(u1.r.bases)+"\n>2\n"+new String(u2.r.bases)+"\n";
@@ -3793,9 +3867,11 @@ public final class Dedupe {
 						+"\n>1a\n"+new String(u1.r.bases, Tools.min(start1, stop1), Tools.max(start1, stop1)-Tools.min(start1, stop1)+1)
 						+"\n>2a\n"+new String(u2.r.bases, Tools.min(start2, stop2), Tools.max(start2, stop2)-Tools.min(start2, stop2)+1);
 					System.err.println("Passed test 3b, "+bandy.lastEdits+" edits.\n");
+					BandedAligner.verbose=false;
+					assert(false);
 				}
 				
-				assert(test(bandy, edits+maxEdits)) : "\n"+this+"\n>1\n"+new String(u1.r.bases)+"\n>2\n"+new String(u2.r.bases)+"\n";
+				assert(customBandwidth || test(bandy, edits+maxEdits)) : "\n"+this+"\n>1\n"+new String(u1.r.bases)+"\n>2\n"+new String(u2.r.bases)+"\n";
 				if(verbose){System.err.println("Passed test 3.");}
 			}
 			//Now all overlaps should be FORWARD or FORWARDRC and u1 should be at least as big as u2
@@ -3868,7 +3944,7 @@ public final class Dedupe {
 			x=u2.compareTo(o.u2);
 			if(x!=0){return -x;}
 			if(type!=o.type){return type-o.type;}
-			if((u1!=o.u1 || u2!=o.u2) && absorbMatch){
+			if((u1!=o.u1 || u2!=o.u2) && absorbMatch && !subsetMode){
 				boolean oldv=verbose;
 				verbose=true;
 				System.err.println(this);
@@ -3889,7 +3965,7 @@ public final class Dedupe {
 				System.err.println("********");
 				verbose=oldv;
 			}
-			assert(!absorbMatch || (u1==o.u1 && u2==o.u2)) : "\n"+u1.r+"\n"+u2.r+"\n"+o.u1.r+"\n"+o.u2.r
+			assert(!absorbMatch || (u1==o.u1 && u2==o.u2) || subsetMode) : "\n"+u1.r+"\n"+u2.r+"\n"+o.u1.r+"\n"+o.u2.r
 				+"\n\n"+u1.r.mate+"\n"+u2.r.mate+"\n"+o.u1.r.mate+"\n"+o.u2.r.mate;
 //			assert(false) : "\n"+this+"\n"+o+"\n>"+u1.name()+"\n"+new String(u1.bases())+"\n>"+u2.name()+"\n"+new String(u2.bases())+"\n";
 			if(start1!=o.start1){return start1-o.start1;}
@@ -3900,7 +3976,7 @@ public final class Dedupe {
 				return 0;
 			}else{
 				//TODO: ensure this assumption is valid.
-				assert(!absorbContainment || !absorbMatch) : "\n"+this+"\n"+o+"\n>"+u1.name()+"\n"+new String(u1.bases())+"\n>"+u2.name()+"\n"+new String(u2.bases())+"\n";
+				assert(!absorbContainment || !absorbMatch || subsetMode) : "\n"+this+"\n"+o+"\n>"+u1.name()+"\n"+new String(u1.bases())+"\n>"+u2.name()+"\n"+new String(u2.bases())+"\n";
 				
 				if(u1.unitID!=o.u1.unitID){return u1.unitID-o.u1.unitID;}
 				if(u2.unitID!=o.u2.unitID){return u2.unitID-o.u2.unitID;}
@@ -3972,6 +4048,10 @@ public final class Dedupe {
 			
 			sb.append(" (");
 			sb.append(u1.name()==null ? u1.r.numericID+"" : u1.name());
+			if(printLengthInEdges){
+				sb.append(", length=");
+				sb.append(u1.length());
+			}
 			sb.append(", start1=");
 			sb.append(start1);
 			sb.append(", stop1=");
@@ -3979,6 +4059,10 @@ public final class Dedupe {
 			
 			sb.append(") (");
 			sb.append(u2.name()==null ? u2.r.numericID+"" : u2.name());
+			if(printLengthInEdges){
+				sb.append(", length=");
+				sb.append(u2.length());
+			}
 			sb.append(", start2=");
 			sb.append(start2);
 			sb.append(", stop2=");
@@ -3996,12 +4080,20 @@ public final class Dedupe {
 			sb.append(mismatches);
 			sb.append(',');
 			sb.append(edits);
-
+			
+			if(printLengthInEdges){
+				sb.append(',');
+				sb.append(u1.length());
+			}
 			sb.append(',');
 			sb.append(start1);
 			sb.append(',');
 			sb.append(stop1);
 
+			if(printLengthInEdges){
+				sb.append(',');
+				sb.append(u2.length());
+			}
 			sb.append(',');
 			sb.append(start2);
 			sb.append(',');
@@ -4172,10 +4264,10 @@ public final class Dedupe {
 			r=r_;
 			code1=Tools.min(codeF_, codeR_);
 			code2=Tools.max(codeF_, codeR_);
-			long f=r.bases.length;
+			long f=r.length();
 			prefix1=hashTip(r.bases, true, k, 0);
 			suffix1=hashTip(r.bases, false, k, 0);
-			if(r.bases.length>2*k){
+			if(r.length()>2*k){
 				prefix2=hashTip(r.bases, true, k, k);
 				suffix2=hashTip(r.bases, false, k, k);
 			}
@@ -4183,7 +4275,7 @@ public final class Dedupe {
 			if(r.pairnum()==1){f|=PAIRNUM_MASK;}
 			flags=f;
 			assert(canonical()==canonical_);
-			assert(length()==r.bases.length);
+			assert(length()==r.length());
 			assert(pairnum()==r.pairnum());
 			if(parseDepth){
 				int[] quad=KmerNormalize.parseDepth(r.id, null);
@@ -5282,6 +5374,12 @@ public final class Dedupe {
 			return r.numericID>=u2.r.numericID;
 		}
 		
+		public final boolean inSet(){
+			if(subsetCount<2){return true;}
+			if(r.pairnum()>0){return ((Unit)r.mate.obj).inSet();}
+			return ((code1&Long.MAX_VALUE)%subsetCount)==subset;
+		}
+		
 		public byte[] bases(){return r==null ? null : r.bases;}
 
 		public String name(){return r!=null ? r.id : null /*code+""*/;}
@@ -5385,7 +5483,7 @@ public final class Dedupe {
 		
 	}
 	
-	private static final int[] makeNmerIndex(int n){
+	public static final int[] makeNmerIndex(final int n){
 		final int max=(1<<(2*n))-1;
 		int[] array=new int[max+1];
 		
@@ -5441,9 +5539,9 @@ public final class Dedupe {
 		return r;
 	}
 	
-	private ConcurrentReadStreamInterface crisa[];
+	private ConcurrentReadInputStream crisa[];
 	
-	private final TextStreamWriter dupeWriter;
+	private final ByteStreamWriter dupeWriter;
 	
 
 	private String[] in1=null;
@@ -5523,6 +5621,10 @@ public final class Dedupe {
 	long baseOverlaps=0;
 	long overlapCollisions=0;
 	long addedToMain=0;
+
+	private final int subset;
+	private final int subsetCount;
+	private final boolean subsetMode;
 	
 	private final int k;
 	private final int k2;
@@ -5558,15 +5660,17 @@ public final class Dedupe {
 	public static boolean preventTransitiveOverlaps=false;
 	public static boolean ignoreAffix1=false;
 	public static boolean parseDepth=false;
+	public static boolean printLengthInEdges=false;
 	public static float depthRatio=2;
 	public static int MINSCAF=0;
-	public static int THREADS=Shared.THREADS;
+	public static int THREADS=Shared.threads();
 	public static int threadMaxReadsToBuffer=4000;
 	public static int threadMaxBasesToBuffer=32000000;
 	public static boolean DISPLAY_PROGRESS=true;
 	public static boolean UNIQUE_ONLY=false;
 	public static boolean REQUIRE_MATCHING_NAMES=false;
 	public static boolean NUMBER_GRAPH_NODES=true;
+	public static boolean ADD_PAIRNUM_TO_NAME=true;
 	
 	private static int reverseType(int type){return (type+2)%4;}
 	public static final int FORWARD=0;

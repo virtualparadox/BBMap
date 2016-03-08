@@ -55,10 +55,10 @@ public final class KmerTable extends AbstractKmerTable {
 			}
 			if(autoResize && size>sizeLimit){resize();}
 		}else{
-			n.count++;
-			if(n.count<0){n.count=Integer.MAX_VALUE;}
+			n.value++;
+			if(n.value<0){n.value=Integer.MAX_VALUE;}
 		}
-		return n.count;
+		return n.value;
 	}
 	
 	@Override
@@ -80,8 +80,8 @@ public final class KmerTable extends AbstractKmerTable {
 			if(autoResize && size>sizeLimit){resize();}
 			return 1;
 		}else{
-			n.count++;
-			if(n.count<0){n.count=Integer.MAX_VALUE;}
+			n.value++;
+			if(n.value<0){n.value=Integer.MAX_VALUE;}
 			return 0;
 		}
 	}
@@ -124,7 +124,7 @@ public final class KmerTable extends AbstractKmerTable {
 		int cell=(int)(kmer%prime);
 		KmerLink n=array[cell];
 		while(n!=null && n.pivot!=kmer){n=n.next;}
-		return n==null ? 0 : n.count;
+		return n==null ? 0 : n.value;
 	}
 	
 	@Override
@@ -138,6 +138,41 @@ public final class KmerTable extends AbstractKmerTable {
 	public boolean contains(long kmer){
 		KmerLink node=get(kmer);
 		return node!=null;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		for(KmerLink n : array){
+			if(n!=null){n.initializeOwnership();}
+		}
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		final int cell=(int)(kmer%prime);
+		KmerLink n=array[cell];
+		assert(n!=null);
+		return n.setOwner(kmer, newOwner);
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		final int cell=(int)(kmer%prime);
+		KmerLink n=array[cell];
+		assert(n!=null);
+		return n.clearOwner(kmer, owner);
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		final int cell=(int)(kmer%prime);
+		KmerLink n=array[cell];
+		assert(n!=null);
+		return n.getOwner(kmer);
 	}
 	
 	/*--------------------------------------------------------------*/

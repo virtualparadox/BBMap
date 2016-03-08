@@ -8,12 +8,10 @@ import fileIO.ReadWrite;
 
 public class CoverageArray2 extends CoverageArray implements Serializable {
 	
-	
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = 23847758821160827L;
-	
+	private static final long serialVersionUID = 8242586595591123194L;
 	
 	public static void main(String[] args){
 		runSpeedTest(args);
@@ -57,6 +55,8 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		
 	}
 	
+	@Deprecated
+	/** Legacy human code */
 	public static void translateGenomeBuild(String[] args){
 
 		Timer t=new Timer();
@@ -73,6 +73,8 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		
 	}
 	
+	@Deprecated
+	/** Legacy human code */
 	public static void translateGenomeBuild(int inBuild, int outBuild, String root){
 		root=root.replace('\\', '/');
 		if(!root.endsWith("/")){root+="/";}
@@ -80,14 +82,14 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		CoverageArray2[] out=new CoverageArray2[27];
 		
 		for(int chrom=1; chrom<out.length; chrom++){
-			out[chrom]=new CoverageArray2(chrom);
+			out[chrom]=new CoverageArray2(chrom, 500);
 		}
 		
 		final byte PLUS=Gene.PLUS;
 		
 		for(int chrom=1; chrom<=25; chrom++){
 			String infile=root+"coverage-chr"+Gene.chromCodes[chrom]+"-build"+inBuild+".ca.zip";
-			CoverageArray2 ca1=ReadWrite.read(CoverageArray2.class, infile);
+			CoverageArray2 ca1=ReadWrite.read(CoverageArray2.class, infile, true);
 			for(int loc1=ca1.minIndex; loc1<=ca1.maxIndex; loc1++){
 				char cov=(char)ca1.get(loc1);
 				int[] xform=Translator2.translate(inBuild, outBuild, chrom, PLUS, loc1);
@@ -111,13 +113,13 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		
 	}
 	
-	public CoverageArray2(){
-		this((int)-1);
-	}
-	
-	public CoverageArray2(int chrom){
-		this(chrom, 1<<24);
-	}
+//	public CoverageArray2(){
+//		this((int)-1);
+//	}
+//	
+//	public CoverageArray2(int chrom){
+//		this(chrom, 1<<24);
+//	}
 	
 	public CoverageArray2(int chrom, int initialLen){
 		super(chrom);

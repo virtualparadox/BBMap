@@ -2,32 +2,31 @@
 #bbwrap in=<infile> out=<outfile>
 
 usage(){
-	echo "BBWrap v33.x"
-	echo "Last modified September 18, 2014"
-	echo ""
-	echo "Description:  Wrapper for BBMap to allow multiple input and output files for the same reference."
-	echo ""
-	echo "To index:  	bbwrap.sh ref=<reference fasta>"
-	echo "To map:    	bbwrap.sh in=<file,file,...> out=<file,file,...>"
-	echo "To map without an index:  	bbwrap.sh ref=<reference fasta> in=<file,file,...> out=<file,file,...> nodisk"
-	echo ""
-	echo "This will probably not work with stdin and stdout, or histogram output."
-	echo ""
-	echo "Other Parameters:"
-	echo ""
-	echo "in=<file>        	Input sequences to mask. 'in=stdin.fa' will pipe from standard in."
-	echo "mapper=bbmap     	Select mapper.  May be BBMap, BBMapPacBio, or BBMapPacBioSkimmer."
-	echo "append=f         	Append to files rather than overwriting them.  If append is enabled,"
-	echo "                 	multiple input files can write to a single output file, if there is exactly one output file."
-	echo ""
-	echo "***** All BBMap parameters can be used; run bbmap.sh for more details. *****"
-	echo ""
-	echo "Java Parameters:"
-	echo "-Xmx             		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "                 		-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
-	echo ""
-	echo "This list is not complete.  For more information, please consult $DIR""docs/readme.txt"
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+echo "
+BBWrap v34.x
+Last modified April 21, 2015
+
+Description:  Wrapper for BBMap to allow multiple input and output files for the same reference.
+
+To index:                 bbwrap.sh ref=<reference fasta>
+To map:                   bbwrap.sh in=<file,file,...> out=<file,file,...>
+To map without an index:  bbwrap.sh ref=<reference fasta> in=<file,file,...> out=<file,file,...> nodisk
+To map pairs and singletons and output them into the same file:
+bbwrap.sh in1=read1.fq,singleton.fq in2=read2.fq,null out=mapped.sam append
+
+BBWrap will not work with stdin and stdout, or histogram output.
+
+Other Parameters:
+
+in=<file,file>    Input sequences to map.
+mapper=bbmap      Select mapper.  May be BBMap, BBMapPacBio, 
+                  or BBMapPacBioSkimmer.
+append=f          Append to files rather than overwriting them.  
+                  If append is enabled, and there is exactly one output file,
+		  all output will be written to that file.
+
+***** All BBMap parameters can be used; run bbmap.sh for more details. *****
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
@@ -64,7 +63,7 @@ bbwrap() {
 	#module load samtools
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBWrap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 bbwrap "$@"

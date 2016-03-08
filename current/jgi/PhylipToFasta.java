@@ -33,6 +33,7 @@ public class PhylipToFasta {
 	
 	public PhylipToFasta(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -43,7 +44,7 @@ public class PhylipToFasta {
 		
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		Parser parser=new Parser();
@@ -64,10 +65,6 @@ public class PhylipToFasta {
 				ReadWrite.verbose=verbose;
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -77,7 +74,8 @@ public class PhylipToFasta {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			in1=parser.in1;
 
@@ -195,7 +193,7 @@ public class PhylipToFasta {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");

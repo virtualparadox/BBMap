@@ -1,6 +1,7 @@
 package kmer;
 
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
 import dna.CoverageArray;
 
@@ -211,7 +212,7 @@ public final class HashForest extends AbstractKmerTable {
 	public final int getValue(long kmer){
 		int cell=(int)(kmer%prime);
 		KmerNode n=array[cell];
-		return n==null ? 0 : n.getValue(kmer);
+		return n==null ? -1 : n.getValue(kmer);
 	}
 	
 	@Override
@@ -224,6 +225,41 @@ public final class HashForest extends AbstractKmerTable {
 	@Override
 	public boolean contains(long kmer){
 		return get(kmer)!=null;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		for(KmerNode n : array){
+			if(n!=null){n.initializeOwnership();}
+		}
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		final int cell=(int)(kmer%prime);
+		KmerNode n=array[cell];
+		assert(n!=null);
+		return n.setOwner(kmer, newOwner);
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		final int cell=(int)(kmer%prime);
+		KmerNode n=array[cell];
+		assert(n!=null);
+		return n.clearOwner(kmer, owner);
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		final int cell=(int)(kmer%prime);
+		KmerNode n=array[cell];
+		assert(n!=null);
+		return n.getOwner(kmer);
 	}
 	
 	/*--------------------------------------------------------------*/

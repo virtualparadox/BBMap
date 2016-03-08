@@ -11,6 +11,7 @@ import stream.SamLine;
 import stream.ScaffoldCoordinates;
 import stream.SiteScore;
 
+import align2.LongList;
 import align2.ReadStats;
 import align2.Tools;
 
@@ -23,6 +24,8 @@ import dna.Gene;
 import dna.Parser;
 import dna.Scaffold;
 import dna.Timer;
+import fileIO.ByteFile;
+import fileIO.ByteStreamWriter;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
@@ -62,9 +65,10 @@ public class CoveragePileup {
 		}
 		System.err.println("Executing "+(this.getClass().getName())+" "+Arrays.toString(args)+"\n");
 		
-		boolean bs=false, setbs=false;
+		int vectorMode=-1;
 		boolean outset=false;
 		ReadWrite.USE_UNPIGZ=true;
+//		SamLine.RNAME_AS_BYTES=false;
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
@@ -76,19 +80,29 @@ public class CoveragePileup {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+//			}else if(Parser.parseCommonStatic(arg, a, b)){//TODO: Enable
+//				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(a.equals("monitor") || a.equals("killswitch")){
+				Parser.parseCommonStatic(arg, a, b);
 			}else if(a.equals("ref") || a.equals("reference") || a.equals("fasta")){
 				reference=b;
 			}else if(a.equals("in") || a.equals("in1")){
-				in=b;
+				in1=b;
+			}else if(a.equals("in2")){
+				in2=b;
 			}else if(a.equals("out") || a.equals("coveragestats") || a.equals("covstats") || a.equals("stats")){
 				covstats=b;
 				outset=true;
 			}else if(a.equals("minscaf") || a.equals("covminscaf")){
 				minscaf=Integer.parseInt(b);
+			}else if(a.equals("minq") || a.equals("minmapq")){
+				minMapq=Integer.parseInt(b);
 			}else if(a.equals("outsam")){
 				outsam=b;
+			}else if(a.equals("rpkm") || a.equals("fpkm") || a.equals("outrpkm")){
+				outrpkm=b;
 			}else if(a.equals("outorf")){
 				outorf=b;
 			}else if(a.equals("orffasta") || a.equals("fastaorf")){
@@ -103,6 +117,10 @@ public class CoveragePileup {
 				normcovOverall=b;
 			}else if(a.equals("delta")){
 				DELTA_ONLY=Tools.parseBoolean(b);
+			}else if(a.equals("physical") || a.equals("physicalcoverage") || a.equals("physcov")){
+				PHYSICAL_COVERAGE=Tools.parseBoolean(b);
+			}else if(a.equals("tlen")){
+				USE_TLEN=Tools.parseBoolean(b);
 			}else if(a.equals("hist") || a.equals("histogram") || a.equals("covhist")){
 				histogram=b;
 			}else if(a.equals("reads")){
@@ -113,12 +131,15 @@ public class CoveragePileup {
 				binsize=Integer.parseInt(b);
 			}else if(a.equals("32bit")){
 				bits32=Tools.parseBoolean(b);
-			}else if(a.equals("bitset") || a.equals("usebitset")){
-				bs=Tools.parseBoolean(b);
-				setbs=true;
-			}else if(a.equals("arrays") || a.equals("usearrays") || a.equals("median") || a.equals("calcmedian")){
-				bs=!Tools.parseBoolean(b);
-				setbs=true;
+			}else if(a.equals("bitset") || a.equals("usebitset") || a.equals("bitsets") || a.equals("usebitsets")){
+//				if(Tools.parseBoolean(b)){arrayMode=BITSET_MODE;}
+				vectorMode=Tools.parseBoolean(b) ? BITSET_MODE : NOTHING_MODE;
+			}else if(a.equals("array") || a.equals("arrays") || a.equals("usearrays")){
+				vectorMode=Tools.parseBoolean(b) ? ARRAY_MODE : NOTHING_MODE;
+			}else if(a.equals("median") || a.equals("calcmedian")){
+				if(Tools.parseBoolean(b)){
+					vectorMode=ARRAY_MODE;
+				}
 			}else if(a.startsWith("nonzero") || a.equals("nzo")){
 				NONZERO_ONLY=Tools.parseBoolean(b);
 				System.err.println("Set NONZERO_ONLY to "+NONZERO_ONLY);
@@ -136,6 +157,9 @@ public class CoveragePileup {
 			}else if(a.equals("secondary") || a.equals("usesecondary")){
 				USE_SECONDARY=Tools.parseBoolean(b);
 				System.err.println("Set USE_SECONDARY_ALIGNMENTS to "+USE_SECONDARY);
+			}else if(a.equals("softclip") || a.equals("includesoftclip")){
+				INCLUDE_SOFT_CLIP=Tools.parseBoolean(b);
+				System.err.println("Set INCLUDE_SOFT_CLIP to "+INCLUDE_SOFT_CLIP);
 			}else if(a.equals("keepshortbins") || a.equals("ksb")){
 				KEEP_SHORT_BINS=Tools.parseBoolean(b);
 				System.err.println("Set KEEP_SHORT_BINS to "+KEEP_SHORT_BINS);
@@ -160,16 +184,33 @@ public class CoveragePileup {
 					boolean x=Tools.parseBoolean(b);
 					NORMALIZE_LENGTH_BINS=x ? 100 : -1;
 				}
+			}else if(a.equals("covwindow")){
+				if(b==null || b.length()<1 || Character.isLetter(b.charAt(0))){
+					USE_WINDOW=Tools.parseBoolean(b);
+				}else{
+					LOW_COV_WINDOW=Integer.parseInt(b);
+					USE_WINDOW=(LOW_COV_WINDOW>0);
+				}
+			}else if(a.equals("covwindowavg")){
+				LOW_COV_DEPTH=Double.parseDouble(b);
 			}else{
 				throw new RuntimeException("Unknown parameter: "+args[i]);
 			}
 			
 		}
 		
-		if(setbs){
-			USE_BITSETS=bs;
-			USE_COVERAGE_ARRAYS=!bs;
-			System.err.println("Set USE_BITSETS to "+USE_BITSETS);
+		if(outsam==null){
+			SamLine.PARSE_0=false;
+			SamLine.PARSE_6=false;
+			SamLine.PARSE_7=false;
+			SamLine.PARSE_8=false;
+			SamLine.PARSE_10=false;
+			SamLine.PARSE_OPTIONAL=false;
+		}
+		
+		if(vectorMode>-1){
+			USE_BITSETS=(vectorMode==BITSET_MODE);
+			USE_COVERAGE_ARRAYS=(vectorMode==ARRAY_MODE);
 		}else{
 			if(histogram==null && basecov==null && bincov==null && normcov==null && normcovOverall==null && outorf==null){//No need for coverage array!
 				USE_COVERAGE_ARRAYS=false;
@@ -178,26 +219,26 @@ public class CoveragePileup {
 				}else{
 					USE_BITSETS=true;
 				}
-				System.err.println("Set USE_COVERAGE_ARRAYS to "+USE_COVERAGE_ARRAYS);
-				System.err.println("Set USE_BITSETS to "+USE_BITSETS);
 			}
 		}
-//		assert(false) : USE_COVERAGE_ARRAYS;
+		
+		System.err.println("Set USE_COVERAGE_ARRAYS to "+USE_COVERAGE_ARRAYS);
+		System.err.println("Set USE_BITSETS to "+USE_BITSETS);
 		
 		if(maxReads<0){maxReads=Long.MAX_VALUE;}
 		{
 			final String a=(args.length>0 ? args[0] : null);
 			final String b=(args.length>1 ? args[1] : null);
-			if(in==null && a!=null && a.indexOf('=')<0 && (a.startsWith("stdin") || new File(a).exists())){in=a;}
+			if(in1==null && a!=null && a.indexOf('=')<0 && (a.startsWith("stdin") || new File(a).exists())){in1=a;}
 			if(covstats==null && b!=null && b.indexOf('=')<0){covstats=b;}
-			if(in==null){in="stdin";}
+			if(in1==null){in1="stdin";}
 			if(covstats==null && !outset){
 //				out="stdout";
 //				System.err.println("Warning: output destination not set; producing no output.  To print to standard out, set 'out=stdout'");
 				Data.sysout=System.err;
 			}
 		}
-		assert(in!=null);
+		assert(in1!=null);
 //		assert(out!=null || outset) : "Output file was not set.";
 		
 		if(STRANDED){
@@ -209,9 +250,9 @@ public class CoveragePileup {
 			assert(covstats==null || covstats.indexOf('#')>=0) : "Output filenames must contain '#' symbol for strand-specific output.";
 		}
 		
-		if(!Tools.testOutputFiles(overwrite, append, false, basecov, bincov, normcov, normcovOverall, histogram, covstats)){
+		if(!Tools.testOutputFiles(overwrite, append, false, basecov, bincov, normcov, normcovOverall, histogram, covstats, outrpkm)){
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+
-					basecov+", "+bincov+", "+normcov+", "+normcovOverall+", "+histogram+", "+covstats+"\n");
+					basecov+", "+bincov+", "+normcov+", "+normcovOverall+", "+histogram+", "+covstats+", "+outrpkm+"\n");
 		}
 	}
 
@@ -225,14 +266,16 @@ public class CoveragePileup {
 	public void clear(){
 		list=null;
 		table=null;
+		pairTable=null;
 		
 		program=null;
 		version=null;
 		
-		in=null;
+		in1=null;
 		covstats=null;
 		outsam=null;
 		outorf=null;
+		outrpkm=null;
 		reference=null;
 		histogram=null;
 		basecov=null;
@@ -267,6 +310,25 @@ public class CoveragePileup {
 		error=false;
 		list=new ArrayList<Scaffold>(initialScaffolds);
 		table=new HashMap<String, Scaffold>(initialScaffolds);
+		
+		if(PHYSICAL_COVERAGE){
+			pairTable=new HashMap<String, Object>();
+			if(COUNT_GC){
+				COUNT_GC=false;
+				System.err.println("COUNT_GC disabled for physical coverage mode.");
+			}
+			if(USE_SECONDARY){
+				USE_SECONDARY=false;
+				System.err.println("USE_SECONDARY disabled for physical coverage mode.");
+			}
+			
+			SamLine.PARSE_0=true;
+			SamLine.PARSE_6=true;
+			SamLine.PARSE_7=true;
+			SamLine.PARSE_8=true;
+			SamLine.PARSE_10=false;
+			SamLine.PARSE_OPTIONAL=false;
+		}
 	}
 	
 	
@@ -278,12 +340,12 @@ public class CoveragePileup {
 	public void process(){
 		createDataStructures();
 		
-		TextFile tf=new TextFile(in, ReadWrite.USE_UNPIGZ, false);
+		ByteFile tf=ByteFile.makeByteFile(in1, ReadWrite.USE_UNPIGZ, false);
 		
-		final TextStreamWriter tsw=(outsam==null ? null : new TextStreamWriter(outsam, overwrite, false, true));
+		final ByteStreamWriter tsw=(outsam==null ? null : new ByteStreamWriter(outsam, overwrite, false, true));
 		if(outsam!=null){tsw.start();}
 		
-		String line=processHeader(tf, tsw);
+		byte[] line=processHeader(tf, tsw);
 		
 		processReference();
 		
@@ -314,39 +376,41 @@ public class CoveragePileup {
 	/** Process all sam header lines from the tf.
 	 * Once a non-header line is encountered, return it. 
 	 * If non-null, print all lines to the tsw. */ 
-	public String processHeader(TextFile tf, TextStreamWriter tsw){
-		String line=null;
-		for(line=tf.nextLine(); line!=null && line.startsWith("@"); line=tf.nextLine()){
+	public byte[] processHeader(ByteFile tf, ByteStreamWriter tsw){
+		byte[] line=null;
+		for(line=tf.nextLine(); line!=null && (line.length==0 || line[0]=='@'); line=tf.nextLine()){
 			if(tsw!=null){tsw.println(line);}
-			
-			final String[] split=line.split("\t");
-			final String a=split[0];
-			
-			if(a.equals("@SQ")){
-				Scaffold scaf=new Scaffold(split);
-				if(COUNT_GC){scaf.basecount=new long[8];}
-				assert(!table.containsKey(scaf.name)) : "\nDuplicate scaffold name!\n"+scaf+"\n\n"+table.get(scaf.name);
-				table.put(scaf.name, scaf);
-				list.add(scaf);
-				refBases+=scaf.length;
-//				sc.obj=new CoverageArray2(table.size(), sc.length+1);
-//				Data.sysout.println("Made scaffold "+sc.name+" of length "+sc.length);
-			}else if(a.equals("@PG")){
-				for(String s : split){
-					if(s.startsWith("PN:")){
-						if(program==null){program=Data.forceIntern(s.substring(3));}
-					}else if(s.startsWith("VN:")){
-						if(version==null){version=Data.forceIntern(s.substring(3));}
+
+			if(line.length>2){
+				final byte a=line[1], b=line[2];
+
+				if(a=='S' && b=='Q'){
+					Scaffold scaf=new Scaffold(line);
+					if(COUNT_GC){scaf.basecount=new long[8];}
+					assert(!table.containsKey(scaf.name)) : "\nDuplicate scaffold name!\n"+scaf+"\n\n"+table.get(scaf.name);
+					table.put(scaf.name, scaf);
+					list.add(scaf);
+					refBases+=scaf.length;
+//					sc.obj=new CoverageArray2(table.size(), sc.length+1);
+//					Data.sysout.println("Made scaffold "+sc.name+" of length "+sc.length);
+				}else if(a=='P' && b=='G'){
+					String[] split=new String(line).split("\t");
+					for(String s : split){
+						if(s.startsWith("PN:")){
+							if(program==null){program=Data.forceIntern(s.substring(3));}
+						}else if(s.startsWith("VN:")){
+							if(version==null){version=Data.forceIntern(s.substring(3));}
+						}
 					}
+				}else if(a=='R' && b=='G'){
+					//Do nothing
+				}else if(a=='H' && b=='D'){
+					//Do nothing
+				}else if(a=='C' && b=='O'){
+					//Do nothing
+				}else{
+					//				assert(false) : line;
 				}
-			}else if(a.equals("@RG")){
-				//Do nothing
-			}else if(a.equals("@HD")){
-				//Do nothing
-			}else if(a.equals("@CO")){
-				//Do nothing
-			}else{
-//				assert(false) : line;
 			}
 		}
 		return line;
@@ -388,12 +452,12 @@ public class CoveragePileup {
 	public void processReference(){
 		if(reference==null){return;}
 
-		TextFile tf2=new TextFile(reference, false, false);
+		ByteFile bf=ByteFile.makeByteFile(reference, false, false);
 		Scaffold scaf=null;
 		int len=0;
 		final long[] acgtn=new long[8];
-		for(String s=tf2.nextLine(); s!=null; s=tf2.nextLine()){
-			if(s.startsWith(">")){
+		for(byte[] s=bf.nextLine(); s!=null; s=bf.nextLine()){
+			if(s.length>0 && s[0]=='>'){
 				if(scaf!=null){
 					scaf.length=len;
 					scaf.gc=(float)((acgtn[1]+acgtn[2])*1d/Data.max(1, acgtn[0]+acgtn[1]+acgtn[2]+acgtn[3]));
@@ -401,8 +465,8 @@ public class CoveragePileup {
 					len=0;
 					Arrays.fill(acgtn, 0);
 				}
-
-				String name=s.substring(1);
+				
+				String name=new String(s, 1, s.length-1);
 				scaf=table.get(name);
 				if(ADD_FROM_REF && scaf==null){
 					scaf=new Scaffold(name, 0);
@@ -410,9 +474,9 @@ public class CoveragePileup {
 					table.put(name, scaf);
 				}
 			}else{
-				len+=s.length();
-				for(int i=0; i<s.length(); i++){
-					acgtn[charToNum[s.charAt(i)]]++;
+				len+=s.length;
+				for(int i=0; i<s.length; i++){
+					acgtn[charToNum[s[i]]]++;
 				}
 			}
 		}
@@ -524,22 +588,36 @@ public class CoveragePileup {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	
-	public boolean addCoverage(String scafName, byte[] seq, int start, int stop, int readlen, int strand){
+	public boolean addCoverage(final String scafName, final byte[] seq, byte[] match, final int start0, final int stop0, final int readlen, final int strand, int incrementFrags){
 		final Scaffold scaf=table.get(scafName);
 		if(scaf==null){
 			assert(false) : "Can't find "+scafName;
 			return false;
 		}
-		start=Tools.max(start, 0);
-		stop=Tools.min(stop, scaf.length-1);
+		return addCoverage(scaf, seq, match, start0, stop0, readlen, strand, incrementFrags);
+	}
+	
+	public boolean addCoverage(final Scaffold scaf, final byte[] seq, byte match[], final int start0, final int stop0, final int readlen, final int strand, int incrementFrags){
+		if(scaf==null){
+			assert(false) : "Adding coverage to a null Scaffold.";
+			return false;
+		}
+		assert(INCLUDE_DELETIONS) : "TODO";
+		final int start=Tools.max(start0, 0);
+		final int stop=Tools.min(stop0, scaf.length-1);
+		
+		assert(start>=0 && stop>=0) : "\nAn error was encountered when processing a read. Output will not be valid.\n"+
+			"\nscafName="+scaf.name+"\nseq="+new String(seq)+"\nstart="+start+
+			"\nstop="+stop+"\nreadlen="+readlen+"\nstrand="+strand+"\nscaf.length="+scaf.length+"\nscaf="+scaf;
+		
 		final int bases=stop-start+1;
 		mappedBases+=readlen;
 		mappedReads++;
 		scaf.basehits+=bases;
 		scaf.readhits++;
+		scaf.fraghits+=incrementFrags;
 		if(strand==1){scaf.readhitsMinus++;}
-
+		
 		if(USE_COVERAGE_ARRAYS){
 			if(scaf.obj1==null){
 				scaf.obj1=(bits32 ? new CoverageArray3(table.size(), scaf.length+1) : new CoverageArray2(table.size(), scaf.length+1));
@@ -578,10 +656,10 @@ public class CoveragePileup {
 	}
 	
 	
-	public boolean processSamLine(String line){
-		if(line==null || line.length()==0){
+	public boolean processSamLine(byte[] line){
+		if(line==null || line.length<3){
 			return false;
-		}else if(line.charAt(0)=='@'){
+		}else if(line[0]=='@'){
 			if(!error){
 				System.err.println("Unexpected header line: "+line);
 				System.err.println("This should not cause problems, and is probably due to concatenated sam files.\n" +
@@ -589,9 +667,8 @@ public class CoveragePileup {
 				error=true;
 			}
 			
-			if(line.startsWith("@SQ")){
-				String[] split=line.split("\t");
-				Scaffold scaf=new Scaffold(split);
+			if(line[1]=='S' && line[2]=='Q'){
+				Scaffold scaf=new Scaffold(line);
 				if(!table.containsKey(scaf.name)){
 					if(COUNT_GC){scaf.basecount=new long[8];}
 					table.put(scaf.name, scaf);
@@ -609,10 +686,30 @@ public class CoveragePileup {
 	
 	public boolean processSamLine(SamLine sl){
 		readsProcessed++;
-		if(sl.mapped() && (USE_SECONDARY || sl.primary()) && (sl.seq!=null || sl.cigar!=null)){
-			assert(sl.seq!=null) : sl.toString();
-			int length=sl.seq==null ? SamLine.calcCigarLength(sl.cigar) : sl.seq.length;
-			return addCoverage(new String(sl.rname()), sl.seq, sl.start(), sl.stop(), length, sl.strand());
+		final boolean properPair=(sl.hasMate() && sl.mapped() && sl.primary() && sl.properPair() && sl.pairedOnSameChrom());
+		if(PHYSICAL_COVERAGE && properPair){
+			SamLine mate=(SamLine)pairTable.remove(sl.qname);
+			if(mate==null){pairTable.put(sl.qname, sl);}
+			else{
+				final int start1=sl.start(INCLUDE_SOFT_CLIP, false);
+				final int stop1=sl.stop(start1, INCLUDE_SOFT_CLIP, false);
+				final int start2=mate.start(INCLUDE_SOFT_CLIP, false);
+				final int stop2=mate.stop(start2, INCLUDE_SOFT_CLIP, false);
+				final int strand=(sl.pairnum()==0 ? sl.strand() : mate.strand());
+				final int length=USE_TLEN ? sl.tlen : Tools.max(stop1, stop2)-Tools.min(start1, start2)+1;
+				addCoverage(sl.rnameS(), null, null, Tools.min(start1, start2), Tools.max(stop1, stop2), length, strand, 2);
+			}
+		}else if(sl.mapped() && (USE_SECONDARY || sl.primary()) && sl.mapq>=minMapq){
+			assert(sl.seq!=null || sl.cigar!=null) : "This program requires bases or a cigar string for every sam line.  Problem line:\n"+sl+"\n";
+//			assert(sl.seq!=null) : sl.toString();
+			final int length=sl.length();
+			final int start=sl.start(INCLUDE_SOFT_CLIP, false);
+			final int stop=sl.stop(start, INCLUDE_SOFT_CLIP, false);
+//			assert(false && length==stop-start+1) : length+", "+start+", "+stop+", "+(stop-start+1);
+//			assert(false) : "'"+new String(sl.rname())+"', '"+sl.rnameS()+"'";
+//			assert(false) : "'"+sl.rnameS()+"'";
+			final byte[] match=(INCLUDE_DELETIONS ? null : SamLine.cigarToShortMatch(sl.cigar, true));
+			return addCoverage(sl.rnameS(), sl.seq, match, start, stop, length, sl.strand(), sl.hasMate() ? 1 : 2);
 		}
 		return false;
 	}
@@ -622,15 +719,28 @@ public class CoveragePileup {
 		readsProcessed++;
 		if(r.mapped() && r.bases!=null){
 			if(USE_SECONDARY && r.sites!=null && r.sites.size()>0){
-				if(coords.set(r)){
-					return addCoverage(new String(coords.name), r.bases, coords.start, coords.stop, r.length(), coords.strand);
-				}
-			}else{
 				boolean b=false;
 				for(SiteScore ss : r.sites){
 					b=processRead(r, ss) || b;
 				}
 				return b;
+			}else{
+				final Read mate=r.mate;
+				final boolean set1=coords.set(r);
+				final boolean set2=(PHYSICAL_COVERAGE && r.paired() && r.pairnum()==0 && coords2.set(mate));
+				if(set1 && set2 && Tools.equals(coords.name, coords2.name)){
+					final int start1=coords.start;
+					final int stop1=coords.stop;
+					final int start2=coords2.start;
+					final int stop2=coords2.stop;
+					final int strand=r.strand();
+					final int length=Tools.max(stop1, stop2)-Tools.min(start1, start2)+1;
+					addCoverage(new String(coords.name), null, null, Tools.min(start1, start2), Tools.max(stop1, stop2), length, strand, 2-r.mateCount());
+				}else{
+					if(set1){
+						return addCoverage(new String(coords.name), r.bases, r.match, coords.start, coords.stop, r.length(), coords.strand, 2-r.mateCount());
+					}
+				}
 			}
 		}
 		return false;
@@ -640,7 +750,7 @@ public class CoveragePileup {
 	public boolean processRead(Read r, SiteScore ss){
 		if(ss!=null && r.bases!=null){
 			if(coords.set(ss)){
-				return addCoverage(new String(coords.name), r.bases, coords.start, coords.stop, r.length(), coords.strand);
+				return addCoverage(new String(coords.name), r.bases, ss.match, coords.start, coords.stop, r.length(), coords.strand, 1);
 			}
 		}
 		return false;
@@ -692,7 +802,9 @@ public class CoveragePileup {
 			writeCoveragePerBaseNormalizedOverall(normcovOverall1, list, binsize, 0, minscaf);
 			writeCoveragePerBaseNormalizedOverall(normcovOverall2, list, binsize, 1, minscaf);
 		}
-		
+		if(outrpkm!=null){
+			writeRPKM(outrpkm, in1, null, readsProcessed, NONZERO_ONLY,list);
+		}
 		
 		{
 			long[] hist=writeStats(stats1, 0);
@@ -704,10 +816,10 @@ public class CoveragePileup {
 			}
 		}
 		
-
-		double depthCovered=mappedBases*1.0/refBases;
+		final double mult=1.0/refBases;
+		double depthCovered=mappedBases*mult;
 		double pctScaffoldsWithCoverage=scaffoldsWithCoverage1*100.0/totalScaffolds;
-		double pctCovered=totalCoveredBases1*100.0/refBases;
+		double pctCovered=totalCoveredBases1*100*mult;
 		
 		Data.sysout.println(String.format("\nAverage coverage:                    \t%.2f", depthCovered));
 		Data.sysout.println(String.format("Percent scaffolds with any coverage: \t%.2f", pctScaffoldsWithCoverage));
@@ -716,6 +828,95 @@ public class CoveragePileup {
 		}
 	}
 	
+	public int basesUnderAverageCoverage(final int[] array, final double avg, final int window){
+		if(array.length<window){return 0;}
+		final long limit=(long)Math.ceil(window*avg);
+		long covSum=0;
+		int baseCount=0;
+		for(int i=0; i<window; i++){
+			covSum+=array[i];
+		}
+		
+		boolean below=false;
+		int lastStop=-1, lastStart=0;
+		for(int a=0, b=window; b<array.length; a++, b++){
+			if(covSum>=limit){
+				if(below){//end range
+					baseCount=b-Tools.max(lastStop+1, lastStart);
+					lastStop=b-1;
+					below=false;
+				}
+			}else{
+				if(!below){//start range
+					lastStart=a;
+					below=true;
+				}
+			}
+			covSum-=array[a];
+			assert(covSum>=0);
+			covSum+=array[b];
+		}
+		
+		if(below){//end range
+			baseCount=array.length-Tools.max(lastStop, lastStart);
+		}
+		
+		assert(baseCount>=0);
+		return baseCount;
+	}
+	
+	public int basesUnderAverageCoverage(final char[] array, final double avg, final int window){
+		if(array.length<window){return 0;}
+		final long limit=(long)Math.ceil(window*avg);
+		long covSum=0;
+		int baseCount=0;
+		for(int i=0; i<window; i++){
+			covSum+=array[i];
+		}
+		
+//		System.err.println("limit: "+limit);
+		
+		boolean below=false;
+		int lastStop=-1, lastStart=0;
+		for(int a=0, b=window; b<array.length; a++, b++){
+			if(covSum>=limit){
+				if(below){//end range
+					baseCount+=b-Tools.max(lastStop+1, lastStart);
+					
+//					System.err.println("\nprev: "+lastStop+", "+lastStart);
+//					System.err.println("end range at "+a+", "+b);
+//					System.err.println("baseCount: "+baseCount+", covSum="+covSum);
+					
+					lastStop=b-1;
+					below=false;
+				}
+			}else{
+				if(!below){//start range
+					
+//					System.err.println("\nprev: "+lastStop+", "+lastStart);
+//					System.err.println("start range at "+a+", "+b);
+//					System.err.println("baseCount: "+baseCount+", covSum="+covSum);
+					
+					lastStart=a;
+					below=true;
+				}
+			}
+			covSum-=array[a];
+			assert(covSum>=0);
+			covSum+=array[b];
+		}
+		
+		if(below){//end range
+			baseCount+=array.length-Tools.max(lastStop+1, lastStart);
+			
+//			System.err.println("\nprev: "+lastStop+", "+lastStart);
+//			System.err.println("end range at "+array.length);
+//			System.err.println("baseCount: "+baseCount+", covSum="+covSum);
+		}
+		
+		assert(baseCount>=0);
+		return baseCount;
+	}
 	
 	public long[] writeStats(String fname, int strand){
 //		System.err.println("Writing stats for "+fname+", "+strand);
@@ -727,18 +928,16 @@ public class CoveragePileup {
 				String pound=(headerPound ? "#" : "");
 				if(TWOCOLUMN){
 					tsw.println(pound+"ID\tAvg_fold");
-				}else if(COUNT_GC){
-					tsw.println(pound+
-							"ID\tAvg_fold\tLength\tRef_GC\tCovered_percent\tCovered_bases\tPlus_reads\tMinus_reads"+(USE_COVERAGE_ARRAYS ? "\tMedian_fold" : "")+"\tRead_GC");
 				}else{
-					tsw.println(pound+
-							"ID\tAvg_fold\tLength\tRef_GC\tCovered_percent\tCovered_bases\tPlus_reads\tMinus_reads"+(USE_COVERAGE_ARRAYS ? "\tMedian_fold" : ""));
+					tsw.println(pound+"ID\tAvg_fold\tLength\tRef_GC\tCovered_percent\tCovered_bases\tPlus_reads\tMinus_reads"+
+							(USE_COVERAGE_ARRAYS ? ("\tMedian_fold"+(USE_WINDOW ? "\tUnder_"+String.format("%.0f",LOW_COV_DEPTH)+"/"+LOW_COV_WINDOW : "")) : "")+
+							(COUNT_GC ? "\tRead_GC" : "")+(USE_COVERAGE_ARRAYS ? "\tStd_Dev" : ""));
 				}
 			}
 		}
 		
-		final long[] hist=(USE_COVERAGE_ARRAYS ? new long[Character.MAX_VALUE+1] : null);
-		final int histmax=Character.MAX_VALUE;
+		final int histmax=(bits32 ? 1000000 : Character.MAX_VALUE);
+		final LongList hist=new LongList(Character.MAX_VALUE);
 		
 		long coveredScafTemp=0;
 		long coveredBaseTemp=0;
@@ -746,31 +945,42 @@ public class CoveragePileup {
 			final long sum=scaf.basehits;
 			int covered=0;
 			int median=-1;
+			int underWindowAverage=-1;
+			final double stdev;
 			if(USE_COVERAGE_ARRAYS){
 				CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
 				if(ca!=null){
 					for(int i=0; i<scaf.length; i++){
 						int x=ca.get(i);
-						hist[Tools.min(x, histmax)]++;
+						hist.increment(Tools.min(x, histmax));
 //						sum+=x;
 						if(x>0){covered++;}
 					}
 					if(bits32){
 						int[] array=((CoverageArray3)ca).array;
+						stdev=Tools.standardDeviation(array);
+						underWindowAverage=basesUnderAverageCoverage(array, LOW_COV_DEPTH, LOW_COV_WINDOW);
 						Arrays.sort(array);
 						Tools.reverseInPlace(array);
 						median=ca.get(scaf.length/2);
 					}else{
 						char[] array=((CoverageArray2)ca).array;
+						stdev=Tools.standardDeviation(array);
+						underWindowAverage=basesUnderAverageCoverage(array, LOW_COV_DEPTH, LOW_COV_WINDOW);
 						Arrays.sort(array);
 						Tools.reverseInPlace(array);
 						median=ca.get(scaf.length/2);
 					}
+				}else{
+					stdev=0;
 				}
 			}else if(USE_BITSETS){
 //				sum+=scaf.basehits;
 				BitSet bs=(BitSet)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
 				covered=(bs==null ? 0 : bs.cardinality());
+				stdev=-1;
+			}else{
+				stdev=-1;
 			}
 			
 			if(sum>0){
@@ -784,16 +994,26 @@ public class CoveragePileup {
 					long[] bc=scaf.basecount;
 					double gc=(bc[1]+bc[2])*1d/Data.max(1, bc[0]+bc[1]+bc[2]+bc[3]);
 					if(USE_COVERAGE_ARRAYS){
-						tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length,
-								scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median, gc));
+						if(USE_WINDOW){
+							tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.2f\n", scaf.name, sum/(double)scaf.length, scaf.length,
+									scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median, underWindowAverage, gc, stdev));
+						}else{
+							tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%.4f\t%.2f\n", scaf.name, sum/(double)scaf.length, scaf.length,
+									scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median, gc, stdev));
+						}
 					}else{
 						tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length,
 								scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, gc/*, scaf.basehits*/));
 					}
 				}else{
 					if(USE_COVERAGE_ARRAYS){
-						tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\n", scaf.name, sum/(double)scaf.length, scaf.length,
-								scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median));
+						if(USE_WINDOW){
+							tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%d\t%.2f\n", scaf.name, sum/(double)scaf.length, scaf.length,
+									scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median, underWindowAverage, stdev));
+						}else{
+							tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\t%d\t%.2f\n", scaf.name, sum/(double)scaf.length, scaf.length,
+									scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus, median, stdev));
+						}
 					}else{
 						tsw.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%d\t%d\n", scaf.name, sum/(double)scaf.length, scaf.length,
 								scaf.gc, covered*100d/scaf.length, covered, (scaf.readhits-scaf.readhitsMinus), scaf.readhitsMinus));
@@ -812,7 +1032,7 @@ public class CoveragePileup {
 		}
 		
 		if(tsw!=null){tsw.poisonAndWait();}
-		return hist;
+		return hist==null ? null : hist.array;
 	}
 	
 	/**
@@ -823,17 +1043,19 @@ public class CoveragePileup {
 	public static void writeHist(String fname, long[] counts){
 		if(fname==null){return;}
 		assert(counts!=null) : "Can't write a histogram with null counts.";
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		ByteStreamWriter tsw=new ByteStreamWriter(fname, overwrite, false, false);
 		tsw.start();
 		if(printHeader){
-			String pound=(headerPound ? "#" : "");
-			tsw.print(pound+"Coverage\tnumBases\n");
+			if(headerPound){tsw.print('#');}
+			tsw.println("Coverage\tnumBases");
 		}
 		int max=0;
 		for(max=counts.length-1; max>0 && counts[max]==0; max--){}
 		for(int i=0; i<=max; i++){
 			long x=counts[i];
-			tsw.print(i+"\t"+x+"\n");
+			tsw.print(i);
+			tsw.print('\t');
+			tsw.println(x);
 		}
 		
 		tsw.poisonAndWait();
@@ -852,23 +1074,27 @@ public class CoveragePileup {
 		if(fname==null || (!STRANDED && strand>0)){return;}
 		
 		if(verbose){System.err.println("Starting tsw "+fname);}
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
+		ByteStreamWriter tsw=new ByteStreamWriter(fname, overwrite, false, true);
 		if(verbose){System.err.println("Created tsw "+fname);}
 		tsw.start();
 //		if(verbose){System.err.println("Started tsw "+fname);}
 		if(printHeader){
-			String pound=(headerPound ? "#" : "");
-			tsw.print(pound+"RefName\tPos\tCoverage\n");
+			if(headerPound){tsw.print('#');}
+			tsw.println("RefName\tPos\tCoverage");
 		}
 		
 		for(Scaffold scaf : list){
 			int last=-1;
 			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
 			if(scaf.length>=minscaf){
-				for(int i=0; i<scaf.length; i++){
+				for(int i=0, len=scaf.length; i<len; i++){
 					int x=(ca==null ? 0 : ca.get(i));
 					if(!deltaOnly || x!=last){
-						tsw.print(scaf.name+"\t"+(i+1)+"\t"+x+"\n");
+						tsw.print(scaf.name);
+						tsw.print('\t');
+						tsw.print(i);
+						tsw.print('\t');
+						tsw.println(x);
 						last=x;
 					}
 				}
@@ -893,19 +1119,22 @@ public class CoveragePileup {
 		if(fname==null || (!STRANDED && strand>0)){return;}
 		
 		if(verbose){System.err.println("Starting tsw "+fname);}
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
+		ByteStreamWriter tsw=new ByteStreamWriter(fname, overwrite, false, true);
 		tsw.start();
 		if(verbose){System.err.println("Started tsw "+fname);}
 //		tsw.print(pound+"RefName\tPos\tCoverage\n");
 		
 		for(Scaffold scaf : list){
-			tsw.print("#"+scaf.name+"\n");
+			tsw.print('#');
+			tsw.println(scaf.name);
 			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
 			if(scaf.length>=minscaf){
 				for(int i=0; i<scaf.length; i++){
 					int x=(ca==null ? 0 : ca.get(i));
 					if(x>0){
-						tsw.print(i+"\t"+x+"\n");
+						tsw.print(i);
+						tsw.print('\t');
+						tsw.println(x);
 					}
 				}
 			}
@@ -1170,6 +1399,53 @@ public class CoveragePileup {
 		tsw.poisonAndWait();
 	}
 	
+
+	
+	/**
+	 * Write RPKM statistics.
+	 */
+	public static void writeRPKM(String out, String in1, String in2, long readsIn, boolean printNonZeroOnly, ArrayList<Scaffold> list){
+		if(out==null){return;}
+		final TextStreamWriter tsw=new TextStreamWriter(out, overwrite, false, false);
+		tsw.start();
+
+		/* Count mapped reads */
+		long mappedReads=0;
+		long mappedFrags=0;
+		for(Scaffold scaf : list){
+			mappedReads+=scaf.readhits;
+			mappedFrags+=scaf.fraghits;
+		}
+		mappedFrags/=2;
+		
+		/* Print header */
+		tsw.print("#File\t"+(in1==null ? "" : in1)+(in2==null ? "" : "\t"+in2)+"\n");
+		tsw.print(String.format("#Reads\t%d\n",readsIn));
+		tsw.print(String.format("#Mapped\t%d\n",mappedReads));
+		tsw.print(String.format("#RefSequences\t%d\n",list.size()));
+		tsw.print("#Name\tLength\tBases\tCoverage\tReads\tRPKM\tFrags\tFPKM\n");
+		
+		final float readMult=1000000000f/Tools.max(1, mappedReads);
+		final float fragMult=1000000000f/Tools.max(1, mappedFrags);
+		
+		/* Print data */
+		for(final Scaffold scaf : list){
+			final long reads=scaf.readhits;
+			final long frags=scaf.fraghits/2;
+			final long bases=scaf.basehits;
+			final String s=scaf.name;
+			final int len=scaf.length;
+			final double invlen=1.0/Tools.max(1, len);
+			final double readMult2=readMult*invlen;
+			final double fragMult2=fragMult*invlen;
+			if(reads>0 || !printNonZeroOnly){
+				tsw.print(String.format("%s\t%d\t%d\t%.4f\t%d\t%.4f\t%d\t%.4f\n",s,len,bases,bases*invlen,reads,reads*readMult2,frags,frags*fragMult2));
+			}
+		}
+		tsw.poisonAndWait();
+	}
+	
+	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
@@ -1179,7 +1455,7 @@ public class CoveragePileup {
 	/** Maps names to scaffolds */
 	private HashMap<String, Scaffold> table;
 	/** Converts BBMap index coordinates to scaffold coordinates */
-	private final ScaffoldCoordinates coords=new ScaffoldCoordinates();
+	private final ScaffoldCoordinates coords=new ScaffoldCoordinates(), coords2=new ScaffoldCoordinates();
 	
 	/** Mapping program name */
 	private String program=null;
@@ -1187,8 +1463,10 @@ public class CoveragePileup {
 	private String version=null;
 
 	//Inputs
-	/** Primary input sam file */
-	public String in=null;
+	/** Primary input file (typically sam) */
+	public String in1=null;
+	/** Secondary input file (typically for coverage directly from BBMap) */
+	public String in2=null;
 	/** Optional, for calculating GC */
 	public String reference=null;
 	public String orffasta=null;
@@ -1211,6 +1489,8 @@ public class CoveragePileup {
 	public String normcov=null;
 	/** Coverage with one line per bin, normalized by length and/or height, for combined reference */
 	public String normcovOverall=null;
+	/** rpkm/fpkm output, similar to Seal */
+	public String outrpkm=null;
 	
 	/** Typically indicates that a header line was encountered in an unexpected place, e.g. with concatenated sam files. */
 	private boolean error=false;
@@ -1231,9 +1511,12 @@ public class CoveragePileup {
 	public int initialScaffolds=4096;
 	public int binsize=1000;
 	public boolean bits32=false;
+	public int minMapq=0;
 	
 	/** Don't print coverage info for scaffolds shorter than this */
 	public int minscaf=0;
+	
+	public HashMap<String, Object> pairTable=new HashMap<String, Object>();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/
@@ -1251,6 +1534,14 @@ public class CoveragePileup {
 	public static boolean printHeader=true;
 	/** Prepend '#' symbol to header lines */
 	public static boolean headerPound=true;
+	
+	/** Window size to use when calculating average coverage,
+	 * for detecting contiguous low-coverage areas */
+	public static int LOW_COV_WINDOW=500;
+	/** Min average coverage to not be classified as low-depth */
+	public static double LOW_COV_DEPTH=5;
+	/** Print number of bases below a certain average coverage in a window */
+	public static boolean USE_WINDOW=false;
 	
 	/** Track base composition of reads covering each scaffold */
 	public static boolean COUNT_GC=true;
@@ -1270,6 +1561,10 @@ public class CoveragePileup {
 	public static boolean DELTA_ONLY=false;
 	/** Process secondary alignments */
 	public static boolean USE_SECONDARY=true;
+	/** Include coverage of unsequenced middle portion of pairs */
+	public static boolean PHYSICAL_COVERAGE=false;
+	/** Use 'tlen' field when calculating physical coverage */
+	public static boolean USE_TLEN=true;
 	/** Abort on error; otherwise, errors may be ignored */
 	public static boolean ABORT_ON_ERROR=true;
 	/** Print coverage for the last bin of a scaffold, even if it is shorter than binsize */
@@ -1281,9 +1576,15 @@ public class CoveragePileup {
 	/** Normalize coverage by expression contig coverage as a fraction of its max coverage */
 	public static boolean NORMALIZE_COVERAGE=false;
 	/** Normalize contig length by binning into this many bins per contig */
-	public static int NORMALIZE_LENGTH_BINS=-1;
+	public static int NORMALIZE_LENGTH_BINS=100;
+	/** Include soft-clipped bases in coverage */
+	public static boolean INCLUDE_SOFT_CLIP=false;
+	/** Include deletions/introns in coverage */
+	public static boolean INCLUDE_DELETIONS=true; //TODO: Note enabled; use BBMask increment method to implement.
 
 	/** Translation array for tracking base counts */
 	private static final byte[] charToNum=AssemblyStats2.makeCharToNum();
+	
+	private static final int NOTHING_MODE=0, BITSET_MODE=1, ARRAY_MODE=2;
 	
 }

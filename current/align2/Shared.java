@@ -7,11 +7,14 @@ import dna.Data;
 
 public class Shared {
 	
-	public static int THREADS=SET_THREADS(-1);
+	private static int THREADS=setThreads(-1);
 
 	public static int READ_BUFFER_LENGTH=200;
-	public static int READ_BUFFER_NUM_BUFFERS=Tools.max(4, (THREADS*3)/2);
-	public static final long READ_BUFFER_MAX_DATA=400000;
+	private static int READ_BUFFER_NUM_BUFFERS=setBuffers();
+	public static long READ_BUFFER_MAX_DATA=400000;
+	
+	/** Temporary, for testing; will be made non-global */
+	public static boolean AMINO_IN=false;
 	
 	//TODO:  For some reason, it seems as though GAPBUFFER must equal exactly 1/2 of GAPLEN.  Not good; 1/4 would be far better.
 	
@@ -23,16 +26,36 @@ public class Shared {
 	public static final byte GAPC='-';
 	
 	public static int BBMAP_VERSION=34;
-	public static String BBMAP_VERSION_MINOR="00";
+	public static String BBMAP_VERSION_MINOR="96";
 	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
 	
 	public static boolean TRIM_READ_COMMENTS=false;
+	
 	public static boolean USE_JNI=false;
+	public static boolean USE_MPI=false;
+	public static boolean MPI_KEEP_ALL=true;
+	/** Use ConcurrentReadInputStreamMPI instead of D */
+	public static boolean USE_CRISMPI=true;
+	public static int MPI_RANK=0;
+	public static int MPI_NUM_RANKS=1;
+	
+	public static int FASTA_WRAP=70;
+	public static byte FAKE_QUAL=30;
 	
 	public static String BBMAP_CLASS=null;
 	public static String[] COMMAND_LINE=null;
 	public static List<String> JVM_ARGS(){
 		return ManagementFactory.getRuntimeMXBean().getInputArguments();
+	}
+	
+	public static long getAvailableMemory(){
+		long usableMemory;
+		{
+			long memory=Runtime.getRuntime().maxMemory();
+			double xmsRatio=Shared.xmsRatio();
+			usableMemory=(long)Tools.max(((memory-96000000-(20*400000))*(xmsRatio>0.97 ? 0.82 : 0.75)), memory*0.45);
+		}
+		return usableMemory;
 	}
 
 	/** Directory in which to write temp files */
@@ -53,14 +76,40 @@ public class Shared {
 	}
 	private static final ThreadLocal<char[]> TLCB=new ThreadLocal<char[]>();
 
-	public static int SET_THREADS(int x){
+	public static int setThreads(int x){
 		if(x>0){
 			THREADS=x;
 		}else{
 			THREADS=Data.LOGICAL_PROCESSORS;
 		}
+		setBuffers();
 		return THREADS;
 	}
+	
+	public static int threads(){return THREADS;}
+	
+	public static int capBuffers(int num){
+		return setBuffers(Tools.min(num, READ_BUFFER_NUM_BUFFERS));
+	}
+
+	public static int setBuffers(){
+		return setBuffersFromThreads(THREADS);
+	}
+	
+	public static int setBuffersFromThreads(int threads){
+		return setBuffers(Tools.max(4, (threads*3)/2));
+	}
+	
+	public static int setBuffers(int num){
+		num=Tools.max(2, num);
+		return READ_BUFFER_NUM_BUFFERS=num;
+	}
+	
+	public static int numBuffers(){
+		return READ_BUFFER_NUM_BUFFERS;
+	}
+	
+	public static boolean LOW_MEMORY=false;
 	
 	/** Ratio of -Xms to -Xmx parameters */
 	public static final double xmsRatio(){

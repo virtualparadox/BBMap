@@ -31,9 +31,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 		
 		for(int i=0; i<args.length; i++){
 			String s=args[i].toLowerCase();
-			if(s.equals("basespace")){COLORSPACE=false;}
-			else if(s.equals("colorspace") || s.equals("cs")){COLORSPACE=true;}
-			else if(s.contains("=")){
+			if(s.contains("=")){
 				String[] split=s.split("=");
 				String a=split[0];
 				String b=split[1];
@@ -57,7 +55,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 		
 		
 		System.err.println("Writing build "+Data.GENOME_BUILD+" "+
-				(COLORSPACE ? "COLOR" : "BASE")+"SPACE index, keylen="+k+", chrom bits="+NUM_CHROM_BITS);
+				"BASESPACE index, keylen="+k+", chrom bits="+NUM_CHROM_BITS);
 		
 		
 		int first=(NUM_CHROM_BITS==0 ? 1 : 0);
@@ -65,7 +63,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 		
 		Data.sysout.println("Loading index for chunk "+first+"-"+MAXCHROM+", build "+Data.GENOME_BUILD);
 		index=IndexMaker4.makeIndex(Data.GENOME_BUILD, first, MAXCHROM, 
-				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, true, false, index);
+				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, true, false, index);
 		
 		
 		System.err.println("Finished all chroms, may still be writing.");
@@ -97,12 +95,11 @@ public final class BBIndexPacBio extends AbstractIndex {
 		assert(minChrom<=maxChrom);
 		Data.sysout.println("Loading index for chunk "+minChrom+"-"+maxChrom+", build "+Data.GENOME_BUILD);
 		index=IndexMaker4.makeIndex(Data.GENOME_BUILD, minChrom, maxChrom, 
-				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, writeToDisk, diskInvalid, index);
+				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, writeToDisk, diskInvalid, index);
 	}
 	
 	/** Calculate statistics of index, such as list lengths, and find clumpy keys */
-	public static final synchronized void analyzeIndex(int minChrom, int maxChrom, boolean cs, float fractionToExclude, int k){
-		assert(!cs) : "Re-enable old reverse complement mode.";
+	public static final synchronized void analyzeIndex(int minChrom, int maxChrom, float fractionToExclude, int k){
 		assert(lengthHistogram==null);
 		assert(COUNTS==null);
 		
@@ -166,7 +163,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 				if((len>CLUMPY_MIN_LENGTH_INDEX && clumps>CLUMPY_FRACTION*len)/* || (len>8*CLUMPY_MIN_LENGTH_INDEX && clumps>.75f*CLUMPY_FRACTION*len)*/){
 					int rkey=AminoAcid.reverseComplementBinaryFast(key, k);
 					assert(key<=rkey);
-					assert(key==KeyRing.reverseComplementKey(rkey, k, cs));
+					assert(key==KeyRing.reverseComplementKey(rkey, k));
 					COUNTS[key]=0;
 					COUNTS[rkey]=0;
 				}
@@ -175,7 +172,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 		
 		lengthHistogram=Tools.makeLengthHistogram3(COUNTS, 1000, verbose2);
 		
-		if(verbose2){System.err.println("lengthHistogram: "+Arrays.toString(lengthHistogram));}
+		//if(verbose2){System.err.println("lengthHistogram: "+Arrays.toString(lengthHistogram));}
 		
 		if(REMOVE_FREQUENT_GENOME_FRACTION){
 
@@ -197,7 +194,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 	
 	/** Returns the filename for the block holding this chrom */
 	public static final String fname(int chrom, int k){
-		return IndexMaker4.fname(minChrom(chrom), maxChrom(chrom), k, NUM_CHROM_BITS, COLORSPACE);
+		return IndexMaker4.fname(minChrom(chrom), maxChrom(chrom), k, NUM_CHROM_BITS);
 	}
 	
 	/** Ensure key offsets are strictly ascending. */
@@ -397,7 +394,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual,  byte[] baseScoresP, int[] keyScoresP, int[] offsetsP, boolean obeyLimits, long id){
 		
 		assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
-		final int[] keysOriginal=KeyRing.makeKeys(basesP, offsetsP, KEYLEN, COLORSPACE);
+		final int[] keysOriginal=KeyRing.makeKeys(basesP, offsetsP, KEYLEN);
 		int[] keysP=Arrays.copyOf(keysOriginal, keysOriginal.length);
 
 		initialKeys+=offsetsP.length;
@@ -502,7 +499,7 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 		//assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
 		//Reverse the offsets for minus-strand mapping, since they are generated based on quality
 		int[] offsetsM=KeyRing.reverseOffsets(offsetsP, KEYLEN, basesP.length);
-		final int[] keysM=(COLORSPACE ? KeyRing.makeKeys(basesM, offsetsM, KEYLEN, COLORSPACE) : KeyRing.reverseComplementKeys(keysP, KEYLEN, COLORSPACE));
+		final int[] keysM=KeyRing.reverseComplementKeys(keysP, KEYLEN);
 		
 //		assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
 //		assert(checkOffsets(offsetsM)) : Arrays.toString(offsetsM);
@@ -1838,7 +1835,7 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 		if(useQuality){
 			//These lines apparently MUST be used if quality is used later on for slow align.
 			if(USE_AFFINE_SCORE){return msa.maxQuality(baseScores);}
-			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5)+Tools.sum(baseScores);}
+			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5)+Tools.sumInt(baseScores);}
 		}else{
 			if(USE_AFFINE_SCORE){return msa.maxQuality(readlen);}
 			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5);}
@@ -2354,6 +2351,7 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 	
 	
 	private final int[] getOffsetArray(int len){
+		if(len>=offsetArrays.length){return new int[len];} 
 		if(offsetArrays[len]==null){offsetArrays[len]=new int[len];}
 		return offsetArrays[len];
 	}
@@ -2363,10 +2361,12 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 		return locArrays[len];
 	}
 	private final int[] getGreedyListArray(int len){
+		if(len>=greedyListArrays.length){return new int[len];} 
 		if(greedyListArrays[len]==null){greedyListArrays[len]=new int[len];}
 		return greedyListArrays[len];
 	}
 	private final int[] getGenericArray(int len){
+		if(len>=genericArrays.length){return new int[len];} 
 		if(genericArrays[len]==null){genericArrays[len]=new int[len];}
 		return genericArrays[len];
 	}
@@ -2391,27 +2391,30 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 		return keyProbArray;
 	}
 	
+	public static final int KMER_ARRAY_LENGTH=1201;
+	public static final int HEAP_LENGTH=2047;
+	public static final int BASE_ARRAY_LENGTH=6001;
 	
-	private final int[][] locArrays=new int[6001][];
-	private final int[] valueArray=new int[1501];
-	private final int[] sizeArray=new int[1501];
-	private final int[][] offsetArrays=new int[1501][];
-	private final int[][] greedyListArrays=new int[1501][];
-	private final int[][] genericArrays=new int[1501][];
-	private final int[] startArray=new int[1501];
-	private final int[] stopArray=new int[1501];
-	private final Quad[] tripleStorage=makeQuadStorage(1501);
+	private final int[][] locArrays=new int[BASE_ARRAY_LENGTH][];
+	private final int[] valueArray=new int[HEAP_LENGTH];
+	private final int[] sizeArray=new int[HEAP_LENGTH];
+	private final int[][] offsetArrays=new int[KMER_ARRAY_LENGTH][];
+	private final int[][] greedyListArrays=new int[KMER_ARRAY_LENGTH][];
+	private final int[][] genericArrays=new int[KMER_ARRAY_LENGTH][];
+	private final int[] startArray=new int[HEAP_LENGTH];
+	private final int[] stopArray=new int[HEAP_LENGTH];
+	private final Quad[] tripleStorage=makeQuadStorage(HEAP_LENGTH);
 	private final int[] greedyReturn=new int[2];
 	private final int[][] shrinkReturn2=new int[3][];
 	private final int[][] shrinkReturn3=new int[5][];
 	private final int[][] prescanReturn=new int[2][];
 	private final int[] prescoreArray;
 	private final int[] precountArray;
-
-	private final byte[][][] baseScoreArrays=new byte[2][6001][];
-	private final int[][][] keyScoreArrays=new int[2][1501][];
-	final float[] keyProbArray=new float[6001];
-	private final float[][] keyWeightArrays=new float[1501][];
+	
+	private final byte[][][] baseScoreArrays=new byte[2][BASE_ARRAY_LENGTH][];
+	private final int[][][] keyScoreArrays=new int[2][KMER_ARRAY_LENGTH][];
+	final float[] keyProbArray=new float[BASE_ARRAY_LENGTH];
+	private final float[][] keyWeightArrays=new float[KMER_ARRAY_LENGTH][];
 	
 	
 	private final Quad[] makeQuadStorage(int number){
@@ -2421,7 +2424,7 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 	}
 	
 
-	private final QuadHeap heap=new QuadHeap(2047);
+	private final QuadHeap heap=new QuadHeap(HEAP_LENGTH);
 	
 	static int SHIFT_LENGTH=(32-1-NUM_CHROM_BITS);
 	static int MAX_ALLOWED_CHROM_INDEX=~((-1)<<SHIFT_LENGTH);

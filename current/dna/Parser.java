@@ -1,12 +1,18 @@
 package dna;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 
 import jgi.CalcTrueQuality;
+import kmer.AbstractKmerTable;
 
-import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentDepot;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
+import stream.KillSwitch;
 import stream.Read;
 import stream.ReadStreamByteWriter;
 import stream.ReadStreamWriter;
@@ -17,6 +23,7 @@ import align2.Tools;
 import align2.TrimRead;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
+import fileIO.TextFile;
 
 /**
  * @author Brian Bushnell
@@ -44,13 +51,13 @@ public class Parser {
 		if(parseFasta(arg, a, b)){return true;}
 		if(parseCommonStatic(arg, a, b)){return true;}
 		if(parseHist(arg, a, b)){return true;}
+		if(parseQualityAdjust(arg, a, b)){return true;}
 
 		if(parseFiles(arg, a, b)){return true;}
 		if(parseCommon(arg, a, b)){return true;}
 		if(parseTrim(arg, a, b)){return true;}
 		if(parseInterleaved(arg, a, b)){return true;}
 		if(parseMapping(arg, a, b)){return true;}
-		
 		return false;
 	}
 
@@ -63,9 +70,9 @@ public class Parser {
 		}else if(a.equals("sampleseed")){
 			sampleseed=Long.parseLong(b);
 		}else if(a.equals("t") || a.equals("threads")){
-			if(b.equalsIgnoreCase("auto")){Shared.SET_THREADS(-1);}
-			else{Shared.THREADS=Integer.parseInt(b);}
-			System.err.println("Set threads to "+Shared.THREADS);
+			if(b.equalsIgnoreCase("auto")){Shared.setThreads(-1);}
+			else{Shared.setThreads(Integer.parseInt(b));}
+			System.err.println("Set threads to "+Shared.threads());
 		}else if(a.equals("append") || a.equals("app")){
 			append=ReadStats.append=Tools.parseBoolean(b);
 		}else if(a.equals("overwrite") || a.equals("ow")){
@@ -74,6 +81,10 @@ public class Parser {
 			testsize=Tools.parseBoolean(b);
 		}else if(a.equals("breaklen") || a.equals("breaklength")){
 			breakLength=Integer.parseInt(b);
+		}else if(a.equals("recalibrate") || a.equals("recalibratequality") || a.equals("recal")){
+			recalibrateQuality=Tools.parseBoolean(b);
+		}else if(a.equals("recalpairnum") || a.equals("recalibratepairnum")){
+			CalcTrueQuality.USE_PAIRNUM=Tools.parseBoolean(b);
 		}else{
 			return false;
 		}
@@ -107,16 +118,32 @@ public class Parser {
 	}
 	
 	public boolean parseTrim(String arg, String a, String b){
-		if(a.equals("ftl") || a.equals("forcetrimleft")){
+		if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
+			forceTrimModulo=Integer.parseInt(b);
+		}else if(a.equals("ftl") || a.equals("forcetrimleft")){
 			forceTrimLeft=Integer.parseInt(b);
 		}else if(a.equals("ftr") || a.equals("forcetrimright")){
 			forceTrimRight=Integer.parseInt(b);
-		}else if(a.equals("trim") || a.equals("qtrim")){
-			if(b==null){qtrimRight=qtrimLeft=true;}
+		}else if(a.equals("ftr2") || a.equals("forcetrimright2")){
+			forceTrimRight2=Integer.parseInt(b);
+		}else if(a.equals("qtrim") || a.equals("trim")){
+			if(b==null || b.length()==0){qtrimRight=qtrimLeft=true;}
 			else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrimLeft=true;qtrimRight=false;}
 			else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrimLeft=false;qtrimRight=true;}
 			else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){qtrimLeft=qtrimRight=true;}
-			else{qtrimRight=qtrimLeft=Tools.parseBoolean(b);}
+			else if(b.equalsIgnoreCase("window") || b.equalsIgnoreCase("w") || b.startsWith("window,") || b.startsWith("w,")){
+				qtrimLeft=false;
+				qtrimRight=true;
+				TrimRead.windowMode=true;
+				TrimRead.optimalMode=false;
+				String[] split=b.split(",");
+				if(b.length()>1){
+					TrimRead.windowLength=Integer.parseInt(split[1]);
+				}
+			}else if(Character.isDigit(b.charAt(0))){
+				trimq=(byte)Integer.parseInt(b);
+				qtrimLeft=qtrimRight=true;
+			}else{qtrimRight=qtrimLeft=Tools.parseBoolean(b);}
 		}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
 			if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
 				TrimRead.optimalMode=true;
@@ -131,11 +158,39 @@ public class Parser {
 			qtrimLeft=Tools.parseBoolean(b);
 		}else if(a.equals("trimq") || a.equals("trimquality")){
 			trimq=Byte.parseByte(b);
+		}else if(a.equals("trimbadsequence")){
+			trimBadSequence=Tools.parseBoolean(b);
+		}else if(a.equals("chastityfilter") || a.equals("cf")){
+			chastityFilter=Tools.parseBoolean(b);
+		}else if(a.equals("failnobarcode")){
+			failIfNoBarcode=Tools.parseBoolean(b);
+		}else if(a.equals("badbarcodes") || a.equals("barcodefilter")){
+			if(b!=null && (b.equalsIgnoreCase("crash") || b.equalsIgnoreCase("fail"))){
+				failBadBarcodes=true;
+				removeBadBarcodes=true;
+			}else{
+				removeBadBarcodes=Tools.parseBoolean(b);
+				failBadBarcodes=false;
+			}
+		}else if(a.equals("barcodes") || a.equals("barcode")){
+			if(b==null || b.length()<1){
+				barcodes=null;
+			}else{
+				barcodes=new HashSet<String>();
+				for(String s : b.split(",")){
+					Tools.addNames(s, barcodes);
+				}
+			}
+			if(barcodes!=null && barcodes.size()>0 && !failBadBarcodes && !removeBadBarcodes){
+				removeBadBarcodes=true;
+			}
 		}else if(a.equals("requirebothbad") || a.equals("rbb")){
 			requireBothBad=Tools.parseBoolean(b);
+		}else if(a.equals("removeifeitherbad") || a.equals("rieb")){
+			requireBothBad=!Tools.parseBoolean(b);
 		}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 			minReadLength=Integer.parseInt(b);
-		}else if(a.equals("maxlength") || a.equals("maxlen")){
+		}else if(a.equals("maxlength") || a.equals("maxreadlength") || a.equals("maxreadlen") || a.equals("maxlen")){
 			maxReadLength=Integer.parseInt(b);
 		}else if(a.equals("mingc")){
 			minGC=Float.parseFloat(b);
@@ -147,6 +202,8 @@ public class Parser {
 			assert(minGC>=0 && minGC<=1) : "maxgc should be a decimal number between 0 and 1, inclusive.";
 		}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 			minLenFraction=Float.parseFloat(b);
+		}else if(a.equals("maxns")){
+			maxNs=Integer.parseInt(b);
 		}else if(a.equals("minavgquality") || a.equals("maq")){
 			minAvgQuality=Byte.parseByte(b);
 			//Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
@@ -156,8 +213,18 @@ public class Parser {
 		}else if(a.equals("minavgquality1") || a.equals("maq1")){
 			minAvgQuality=Byte.parseByte(b);
 			Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
+		}else if(a.equals("minavgqualitybases") || a.equals("maqb")){
+			minAvgQualityBases=Integer.parseInt(b);
 		}else if(a.equals("averagequalitybyprobability") || a.equals("aqbp")){
 			Read.AVERAGE_QUALITY_BY_PROBABILITY=Tools.parseBoolean(b);
+		}else if(a.equals("mintl") || a.equals("mintrimlen") || a.equals("mintrimlength")){
+			minTrimLength=Integer.parseInt(b);
+		}else if(a.equals("untrim")){
+			untrim=Tools.parseBoolean(b);
+		}else if(a.equals("tossjunk")){
+			boolean x=Tools.parseBoolean(b);
+			tossJunk=x;
+			if(x){Read.FLAG_JUNK=x;}
 		}else{
 			return false;
 		}
@@ -203,11 +270,23 @@ public class Parser {
 			idFilter=Float.parseFloat(b);
 			if(idFilter>1f){idFilter/=100;}
 			assert(idFilter<=1f) : "idfilter should be between 0 and 1.";
+		}else if(a.equals("subfilter")){
+			subfilter=Integer.parseInt(b);
+		}else if(a.equals("delfilter")){
+			delfilter=Integer.parseInt(b);
+		}else if(a.equals("insfilter")){
+			insfilter=Integer.parseInt(b);
+		}else if(a.equals("indelfilter")){
+			indelfilter=Integer.parseInt(b);
+		}else if(a.equals("dellenfilter")){
+			dellenfilter=Integer.parseInt(b);
+		}else if(a.equals("inslenfilter")){
+			inslenfilter=Integer.parseInt(b);
+		}else if(a.equals("editfilter")){
+			editfilter=Integer.parseInt(b);
 		}else if(a.equals("build") || a.equals("genome")){
 			build=Integer.parseInt(b);
 			Data.GENOME_BUILD=build;
-		}else if(false){
-			//do something
 		}else{
 			return false;
 		}
@@ -218,9 +297,60 @@ public class Parser {
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-
+	
+	public static String[] parseConfig(String[] args){
+		boolean found=false;
+		for(String s : args){
+			if(s!=null && s.toLowerCase().startsWith("config=")){
+				found=true;
+				break;
+			}
+		}
+		if(!found){return args;}
+		ArrayList<String> list=new ArrayList<String>();
+		for(int i=0; i<args.length; i++){
+			final String arg=(args[i]==null ? "null" : args[i]);
+			final String[] split=arg.split("=");
+			final String a=split[0].toLowerCase();
+			String b=split.length>1 ? split[1] : null;
+			if("null".equalsIgnoreCase(b)){b=null;}
+			
+			if(a.equals("config")){
+				for(String bb : b.split(",")){
+					try{
+						TextFile tf=new TextFile(bb);
+						for(String line=tf.nextLine(); line!=null; line=tf.nextLine()){
+							String line2=line.trim();
+							if(line2.length()>0 && !line2.startsWith("#")){
+								list.add(line2);
+							}
+						}
+						tf.close();
+					}catch(Throwable t){
+						throw new RuntimeException("Could not process config file "+b+"\nCaused by:\n"+t.toString()+"\n");
+					}
+				}
+			}else if(arg!=null && "null".equals(arg)){
+				list.add(arg);
+			}
+		}
+		return list.toArray(new String[list.size()]);
+	}
+	
 	public static boolean parseCommonStatic(String arg, String a, String b){
-		if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription") || a.equals("trimreaddescriptions")){
+		if(a.equals("monitor") || a.equals("killswitch")){
+			if(Tools.isNumber(b)){
+				String[] pair=b.split(",");
+				if(pair.length==1){
+					KillSwitch.launch(Double.parseDouble(pair[0]));
+				}else{
+					assert(pair.length==2) : "monitor takes one or two arguments, like this: monitor=600,0.002";
+					KillSwitch.launch(Double.parseDouble(pair[0]), Double.parseDouble(pair[1]));
+				}
+			}else if(Tools.parseBoolean(b)){
+				KillSwitch.launch();
+			}
+		}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription") || a.equals("trimreaddescriptions")){
 			Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
 		}else if(a.equals("tuc") || a.equals("touppercase")){
 			Read.TO_UPPER_CASE=Tools.parseBoolean(b);
@@ -231,15 +361,40 @@ public class Parser {
 		}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
 			boolean x=Tools.parseBoolean(b);
 			Read.NULLIFY_BROKEN_QUALITY=x;
-			ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
+			ConcurrentReadInputStream.REMOVE_DISCARDED_READS=x;
+		}else if(a.equals("flagjunk")){
+			boolean x=Tools.parseBoolean(b);
+			Read.FLAG_JUNK=x;
+		}else if(a.equals("fixjunk")){
+			boolean x=Tools.parseBoolean(b);
+			Read.FIX_JUNK=x;
 		}else if(a.equals("bf1")){
 			ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
 			ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
+		}else if(a.equals("utot")){
+			Read.U_TO_T=Tools.parseBoolean(b);
 		}else if(a.equals("bf2")){
 			ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 			ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
 		}else if(a.equals("usejni") || a.equals("jni")){
 			Shared.USE_JNI=Tools.parseBoolean(b);
+		}else if(a.equals("usempi") || a.equals("mpi")){
+			if(b!=null && Character.isDigit(b.charAt(0))){
+				Shared.MPI_NUM_RANKS=Integer.parseInt(b);
+				Shared.USE_MPI=Shared.MPI_NUM_RANKS>0;
+			}else{
+				Shared.USE_MPI=Tools.parseBoolean(b);
+			}
+		}else if(a.equals("crismpi")){
+			Shared.USE_CRISMPI=Tools.parseBoolean(b);
+		}else if(a.equals("mpikeepall")){
+			Shared.MPI_KEEP_ALL=Tools.parseBoolean(b);
+		}else if(a.equals("readbufferlength") || a.equals("readbufferlen")){
+			Shared.READ_BUFFER_LENGTH=(int)Tools.parseKMG(b);
+		}else if(a.equals("readbufferdata")){
+			Shared.READ_BUFFER_MAX_DATA=(int)Tools.parseKMG(b);
+		}else if(a.equals("readbuffers")){
+			Shared.setBuffers(Integer.parseInt(b));
 		}else if(a.equals("rbm") || a.equals("renamebymapping")){
 			FASTQ.TAG_CUSTOM=Tools.parseBoolean(b);
 		}else if(a.equals("don") || a.equals("deleteoldname")){
@@ -248,16 +403,37 @@ public class Parser {
 			ReadStreamWriter.ASSERT_CIGAR=Tools.parseBoolean(b);
 		}else if(a.equals("verbosesamline")){
 			SamLine.verbose=Tools.parseBoolean(b);
-		}else{
+		}else if(a.equals("parsecustom") || a.equals("fastqparsecustom")){
+			FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
+			System.err.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
+		}else if(a.equals("fairqueues")){
+			ConcurrentDepot.fair=Tools.parseBoolean(b);
+		}else if(a.equals("fixheader") || a.equals("fixheaders")){
+			Read.FIX_HEADER=Tools.parseBoolean(b);
+		}else if(a.equals("aminoin")){
+			//Note - ensure changes to this do not conflict with TranslateSixFrames "aain" flag.
+			Shared.AMINO_IN=Tools.parseBoolean(b);
+		}else if(a.equals("maxcalledquality")){
+			int x=Tools.mid(1, Integer.parseInt(b), 93);
+			Read.MAX_CALLED_QUALITY=(byte)x;
+		}else if(a.equals("mincalledquality")){
+			int x=Tools.mid(0, Integer.parseInt(b), 93);
+			Read.MIN_CALLED_QUALITY=(byte)x;
+		}
+//		else if(a.equals("aminoout")){
+//			Shared.AMINO_OUT=Tools.parseBoolean(b);
+//		}
+		else{
 			return false;
 		}
 		return true;
 	}
 	
 	public static boolean parseQuality(String arg, String a, String b){
+		parsedQuality=true; //For internal verification that this function was indeed called. 
 		if(a.equals("ignorebadquality") || a.equals("ibq")){
 			FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-		}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
+		}else if(a.equals("ascii") || a.equals("asciioffset") || a.equals("quality") || a.equals("qual")){
 			byte x;
 			if(b.equalsIgnoreCase("sanger")){x=33;}
 			else if(b.equalsIgnoreCase("illumina")){x=64;}
@@ -279,10 +455,20 @@ public class Parser {
 			else{x=(byte)Integer.parseInt(b);}
 			qout=x;
 		}else if(a.equals("fakequality") || a.equals("qfake")){
-			FASTQ.FAKE_QUAL=Byte.parseByte(b);
-		}else if(a.equals("fixquality")){
-			Read.FIX_QUALITY=Tools.parseBoolean(b);
-			if(Read.FIX_QUALITY){FASTQ.IGNORE_BAD_QUALITY=true;}
+			Shared.FAKE_QUAL=Byte.parseByte(b);
+		}else if(a.equals("fakefastaqual") || a.equals("fakefastaquality") || a.equals("ffq")){
+			if(b==null || b.length()<1){b="f";}
+			if(Character.isLetter(b.charAt(0))){
+				FastaReadInputStream.FAKE_QUALITY=Tools.parseBoolean(b);
+			}else{
+				int x=Integer.parseInt(b);
+				if(x<1){
+					FastaReadInputStream.FAKE_QUALITY=false;
+				}else{
+					FastaReadInputStream.FAKE_QUALITY=true;
+					Shared.FAKE_QUAL=(byte)Tools.min(x, 50);
+				}
+			}
 		}else if(a.equals("qauto")){
 			FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 		}else{
@@ -291,18 +477,27 @@ public class Parser {
 		return true;
 	}
 	
+	private static boolean qhistsNull(){
+		return ReadStats.BQUAL_HIST_FILE==null && ReadStats.QUAL_HIST_FILE!=null && ReadStats.AVG_QUAL_HIST_FILE!=null && ReadStats.BQUAL_HIST_OVERALL_FILE!=null
+				&& ReadStats.QUAL_COUNT_HIST_FILE==null;
+	}
+	
 	public static boolean parseHist(String arg, String a, String b){
 		if(a.equals("qualityhistogram") || a.equals("qualityhist") || a.equals("qhist")){
 			ReadStats.QUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
-			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.BQUAL_HIST_FILE!=null || ReadStats.QUAL_HIST_FILE!=null || ReadStats.AVG_QUAL_HIST_FILE!=null || ReadStats.BQUAL_HIST_OVERALL_FILE!=null);
+			ReadStats.COLLECT_QUALITY_STATS=!qhistsNull();
 			if(ReadStats.COLLECT_QUALITY_STATS){System.err.println("Set quality histogram output to "+ReadStats.QUAL_HIST_FILE);}
 		}else if(a.equals("basequalityhistogram") || a.equals("basequalityhist") || a.equals("bqhist")){
 			ReadStats.BQUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
-			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.BQUAL_HIST_FILE!=null || ReadStats.QUAL_HIST_FILE!=null || ReadStats.AVG_QUAL_HIST_FILE!=null || ReadStats.BQUAL_HIST_OVERALL_FILE!=null);
+			ReadStats.COLLECT_QUALITY_STATS=!qhistsNull();
 			if(ReadStats.BQUAL_HIST_FILE!=null){System.err.println("Set bquality histogram output to "+ReadStats.BQUAL_HIST_FILE);}
+		}else if(a.equals("qualitycounthistogram") || a.equals("qualitycounthist") || a.equals("qchist")){
+			ReadStats.QUAL_COUNT_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_QUALITY_STATS=!qhistsNull();
+			if(ReadStats.QUAL_COUNT_HIST_FILE!=null){System.err.println("Set qcount histogram output to "+ReadStats.QUAL_COUNT_HIST_FILE);}
 		}else if(a.equals("averagequalityhistogram") || a.equals("aqhist")){
 			ReadStats.AVG_QUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
-			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.BQUAL_HIST_FILE!=null || ReadStats.QUAL_HIST_FILE!=null || ReadStats.AVG_QUAL_HIST_FILE!=null || ReadStats.BQUAL_HIST_OVERALL_FILE!=null);
+			ReadStats.COLLECT_QUALITY_STATS=!qhistsNull();
 			if(ReadStats.COLLECT_QUALITY_STATS){System.err.println("Set average quality histogram output to "+ReadStats.AVG_QUAL_HIST_FILE);}
 		}else if(a.equals("overallbasequalityhistogram") || a.equals("overallbasequalityhist") || a.equals("obqhist")){
 			ReadStats.BQUAL_HIST_OVERALL_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
@@ -341,13 +536,31 @@ public class Parser {
 			ReadStats.COLLECT_GC_STATS=(ReadStats.GC_HIST_FILE!=null);
 			if(ReadStats.COLLECT_GC_STATS){System.err.println("Set GC histogram output to "+ReadStats.GC_HIST_FILE);}
 		}else if(a.equals("gcbins") || a.equals("gchistbins")){
-			ReadStats.GC_BINS=Integer.parseInt(b);
+			if("auto".equalsIgnoreCase(b)){
+				ReadStats.GC_BINS=750;
+				ReadStats.GC_BINS_AUTO=true;
+			}else{
+				ReadStats.GC_BINS=Integer.parseInt(b);
+				ReadStats.GC_BINS_AUTO=false;
+			}
+		}else if(a.equals("gcchart") || a.equals("gcplot")){
+			ReadStats.GC_PLOT_X=Tools.parseBoolean(b);
+		}else if(a.equals("timehistogram") || a.equals("thist")){
+			ReadStats.TIME_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_TIME_STATS=(ReadStats.TIME_HIST_FILE!=null);
+			if(ReadStats.COLLECT_IDENTITY_STATS){System.err.println("Set identity histogram output to "+ReadStats.IDENTITY_HIST_FILE);}
 		}else if(a.equals("identityhistogram") || a.equals("idhist")){
 			ReadStats.IDENTITY_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
 			ReadStats.COLLECT_IDENTITY_STATS=(ReadStats.IDENTITY_HIST_FILE!=null);
 			if(ReadStats.COLLECT_IDENTITY_STATS){System.err.println("Set identity histogram output to "+ReadStats.IDENTITY_HIST_FILE);}
 		}else if(a.equals("idhistlen") || a.equals("idhistlength") || a.equals("idhistbins") || a.equals("idbins")){
-			ReadStats.ID_BINS=Integer.parseInt(b);
+			if("auto".equalsIgnoreCase(b)){
+				ReadStats.ID_BINS=750;
+				ReadStats.ID_BINS_AUTO=true;
+			}else{
+				ReadStats.ID_BINS=Integer.parseInt(b);
+				ReadStats.ID_BINS_AUTO=false;
+			}
 		}else{
 			return false;
 		}
@@ -388,6 +601,8 @@ public class Parser {
 		if(a.equals("samversion") || a.equals("samv") || a.equals("sam")){
 			assert(b!=null) : "The sam flag requires a version number, e.g. 'sam=1.4'";
 			SamLine.VERSION=Float.parseFloat(b);
+		}else if(a.equals("notags")){
+			SamLine.NO_TAGS=Tools.parseBoolean(b);
 		}else if(a.equals("mdtag") || a.equals("md")){
 			SamLine.MAKE_MD_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("idtag")){
@@ -396,6 +611,8 @@ public class Parser {
 			SamLine.MAKE_XM_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("stoptag")){
 			SamLine.MAKE_STOP_TAG=Tools.parseBoolean(b);
+		}else if(a.equals("boundstag")){
+			SamLine.MAKE_BOUNDS_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("scoretag")){
 			SamLine.MAKE_SCORE_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("sortscaffolds")){
@@ -416,12 +633,14 @@ public class Parser {
 			SamLine.INTRON_LIMIT=Integer.parseInt(b);
 			SamLine.setintron=true;
 		}else if(a.equals("suppressheader") || a.equals("noheader")){
-			ReadStreamWriter.SUPPRESS_HEADER=Tools.parseBoolean(b);
+			ReadStreamWriter.NO_HEADER=Tools.parseBoolean(b);
+		}else if(a.equals("noheadersequences") || a.equals("nhs") || a.equals("suppressheadersequences")){
+			ReadStreamWriter.NO_HEADER_SEQUENCES=Tools.parseBoolean(b);
 		}else if(a.equals("tophat")){
 			if(Tools.parseBoolean(b)){
 				SamLine.MAKE_TOPHAT_TAGS=true;
 				FastaReadInputStream.FAKE_QUALITY=true;
-				FastaReadInputStream.FAKE_QUALITY_LEVEL=40;
+				Shared.FAKE_QUAL=40;
 				SamLine.MAKE_MD_TAG=true;
 			}
 		}else if(a.equals("xstag") || a.equals("xs")){
@@ -457,10 +676,9 @@ public class Parser {
 		}else if(a.equals("forcesectionname")){
 			FastaReadInputStream.FORCE_SECTION_NAME=Tools.parseBoolean(b);
 		}else if(a.equals("fastawrap")){
-			FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-		}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
-			int x=Integer.parseInt(b);
-			FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
+			Shared.FASTA_WRAP=Integer.parseInt(b);
+		}else if(a.equals("fastadump")){
+			AbstractKmerTable.FASTA_DUMP=Tools.parseBoolean(b);
 		}else{
 			return false;
 		}
@@ -468,26 +686,61 @@ public class Parser {
 	}
 	
 	public static boolean parseQualityAdjust(String arg, String a, String b){
-		if(a.equals("q102matrix") || a.equals("q102m")){
-			CalcTrueQuality.q102matrix=b;
-		}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
-			CalcTrueQuality.qbpmatrix=b;
-		}else if(a.equals("loadq102")){
-			CalcTrueQuality.q102=Tools.parseBoolean(b);
+		int pass=0;
+		if(a.endsWith("_p1") || a.endsWith("_p2")){
+			pass=Integer.parseInt(a.substring(a.length()-1))-1;
+			a=a.substring(0, a.length()-3);
+		}
+		
+		if(a.equals("loadq102")){
+			CalcTrueQuality.use_q102[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadqbp")){
-			CalcTrueQuality.qbp=Tools.parseBoolean(b);
+			CalcTrueQuality.use_qbp[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadq10")){
-			CalcTrueQuality.q10=Tools.parseBoolean(b);
+			CalcTrueQuality.use_q10[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadq12")){
-			CalcTrueQuality.q12=Tools.parseBoolean(b);
+			CalcTrueQuality.use_q12[pass]=Tools.parseBoolean(b);
+		}else if(a.equals("loadqb12")){
+			CalcTrueQuality.use_qb12[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadqb012")){
-			CalcTrueQuality.qb012=Tools.parseBoolean(b);
+			CalcTrueQuality.use_qb012[pass]=Tools.parseBoolean(b);
+		}else if(a.equals("loadqb123")){
+			CalcTrueQuality.use_qb123[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadqb234")){
-			CalcTrueQuality.qb234=Tools.parseBoolean(b);
+			CalcTrueQuality.use_qb234[pass]=Tools.parseBoolean(b);
+		}else if(a.equals("loadq12b12")){
+			CalcTrueQuality.use_q12b12[pass]=Tools.parseBoolean(b);
 		}else if(a.equals("loadqp")){
-			CalcTrueQuality.qp=Tools.parseBoolean(b);
-		}else if(a.equals("adjustquality") || a.equals("adjq")){
-			TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
+			CalcTrueQuality.use_qp[pass]=Tools.parseBoolean(b);
+		}else if(a.equals("loadq")){
+			CalcTrueQuality.use_q[pass]=Tools.parseBoolean(b);
+		}else if(a.equals("observationcutoff")){
+			long x=Long.parseLong(b);
+			CalcTrueQuality.OBSERVATION_CUTOFF[pass]=x;
+		}else if(a.equals("recalpasses")){
+			CalcTrueQuality.passes=Integer.parseInt(b);
+		}else if(a.equals("recalqmax")){
+			int x=Tools.mid(1, Integer.parseInt(b), 93);
+			CalcTrueQuality.setQmax(x);
+			Read.MAX_CALLED_QUALITY=(byte)Tools.max(Read.MAX_CALLED_QUALITY, x);
+		}else if(a.equals("recalqmin")){
+			int x=Tools.mid(0, Integer.parseInt(b), 93);
+			Read.MIN_CALLED_QUALITY=(byte)Tools.min(Read.MIN_CALLED_QUALITY, x);
+		}else if(a.equals("recalwithposition") || a.equals("recalwithpos") || a.equals("recalusepos")){
+			boolean x=Tools.parseBoolean(b);
+			if(!x){
+				Arrays.fill(CalcTrueQuality.use_qp, false);
+				Arrays.fill(CalcTrueQuality.use_qbp, false);
+			}
+		}else if(a.equals("qmatrixmode")){
+			if("weighted".equalsIgnoreCase(b) || "weightedaverage".equalsIgnoreCase(b)){
+				CalcTrueQuality.USE_WEIGHTED_AVERAGE=true;
+			}else if("average".equalsIgnoreCase(b) || "avg".equalsIgnoreCase(b)){
+				CalcTrueQuality.USE_WEIGHTED_AVERAGE=false;
+				CalcTrueQuality.USE_AVERAGE=true;
+			}else if("max".equalsIgnoreCase(b)){
+				CalcTrueQuality.USE_AVERAGE=CalcTrueQuality.USE_WEIGHTED_AVERAGE=false;
+			}
 		}else{
 			return false;
 		}
@@ -507,8 +760,8 @@ public class Parser {
 	/** Return true if the user seems confused */
 	public static boolean parseHelp(String[] args){
 		if(args==null || args.length==0 || (args.length==1 && args[0]==null)){return true;}
-		if(args.length>1){return false;}
-		final String s=args[0].toLowerCase();
+//		if(args.length>1){return false;}
+		final String s=args[args.length-1].toLowerCase();
 		return s.equals("-h") || s.equals("-help") || s.equals("--help") 
 				|| s.equals("-version") || s.equals("--version") || s.equals("?") || s.equals("-?") || (s.equals("help") && !new File(s).exists());
 	}
@@ -551,8 +804,12 @@ public class Parser {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public boolean recalibrateQuality=false;
+	
+	public int forceTrimModulo=-1;
 	public int forceTrimLeft=-1;
 	public int forceTrimRight=-1;
+	public int forceTrimRight2=-1;
 	public int build=1;
 
 	public long maxReads=-1;
@@ -564,20 +821,38 @@ public class Parser {
 	
 	public byte trimq=6;
 	public byte minAvgQuality=0;
+	public int minAvgQualityBases=0;
+	public int maxNs=-1;
 	public int minReadLength=0;
-	public int maxReadLength=0;
+	public int maxReadLength=-1;
+	public int minTrimLength=-1;
 	public float minLenFraction=0;
 	public float minGC=0;
 	public float maxGC=1;
 	public boolean filterGC=false;
-	
-	public float idFilter=0;
+	public boolean untrim=false;
+	public boolean tossJunk=false;
+
+	public float idFilter=-1;
+	public int subfilter=-1;
+	public int delfilter=-1;
+	public int insfilter=-1;
+	public int indelfilter=-1;
+	public int dellenfilter=-1;
+	public int inslenfilter=-1;
+	public int editfilter=-1;
 	
 	public int breakLength=0;
 	/** Toss pair only if both reads are shorter than limit */ 
 	public boolean requireBothBad=false;
 	public boolean trimBadSequence=false;
-
+	public boolean chastityFilter=false;
+	public boolean removeBadBarcodes=false;
+	public boolean failBadBarcodes=false;
+	public boolean failIfNoBarcode=false;
+	
+	public HashSet<String> barcodes=null;
+	
 	public boolean overwrite=false;
 	public boolean append=false;
 	public boolean testsize=false;
@@ -605,7 +880,23 @@ public class Parser {
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static byte qin=-1;
-	public static byte qout=-1;
+	private static byte qin=-1;
+	private static byte qout=-1;
+	private static boolean parsedQuality=false;
+	
+	public static void processQuality(){
+		assert(parsedQuality);
+		if(qin!=-1 && qout!=-1){
+			FASTQ.ASCII_OFFSET=qin;
+			FASTQ.ASCII_OFFSET_OUT=qout;
+			FASTQ.DETECT_QUALITY=false;
+		}else if(qin!=-1){
+			FASTQ.ASCII_OFFSET=qin;
+			FASTQ.DETECT_QUALITY=false;
+		}else if(qout!=-1){
+			FASTQ.ASCII_OFFSET_OUT=qout;
+			FASTQ.DETECT_QUALITY_OUT=false;
+		}
+	}
 	
 }

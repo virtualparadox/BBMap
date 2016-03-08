@@ -52,7 +52,11 @@ public class CountGC {
 
 				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseCommonStatic(arg, a, b)){
+					//do nothing
 				}else if(Parser.parseZip(arg, a, b)){
+					//do nothing
+				}else if(Parser.parseQuality(arg, a, b)){
 					//do nothing
 				}else if(a.equals("in")){
 					in=b;
@@ -77,14 +81,16 @@ public class CountGC {
 					if(FORMAT!=1 && FORMAT!=2 && FORMAT!=4){
 						throw new RuntimeException("\nUnknown format: "+FORMAT+"; valid values are 1, 2, and 4.\n");
 					}
-				}else if(a.equals("bf2")){
-					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
 				}else if(in==null && i==0 && !args[i].contains("=")){
 					in=args[i];
 				}else if(out==null && i==1 && !args[i].contains("=")){
 					out=args[i];
 				}
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 		long[] counts=null;
@@ -328,32 +334,34 @@ public class CountGC {
 	}
 	
 	private static String toString2(StringBuilder sb, int[] counts){
-		long sum=(long)counts[0]+(long)counts[1]+(long)counts[2]+(long)counts[3];
-		long sum2=sum+counts[4];
-		float inv1=1f/sum;
+		final long sum1=(long)counts[0]+(long)counts[1]+(long)counts[2]+(long)counts[3];
+		final long sum2=sum1+counts[4];
+		final float inv1=1f/Tools.max(1, sum1);
+		final float inv2=1f/Tools.max(1, sum2);
 		if(FORMAT==1){
-			return sb.append(String.format("\t0\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
-					sum, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*1f/sum2, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format("\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
+					sum2, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*inv2, (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==2){
 			return sb.append(String.format("\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==4){
-			return sb.append(String.format("\t%d\t%.5f\n", sum, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format("\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
 		}else{
 			throw new RuntimeException("Unknown format.");
 		}
 	}
 	
 	private static String toString2(StringBuilder sb, long[] counts){
-		long sum=(long)counts[0]+(long)counts[1]+(long)counts[2]+(long)counts[3];
-		long sum2=sum+counts[4];
-		float inv1=1f/sum;
+		final long sum1=(long)counts[0]+(long)counts[1]+(long)counts[2]+(long)counts[3];
+		final long sum2=sum1+counts[4];
+		final float inv1=1f/Tools.max(1, sum1);
+		final float inv2=1f/Tools.max(1, sum2);
 		if(FORMAT==1){
-			return sb.append(String.format("\t0\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
-					sum, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*1f/sum2, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format("\t%d\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", 
+					sum2, counts[0]*inv1, counts[1]*inv1, counts[2]*inv1, counts[3]*inv1, counts[4]*inv2, (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==2){
 			return sb.append(String.format("\t%.5f\n", (counts[1]+counts[2])*inv1)).toString();
 		}else if(FORMAT==4){
-			return sb.append(String.format("\t%d\t%.5f\n", sum, (counts[1]+counts[2])*inv1)).toString();
+			return sb.append(String.format("\t%d\t%.5f\n", sum2, (counts[1]+counts[2])*inv1)).toString();
 		}else{
 			throw new RuntimeException("Unknown format.");
 		}

@@ -44,8 +44,8 @@ public class CompareSamFiles {
 				THRESH2=Integer.parseInt(b);
 			}else if(a.equals("printerr")){
 				printerr=Tools.parseBoolean(b);
-			}else if(a.equals("ssaha2") || a.equals("subtractleadingclip")){
-				SamLine.SUBTRACT_LEADING_SOFT_CLIP=Tools.parseBoolean(b);
+//			}else if(a.equals("ssaha2") || a.equals("subtractleadingclip")){
+//				SamLine.SUBTRACT_LEADING_SOFT_CLIP=Tools.parseBoolean(b);
 			}else if(a.equals("blasr")){
 				BLASR=Tools.parseBoolean(b);
 			}else if(a.equals("q") || a.equals("quality") || a.startsWith("minq")){

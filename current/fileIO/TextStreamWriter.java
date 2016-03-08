@@ -5,6 +5,8 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import align2.Shared;
+
 import stream.Read;
 
 import dna.Data;
@@ -51,10 +53,12 @@ public class TextStreamWriter extends Thread {
 		
 		if(!BAM || !Data.SAMTOOLS() || !Data.SH()){
 			myOutstream=ReadWrite.getOutputStream(fname, append, true, allowSubprocess);
+			if(verbose){System.err.println("Created output stream for "+fname+", "+append+", "+true+", "+allowSubprocess);}
 		}else{
 			myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true);
 		}
 		myWriter=new PrintWriter(myOutstream);
+		if(verbose){System.err.println("Created PrintWriter for "+myOutstream);}
 		
 		queue=new ArrayBlockingQueue<ArrayList<CharSequence>>(5);
 		buffer=new ArrayList<CharSequence>(buffersize);
@@ -82,7 +86,7 @@ public class TextStreamWriter extends Thread {
 		while(job==null){
 			try {
 				job=queue.take();
-//				job.list=queue.take();
+				if(verbose){System.err.println("grabbed first job of size "+job.size());}
 			} catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -92,9 +96,12 @@ public class TextStreamWriter extends Thread {
 		if(verbose){System.err.println("processing jobs");}
 		while(job!=null && job!=POISON2){
 			if(!job.isEmpty()){
+//				if(verbose){System.err.println("writing job of size "+job.size());}
 				for(final CharSequence cs : job){
+//					if(verbose){System.err.println("writing cs of size "+cs.length());}
 					assert(cs!=POISON);
 					myWriter.print(cs);
+//					if(verbose){System.err.println("printing "+cs);}
 				}
 			}
 			
@@ -111,8 +118,9 @@ public class TextStreamWriter extends Thread {
 		if(verbose){System.err.println("null/poison job");}
 //		assert(false);
 		open=false;
+		if(verbose){System.err.println("call finish writing");}
 		ReadWrite.finishWriting(myWriter, myOutstream, fname, allowSubprocess);
-		if(verbose){System.err.println("finish writing");}
+		if(verbose){System.err.println("finished writing");}
 		synchronized(this){notifyAll();}
 		if(verbose){System.err.println("done");}
 	}
@@ -142,6 +150,7 @@ public class TextStreamWriter extends Thread {
 	public synchronized void poison(){
 		//Don't allow thread to shut down before it has started
 		while(!started || this.getState()==Thread.State.NEW){
+			if(verbose){System.err.println("waiting for start.");}
 			try {
 				this.wait(20);
 			} catch (InterruptedException e) {
@@ -150,7 +159,9 @@ public class TextStreamWriter extends Thread {
 			}
 		}
 		
+		if(verbose){System.err.println("testing if open.");}
 		if(!open){return;}
+//		if(verbose){System.err.println("adding buffer: "+buffer.size());}
 		addJob(buffer);
 		buffer=null;
 //		System.err.println("Poisoned!");
@@ -162,7 +173,9 @@ public class TextStreamWriter extends Thread {
 	}
 	
 	public void waitForFinish(){
+		if(verbose){System.err.println("waiting for finish.");}
 		while(this.getState()!=Thread.State.TERMINATED){
+			if(verbose){System.err.println("attempting join.");}
 			try {
 				this.join(1000);
 			} catch (InterruptedException e) {
@@ -177,12 +190,13 @@ public class TextStreamWriter extends Thread {
 	public boolean poisonAndWait(){
 		poison();
 		waitForFinish();
+		assert(buffer==null || buffer.isEmpty());
 		return errorState;
 	}
 	
 	//TODO Why is this synchronized?
 	public synchronized void addJob(ArrayList<CharSequence> j){
-//		System.err.println("Got job "+(j.list==null ? "null" : j.list.size()));
+		if(verbose){System.err.println("Got job "+(j==null ? "null" : j.size()));}
 		
 		assert(started) : "Wait for start() to return before using the writer.";
 //		while(!started || this.getState()==Thread.State.NEW){
@@ -205,6 +219,7 @@ public class TextStreamWriter extends Thread {
 				assert(!queue.contains(j)); //Hopefully it was not added.
 			}
 		}
+		if(verbose){System.err.println("Put job in queue: "+success);}
 	}
 	
 	
@@ -215,6 +230,7 @@ public class TextStreamWriter extends Thread {
 	
 	public void print(CharSequence cs){
 //		System.err.println("Added line '"+cs+"'");
+//		System.err.println("Adding "+cs.length()+" chars.");
 		assert(open) : cs;
 		buffer.add(cs);
 		bufferLen+=cs.length();
@@ -227,7 +243,7 @@ public class TextStreamWriter extends Thread {
 	
 	public void print(Read r){
 		assert(!OTHER);
-		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta() : SAM ? r.toSam() : 
+		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() : 
 			SITES ? r.toSites() : INFO ? r.toInfo() : r.toText(true));
 		print(sb);
 	}
@@ -245,7 +261,7 @@ public class TextStreamWriter extends Thread {
 	
 	public void println(Read r){
 		assert(!OTHER);
-		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta() : SAM ? r.toSam() : 
+		StringBuilder sb=(FASTQ ? r.toFastq() : FASTA ? r.toFasta(FASTA_WRAP) : SAM ? r.toSam() : 
 			SITES ? r.toSites() : INFO ? r.toInfo() : r.toText(true)).append('\n');
 		print(sb);
 	}
@@ -283,6 +299,8 @@ public class TextStreamWriter extends Thread {
 	private final boolean SITES;
 	private final boolean INFO;
 	private final boolean OTHER;
+	
+	private final int FASTA_WRAP=Shared.FASTA_WRAP;
 	
 	/*--------------------------------------------------------------*/
 

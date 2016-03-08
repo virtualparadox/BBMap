@@ -4,14 +4,16 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
+import stream.ReadStreamWriter;
+import stream.SamLine;
 
 import dna.Parser;
 import dna.Timer;
@@ -20,7 +22,6 @@ import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
-import fileIO.TextFile;
 
 import align2.ListNum;
 import align2.ReadStats;
@@ -43,6 +44,7 @@ public class FilterReadsByName {
 	
 	public FilterReadsByName(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -56,10 +58,12 @@ public class FilterReadsByName {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		SamLine.SET_FROM_OK=true;
+		ReadStreamWriter.USE_ATTACHED_SAMLINE=true;
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -90,16 +94,23 @@ public class FilterReadsByName {
 						names.add(s);
 					}
 				}
+			}else if(a.equals("substrings") || a.equals("substring")){
+				if(b==null){b="t";}
+				if(b=="header"){
+					headerSubstringOfName=true;
+				}else if(b=="name"){
+					nameSubstringOfHeader=true;
+				}else{
+					nameSubstringOfHeader=headerSubstringOfName=Tools.parseBoolean(b);
+				}
+			}else if(a.equals("casesensitive") || a.equals("case")){
+				ignoreCase=!Tools.parseBoolean(b);
 			}else if(a.equals("include") || a.equals("retain")){
 				exclude=!Tools.parseBoolean(b);
 			}else if(a.equals("exclude") || a.equals("remove")){
 				exclude=Tools.parseBoolean(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -113,19 +124,19 @@ public class FilterReadsByName {
 			String[] x=names.toArray(new String[names.size()]);
 			names.clear();
 			for(String s : x){
-				if(new File(s).exists()){
-					TextFile tf=new TextFile(s);
-					String[] lines=tf.toStringLines();
-					for(String s2 : lines){
-						names.add(s2);
-					}
-				}else{
-					names.add(s);
-				}
+				Tools.addNames(s, names);
+			}
+		}
+		if(ignoreCase){
+			String[] x=names.toArray(new String[names.size()]);
+			names.clear();
+			for(String s : x){
+				names.add(s.toLowerCase());
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
@@ -167,7 +178,7 @@ public class FilterReadsByName {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -203,45 +214,36 @@ public class FilterReadsByName {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
+		
+//		if(ffin1!=null && ffout1!=null && ffin1.samOrBam()){
+//			if(ffout1.samOrBam()){
+//				useSharedHeader=true;
+//			}else if(ffout1.bread()){
+//				SamLine.CONVERT_CIGAR_TO_MATCH=true;
+//			}
+//		}
 	}
 	
 	void process(Timer t){
 		
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, qfin1, qfin2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
 			if(verbose){outstream.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 //		if(verbose){
-			outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
+			if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
 //		}
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -252,7 +254,7 @@ public class FilterReadsByName {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
 			ros.start();
 		}else{ros=null;}
 		
@@ -284,18 +286,29 @@ public class FilterReadsByName {
 					final Read r2=r1.mate;
 					
 					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
+					final int initialLength2=(r1.mateLength());
 					
-					String name=r1.id, prefix=null;
-					for(int x=0; x<name.length(); x++){
-						char c=name.charAt(x);
-						if((c=='/' && x<name.length()-1 && name.charAt(x+1)=='1') || Character.isWhitespace(c)){
-							prefix=name.substring(0, x);
+					final String header=(ignoreCase ? r1.id.toLowerCase() : r1.id);
+					String prefix=null;
+					for(int x=1; x<header.length(); x++){
+						char c=header.charAt(x-1);
+						char next=header.charAt(x);
+						if(Character.isWhitespace(c) || (c=='/' && (next=='1' || next=='2'))){
+							prefix=header.substring(0, x).trim();
 							break;
 						}
 					}
 					
-					boolean match=(names.contains(name) || prefix!=null && names.contains(prefix));
+					boolean match=(names.contains(header) || (prefix!=null && names.contains(prefix)));
+					if(!match && (nameSubstringOfHeader || headerSubstringOfName)){
+						for(String name : names){
+							if((headerSubstringOfName && name.contains(header)) || (nameSubstringOfHeader && header.contains(name))){match=true;}
+							else if(prefix!=null && ((headerSubstringOfName && name.contains(prefix)) || (nameSubstringOfHeader && prefix.contains(name)))){match=true;}
+						}
+					}
+					
+//					assert(false) : names.contains(name)+", "+name+", "+prefix+", "+exclude;
+					
 					if(match!=exclude){
 						retain.add(r1);
 						{
@@ -321,16 +334,16 @@ public class FilterReadsByName {
 				
 				if(ros!=null){ros.add(listOut, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
-		errorState|=ReadStats.writeAll(paired);
+		errorState|=ReadStats.writeAll();
 		
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
@@ -348,8 +361,8 @@ public class FilterReadsByName {
 		outstream.println("Time:               "+t);
 		outstream.println("Reads Processed:    "+readsProcessed+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 		outstream.println("Bases Processed:    "+basesProcessed+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
-		outstream.println("Reads Processed:    "+readsOut);
-		outstream.println("Bases Processed:    "+basesOut);
+		outstream.println("Reads Out:          "+readsOut);
+		outstream.println("Bases Out:          "+basesOut);
 		
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -367,7 +380,7 @@ public class FilterReadsByName {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
@@ -395,8 +408,11 @@ public class FilterReadsByName {
 
 	private long maxReads=-1;
 	private boolean exclude=true;
+	private boolean nameSubstringOfHeader=false;
+	private boolean headerSubstringOfName=false;
+	private boolean ignoreCase=true;
 	
-	private HashSet<String> names=new HashSet<String>();
+	private LinkedHashSet<String> names=new LinkedHashSet<String>();
 	
 	/*--------------------------------------------------------------*/
 	
@@ -414,5 +430,6 @@ public class FilterReadsByName {
 	public boolean errorState=false;
 	private boolean overwrite=true;
 	private boolean append=false;
+	private boolean useSharedHeader=false;
 	
 }

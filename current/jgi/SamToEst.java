@@ -39,7 +39,7 @@ public class SamToEst {
 	
 	public static void main(String[] args){
 		
-		ByteFile.FORCE_MODE_BF2=Shared.THREADS>2;
+		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		ReadWrite.USE_UNPIGZ=true;
@@ -56,16 +56,14 @@ public class SamToEst {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("sam")){
 				sam=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("stats")){
@@ -80,10 +78,6 @@ public class SamToEst {
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(sam==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				sam=arg;
 			}else if(stats==null && i==1 && !arg.contains("=")){
@@ -93,6 +87,10 @@ public class SamToEst {
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 		if(stats==null){stats="stdout";}

@@ -5,11 +5,10 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import align2.ListNum;
-import align2.Shared;
 
 import dna.Data;
 
-public class ConcurrentCollectionReadInputStream implements ConcurrentReadStreamInterface {
+public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStream {
 	
 	public ConcurrentCollectionReadInputStream(List<Read> source1, List<Read> source2, long maxReadsToGenerate){
 		assert(source1!=source2);
@@ -47,35 +46,21 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 		return ln;
 	}
 	
-	public void returnList(ListNum<Read> ln, boolean poison){
-		if(ln!=null){
-			ln.list.clear();
-		}else{
-			System.err.println("Warning, null list returned: ");  //System.err.println("Warning from class "+getClass().getName()+", null list returned: ");
-			new Exception().printStackTrace();
-		}
+	public void returnList(long listNumber, boolean poison){
 		if(poison){
-			if(verbose){System.err.println("A: Adding empty list to full.");}
-			depot.full.add(ln==null ? new ArrayList<Read>(0) : ln.list);
-		}else{
-			if(ln!=null){depot.empty.add(ln.list);}
-//			depot.empty.add(ln==null ? new ArrayList<Read>(0) : ln.list);
-		}
-	}
-	
-	public void returnList(boolean poison){
-		if(poison){
+			if(verbose){System.err.println("crisC:    A: Adding empty list to full.");}
 			depot.full.add(new ArrayList<Read>(0));
 		}else{
-			depot.empty.add(new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+			if(verbose){System.err.println("crisC:    A: Adding empty list to empty.");}
+			depot.empty.add(new ArrayList<Read>(BUF_LEN));
 		}
 	}
 	
 	@Override
 	public void run() {
 //		producer.start();
-		if(verbose){System.err.println("cris started.");}
 		threads=new Thread[] {Thread.currentThread()};
+		if(verbose){System.err.println("crisC started, thread="+threads[0]);}
 
 //		readLists();
 		readSingles();
@@ -113,7 +98,7 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 				}
 			}
 			if(list!=null){
-				if(verbose){System.err.println("D: Adding list("+list.size()+") to full.");}
+				if(verbose){System.err.println("D: Adding list("+list.size()+") to full "+depot.full.size()+"/"+depot.bufferCount);}
 				depot.full.add(list);
 			}
 		}
@@ -156,14 +141,14 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 
 						assert(a.pairnum()==0);
 						b.setPairnum(1);
-						bases+=(b.bases==null ? 0 : b.bases.length);
+						bases+=(b.bases==null ? 0 : b.length());
 					}
-					bases+=(a.bases==null ? 0 : a.bases.length);
+					bases+=(a.bases==null ? 0 : a.length());
 				}
 				incrementGenerated(1);
 			}
 
-			if(verbose){System.err.println("E: Adding list("+list.size()+") to full.");}
+			if(verbose){System.err.println("E: Adding list("+list.size()+") to full "+depot.full.size()+"/"+depot.bufferCount);}
 			depot.full.add(list);
 		}
 	}
@@ -172,15 +157,20 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	
 	@Override
 	public void shutdown(){
-//		System.out.println("Called shutdown.");
+		if(verbose){System.out.println("Called shutdown.");}
 		shutdown=true;
 		if(!shutdown){
+			if(verbose){System.out.println("shutdown 2.");}
 			for(Thread t : threads){
+				if(verbose){System.out.println("shutdown 3.");}
 				if(t!=null && t.isAlive()){
+					if(verbose){System.out.println("shutdown 4.");}
 					t.interrupt();
+					if(verbose){System.out.println("shutdown 5.");}
 				}
 			}
 		}
+		if(verbose){System.out.println("shutdown 6.");}
 	}
 	
 	@Override
@@ -195,18 +185,24 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	
 	@Override
 	public synchronized void close(){
+		if(verbose){System.out.println("Thread "+Thread.currentThread().getId()+" called close.");}
 		shutdown();
 //		producer1.close();
 //		if(producer2!=null){producer2.close();}
 //		System.out.println("A");
 		if(threads!=null && threads[0]!=null && threads[0].isAlive()){
+			if(verbose){System.out.println("close 1.");}
 			
 			while(threads[0].isAlive()){
+				if(verbose){System.out.println("close 2: Thread "+Thread.currentThread().getId()+" closing thread "+threads[0].getId()+" "+threads[0].getState());}
 //				System.out.println("B");
 				ArrayList<Read> list=null;
-				for(int i=0; i<1000 && list==null && threads[0].isAlive(); i++){
+				for(int i=0; i<1 && list==null && threads[0].isAlive(); i++){
+					if(verbose){System.out.println("close 3.");}
 					try {
-						list=depot.full.poll(200, TimeUnit.MILLISECONDS);
+						if(verbose){System.out.println("close 4.");}
+						list=depot.full.poll(100, TimeUnit.MILLISECONDS);
+						if(verbose){System.out.println("close 5; list.size()="+depot.full.size()+", list="+(list==null ? "null" : list.size()+""));}
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						System.err.println("Do not be alarmed by the following error message:");
@@ -219,18 +215,25 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 					list.clear();
 					depot.empty.add(list);
 				}
-					
+				if(verbose){System.out.println("close 6.");}
 				
 //				System.out.println("isAlive? "+threads[0].isAlive());
 			}
+			if(verbose){System.out.println("close 7.");}
 			
 		}
+		if(verbose){System.out.println("close 8.");}
 		
 		if(threads!=null){
+			if(verbose){System.out.println("close 9.");}
 			for(int i=1; i<threads.length; i++){
+				if(verbose){System.out.println("close 10.");}
 				while(threads[i]!=null && threads[i].isAlive()){
+					if(verbose){System.out.println("close 11.");}
 					try {
+						if(verbose){System.out.println("close 12.");}
 						threads[i].join();
+						if(verbose){System.out.println("close 13.");}
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -238,6 +241,7 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 				}
 			}
 		}
+		if(verbose){System.out.println("close 14.");}
 		
 	}
 
@@ -245,6 +249,9 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	public boolean paired() {
 		return producer2!=null ? true : (producer1==null || producer1.isEmpty() ? false : producer1.get(0).mate!=null);
 	}
+	
+	@Override
+	public boolean verbose(){return verbose;}
 	
 	private void incrementGenerated(long amt){
 		generated+=amt;
@@ -292,10 +299,6 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	private long generated=0;
 	private long listnum=0;
 	private long nextProgress=PROGRESS_INCR;
-
-	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
-	private final int NUM_BUFFS=Shared.READ_BUFFER_NUM_BUFFERS;
-	private final long MAX_DATA=Shared.READ_BUFFER_MAX_DATA;
 	
 	public static boolean verbose=false;
 	

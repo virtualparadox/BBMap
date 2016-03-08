@@ -5,16 +5,19 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Random;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
+import stream.KillSwitch;
 import stream.Read;
 import stream.SamLine;
 
+import dna.Data;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
@@ -45,6 +48,7 @@ public class ReformatReads {
 	
 	public ReformatReads(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -58,10 +62,12 @@ public class ReformatReads {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		SamLine.SET_FROM_OK=true;
+//		SamLine.CONVERT_CIGAR_TO_MATCH=true;
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -71,7 +77,7 @@ public class ReformatReads {
 			String b=split.length>1 ? split[1] : null;
 			if(b==null || b.equalsIgnoreCase("null")){b=null;}
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
-
+			
 			if(parser.parse(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(parser.in2)){
@@ -79,6 +85,8 @@ public class ReformatReads {
 			}else if(a.equals("passes")){
 				assert(false) : "'passes' is disabled.";
 //				passes=Integer.parseInt(b);
+			}else if(a.equals("path")){
+				Data.setPath(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -94,10 +102,19 @@ public class ReformatReads {
 			}else if(a.equals("samplebases") || a.equals("samplebasestarget") || a.equals("sbt")){
 				sampleBasesTarget=Tools.parseKMG(b);
 				sampleBasesExact=(sampleBasesTarget>0);
-			}else if(a.equals("parsecustom")){
-				parsecustom=Tools.parseBoolean(b);
 			}else if(a.equals("addslash")){
 				addslash=Tools.parseBoolean(b);
+			}else if(a.equals("slashspace") || a.equals("spaceslash")){
+				boolean x=Tools.parseBoolean(b);
+				if(x){
+					slash1=" /1";
+					slash2=" /2";
+				}else{
+					slash1="/1";
+					slash2="/2";
+				}
+			}else if(a.equals("addunderscore") || a.equals("underscore")){
+				addunderscore=Tools.parseBoolean(b);
 			}else if(a.equals("uniquenames")){
 				uniqueNames=Tools.parseBoolean(b);
 			}else if(a.equals("verifyinterleaved") || a.equals("verifyinterleaving") || a.equals("vint")){
@@ -116,12 +133,34 @@ public class ReformatReads {
 				deleteEmptyFiles=Tools.parseBoolean(b);
 			}else if(a.equals("mappedonly")){
 				mappedOnly=Tools.parseBoolean(b);
+			}else if(a.equals("unmappedonly")){
+				unmappedOnly=Tools.parseBoolean(b);
+			}else if(a.equals("requiredbits") || a.equals("rbits")){
+				requiredBits=Tools.parseIntHexDecOctBin(b);
+			}else if(a.equals("filterbits") || a.equals("fbits")){
+				filterBits=Tools.parseIntHexDecOctBin(b);
+			}else if(a.equals("primaryonly")){
+				primaryOnly=Tools.parseBoolean(b);
+			}else if(a.equals("remap1")){
+				remap1=Tools.parseRemap(b);
+			}else if(a.equals("remap2")){
+				remap2=Tools.parseRemap(b);
+			}else if(a.equals("remap")){
+				remap1=remap2=Tools.parseRemap(b);
+			}else if(a.equals("skipreads")){
+				skipreads=Tools.parseKMG(b);
+			}else if(a.equals("undefinedton") || a.equals("iupacton") || a.equals("itn")){
+				iupacToN=Tools.parseBoolean(b);
+			}else if(a.equals("quantize")){
+				if(b==null || b.length()<1){b="t";}
+				if(Character.isLetter(b.charAt(0))){
+					quantizeQuality=Tools.parseBoolean(b);
+				}else{
+					quantizeQuality=true;
+					quantizeArray=Tools.parseByteArray(b, ",");
+				}
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -131,32 +170,44 @@ public class ReformatReads {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			samplerate=parser.samplerate;
 			sampleseed=parser.sampleseed;
-
-			forceTrimLeft=parser.forceTrimLeft;
-			forceTrimRight=parser.forceTrimRight;
-			qtrimLeft=parser.qtrimLeft;
-			qtrimRight=parser.qtrimRight;
-
-			trimq=parser.trimq;
-			minAvgQuality=parser.minAvgQuality;
-			minReadLength=parser.minReadLength;
-			maxReadLength=parser.maxReadLength;
-			minLenFraction=parser.minLenFraction;
-			breakLength=parser.breakLength;
-			requireBothBad=parser.requireBothBad;
-			trimBadSequence=parser.trimBadSequence;
+			
 			overwrite=ReadStats.overwrite=parser.overwrite;
 			append=ReadStats.append=parser.append;
 			testsize=parser.testsize;
-
+			trimBadSequence=parser.trimBadSequence;
+			breakLength=parser.breakLength;
+			stoptag=SamLine.MAKE_STOP_TAG;
+			
+			forceTrimModulo=parser.forceTrimModulo;
+			forceTrimLeft=parser.forceTrimLeft;
+			forceTrimRight=parser.forceTrimRight;
+			forceTrimRight2=parser.forceTrimRight2;
+			qtrimLeft=parser.qtrimLeft;
+			qtrimRight=parser.qtrimRight;
+			trimq=parser.trimq;
+			minAvgQuality=parser.minAvgQuality;
+			minAvgQualityBases=parser.minAvgQualityBases;
+			chastityFilter=parser.chastityFilter;
+			failBadBarcodes=parser.failBadBarcodes;
+			removeBadBarcodes=parser.removeBadBarcodes;
+			failIfNoBarcode=parser.failIfNoBarcode;
+			barcodes=parser.barcodes;
+			maxNs=parser.maxNs;
+			minReadLength=parser.minReadLength;
+			maxReadLength=parser.maxReadLength;
+			minLenFraction=parser.minLenFraction;
+			requireBothBad=parser.requireBothBad;
 			minGC=parser.minGC;
 			maxGC=parser.maxGC;
 			filterGC=parser.filterGC;
+			tossJunk=parser.tossJunk;
+			recalibrateQuality=parser.recalibrateQuality;
 
 			setInterleaved=parser.setInterleaved;
 			
@@ -175,7 +226,7 @@ public class ReformatReads {
 			extout=parser.extout;
 		}
 		
-		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
+		if(recalibrateQuality){CalcTrueQuality.initializeMatrices();}
 		
 		if(SamLine.setxs && !SamLine.setintron){SamLine.INTRON_LIMIT=10;}
 		qtrim=qtrimLeft||qtrimRight;
@@ -192,7 +243,7 @@ public class ReformatReads {
 			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
-
+		
 		if(verifyinterleaving || (verifypairing && in2==null)){
 			verifypairing=true;
 			setInterleaved=true;
@@ -206,7 +257,7 @@ public class ReformatReads {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -234,7 +285,7 @@ public class ReformatReads {
 				}
 			}
 		}
-
+		
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		if(outsingle!=null && outsingle.equalsIgnoreCase("null")){outsingle=null;}
@@ -243,23 +294,11 @@ public class ReformatReads {
 			System.err.println((out1==null)+", "+(out2==null)+", "+out1+", "+out2);
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
+		if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2, outsingle) || !ReadStats.testFiles(false)){
+			throw new RuntimeException("Duplicate filenames are not allowed.");
+		}
 		
 		FASTQ.PARSE_CUSTOM=parsecustom;
-		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
 		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
@@ -274,19 +313,12 @@ public class ReformatReads {
 //		System.err.println("\n"+ReadWrite.USE_PIGZ+", "+ReadWrite.USE_UNPIGZ+", "+Data.PIGZ()+", "+Data.UNPIGZ()+", "+ffin1+"\n");
 //		assert(false) : ReadWrite.USE_PIGZ+", "+ReadWrite.USE_UNPIGZ+", "+Data.PIGZ()+", "+Data.UNPIGZ()+", "+ffin1;
 
-		if(ffin1!=null && ffout1!=null && ffin1.samOrBam()){
-			if(ffout1.samOrBam()){
-				useSharedHeader=true;
-				SamLine.CONVERT_CIGAR_TO_MATCH=true;
-			}else if(ffout1.bread()){
-				SamLine.CONVERT_CIGAR_TO_MATCH=true;
-			}
-		}
-
 		nameMap1=(uniqueNames ? new HashMap<String, Integer>() : null);
 		nameMap2=(uniqueNames ? new HashMap<String, Integer>() : null);
+		
+		qualityRemapArray=makeQualityRemapArray(quantizeArray);
 	}
-	
+
 	void process(Timer t){
 		
 		long readsRemaining=0;
@@ -300,14 +332,12 @@ public class ReformatReads {
 		}
 		
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
 			cris.setSampleRate(samplerate, sampleseed);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 //		if(verbose){
@@ -316,26 +346,25 @@ public class ReformatReads {
 		
 		assert(!paired || breakLength<1) : "Paired input cannot be broken with 'breaklength'";
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;
 			
 			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
 				outstream.println("Writing interleaved.");
-			}			
-
+			}
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
 			ros.start();
 		}else{ros=null;}
 		
-		final RTextOutputStream3 rosb;
+		final ConcurrentReadOutputStream rosb;
 		if(outsingle!=null){
 			final int buff=4;
 			
-			rosb=new RTextOutputStream3(ffoutsingle, null, buff, null, useSharedHeader);
+			rosb=ConcurrentReadOutputStream.getStream(ffoutsingle, null, buff, null, useSharedHeader);
 			rosb.start();
 		}else{rosb=null;}
 		final boolean discardTogether=(!paired || (outsingle==null && !requireBothBad));
@@ -352,8 +381,11 @@ public class ReformatReads {
 		long basesOut2=0;
 		long basesOutSingle=0;
 		
-		long basesTrimmedT=0;
-		long readsTrimmedT=0;
+		long basesFTrimmedT=0;
+		long readsFTrimmedT=0;
+		
+		long basesQTrimmedT=0;
+		long readsQTrimmedT=0;
 		
 		long lowqBasesT=0;
 		long lowqReadsT=0;
@@ -366,6 +398,9 @@ public class ReformatReads {
 		
 		long unmappedReadsT=0;
 		long unmappedBasesT=0;
+		
+		long basesSwappedT=0;
+		long readsSwappedT=0;
 
 		final boolean MAKE_QHIST=ReadStats.COLLECT_QUALITY_STATS;
 		final boolean MAKE_QAHIST=ReadStats.COLLECT_QUALITY_ACCURACY;
@@ -394,6 +429,24 @@ public class ReformatReads {
 			}
 
 			while(reads!=null && reads.size()>0){
+				
+				if(skipreads>0){
+					int removed=0;
+					for(int i=0; i<reads.size(); i++){
+						Read r=reads.get(i);
+						if(r.numericID<skipreads){
+							reads.set(i, null);
+							removed++;
+						}else{
+							skipreads=-1;
+							break;
+						}
+					}
+					if(removed>0){
+						Tools.condenseStrict(reads);
+					}
+				}
+				
 				ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(32));
 				
 				if(breakLength>0){
@@ -405,7 +458,7 @@ public class ReformatReads {
 					final Read r2=r1.mate;
 					
 					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
+					final int initialLength2=(r1.mateLength());
 
 					final int minlen1=(int)Tools.max(initialLength1*minLenFraction, minReadLength);
 					final int minlen2=(int)Tools.max(initialLength2*minLenFraction, minReadLength);
@@ -445,26 +498,142 @@ public class ReformatReads {
 						}
 					}
 					
+					if(tossJunk){
+						if(r1!=null && r1.junk()){
+							lowqBasesT+=r1.length();
+							lowqReadsT++;
+							r1.setDiscarded(true);
+						}
+						if(r2!=null && r2.junk()){
+							lowqBasesT+=r2.length();
+							lowqReadsT++;
+							r2.setDiscarded(true);
+						}
+					}
+					
+					if(iupacToN){
+						if(r1!=null){r1.convertUndefinedTo((byte)'N');}
+						if(r2!=null){r2.convertUndefinedTo((byte)'N');}
+					}
+					
+					if(remap1!=null && r1!=null){
+						int swaps=r1.remapAndCount(remap1);
+						if(swaps>0){
+							basesSwappedT+=swaps;
+							readsSwappedT++;
+						}
+					}
+					if(remap2!=null && r2!=null){
+						int swaps=r2.remapAndCount(remap2);
+						if(swaps>0){
+							basesSwappedT+=swaps;
+							readsSwappedT++;
+						}
+					}
+					
 					if(trimBadSequence){//Experimental
 						if(r1!=null){
 							int x=TrimRead.trimBadSequence(r1);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							basesQTrimmedT+=x;
+							readsQTrimmedT+=(x>0 ? 1 : 0);
 						}
 						if(r2!=null){
 							int x=TrimRead.trimBadSequence(r2);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							basesQTrimmedT+=x;
+							readsQTrimmedT+=(x>0 ? 1 : 0);
+						}
+					}
+					
+					if(chastityFilter){
+						if(r1!=null && r1.failsChastity()){
+							lowqBasesT+=r1.length()+r1.mateLength();
+							lowqReadsT+=1+r1.mateCount();
+							r1.setDiscarded(true);
+							if(r2!=null){r2.setDiscarded(true);}
+						}
+					}
+					
+					if(removeBadBarcodes){
+						if(r1!=null && !r1.discarded() && r1.failsBarcode(barcodes, failIfNoBarcode)){
+							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id);}
+							lowqBasesT+=r1.length()+r1.mateLength();
+							lowqReadsT+=1+r1.mateCount();
+							r1.setDiscarded(true);
+							if(r2!=null){r2.setDiscarded(true);}
+						}
+					}
+					
+					if(filterBits!=0 || requiredBits!=0){
+						if(r1!=null && !r1.discarded()){
+							assert(r1.obj!=null && r1.obj.getClass().equals(SamLine.class)) : "filterbits and requiredbits only work on sam/bam input.";
+							SamLine sl=(SamLine)r1.obj;
+							if(((sl.flag&filterBits)!=0) || ((sl.flag&requiredBits)!=requiredBits)){
+								r1.setDiscarded(true);
+								unmappedBasesT+=initialLength1;
+								unmappedReadsT++;
+							}
+						}
+						if(r2!=null && !r2.discarded()){
+							assert(r2.obj!=null && r2.obj.getClass().equals(SamLine.class)) : "filterbits and requiredbits only work on sam/bam input.";
+							SamLine sl=(SamLine)r2.obj;
+							if(((sl.flag&filterBits)!=0) || ((sl.flag&requiredBits)!=requiredBits)){
+								r2.setDiscarded(true);
+								unmappedBasesT+=initialLength1;
+								unmappedReadsT++;
+							}
+						}
+					}
+					
+					if(stoptag){
+						if(r1!=null && !r1.discarded()){
+							assert(r1.obj!=null && r1.obj.getClass().equals(SamLine.class)) : "stoptag only works on sam/bam input.";
+							SamLine sl=(SamLine)r1.obj;
+							if(sl.mapped() && sl.cigar!=null){
+								if(sl.optional==null){sl.optional=new ArrayList<String>(2);}
+								sl.optional.add(SamLine.makeStopTag(sl.pos, sl.calcCigarLength(false, false), sl.cigar, r1.perfect()));
+							}
+						}
+						if(r2!=null && !r2.discarded()){
+							assert(r2.obj!=null && r2.obj.getClass().equals(SamLine.class)) : "stoptag only works on sam/bam input.";
+							SamLine sl=(SamLine)r2.obj;
+							if(sl.mapped() && sl.cigar!=null){
+								if(sl.optional==null){sl.optional=new ArrayList<String>(2);}
+								sl.optional.add(SamLine.makeStopTag(sl.pos, sl.calcCigarLength(false, false), sl.cigar, r2.perfect()));
+							}
 						}
 					}
 					
 					if(mappedOnly){
-						if(r1!=null && !r1.discarded() && !r1.mapped()){
+						if(r1!=null && !r1.discarded() && (!r1.mapped() || r1.bases==null || r1.secondary())){
 							r1.setDiscarded(true);
 							unmappedBasesT+=initialLength1;
 							unmappedReadsT++;
 						}
-						if(r2!=null && !r2.discarded() && !r2.mapped()){
+						if(r2!=null && !r2.discarded() && (!r2.mapped() || r2.bases==null || r2.secondary())){
+							r2.setDiscarded(true);
+							unmappedBasesT+=initialLength2;
+							unmappedReadsT++;
+						}
+					}else if(unmappedOnly){
+						if(r1!=null && (r1.mapped() || r1.bases==null || r1.secondary())){
+							r1.setDiscarded(true);
+							unmappedBasesT+=initialLength1;
+							unmappedReadsT++;
+						}
+						if(r2!=null && (r2.mapped() || r2.bases==null || r2.secondary())){
+							r2.setDiscarded(true);
+							unmappedBasesT+=initialLength2;
+							unmappedReadsT++;
+						}
+					}
+					
+					if(primaryOnly){
+						if(r1!=null && (r1.bases==null || r1.secondary())){
+							r1.setDiscarded(true);
+							unmappedBasesT+=initialLength1;
+							unmappedReadsT++;
+						}
+						if(r2!=null && (r2.bases==null || r2.secondary())){
 							r2.setDiscarded(true);
 							unmappedBasesT+=initialLength2;
 							unmappedReadsT++;
@@ -491,52 +660,98 @@ public class ReformatReads {
 							}
 						}
 					}
-
-					if(minAvgQuality>0){
-						final int a=(r1==null ? 99 : r1.avgQuality());
-						final int b=(r2==null ? 99 : r2.avgQuality());
-						if((a<minAvgQuality || b<minAvgQuality)){
-							if(r1!=null && a<minAvgQuality && !r1.discarded()){
-								lowqBasesT+=r1.bases.length;
-								lowqReadsT++;
-								r1.setDiscarded(true);
+					
+					if(recalibrateQuality){
+						if(r1!=null && !r1.discarded()){
+							CalcTrueQuality.recalibrate(r1);
+						}
+						if(r2!=null && !r2.discarded()){
+							CalcTrueQuality.recalibrate(r2);
+						}
+					}
+					
+					if(quantizeQuality){
+						final byte[] quals1=r1.quality, quals2=(r2==null ? null : r2.quality);
+						if(quals1!=null){
+							for(int i=0; i<quals1.length; i++){
+								quals1[i]=qualityRemapArray[quals1[i]];
 							}
-							if(r2!=null && b<minAvgQuality && !r2.discarded()){
-								lowqBasesT+=r2.bases.length;
-								lowqReadsT++;
-								r2.setDiscarded(true);
+						}
+						if(quals2!=null){
+							for(int i=0; i<quals2.length; i++){
+								quals2[i]=qualityRemapArray[quals2[i]];
 							}
 						}
 					}
 					
-					if(forceTrimLeft>0 || forceTrimRight>0){
+					if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimModulo>0 || forceTrimRight2>0){
 						if(r1!=null && !r1.discarded()){
-							int x=TrimRead.trimToPosition(r1, forceTrimLeft>0 ? forceTrimLeft : 0, forceTrimRight>0 ? forceTrimRight : r1.bases.length, 1);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							final int len=r1.length();
+							final int a=forceTrimLeft>0 ? forceTrimLeft : 0;
+							final int b0=forceTrimModulo>0 ? len-1-len%forceTrimModulo : len;
+							final int b1=forceTrimRight>0 ? forceTrimRight : len;
+							final int b2=forceTrimRight2>0 ? len-1-forceTrimRight2 : len;
+							final int b=Tools.min(b0, b1, b2);
+							final int x=TrimRead.trimToPosition(r1, a, b, 1);
+							basesFTrimmedT+=x;
+							readsFTrimmedT+=(x>0 ? 1 : 0);
+							if(r1.length()<minlen1){r1.setDiscarded(true);}
 						}
 						if(r2!=null && !r2.discarded()){
-							int x=TrimRead.trimToPosition(r2, forceTrimLeft>0 ? forceTrimLeft : 0, forceTrimRight>0 ? forceTrimRight : r2.bases.length, 1);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							final int len=r2.length();
+							final int a=forceTrimLeft>0 ? forceTrimLeft : 0;
+							final int b0=forceTrimModulo>0 ? len-1-len%forceTrimModulo : len;
+							final int b1=forceTrimRight>0 ? forceTrimRight : len;
+							final int b2=forceTrimRight2>0 ? len-1-forceTrimRight2 : len;
+							final int b=Tools.min(b0, b1, b2);
+							final int x=TrimRead.trimToPosition(r2, a, b, 1);
+							basesFTrimmedT+=x;
+							readsFTrimmedT+=(x>0 ? 1 : 0);
+							if(r2.length()<minlen2){r2.setDiscarded(true);}
 						}
 					}
 					
 					if(qtrim){
 						if(r1!=null && !r1.discarded()){
 							int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, 1);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							basesQTrimmedT+=x;
+							readsQTrimmedT+=(x>0 ? 1 : 0);
 						}
 						if(r2!=null && !r2.discarded()){
 							int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, 1);
-							basesTrimmedT+=x;
-							readsTrimmedT+=(x>0 ? 1 : 0);
+							basesQTrimmedT+=x;
+							readsQTrimmedT+=(x>0 ? 1 : 0);
+						}
+					}
+					
+					if(minAvgQuality>0){
+						if(r1!=null && !r1.discarded() && r1.avgQuality(false, minAvgQualityBases)<minAvgQuality){
+							lowqBasesT+=r1.length();
+							lowqReadsT++;
+							r1.setDiscarded(true);
+						}
+						if(r2!=null && !r2.discarded() && r2.avgQuality(false, minAvgQualityBases)<minAvgQuality){
+							lowqBasesT+=r2.length();
+							lowqReadsT++;
+							r2.setDiscarded(true);
+						}
+					}
+					
+					if(maxNs>=0){
+						if(r1!=null && !r1.discarded() && r1.countUndefined()>maxNs){
+							lowqBasesT+=r1.length();
+							lowqReadsT++;
+							r1.setDiscarded(true);
+						}
+						if(r2!=null && !r2.discarded() && r2.countUndefined()>maxNs){
+							lowqBasesT+=r2.length();
+							lowqReadsT++;
+							r2.setDiscarded(true);
 						}
 					}
 					
 					if(minlen1>0 || minlen2>0 || maxReadLength>0){
-//						assert(false) : minlen1+", "+minlen2+", "+maxReadLength+", "+r1.bases.length;
+//						assert(false) : minlen1+", "+minlen2+", "+maxReadLength+", "+r1.length();
 						if(r1!=null && !r1.discarded()){
 							int rlen=r1.length();
 							if(rlen<minlen1 || (maxReadLength>0 && rlen>maxReadLength)){
@@ -563,8 +778,13 @@ public class ReformatReads {
 					}
 					
 					if(remove){reads.set(idx, null);}
-					else{
+					else if(uniqueNames || addunderscore || addslash){
+						
+						if(r1.id==null){r1.id=""+r1.numericID;}
+						if(r2!=null && r2.id==null){r2.id=r1.id;}
+						
 						if(uniqueNames){
+							
 							{
 								Integer v=nameMap1.get(r1.id);
 								if(v==null){
@@ -586,12 +806,14 @@ public class ReformatReads {
 								}
 							}
 						}
+						if(addunderscore){
+							r1.id=Tools.whitespace.matcher(r1.id).replaceAll("_");
+							if(r2!=null){r2.id=Tools.whitespace.matcher(r2.id).replaceAll("_");}
+						}
 						if(addslash){
-							if(r1.id==null){r1.id=" "+r1.numericID;}
-							if(!r1.id.contains(" /1")){r1.id+=" /1";}
+							if(!r1.id.contains(slash1)){r1.id+=slash1;}
 							if(r2!=null){
-								if(r2.id==null){r2.id=" "+r2.numericID;}
-								if(!r2.id.contains(" /2")){r2.id+=" /2";}
+								if(!r2.id.contains(slash2)){r2.id+=slash2;}
 							}
 						}
 					}
@@ -635,7 +857,7 @@ public class ReformatReads {
 						for(Read r : reads){
 							if(r!=null){
 								assert(basesRemaining>0) : basesRemaining;
-								int bases=r.bases.length+(r.mate==null ? 0 : r.mate.bases.length);
+								int bases=r.length()+(r.mate==null ? 0 : r.mateLength());
 								double prob=sampleBasesTarget/(double)(basesRemaining);
 								if(randy.nextDouble()<prob){
 									listOut.add(r);
@@ -655,7 +877,7 @@ public class ReformatReads {
 							basesOut1+=r.length();
 							if(r.mate!=null){
 								readsOut2++;
-								basesOut2+=r.mate.length();
+								basesOut2+=r.mateLength();
 							}
 						}
 					}
@@ -671,18 +893,18 @@ public class ReformatReads {
 				if(ros!=null){ros.add(listOut, ln.id);}
 				if(rosb!=null){rosb.add(singles, ln.id);}
 
-				cris.returnList(ln, false);
+				cris.returnList(ln.id, false);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-//				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+//				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 				assert(ln.list.isEmpty());
-				cris.returnList(ln, true);
+				cris.returnList(ln.id, true);
 			}
 		}
 		
-		errorState|=ReadStats.writeAll(paired);
+		errorState|=ReadStats.writeAll();
 		
 		errorState|=ReadWrite.closeStreams(cris, ros, rosb);
 		
@@ -720,14 +942,23 @@ public class ReformatReads {
 					basesProcessed+" bases");
 		}
 		
-		if(qtrim || forceTrimLeft>0 || forceTrimRight>0 || trimBadSequence){
-			outstream.println("QTrimmed:               \t"+readsTrimmedT+" reads ("+String.format("%.2f",readsTrimmedT*rpmult)+"%) \t"+
-					basesTrimmedT+" bases ("+String.format("%.2f",basesTrimmedT*bpmult)+"%)");
-		}else if(minReadLength>0 || maxReadLength>0){
+		if(remap1!=null || remap2!=null){
+			outstream.println("Base Transforms:        \t"+readsSwappedT+" reads ("+String.format("%.2f",readsSwappedT*rpmult)+"%) \t"+
+					basesSwappedT+" bases ("+String.format("%.2f",basesSwappedT*bpmult)+"%)");
+		}
+		if(qtrim || trimBadSequence){
+			outstream.println("QTrimmed:               \t"+readsQTrimmedT+" reads ("+String.format("%.2f",readsQTrimmedT*rpmult)+"%) \t"+
+					basesQTrimmedT+" bases ("+String.format("%.2f",basesQTrimmedT*bpmult)+"%)");
+		}
+		if(forceTrimLeft>0 || forceTrimRight>0 || forceTrimRight2>0 || forceTrimModulo>0){  
+			outstream.println("FTrimmed:               \t"+readsFTrimmedT+" reads ("+String.format("%.2f",readsFTrimmedT*rpmult)+"%) \t"+
+					basesFTrimmedT+" bases ("+String.format("%.2f",basesFTrimmedT*bpmult)+"%)");
+		}
+		if(minReadLength>0 || maxReadLength>0){
 			outstream.println("Short Read Discards:    \t"+readShortDiscardsT+" reads ("+String.format("%.2f",readShortDiscardsT*rpmult)+"%) \t"+
 					baseShortDiscardsT+" bases ("+String.format("%.2f",baseShortDiscardsT*bpmult)+"%)");
 		}
-		if(minAvgQuality>0){
+		if(minAvgQuality>0 || maxNs>=0 || chastityFilter || tossJunk || removeBadBarcodes){
 			outstream.println("Low quality discards:   \t"+lowqReadsT+" reads ("+String.format("%.2f",lowqReadsT*rpmult)+"%) \t"+
 					lowqBasesT+" bases ("+String.format("%.2f",lowqBasesT*bpmult)+"%)");
 		}
@@ -802,9 +1033,9 @@ public class ReformatReads {
 		for(Read r : list){
 			if(r==null || r.bases==null){
 				temp.add(r);
-			}else if(r.bases.length<min){
+			}else if(r.length()<min){
 				temp.add(null);
-			}else if(max<1 || r.bases.length<=max){
+			}else if(max<1 || r.length()<=max){
 				temp.add(r);
 			}else{
 				final byte[] bases=r.bases;
@@ -837,8 +1068,8 @@ public class ReformatReads {
 	private static boolean containsReadsAboveSize(ArrayList<Read> list, int size){
 		for(Read r : list){
 			if(r!=null && r.bases!=null){
-				if(r.bases.length>size){
-					assert(r.mate==null) : "Read of length "+r.bases.length+">"+size+". Paired input is incompatible with 'breaklength'";
+				if(r.length()>size){
+					assert(r.mate==null) : "Read of length "+r.length()+">"+size+". Paired input is incompatible with 'breaklength'";
 					return true;
 				}
 			}
@@ -849,8 +1080,8 @@ public class ReformatReads {
 	private static boolean containsReadsOutsideSizeRange(ArrayList<Read> list, int min, int max){
 		for(Read r : list){
 			if(r!=null && r.bases!=null){
-				if((max>0 && r.bases.length>max) || r.bases.length<min){
-					assert(r.mate==null) : "Read of length "+r.bases.length+" outside of range "+min+"-"+max+". Paired input is incompatible with 'breaklength'";
+				if((max>0 && r.length()>max) || r.length()<min){
+					assert(r.mate==null) : "Read of length "+r.length()+" outside of range "+min+"-"+max+". Paired input is incompatible with 'breaklength'";
 					return true;
 				}
 			}
@@ -867,13 +1098,11 @@ public class ReformatReads {
 			}
 		}
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ffin1, ffin2, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, null, null);
 			if(verbose){System.err.println("Counting Reads");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		
 		ListNum<Read> ln=cris.nextList();
@@ -884,20 +1113,32 @@ public class ReformatReads {
 		while(reads!=null && reads.size()>0){
 			count+=reads.size();
 			for(Read r : reads){
-				bases+=r.bases.length;
+				bases+=r.length();
 				count2++;
 				if(r.mate!=null){
-					bases+=r.mate.bases.length;
+					bases+=r.mateLength();
 					count2++;
 				}
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 		errorState|=ReadWrite.closeStream(cris);
 		return new long[] {count, count2, bases};
+	}
+	
+	public static final byte[] makeQualityRemapArray(byte[] quantizeArray) {
+		byte[] array=new byte[128];
+		for(int i=0; i<array.length; i++){
+			byte q=0;
+			for(byte x : quantizeArray){
+				if(Tools.absdif(x, i)<=Tools.absdif(q, i)){q=x;}
+			}
+			array[i]=q;
+		}
+		return array;
 	}
 	
 	private void printOptions(){
@@ -908,7 +1149,7 @@ public class ReformatReads {
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
@@ -951,12 +1192,35 @@ public class ReformatReads {
 	private boolean verifypairing=false;
 	private boolean allowIdenticalPairNames=true;
 	private boolean trimBadSequence=false;
+	private boolean chastityFilter=false;
+	/** Crash if a barcode is encountered that contains Ns or is not in the table */
+	private final boolean failBadBarcodes;
+	/** Remove reads with Ns in barcodes or that are not in the table */
+	private final boolean removeBadBarcodes;
+	/** Fail reads missing a barcode */
+	private final boolean failIfNoBarcode;
+	/** A set of valid barcodes; null if unused */
+	private final HashSet<String> barcodes;
 	private boolean deleteEmptyFiles=false;
 	private boolean mappedOnly=false;
+	private boolean unmappedOnly=false;
+	private boolean primaryOnly=false;
+	/** For sam file filtering: These bits must be set. */
+	private int requiredBits=0;
+	/** For sam file filtering: These bits must be unset */
+	private int filterBits=0;
 	/** Add /1 and /2 to paired reads */
 	private boolean addslash=false;
+	/** Change read name whitespace to underscores */
+	private boolean addunderscore=false;
+	private String slash1=" /1";
+	private String slash2=" /2";
+	private boolean stoptag=false;
+	private boolean iupacToN=false;
+	
 
 	private long maxReads=-1;
+	private long skipreads=-1;
 	private float samplerate=1f;
 	private long sampleseed=-1;
 	private boolean sampleReadsExact=false;
@@ -964,12 +1228,20 @@ public class ReformatReads {
 	private long sampleReadsTarget=0;
 	private long sampleBasesTarget=0;
 	
+	/** Recalibrate quality scores using matrices */
+	private boolean recalibrateQuality=false;
 	private boolean qtrimRight=false;
 	private boolean qtrimLeft=false;
-	private int forceTrimLeft=-1;
-	private int forceTrimRight=-1;
+	private final int forceTrimLeft;
+	private final int forceTrimRight;
+	private final int forceTrimRight2;
+	/** Trim right bases of the read modulo this value. 
+	 * e.g. forceTrimModulo=50 would trim the last 3bp from a 153bp read. */
+	private final int forceTrimModulo;
 	private byte trimq=6;
 	private byte minAvgQuality=0;
+	private int minAvgQualityBases=0;
+	private int maxNs=-1;
 	private int breakLength=0;
 	private int maxReadLength=0;
 	private int minReadLength=0;
@@ -977,10 +1249,18 @@ public class ReformatReads {
 	private float minGC=0;
 	private float maxGC=1;
 	private boolean filterGC=false;
+	private boolean tossJunk=false;
 	/** Toss pair only if both reads are shorter than limit */ 
 	private boolean requireBothBad=false;
 	
 	private boolean useSharedHeader;
+	
+	private byte[] remap1=null, remap2=null;
+	
+	private boolean quantizeQuality=false;
+	
+	private byte[] quantizeArray={0, 8, 13, 22, 27, 32, 37};
+	private final byte[] qualityRemapArray;
 	
 	/*--------------------------------------------------------------*/
 	
@@ -1001,7 +1281,6 @@ public class ReformatReads {
 	public boolean errorState=false;
 	private boolean overwrite=false;
 	private boolean append=false;
-	private boolean colorspace=false;
 	private boolean parsecustom=false;
 	private boolean testsize=false;
 	

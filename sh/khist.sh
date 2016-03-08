@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified November 4, 2014"
+	echo "Last modified April 10, 2015"
 	echo ""
 	echo "Description:  Generates a histogram of kmer counts for the input reads or assemblies."
 	echo "Can also normalize, error-correct, and/or bin reads by kmer depth."
@@ -69,7 +69,7 @@ usage(){
 	echo "Error detection parameters:"
 	echo "hdp=90.0 		(highdepthpercentile) Position in sorted kmer depth array used as proxy of a read's high kmer depth."
 	echo "ldp=25.0    		(lowdepthpercentile) Position in sorted kmer depth array used as proxy of a read's low kmer depth."
-	echo "tossbadreads=f		(tbr) Throw away reads detected as containing errors.  Only controls behavior of final pass."
+	echo "tossbadreads=f		(tbr) Throw away reads detected as containing errors."
 	echo "errordetectratio=125	(edr) Reads with a ratio of at least this much between their high and low depth kmers will be classified as error reads."
 	echo "highthresh=12		(ht) Threshold for high kmer.  A high kmer at this or above are considered non-error."
 	echo "lowthresh=3		(lt) Threshold for low kmer.  Kmers at this and below are always considered errors."
@@ -83,6 +83,7 @@ usage(){
 	echo "eccmaxqual=127		Do not correct bases with quality above this value."
 	echo "meo=f			(markErrorsOnly) Marks errors by reducing quality value of suspected errors; does not correct anything."
 	echo "mue=t			(markUncorrectableErrors) Marks errors only on uncorrectable reads; requires 'ecc=t'."
+	echo "overlap=f		Error correct by read overlap."
 	echo ""	
 	echo "Depth binning parameters:"
 	echo "lowbindepth=10		(lbd) Cutoff for low depth bin."
@@ -146,7 +147,7 @@ khist() {
 	#module load pigz
 	local CMD="java $EA $z $z2 -cp $CP jgi.KmerNormalize bits=32 ecc=f passes=1 keepall dr=f prefilter hist=stdout minprob=0 minqual=0 mindepth=0 minkmers=1 hashes=3 $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 khist "$@"

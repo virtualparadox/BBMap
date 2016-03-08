@@ -5,14 +5,15 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import bloom.KCountArray;
+import bloom.KmerCount7MTA;
+import bloom.KmerCountAbstract;
+
 import kmer.AbstractKmerTable;
 import kmer.HashBuffer;
-import kmer.KCountArray;
-import kmer.KmerCount7MTA;
 import kmer.Primes;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
@@ -45,6 +46,7 @@ public class KmerCountExact {
 	 */
 	public static void main(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -68,7 +70,7 @@ public class KmerCountExact {
 	 */
 	private static void printOptions(){
 		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.CountKmersExact in=<input file>");
+		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.KmerCountExact in=<input file>");
 		outstream.println("\nOptional flags:");
 		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
 		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
@@ -86,7 +88,7 @@ public class KmerCountExact {
 		outstream.println("minq=4             \tTrim quality threshold.");
 		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
 		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=80       \tLength of lines in fasta output");
+		outstream.println("fastawrap=70       \tLength of lines in fasta output");
 		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
@@ -108,20 +110,18 @@ public class KmerCountExact {
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.USE_UNPIGZ=true;
 		FastaReadInputStream.SPLIT_READS=false;
-		ByteFile.FORCE_MODE_BF2=Shared.THREADS>2;
+		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		
 		/* Initialize local variables with defaults */
-		boolean setOut=false, qtrimRight_=false, qtrimLeft_=false;
+		Parser parser=new Parser();
+		boolean setOut=false;
 		boolean rcomp_=true;
 		boolean useForest_=false, useTable_=false, useArray_=true, prealloc_=true;
 		long skipreads_=0;
 		int k_=31;
 		int ways_=-1;
-		byte qin=-1;
-		
-		byte trimq_=4;
-		byte minAvgQuality_=0;
 		int filterMax_=2;
+		boolean ecc_=false;
 		
 		{
 			boolean b=false;
@@ -141,7 +141,17 @@ public class KmerCountExact {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
+			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
@@ -171,36 +181,19 @@ public class KmerCountExact {
 				if(useArray_){useTable_=useForest_=false;}
 			}else if(a.equals("ways")){
 				ways_=Integer.parseInt(b);
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(a.equals("buflen") || a.equals("bufflen") || a.equals("bufferlength")){
 				buflen=Integer.parseInt(b);
 			}else if(a.equals("k")){
-				assert(b!=null) : "\nThe k key needs an integer value from 1 to 31, such as k=28\n";
+				assert(b!=null) : "\nk needs an integer value from 1 to 31, such as k=27.  Default is 31.\n";
 				k_=Integer.parseInt(b);
 			}else if(a.equals("skipreads")){
 				skipreads_=Tools.parseKMG(b);
 			}else if(a.equals("threads") || a.equals("t")){
-				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
-			}else if(a.equals("minavgquality") || a.equals("maq")){
-				minAvgQuality_=(byte)Integer.parseInt(b);
-			}else if(a.equals("minavgquality2") || a.equals("maq2")){
-				minAvgQuality_=(byte)Integer.parseInt(b);
-				Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
+				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.threads() : Integer.parseInt(b));
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
+			}else if(a.equals("ecc")){
+				ecc_=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				assert(false) : "Verbose flag is currently static final; must be recompiled to change.";
 //				verbose=Tools.parseBoolean(b);
@@ -208,37 +201,6 @@ public class KmerCountExact {
 				rcomp_=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Tools.parseKMG(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("trim") || a.equals("qtrim")){
-				if(b==null){qtrimRight_=qtrimLeft_=true;}
-				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrimLeft_=true;qtrimRight_=false;}
-				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrimLeft_=false;qtrimRight_=true;}
-				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){qtrimLeft_=qtrimRight_=true;}
-				else if(Character.isDigit(b.charAt(0))){
-					if(!qtrimLeft_ && !qtrimRight_){qtrimLeft_=qtrimRight_=true;}
-					trimq_=Byte.parseByte(b);
-				}else{qtrimRight_=qtrimLeft_=Tools.parseBoolean(b);}
-			}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
-				if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
-					TrimRead.optimalMode=true;
-					TrimRead.optimalBias=Float.parseFloat(b);
-					assert(TrimRead.optimalBias>=0 && TrimRead.optimalBias<1);
-				}else{
-					TrimRead.optimalMode=Tools.parseBoolean(b);
-				}
-			}else if(a.equals("trimright") || a.equals("qtrimright")){
-				qtrimRight_=Tools.parseBoolean(b);
-			}else if(a.equals("trimleft") || a.equals("qtrimleft")){
-				qtrimLeft_=Tools.parseBoolean(b);
-			}else if(a.equals("trimq") || a.equals("trimquality")){
-				trimq_=Byte.parseByte(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
 				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
 					prealloc_=Tools.parseBoolean(b);
@@ -246,22 +208,6 @@ public class KmerCountExact {
 					preallocFraction=Tools.max(0, Double.parseDouble(b));
 					prealloc_=(preallocFraction>0);
 				}
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 			}else if(a.equals("prefilter")){
 				if(b==null || b.length()<1 || !Character.isDigit(b.charAt(0))){
 					prefilter=Tools.parseBoolean(b);
@@ -312,8 +258,16 @@ public class KmerCountExact {
 			}
 		}
 		
-		
-		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
+		{//Process parser fields
+			Parser.processQuality();
+			
+			qtrimLeft=parser.qtrimLeft;
+			qtrimRight=parser.qtrimRight;
+			trimq=parser.trimq;
+			
+			minAvgQuality=parser.minAvgQuality;
+			minAvgQualityBases=parser.minAvgQualityBases;
+		}
 		
 		{
 			long memory=Runtime.getRuntime().maxMemory();
@@ -342,16 +296,14 @@ public class KmerCountExact {
 		useArray=useArray_;
 		rcomp=rcomp_;
 		skipreads=skipreads_;
-		trimq=trimq_;
-		minAvgQuality=minAvgQuality_;
 		WAYS=ways_;
 		filterMax=Tools.min(filterMax_, 0x7FFFFFFF);
+		ecc=ecc_;
 		
 		k=k_;
 		k2=k-1;
 		
-		qtrimRight=qtrimRight_;
-		qtrimLeft=qtrimLeft_;
+		if(k<1 || k>31){throw new RuntimeException("\nk needs an integer value from 1 to 31, such as k=27.  Default is 31.\n");}
 		
 		if(initialSize<1){
 			final long memOverWays=tableMemory/(12*WAYS);
@@ -363,11 +315,6 @@ public class KmerCountExact {
 		}
 		
 		/* Adjust I/O settings and filenames */
-		
-		if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}
 		
 		assert(FastaReadInputStream.settingsOK());
 		
@@ -499,7 +446,7 @@ public class KmerCountExact {
 		prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
-			KmerCount7MTA.CANONICAL=true;
+			KmerCountAbstract.CANONICAL=true;
 			
 			long precells=-1;
 			int cbits=1;
@@ -516,13 +463,13 @@ public class KmerCountExact {
 			if(prehashes<1){prehashes=2;}
 			
 			if(onePass){
-				prefilterArray=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, precells, prehashes, minq, true, maxReads, 1, 1, 1, 1, null);
+				prefilterArray=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, precells, prehashes, minq, true, ecc, maxReads, 1, 1, 1, 1, null);
 			}else if(precells>100000){
 				Timer ht=new Timer();
 				ht.start();
 				
 				ArrayList<String> extra=null;
-				prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, 0, precells, prehashes, minq, true, maxReads, 1, 1, 1, 1, null);
+				prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, 0, precells, prehashes, minq, true, ecc, maxReads, 1, 1, 1, 1, null);
 				assert(filterMax<prefilterArray.maxValue);
 				outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 				double uf=prefilterArray.usedFraction();
@@ -583,13 +530,12 @@ public class KmerCountExact {
 	private long loadKmers(){
 		
 		/* Create read input stream */
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ff1, ff2);
-			Thread cristhread=new Thread(cris);
-			cristhread.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, ff1.samOrBam(), ff1, ff2);
+			cris.start(); //4567
 		}
 		
 		/* Optionally skip the first reads, since initial reads may have lower quality */
@@ -602,11 +548,11 @@ public class KmerCountExact {
 			while(skipped<skipreads && reads!=null && reads.size()>0){
 				skipped+=reads.size();
 				
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			if(reads==null || reads.isEmpty()){
 				ReadWrite.closeStreams(cris);
 				System.err.println("Skipped all of the reads.");
@@ -663,7 +609,7 @@ public class KmerCountExact {
 		 * @param ros_ Unmatched read output stream (optional)
 		 * @param rosb_ Matched read output stream (optional)
 		 */
-		public ProcessThread(ConcurrentReadStreamInterface cris_){
+		public ProcessThread(ConcurrentReadInputStream cris_){
 			cris=cris_;
 			table=new HashBuffer(keySets, buflen);
 		}
@@ -692,8 +638,8 @@ public class KmerCountExact {
 					
 					//Determine whether to discard the reads based on average quality
 					if(minAvgQuality>0){
-						if(r1!=null && r1.quality!=null && r1.avgQuality()<minAvgQuality){r1.setDiscarded(true);}
-						if(r2!=null && r2.quality!=null && r2.avgQuality()<minAvgQuality){r2.setDiscarded(true);}
+						if(r1!=null && r1.quality!=null && r1.avgQuality(false, minAvgQualityBases)<minAvgQuality){r1.setDiscarded(true);}
+						if(r2!=null && r2.quality!=null && r2.avgQuality(false, minAvgQualityBases)<minAvgQuality){r2.setDiscarded(true);}
 					}
 					
 					int rlen1=0, rlen2=0;
@@ -715,10 +661,12 @@ public class KmerCountExact {
 						rlen2=r2.length();
 						if(rlen2<k){r2.setDiscarded(true);}
 					}
+					
+					if(ecc && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){BBMerge.findOverlapStrict(r1, r2, true);}
 
 					if(r1!=null){
 						if(r1.discarded()){
-							lowqBasesT+=r1.bases.length;
+							lowqBasesT+=r1.length();
 							lowqReadsT++;
 						}else{
 							long temp=addKmersToTable(r1);
@@ -728,7 +676,7 @@ public class KmerCountExact {
 					}
 					if(r2!=null){
 						if(r2.discarded()){
-							lowqBasesT+=r2.bases.length;
+							lowqBasesT+=r2.length();
 							lowqReadsT++;
 						}else{
 							long temp=addKmersToTable(r2);
@@ -739,11 +687,11 @@ public class KmerCountExact {
 				}
 				
 				//Fetch a new read list
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			added+=table.flush();
 		}
 		
@@ -845,7 +793,7 @@ public class KmerCountExact {
 		/*--------------------------------------------------------------*/
 		
 		/** Input read stream */
-		private final ConcurrentReadStreamInterface cris;
+		private final ConcurrentReadInputStream cris;
 		
 		private final HashBuffer table;
 		
@@ -908,7 +856,7 @@ public class KmerCountExact {
 			bsw.print("#Depth\t"+(cols==3 ? "RawCount\t" : "")+"Count\n");
 		}
 		
-		CoverageArray ca=new CoverageArray3();
+		CoverageArray ca=new CoverageArray3(-1, 500);
 		for(AbstractKmerTable set : keySets){
 			set.fillHistogram(ca, histMax);
 		}
@@ -1113,6 +1061,10 @@ public class KmerCountExact {
 	private final byte trimq;
 	/** Throw away reads below this average quality before trimming.  Default: 0 */
 	private final byte minAvgQuality;
+	/** If positive, calculate average quality from the first X bases only.  Default: 0 */
+	private final int minAvgQualityBases;
+	/** Quality-trim the left side */
+	private final boolean ecc;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
@@ -1123,8 +1075,6 @@ public class KmerCountExact {
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	public static int VERSION=1;
 	
 	/** Print messages to this stream */
 	private static PrintStream outstream=System.err;
@@ -1139,7 +1089,7 @@ public class KmerCountExact {
 	/** Verbose messages */
 	public static final boolean verbose=false;
 	/** Number of ProcessThreads */
-	public static int THREADS=Shared.THREADS;
+	public static int THREADS=Shared.threads();
 	/** Do garbage collection prior to printing memory usage */
 	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	

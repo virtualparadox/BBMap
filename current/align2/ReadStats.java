@@ -6,8 +6,8 @@ import java.util.Arrays;
 import dna.AminoAcid;
 
 import stream.Read;
+import stream.SamLine;
 
-import fileIO.FileFormat;
 import fileIO.TextStreamWriter;
 
 
@@ -45,6 +45,12 @@ public class ReadStats {
 			bqualHist=new long[2][MAXLEN][127];
 		}else{
 			bqualHist=null;
+		}
+		
+		if(QUAL_COUNT_HIST_FILE!=null){
+			qcountHist=new long[2][127];
+		}else{
+			qcountHist=null;
 		}
 
 		if(COLLECT_MATCH_STATS){
@@ -131,15 +137,21 @@ public class ReadStats {
 			idBaseHist=null;
 		}
 		
+		if(COLLECT_TIME_STATS){
+			timeHist=new LongList(1001);
+		}else{
+			timeHist=null;
+		}
+		
 	}
 	
 	public static ReadStats mergeAll(){
-
 		if(objectList==null || objectList.isEmpty()){return merged=null;}
 		if(objectList.size()==1){return merged=objectList.get(0);}
 		
 		ReadStats x=new ReadStats(false);
 		for(ReadStats rs : objectList){
+			x.read2Count+=rs.read2Count;
 			if(COLLECT_QUALITY_STATS){
 				for(int i=0; i<MAXLEN; i++){
 					x.qualLength[0][i]+=rs.qualLength[0][i];
@@ -162,6 +174,13 @@ public class ReadStats {
 							for(int k=0; k<x.bqualHist[i][j].length; k++){
 								x.bqualHist[i][j][k]+=rs.bqualHist[i][j][k];
 							}
+						}
+					}
+				}
+				if(QUAL_COUNT_HIST_FILE!=null){
+					for(int i=0; i<x.qcountHist.length; i++){
+						for(int j=0; j<x.qcountHist[i].length; j++){
+							x.qcountHist[i][j]+=rs.qcountHist[i][j];
 						}
 					}
 				}
@@ -233,6 +252,12 @@ public class ReadStats {
 				}
 			}
 			
+			if(COLLECT_TIME_STATS){
+				x.timeHist.add(rs.timeHist);
+			}
+
+			x.gcMaxReadLen=Tools.max(x.gcMaxReadLen, rs.gcMaxReadLen);
+			x.idMaxReadLen=Tools.max(x.idMaxReadLen, rs.idMaxReadLen);
 		}
 		
 		merged=x;
@@ -241,25 +266,32 @@ public class ReadStats {
 	
 	public void addToQualityHistogram(final Read r){
 		if(r==null){return;}
-		addToQualityHistogram(r, r.obj, 0);
-		if(r.mate!=null){addToQualityHistogram(r.mate, r.obj, 1);}
+		addToQualityHistogram2(r);
+		if(r.mate!=null){addToQualityHistogram2(r.mate);}
 	}
 	
-	private void addToQualityHistogram(final Read r, Object obj, final int pairnum){
+	private void addToQualityHistogram2(final Read r){
+		int pairnum=r.pairnum();
 		if(r==null || r.quality==null || r.quality.length<1){return;}
-		final byte[] quals, bases;
-		if(obj!=null && obj.getClass()==TrimRead.class){
-			quals=(pairnum==0 ? ((TrimRead)obj).qual1 : ((TrimRead)obj).qual2);
-			bases=(pairnum==0 ? ((TrimRead)obj).bases1 : ((TrimRead)obj).bases2);
-		}else{
-			quals=r.quality;
-			bases=r.bases;
+		byte[] quals=r.quality, bases=r.bases;
+		final Object obj=r.obj;
+		if(obj!=null){
+			if(obj.getClass()==SamLine.class){
+				pairnum=((SamLine)obj).pairnum();
+			}else if(obj.getClass()==TrimRead.class){
+				quals=(pairnum==0 ? ((TrimRead)obj).qual1 : ((TrimRead)obj).qual2);
+				bases=(pairnum==0 ? ((TrimRead)obj).bases1 : ((TrimRead)obj).bases2);
+			}
 		}
+		if(pairnum==1){read2Count++;}
 		addToQualityHistogram(quals, pairnum);
-		int x=Read.avgQualityByProbability(bases, quals);
+		int x=Read.avgQualityByProbability(bases, quals, true, 0);
 		aqualArray[pairnum][x]++;
 		if(BQUAL_HIST_FILE!=null){
 			addToBQualityHistogram(quals, pairnum);
+		}
+		if(QUAL_COUNT_HIST_FILE!=null){
+			addToQCountHistogram(quals, pairnum);
 		}
 	}
 	
@@ -287,12 +319,27 @@ public class ReadStats {
 		}
 	}
 	
+	private void addToQCountHistogram(byte[] qual, int pairnum){
+		if(qual==null || qual.length<1){return;}
+		final long[] qch=qcountHist[pairnum];
+		for(byte q : qual){
+			qch[q]++;
+		}
+	}
+	
 	public void addToQualityAccuracy(final Read r){
+		if(r==null){return;}
+		addToQualityAccuracy(r, 0);
+		if(r.mate!=null){addToQualityAccuracy(r.mate, 1);}
+	}
+	
+	public void addToQualityAccuracy(final Read r, int pairnum){
 		if(r==null || r.quality==null || r.quality.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
 		final byte[] bases=r.bases;
 		final byte[] qual=r.quality;
-		final byte[] match=r.match;
-
+		byte[] match=r.match;
+		
+		if(match!=null && r.shortmatch()){match=Read.toLongMatchString(match);}
 
 		final boolean plus=(r.strand()==0);
 		int rpos=0;
@@ -329,7 +376,7 @@ public class ReadStats {
 					}
 					rpos--;
 				}else{
-					assert(!Character.isDigit(m));
+					assert(!Character.isDigit(m)) : ((char)m);
 				}
 			}
 
@@ -346,7 +393,7 @@ public class ReadStats {
 	}
 	
 	private void addToErrorHistogram(final Read r, int pairnum){
-		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		if(r==null || r.bases==null || r.length()<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
 		int x=r.countSubs();
 		errorHist.increment(x, 1);
 	}
@@ -359,7 +406,7 @@ public class ReadStats {
 	
 	private void addToLengthHistogram(final Read r, int pairnum){
 		if(r==null || r.bases==null){return;}
-		int x=Tools.min(r.bases.length, 80000); 
+		int x=Tools.min(r.length(), MAXLENGTHLEN); 
 		lengthHist.increment(x, 1);
 	}
 	
@@ -372,6 +419,7 @@ public class ReadStats {
 	private void addToGCHistogram(final Read r, int pairnum){
 		if(r==null || r.bases==null){return;}
 		gcHist[Tools.min(GC_BINS, (int)(r.gc()*(GC_BINS+1)))]++;
+		gcMaxReadLen=Tools.max(r.length(), gcMaxReadLen);
 	}
 	
 	public void addToIdentityHistogram(final Read r){
@@ -381,9 +429,23 @@ public class ReadStats {
 	}
 		
 	private void addToIdentityHistogram(final Read r, int pairnum){
-		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
-		idHist[(int)(r.identity()*ID_BINS)]++;
-		idBaseHist[(int)(r.identity()*ID_BINS)]+=r.bases.length;
+		if(r==null || r.bases==null || r.length()<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		float id=r.identity();
+		idHist[(int)(id*ID_BINS)]++;
+		idBaseHist[(int)(id*ID_BINS)]+=r.length();
+		idMaxReadLen=Tools.max(r.length(), idMaxReadLen);
+	}
+	
+	public void addToTimeHistogram(final Read r){
+		if(r==null){return;}
+		addToTimeHistogram(r, 0);//Time for pairs is the same.
+	}
+	
+	private void addToTimeHistogram(final Read r, int pairnum){
+		if(r==null){return;}
+		assert(r.obj!=null && r.obj.getClass()==Long.class);
+		int x=(int)Tools.min(((Long)r.obj).longValue(), MAXTIMELEN); 
+		timeHist.increment(x, 1);
 	}
 	
 	public void addToIndelHistogram(final Read r){
@@ -393,7 +455,7 @@ public class ReadStats {
 	}
 		
 	private void addToIndelHistogram(final Read r, int pairnum){
-		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		if(r==null || r.bases==null || r.length()<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
 		final byte[] bases=r.bases, match=r.match;
 		final int limit=Tools.min(bases.length, MAXLEN);
 		
@@ -432,12 +494,19 @@ public class ReadStats {
 	
 	public void addToMatchHistogram(final Read r){
 		if(r==null){return;}
-		addToMatchHistogram(r, 0);
-		if(r.mate!=null){addToMatchHistogram(r.mate, 1);}
+		addToMatchHistogram2(r);
+		if(r.mate!=null){addToMatchHistogram2(r.mate);}
 	}
 	
-	private void addToMatchHistogram(final Read r, final int pairnum){
-		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+	private void addToMatchHistogram2(final Read r){
+		if(r==null || r.bases==null || r.length()<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		int pairnum=r.pairnum();
+		if(r.obj!=null){
+			if(r.obj.getClass()==SamLine.class){
+				pairnum=((SamLine)r.obj).pairnum();
+			}
+		}
+		if(pairnum==1){read2Count++;}
 		final byte[] bases=r.bases;
 		final int limit=Tools.min(bases.length, MAXLEN);
 		final long[] ms=matchSum[pairnum], ds=delSum[pairnum], is=insSum[pairnum],
@@ -508,13 +577,19 @@ public class ReadStats {
 	}
 	
 	public void addToBaseHistogram(final Read r){
-		addToBaseHistogram(r, 0);
-		if(r.mate!=null){addToBaseHistogram(r.mate, 1);}
+		addToBaseHistogram2(r);
+		if(r.mate!=null){addToBaseHistogram2(r.mate);}
 	}
 	
-	public void addToBaseHistogram(final Read r, final int pairnum){
+	public void addToBaseHistogram2(final Read r){
 		if(r==null || r.bases==null){return;}
-		
+		int pairnum=r.pairnum();
+		if(r.obj!=null){
+			if(r.obj.getClass()==SamLine.class){
+				pairnum=((SamLine)r.obj).pairnum();
+			}
+		}
+		if(pairnum==1){read2Count++;}
 		final byte[] bases=r.bases;
 		final LongList[] lists=baseHist[pairnum];
 		for(int i=0; i<bases.length; i++){
@@ -525,19 +600,22 @@ public class ReadStats {
 	}
 	
 	public static boolean testFiles(boolean allowDuplicates){
-		return Tools.testOutputFiles(overwrite, append, allowDuplicates, AVG_QUAL_HIST_FILE, QUAL_HIST_FILE, BQUAL_HIST_FILE, BQUAL_HIST_OVERALL_FILE, 
+		return Tools.testOutputFiles(overwrite, append, allowDuplicates, 
+				AVG_QUAL_HIST_FILE, QUAL_HIST_FILE, BQUAL_HIST_FILE, BQUAL_HIST_OVERALL_FILE, QUAL_COUNT_HIST_FILE, 
 				MATCH_HIST_FILE, INSERT_HIST_FILE, BASE_HIST_FILE, QUAL_ACCURACY_FILE, INDEL_HIST_FILE, ERROR_HIST_FILE, LENGTH_HIST_FILE, 
-				GC_HIST_FILE, IDENTITY_HIST_FILE);
+				GC_HIST_FILE, IDENTITY_HIST_FILE, TIME_HIST_FILE);
 	}
 	
-	public static boolean writeAll(boolean paired){
+	public static boolean writeAll(){
 		if(collectingStats()){
 			ReadStats rs=mergeAll();
+			boolean paired=rs.read2Count>0;
 			
 			if(AVG_QUAL_HIST_FILE!=null){rs.writeAverageQualityToFile(AVG_QUAL_HIST_FILE, paired);}
 			if(QUAL_HIST_FILE!=null){rs.writeQualityToFile(QUAL_HIST_FILE, paired);}
 			if(BQUAL_HIST_FILE!=null){rs.writeBQualityToFile(BQUAL_HIST_FILE, paired);}
 			if(BQUAL_HIST_OVERALL_FILE!=null){rs.writeBQualityOverallToFile(BQUAL_HIST_OVERALL_FILE);}
+			if(QUAL_COUNT_HIST_FILE!=null){rs.writeQCountToFile(QUAL_COUNT_HIST_FILE, paired);}
 			if(MATCH_HIST_FILE!=null){rs.writeMatchToFile(MATCH_HIST_FILE, paired);}
 			if(INSERT_HIST_FILE!=null){rs.writeInsertToFile(INSERT_HIST_FILE);}
 			if(BASE_HIST_FILE!=null){rs.writeBaseContentToFile(BASE_HIST_FILE, paired);}
@@ -548,6 +626,7 @@ public class ReadStats {
 			if(LENGTH_HIST_FILE!=null){rs.writeLengthToFile(LENGTH_HIST_FILE);}
 			if(GC_HIST_FILE!=null){rs.writeGCToFile(GC_HIST_FILE, true);}
 			if(IDENTITY_HIST_FILE!=null){rs.writeIdentityToFile(IDENTITY_HIST_FILE, true);}
+			if(TIME_HIST_FILE!=null){rs.writeTimeToFile(TIME_HIST_FILE);}
 			
 			return rs.errorState;
 		}
@@ -582,10 +661,47 @@ public class ReadStats {
 		errorState|=tsw.errorState;
 	}
 	
+	public void writeQCountToFile(String fname, boolean writePaired){
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
+		tsw.start();
+		tsw.print("#Quality\tcount1\tfraction1"+(writePaired ? "\tcount2\tfraction2" : "")+"\n");
+
+		long sum1=Tools.sum(qcountHist[0]);
+		long sum2=Tools.sum(qcountHist[1]);
+		double mult1=1.0/Tools.max(1, sum1);
+		double mult2=1.0/Tools.max(1, sum2);
+		
+		long y=sum1+sum2;
+		for(int i=0; i<qcountHist[0].length; i++){
+			long x1=qcountHist[0][i];
+			long x2=qcountHist[1][i];
+			y-=x1;
+			y-=x2;
+			tsw.print(String.format("%d\t%d\t%.5f", i, x1, x1*mult1));
+			if(writePaired){
+				tsw.print(String.format("\t%d\t%.5f", x2, x2*mult2));
+			}
+			tsw.print("\n");
+			if(y<=0){break;}
+		}
+		tsw.poison();
+		tsw.waitForFinish();
+		errorState|=tsw.errorState;
+	}
+	
 	public void writeQualityToFile(String fname, boolean writePaired){
 		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
 		tsw.start();
-		tsw.print("#BaseNum\tRead1_linear\tRead1_log"+(writePaired ? "\tRead2_linear\tRead2_log" : "")+"\n");
+		final boolean measure=(matchSum!=null);
+		if(measure){
+			if(writePaired){
+				tsw.print("#BaseNum\tRead1_linear\tRead1_log\tRead1_measured\tRead2_linear\tRead2_log\tRead2_measured\n");
+			}else{
+				tsw.print("#BaseNum\tRead1_linear\tRead1_log\tRead1_measured\n");
+			}
+		}else{
+			tsw.print("#BaseNum\tRead1_linear\tRead1_log"+(writePaired ? "\tRead2_linear\tRead2_log" : "")+"\n");
+		}
 		
 		final long[] qs1=qualSum[0], qs2=qualSum[1], ql1=qualLength[0], ql2=qualLength[1];
 		final double[] qsd1=qualSumDouble[0], qsd2=qualSumDouble[1];
@@ -605,7 +721,13 @@ public class ReadStats {
 				clog=qsd2[i]/(double)Tools.max(1, ql2[i]);
 				blog=QualityTools.probErrorToPhredDouble(blog);
 				clog=QualityTools.probErrorToPhredDouble(clog);
-				tsw.print(String.format("%d\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, clin, clog));
+				if(measure){
+					double bcalc=calcQualityAtPosition(i, 0);
+					double ccalc=calcQualityAtPosition(i, 1);
+					tsw.print(String.format("%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc, clin, clog, ccalc));
+				}else{
+					tsw.print(String.format("%d\t%.3f\t%.3f\t%.3f\t%.3f\n", a, blin, blog, clin, clog));
+				}
 			}
 		}else{
 			for(int i=0; i<MAXLEN && ql1[i]>0; i++){
@@ -614,12 +736,32 @@ public class ReadStats {
 				blin=qs1[i]/(double)Tools.max(1, ql1[i]);
 				blog=qsd1[i]/(double)Tools.max(1, ql1[i]);
 				blog=QualityTools.probErrorToPhredDouble(blog);
-				tsw.print(String.format("%d\t%.3f\t%.3f\n", a, blin, blog));
+				if(measure){
+					double bcalc=calcQualityAtPosition(i, 0);
+					tsw.print(String.format("%d\t%.3f\t%.3f\t%.3f\n", a, blin, blog, bcalc));
+				}else{
+					tsw.print(String.format("%d\t%.3f\t%.3f\n", a, blin, blog));
+				}
 			}
 		}
 		tsw.poison();
 		tsw.waitForFinish();
 		errorState|=tsw.errorState;
+	}
+	
+	private double calcQualityAtPosition(int pos, int pairnum){
+		long m=matchSum[pairnum][pos];
+		long d=delSum[pairnum][pos]; //left-adjacent deletion
+		long d2=delSum[pairnum][Tools.min(pos, delSum[pairnum].length-1)]; //right-adjacent deletion
+		long i=insSum[pairnum][pos];
+		long s=subSum[pairnum][pos];
+		long n=nSum[pairnum][pos]; //Not generally useful
+		long good=Tools.max(0, m*2-d-d2);
+		long total=Tools.max(0, m*2+i*2+s*2); //not d
+		long bad=total-good;
+		if(total<1){return 0;}
+		double error=bad/(double)total;
+		return QualityTools.probErrorToPhredDouble(error);
 	}
 	
 	public void writeBQualityOverallToFile(String fname){
@@ -701,16 +843,50 @@ public class ReadStats {
 	}
 	
 	public void writeQualityAccuracyToFile(String fname){
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
-		tsw.start();
-		tsw.print("#Quality\tMatch\tSub\tIns\tDel\tTrueQuality\tTrueQualitySub\n");
 		
 		int max=qualMatch.length;
 		for(int i=max-1; i>=0; i--){
 			if(qualMatch[i]+qualSub[i]+qualIns[i]+qualDel[i]>0){break;}
 			max=i;
 		}
-		
+
+		double devsum=0;
+		double devsumSub=0;
+		long observations=0;
+		for(int i=0; i<max; i++){
+			long qm=qualMatch[i]*2;
+			long qs=qualSub[i]*2;
+			long qi=qualIns[i]*2;
+			long qd=qualDel[i];
+			
+			double phred=-1;
+			double phredSub=-1;
+			
+			long sum=qm+qs+qi+qd;
+			if(sum>0){
+				double mult=1.0/sum;
+				double subRate=(qs)*mult;
+				double errorRate=(qs+qi+qd)*mult;
+				
+				phredSub=QualityTools.probErrorToPhredDouble(subRate);
+				phred=QualityTools.probErrorToPhredDouble(errorRate);
+				double deviation=phred-i;
+				double deviationSub=phredSub-i;
+				if(i==Read.MIN_CALLED_QUALITY && deviation<0){deviation=0;}
+				else if(i==Read.MAX_CALLED_QUALITY && max==Read.MAX_CALLED_QUALITY+1 && deviation>0){deviation=0;}
+				if(i==Read.MIN_CALLED_QUALITY && deviationSub<0){deviationSub=0;}
+				else if(i==Read.MAX_CALLED_QUALITY && max==Read.MAX_CALLED_QUALITY+1 && deviationSub>0){deviationSub=0;}
+				devsum+=(Math.abs(deviation)*sum);
+				devsumSub+=(Math.abs(deviationSub)*sum);
+				observations+=sum;
+			}
+		}
+
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
+		tsw.start();
+		tsw.print(String.format("#Deviation\t%.3f\n", devsum/observations));
+		tsw.print(String.format("#DeviationSub\t%.3f\n", devsumSub/observations));
+		tsw.print("#Quality\tMatch\tSub\tIns\tDel\tTrueQuality\tTrueQualitySub\n");
 		for(int i=0; i<max; i++){
 			long qm=qualMatch[i]*2;
 			long qs=qualSub[i]*2;
@@ -875,14 +1051,16 @@ public class ReadStats {
 			}
 		}
 		
-		tsw.print("#Length_bin\tDeletions\n");
-		max=delHist2.size;
-		for(int i=0; i<max; i++){
-			long x=delHist2.get(i);
-			if(x>0 || !skipZeroIndel){
-				tsw.print((i*DEL_BIN)+"\t"+x+"\n");
-			}
-		}
+		//TODO: Disabled because it was irritating when graphing.  Should write to a different file.
+//		tsw.print("#Length_bin\tDeletions\n");
+//		max=delHist2.size;
+//		for(int i=0; i<max; i++){
+//			long x=delHist2.get(i);
+//			if(x>0 || !skipZeroIndel){
+//				tsw.print((i*DEL_BIN)+"\t"+x+"\n");
+//			}
+//		}
+		
 		tsw.poison();
 		tsw.waitForFinish();
 		errorState|=tsw.errorState;
@@ -894,6 +1072,10 @@ public class ReadStats {
 	
 	public void writeLengthToFile(String fname){
 		writeHistogramToFile(fname, "#Length\tCount\n", lengthHist, false);
+	}
+	
+	public void writeTimeToFile(String fname){
+		writeHistogramToFile(fname, "#Time\tCount\n", timeHist, false);
 	}
 	
 	public void writeHistogramToFile(String fname, String header, LongList hist, boolean printZeros){
@@ -915,24 +1097,61 @@ public class ReadStats {
 	}
 	
 	public void writeGCToFile(String fname, boolean printZeros){
-		final double mult=100.0/(GC_BINS);
-		final long[] hist=gcHist;
-		final int max=hist.length;
+		final long[] hist;
+		if(GC_BINS_AUTO && gcMaxReadLen+1<gcHist.length){
+			hist=Tools.downsample(gcHist, gcMaxReadLen+1);
+		}else{
+			hist=gcHist;
+		}
+		final int bins=hist.length;
+		final double gcMult=100.0/Tools.max(1, bins-1);
+		final long total=Tools.sum(hist);
+		final long max=Tools.max(hist);
+		final double countsPerX=Tools.max(1, ((max*1000.0)/40));
+		final double fractionMult=1.0/Tools.max(1, total);
+		long sum=0;
 		
 		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
 		tsw.start();
-		tsw.print("#Mean\t"+String.format("%.3f", Tools.averageHistogram(hist)*mult)+"\n");
-		tsw.print("#Median\t"+String.format("%.3f", Tools.percentile(hist, 0.5)*mult)+"\n");
-		tsw.print("#Mode\t"+String.format("%.3f", Tools.calcMode(hist)*mult)+"\n");
-		tsw.print("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(hist)*mult)+"\n");
-		tsw.print("#GC\tCount\n");
+		tsw.print("#Mean\t"+String.format("%.3f", Tools.averageHistogram(hist)*gcMult)+"\n");
+		tsw.print("#Median\t"+String.format("%.3f", Tools.percentile(hist, 0.5)*gcMult)+"\n");
+		tsw.print("#Mode\t"+String.format("%.3f", Tools.calcMode(hist)*gcMult)+"\n");
+		tsw.print("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(hist)*gcMult)+"\n");
+		if(GC_PLOT_X){
+			tsw.print("#GC\tCount\tCumulative\tPlot\n");
+		}else{
+			tsw.print("#GC\tCount\n");
+		}
 		
-		for(int i=0; i<max; i++){
+		for(int i=0; i<bins; i++){
 			long x=hist[i];
+			sum+=x;
 			if(x>0 || printZeros){
 				//This assumes GC_BINS==100
 //				tsw.print(i+"\t"+x+"\n");
-				tsw.print(String.format("%.1f", i*mult)+"\t"+x+"\n");
+				if(GC_PLOT_X){
+					tsw.print(String.format("%.1f\t%d\t", i*gcMult, x));
+					
+					tsw.print(String.format("%.3f\t", sum*fractionMult));
+					
+//					int len=(int)((x*6000)/total);
+//					int len2=len/8;
+//					for(int j=0; j<len2; j++){tsw.print("X");}
+//					if(len2<1 && x>0){
+//						if(len>0){tsw.print("x");}
+//						else{tsw.print(".");}
+//					}
+					int len=(int)((x*1000)/countsPerX);
+					for(int j=0; j<len; j++){tsw.print("X");}
+					if(len<1 && x>0){
+						if((x*1000f)/countsPerX>0.1f){tsw.print("x");}
+						else{tsw.print(".");}
+					} 
+					
+					tsw.print("\n");
+				}else{
+					tsw.print(String.format("%.1f\t%d\n", i*gcMult, x));
+				}
 			}
 		}
 		tsw.poison();
@@ -941,23 +1160,29 @@ public class ReadStats {
 	}
 	
 	public void writeIdentityToFile(String fname, boolean printZeros){
-		final long[] hist=idHist;
-		final long[] histb=idBaseHist;
-		final double mult=100.0/ID_BINS;
+		final long[] hist, histb;
+		if(ID_BINS_AUTO && idMaxReadLen+1<idHist.length){
+			hist=Tools.downsample(idHist, idMaxReadLen+1);
+			histb=Tools.downsample(idBaseHist, idMaxReadLen+1);
+		}else{
+			hist=idHist;
+			histb=idBaseHist;
+		}
 		final int max=hist.length;
+		final double mult=100.0/(max-1);
 		
 		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
 		tsw.start();
 		
 		
 		tsw.print("#Mean_reads\t"+String.format("%.3f", (Tools.averageHistogram(hist)*mult))+"\n");
-		tsw.print("#Mean_bases\t"+(String.format("%.3f", Tools.averageHistogram(idBaseHist)*mult))+"\n");
-		tsw.print("#Median_reads\t"+(Tools.percentile(hist, 0.5)*mult)+"\n");
-		tsw.print("#Median_bases\t"+(Tools.percentile(idBaseHist, 0.5)*mult)+"\n");
-		tsw.print("#Mode_reads\t"+(Tools.calcMode(hist)*mult)+"\n");
-		tsw.print("#Mode_bases\t"+(Tools.calcMode(idBaseHist)*mult)+"\n");
+		tsw.print("#Mean_bases\t"+(String.format("%.3f", Tools.averageHistogram(histb)*mult))+"\n");
+		tsw.print("#Median_reads\t"+(int)Math.round(Tools.percentile(hist, 0.5)*mult)+"\n");
+		tsw.print("#Median_bases\t"+(int)Math.round(Tools.percentile(histb, 0.5)*mult)+"\n");
+		tsw.print("#Mode_reads\t"+(int)Math.round(Tools.calcMode(hist)*mult)+"\n");
+		tsw.print("#Mode_bases\t"+(int)Math.round(Tools.calcMode(histb)*mult)+"\n");
 		tsw.print("#STDev_reads\t"+String.format("%.3f", (Tools.standardDeviationHistogram(hist)*mult))+"\n");
-		tsw.print("#STDev_bases\t"+String.format("%.3f", (Tools.standardDeviationHistogram(idBaseHist)*mult))+"\n");
+		tsw.print("#STDev_bases\t"+String.format("%.3f", (Tools.standardDeviationHistogram(histb)*mult))+"\n");
 		tsw.print("#Identity\tReads\tBases\n");
 		
 		for(int i=0; i<max; i++){
@@ -973,8 +1198,11 @@ public class ReadStats {
 	
 	public static boolean collectingStats(){
 		return COLLECT_QUALITY_STATS || COLLECT_QUALITY_ACCURACY || COLLECT_MATCH_STATS || COLLECT_INSERT_STATS || COLLECT_BASE_STATS
-				|| COLLECT_INDEL_STATS || COLLECT_GC_STATS || COLLECT_ERROR_STATS || COLLECT_LENGTH_STATS || COLLECT_IDENTITY_STATS;
+				|| COLLECT_INDEL_STATS || COLLECT_GC_STATS || COLLECT_ERROR_STATS || COLLECT_LENGTH_STATS || COLLECT_IDENTITY_STATS || COLLECT_TIME_STATS;
 	}
+	
+	//Tracks to see if read2s have been encountered, for displaying stats.
+	private long read2Count=0;
 	
 	public final long[][] aqualArray;
 	public final long[][] qualLength;
@@ -982,6 +1210,8 @@ public class ReadStats {
 	
 	public final long[][][] bqualHist;
 	public final long[] bqualHistOverall;
+	
+	public final long[][] qcountHist;
 	
 	public final double[][] qualSumDouble;
 	
@@ -1001,6 +1231,8 @@ public class ReadStats {
 	public final long[] gcHist;
 	public final long[] idHist;
 	public final long[] idBaseHist;
+	private int gcMaxReadLen=1;
+	private int idMaxReadLen=1;
 
 	public final LongList[][] baseHist;
 	
@@ -1016,16 +1248,22 @@ public class ReadStats {
 	public final LongList delHist;
 	/** Deletion length, binned  */
 	public final LongList delHist2;
+	/** Time */
+	public final LongList timeHist;
 	
 	public static final int MAXLEN=6000;
-	public static final int MAXINSERTLEN=24000;
+	public static final int MAXINSERTLEN=40000;
 	public static final int MAXLENGTHLEN=80000;
+	public static final int MAXTIMELEN=80000;
 	public static final int MAXINSLEN=1000;
 	public static final int MAXDELLEN=1000;
 	public static final int MAXDELLEN2=1000000;
 	public static final int DEL_BIN=100;
 	public static int GC_BINS=100;
 	public static int ID_BINS=100;
+	public static boolean ID_BINS_AUTO=false;
+	public static boolean GC_BINS_AUTO=false;
+	public static boolean GC_PLOT_X=false;
 	
 	public boolean errorState=false;
 	
@@ -1042,10 +1280,12 @@ public class ReadStats {
 	public static boolean COLLECT_ERROR_STATS=false;
 	public static boolean COLLECT_LENGTH_STATS=false;
 	public static boolean COLLECT_IDENTITY_STATS=false;
+	public static boolean COLLECT_TIME_STATS=false;
 	
 	public static String AVG_QUAL_HIST_FILE=null;
 	public static String QUAL_HIST_FILE=null;
 	public static String BQUAL_HIST_FILE=null;
+	public static String QUAL_COUNT_HIST_FILE=null;
 	public static String BQUAL_HIST_OVERALL_FILE=null;
 	public static String QUAL_ACCURACY_FILE=null;
 	public static String MATCH_HIST_FILE=null;
@@ -1056,6 +1296,7 @@ public class ReadStats {
 	public static String LENGTH_HIST_FILE=null;
 	public static String GC_HIST_FILE=null;
 	public static String IDENTITY_HIST_FILE=null;
+	public static String TIME_HIST_FILE=null;
 	
 	public static boolean overwrite=false;
 	public static boolean append=false;

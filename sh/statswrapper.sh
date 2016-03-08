@@ -59,7 +59,7 @@ stats() {
 	#module load oracle-jdk/1.7_64bit
 	local CMD="java $EA $z -cp $CP jgi.AssemblyStatsWrapper $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 stats "$@"

@@ -7,10 +7,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 
-import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SiteScore;
 
@@ -141,7 +141,7 @@ public class BBSplitter {
 				}else if(a.equals("build")){
 					build=Integer.parseInt(b);
 					unparsed.add(args[i]);
-				}else if(a.equals("basename")){
+				}else if(a.equals("basename") || a.equals("pattern")){
 					basename=b;
 					assert(b==null || (b.indexOf('%')>=0 && (b.indexOf('%')<b.lastIndexOf('.')))) : 
 						"basename must contain a '%' symbol prior to file extension.";
@@ -156,8 +156,11 @@ public class BBSplitter {
 				}else if(a.equals("verbose")){
 					verbose=Tools.parseBoolean(b);
 					unparsed.add(args[i]);
+				}else if(a.equals("rebuild")){
+					forceRebuild=Tools.parseBoolean(b);
+					unparsed.add(args[i]);
 				}else if(a.equals("fastawrap")){
-					FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+					Shared.FASTA_WRAP=Integer.parseInt(b);
 				}else{
 					unparsed.add(args[i]);
 				}
@@ -210,25 +213,7 @@ public class BBSplitter {
 			}else if(a.equals("ref") && b!=null){
 				args[i]=null;
 				removed++;
-				String[] files=b.split(",");
-				for(String file : files){
-					String name=file.replace('\\', '/');
-					int x=name.lastIndexOf('/');
-					if(x>=0){name=name.substring(x+1);}
-					while(name.endsWith(".zip") || name.endsWith(".bz2") || name.endsWith(".gz") || name.endsWith(".gzip")){
-						name=name.substring(0, name.lastIndexOf('.'));
-					}
-					if(name.lastIndexOf('.')>=0){
-						name=name.substring(0, name.lastIndexOf('.'));
-					}
-					set.add(name);
-					LinkedHashSet<String> list=map.get(name);
-					if(list==null){
-						list=new LinkedHashSet<String>();
-						map.put(name, list);
-					}
-					list.add(file);
-				}
+				processRef(b, set, map);
 			}
 		}
 		if(set.isEmpty() && removed==0){return args;}
@@ -262,6 +247,28 @@ public class BBSplitter {
 		return args2;
 	}
 	
+	private static void processRef(String b, LinkedHashSet<String> set, HashMap<String,LinkedHashSet<String>> map){
+		
+		ArrayList<String> files=Tools.getFileOrFiles(b, null, true, false, false, false);
+		for(String file : files){
+			String name=file.replace('\\', '/');
+			int x=name.lastIndexOf('/');
+			if(x>=0){name=name.substring(x+1);}
+			while(name.endsWith(".zip") || name.endsWith(".bz2") || name.endsWith(".gz") || name.endsWith(".gzip")){
+				name=name.substring(0, name.lastIndexOf('.'));
+			}
+			if(name.lastIndexOf('.')>=0){
+				name=name.substring(0, name.lastIndexOf('.'));
+			}
+			set.add(name);
+			LinkedHashSet<String> list=map.get(name);
+			if(list==null){
+				list=new LinkedHashSet<String>();
+				map.put(name, list);
+			}
+			list.add(file);
+		}
+	}
 	
 	public static ArrayList<String> gatherLists(LinkedHashSet<String> nameSet, String basename){
 		if(basename==null){return null;}
@@ -380,7 +387,7 @@ public class BBSplitter {
 		String refname0="merged_ref_"+key+".fa.gz";
 		String refname=root+"/"+refname0;
 		
-		{
+		if(!forceRebuild){
 			File f=new File(refname);
 			if(f.exists()){
 				//			Data.sysout.println("Merged reference file /ref/genome/"+build+"/"+refname0+" already exists; skipping merge.");
@@ -395,7 +402,7 @@ public class BBSplitter {
 		//			Data.sysout.println("Creating merged reference file /ref/genome/"+build+"/"+refname0);
 		Data.sysout.println("Creating merged reference file "+refname);
 		
-		TextStreamWriter tsw=new TextStreamWriter(refname, overwrite, false, true);
+		TextStreamWriter tsw=new TextStreamWriter(refname, overwrite || forceRebuild, false, true);
 		tsw.start();
 		for(String fname : fnames){
 			TextFile tf=new TextFile(fname, false, false);
@@ -482,10 +489,10 @@ public class BBSplitter {
 		return set;
 	}
 	
-	public static synchronized HashMap<String, RTextOutputStream3> makeOutputStreams(String[] args, boolean OUTPUT_READS, boolean OUTPUT_ORDERED_READS, 
+	public static synchronized HashMap<String, ConcurrentReadOutputStream> makeOutputStreams(String[] args, boolean OUTPUT_READS, boolean OUTPUT_ORDERED_READS, 
 			int buff, boolean paired, boolean overwrite_, boolean append_, boolean ambiguous){
 //		assert(false) : Arrays.toString(args);
-		HashMap<String, RTextOutputStream3> table=new HashMap<String, RTextOutputStream3>();
+		HashMap<String, ConcurrentReadOutputStream> table=new HashMap<String, ConcurrentReadOutputStream>();
 		for(String arg : args){
 			String[] split=arg.split("=");
 			String a=split[0];
@@ -495,7 +502,7 @@ public class BBSplitter {
 			if(arg.indexOf('=')>0 && a.toLowerCase().startsWith("out_")){
 				String name=a.substring(4).replace('\\', '/');
 				
-				String fname1, fname2;
+				final String fname1, fname2;
 				
 				if(ambiguous){
 					if(b.indexOf('/')>=0){
@@ -506,40 +513,42 @@ public class BBSplitter {
 					}
 				}
 				
-				if(b.endsWith("#")){
+				if(!FileFormat.hasSamOrBamExtension(b) && ReadWrite.stripExtension(b).contains("#")){
 					fname1=b.replace('#', '1');
 					fname2=b.replace('#', '2');
 				}else{
 					fname1=b;
 					fname2=null;
 				}
+//				assert(false) : fname1;
 //				assert(!ambiguous) : fname1+", "+fname2+", "+b+", "+ambiguous;
 
 				FileFormat ff1=FileFormat.testOutput(fname1, FileFormat.SAM, null, true, overwrite_, append_, OUTPUT_ORDERED_READS);
 				FileFormat ff2=paired ? FileFormat.testOutput(fname2, FileFormat.SAM, null, true, overwrite_, append_, OUTPUT_ORDERED_READS) : null;
-				RTextOutputStream3 ros=new RTextOutputStream3(ff1, ff2, null, null, buff, null, false);
+				ConcurrentReadOutputStream ros=ConcurrentReadOutputStream.getStream(ff1, ff2, null, null, buff, null, false);
 				ros.start();
 //				Data.sysout.println("Started output stream:\t"+t);
 				table.put(name, ros);
+				AbstractMapThread.OUTPUT_SAM|=ff1.samOrBam();
 			}
 		}
 		return table.isEmpty() ? null : table;
 	}
 	
 	
-	public static synchronized HashMap<String, SetCount> makeSetCountTable(){
+	public static synchronized LinkedHashMap<String, SetCount> makeSetCountTable(){
 		assert(setCountTable==null);
 		HashSet<String> names=getScaffoldAffixes(true);
-		setCountTable=new HashMap<String, SetCount>(); 
+		setCountTable=new LinkedHashMap<String, SetCount>(); 
 		for(String s : names){setCountTable.put(s, new SetCount(s));}
 		return setCountTable;
 	}
 	
 	
-	public static synchronized HashMap<String, SetCount> makeScafCountTable(){
+	public static synchronized LinkedHashMap<String, SetCount> makeScafCountTable(){
 		assert(scafCountTable==null);
 		HashSet<String> names=getScaffoldAffixes(false);
-		scafCountTable=new HashMap<String, SetCount>(); 
+		scafCountTable=new LinkedHashMap<String, SetCount>(); 
 		for(String s : names){scafCountTable.put(s, new SetCount(s));}
 //		System.out.println("Made table "+scafCountTable);
 		return scafCountTable;
@@ -586,7 +595,7 @@ public class BBSplitter {
 		for(String s : streamTable.keySet()){
 			ArrayList<Read> alr=splitTable.get(s);
 			if(alr==null){alr=blank;}
-			RTextOutputStream3 tros=streamTable.get(s);
+			ConcurrentReadOutputStream tros=streamTable.get(s);
 			tros.add(alr, listID);
 		}
 		if(clear){splitTable.clear();}
@@ -724,7 +733,7 @@ public class BBSplitter {
 						}
 						//	System.out.println(primarySet);
 						final int incrR=1+(r2==null ? 0 : 1);
-						final int incrB=r1.bases.length+(r2==null ? 0 : r2.bases.length);
+						final int incrB=r1.length()+(r1.mateLength());
 
 						for(String s : primarySet){
 							SetCount sc=setCountTable.get(s);
@@ -755,7 +764,7 @@ public class BBSplitter {
 				ArrayList<Read> alr=splitTable.get(s);
 //				System.err.println("Adding alr "+alr+"\n");
 				if(alr==null){alr=blank;}
-				RTextOutputStream3 tros=streamTable.get(s);
+				ConcurrentReadOutputStream tros=streamTable.get(s);
 				tros.add(alr, listID);
 			}
 		}
@@ -763,7 +772,7 @@ public class BBSplitter {
 			for(String s : streamTableAmbiguous.keySet()){
 				ArrayList<Read> alr=splitTableA.get(s);
 				if(alr==null){alr=blank;}
-				RTextOutputStream3 tros=streamTableAmbiguous.get(s);
+				ConcurrentReadOutputStream tros=streamTableAmbiguous.get(s);
 				tros.add(alr, listID);
 			}
 		}
@@ -783,10 +792,10 @@ public class BBSplitter {
 				if(r!=null){
 					if(r.ambiguous()){
 						incrRA+=1;
-						incrBA+=r.bases.length;
+						incrBA+=r.length();
 					}else{
 						incrRM+=1;
-						incrBM+=r.bases.length;
+						incrBM+=r.length();
 					}
 				}
 				for(String s : set){
@@ -1062,7 +1071,7 @@ public class BBSplitter {
 			}
 		}
 		if(streamTable!=null){
-			for(RTextOutputStream3 ros : streamTable.values()){
+			for(ConcurrentReadOutputStream ros : streamTable.values()){
 				String s=ros.fname();
 				if(s.endsWith(".sam") || s.endsWith(".sam.gz") || s.endsWith(".bam")){
 					set.add(s);
@@ -1139,14 +1148,18 @@ public class BBSplitter {
 		
 	}
 	
-	public static void printCounts(String fname, HashMap<String, SetCount> map, boolean header, long totalReads){
+	public static void printCounts(String fname, LinkedHashMap<String, SetCount> map, boolean header, long totalReads, boolean nzo, boolean sort){
 		final ArrayList<SetCount> list=new ArrayList<SetCount>(map.size());
-		list.addAll(map.values());
+		for(String name : map.keySet()){
+			list.add(map.get(name));
+		}
 		final TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
 		tsw.start();
-		Collections.sort(list);
-		Collections.reverse(list);
-//		long ur=0, ub=0, ar=0, ab=0;
+		if(sort){
+			Collections.sort(list);
+			Collections.reverse(list);
+		}
+		
 		if(header){
 			tsw.print("#name\t%unambiguousReads\tunambiguousMB\t%ambiguousReads\tambiguousMB\tunambiguousReads\tambiguousReads\n");
 		}
@@ -1154,32 +1167,33 @@ public class BBSplitter {
 		final double divR=100.0/(totalReads);
 		final double divB=1.0/1000000;
 		for(SetCount sc : list){
-			if(sc.mappedReads<1 && sc.ambiguousReads<1){break;}
-			sb.append(sc.name).append('\t');
-			sb.append(String.format("%.5f\t", sc.mappedReads*divR));
-			sb.append(String.format("%.5f\t", sc.mappedBases*divB));
-			sb.append(String.format("%.5f\t", sc.ambiguousReads*divR));
-			sb.append(String.format("%.5f\t", sc.ambiguousBases*divB));
-			sb.append(sc.mappedReads).append('\t');
-			sb.append(sc.ambiguousReads).append('\n');
-			tsw.print(sb.toString());
-			sb.setLength(0);
+			if(!nzo || sc.mappedReads>0 || sc.ambiguousReads>0){
+				sb.append(sc.name).append('\t');
+				sb.append(String.format("%.5f\t", sc.mappedReads*divR));
+				sb.append(String.format("%.5f\t", sc.mappedBases*divB));
+				sb.append(String.format("%.5f\t", sc.ambiguousReads*divR));
+				sb.append(String.format("%.5f\t", sc.ambiguousBases*divB));
+				sb.append(sc.mappedReads).append('\t');
+				sb.append(sc.ambiguousReads).append('\n');
+				tsw.print(sb.toString());
+				sb.setLength(0);
+			}
 		}
 		tsw.poison();
 	}
 
-	public static HashMap<String, SetCount> setCountTable=null;
-	public static HashMap<String, SetCount> scafCountTable=null;
+	public static LinkedHashMap<String, SetCount> setCountTable=null;
+	public static LinkedHashMap<String, SetCount> scafCountTable=null;
 	
 	/**
 	 * Holds named output streams.
 	 */
-	public static HashMap<String, RTextOutputStream3> streamTable=null;
+	public static HashMap<String, ConcurrentReadOutputStream> streamTable=null;
 	
 	/**
 	 * Holds named output streams for ambiguous (across different references) reads.
 	 */
-	public static HashMap<String, RTextOutputStream3> streamTableAmbiguous=null;
+	public static HashMap<String, ConcurrentReadOutputStream> streamTableAmbiguous=null;
 	public static final int AMBIGUOUS2_UNSET=0;
 	public static final int AMBIGUOUS2_FIRST=1;
 	public static final int AMBIGUOUS2_SPLIT=2;
@@ -1194,6 +1208,7 @@ public class BBSplitter {
 	public static boolean overwrite=true;
 	public static boolean append=false;
 	public static boolean verbose=false;
+	public static boolean forceRebuild=false;
 	private static final ArrayList<Read> blank=new ArrayList<Read>(0);
 
 	public static final int MAP_NORMAL=1;

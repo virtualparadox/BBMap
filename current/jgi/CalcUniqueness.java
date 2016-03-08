@@ -11,7 +11,7 @@ import kmer.HashForest;
 import kmer.KmerTable;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
@@ -49,6 +49,7 @@ public class CalcUniqueness {
 	
 	public CalcUniqueness(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -61,7 +62,7 @@ public class CalcUniqueness {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
@@ -101,10 +102,6 @@ public class CalcUniqueness {
 				interval=Integer.parseInt(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -114,7 +111,8 @@ public class CalcUniqueness {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;	
 			samplerate=parser.samplerate;
@@ -155,7 +153,7 @@ public class CalcUniqueness {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -168,17 +166,6 @@ public class CalcUniqueness {
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}
-		}
-		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
 			}
 		}
 		
@@ -270,14 +257,12 @@ public class CalcUniqueness {
 	
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ffin1, ffin2, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, null, null);
 			cris.setSampleRate(samplerate, sampleseed);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		final boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
@@ -399,12 +384,12 @@ public class CalcUniqueness {
 				}
 				
 				//Fetch a new list
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){//Return final list
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -621,7 +606,6 @@ public class CalcUniqueness {
 	public boolean errorState=false;
 	private boolean overwrite=false;
 	private boolean append=false;
-	private boolean colorspace=false;
 	private boolean testsize=false;
 	
 	private static final boolean useForest=false, useTable=false, useArray=true;

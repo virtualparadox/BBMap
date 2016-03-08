@@ -13,6 +13,7 @@ import stream.FASTQ;
 import stream.Read;
 
 import align2.BBMap;
+import align2.BBSplitter;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -59,8 +60,13 @@ public class RQCFilter {
 //		arglist.add("k=22");
 //		arglist.add("maxbadkmers=2");
 		
+		//Parses some shared arguments
+		Parser parser=new Parser();
+		
 		//Symbols to insert in output filename to denote operations performed; may be overriden from command line
 		String symbols_=null;//"filtered"
+		
+		boolean doNextera_=false;
 		
 		//Parse argument list
 		for(int i=0; i<args.length; i++){
@@ -70,13 +76,19 @@ public class RQCFilter {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 			
-//			System.out.println("Processing '"+arg+"' a='"+a+"', b='"+b+"'");
-			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				if(a.equals("pigz")){
+					pigz=b;
+				}else if(a.equals("unpigz")){
+					unpigz=b;
+				}else if(a.equals("zl") || a.equals("ziplevel")){
+					zl=b;
+				}
+			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
@@ -104,11 +116,11 @@ public class RQCFilter {
 			}else if(a.equals("ref")){
 				if(b!=null){
 					if(!b.contains(",") || new File(b).exists()){
-						refs.add(b);
+						bbdukFilterRefs.add(b);
 					}else{
 						String[] split2=b.split(",");
 						for(String s2 : split2){
-							refs.add(s2);
+							bbdukFilterRefs.add(s2);
 						}
 					}
 				}
@@ -122,6 +134,8 @@ public class RQCFilter {
 				phixRef=b;
 			}else if(a.equals("fragadapter")){
 				fragAdapter=b;
+			}else if(a.equals("rnaadapter")){
+				rnaAdapter=b;
 			}else if(a.equals("lfpelinker")){
 				lfpeLinker=b;
 			}else if(a.equals("cliplinker") || a.equals("jointseq")){
@@ -130,10 +144,16 @@ public class RQCFilter {
 				clrsLinker=b;
 			}else if(a.equals("trimfragadapter") || a.equals("trimfragadapters")){
 				fragAdapterFlag=Tools.parseBoolean(b);
-			}else if(a.equals("removehuman")){
+			}else if(a.equals("trimrnaadapter") || a.equals("trimrnaadapters")){
+				rnaAdapterFlag=Tools.parseBoolean(b);
+			}else if(a.equals("removehuman") || a.equals("human")){
 				humanFlag=Tools.parseBoolean(b);
-			}else if(a.equals("useindex")){
-				humanRefIndexedFlag=Tools.parseBoolean(b);
+			}else if(a.equals("removedog") || a.equals("dog")){
+				dogFlag=Tools.parseBoolean(b);
+			}else if(a.equals("removecat") || a.equals("cat")){
+				catFlag=Tools.parseBoolean(b);
+			}else if(a.equals("catdoghuman")){
+				catDogHumanFlag=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -152,6 +172,10 @@ public class RQCFilter {
 				rqcStatsName=b;
 			}else if(a.equals("scafstats")){
 				scaffoldStatsName=b;
+			}else if(a.equals("scafstatskt") || a.equals("scafstatstrim")){
+				scaffoldStatsName_kt=b;
+			}else if(a.equals("refstats")){
+				refStatsName=b;
 			}else if(a.equals("kmerstats")){
 				kmerStatsName=b;
 			}else if(a.equals("log")){
@@ -162,16 +186,19 @@ public class RQCFilter {
 				fileListName=b;
 			}else if(a.equals("compress")){
 				compress=Tools.parseBoolean(b);
+			}else if(a.equals("dna")){
+				dnaArtifactFlag=Tools.parseBoolean(b);
 			}else if(a.equals("rna")){
-				rnaFlag=Tools.parseBoolean(b);
+				rnaArtifactFlag=Tools.parseBoolean(b);
+				dnaArtifactFlag=!rnaArtifactFlag; //This line requested by Bryce.
 			}else if(a.equals("phix")){
 				phixFlag=Tools.parseBoolean(b);
-//			}else if(a.equals("tbo")){
-//				tboFlag=Tools.parseBoolean(b);
-//			}else if(a.equals("tpe")){
-//				tpeFlag=Tools.parseBoolean(b);
+			}else if(a.equals("pjet")){
+				pjetFlag=Tools.parseBoolean(b);
 			}else if(a.equals("jointseq")){
 				jointSeq=b;
+			}else if(a.equals("nextera")){
+				doNextera_=Tools.parseBoolean(b);
 			}else if(a.equals("ktrim")){
 				ktrim=b;
 			}else if(a.equals("mink")){
@@ -187,8 +214,16 @@ public class RQCFilter {
 				map_k=Integer.parseInt(b);
 			}else if(a.equals("normalizek") || a.equals("normk") || a.equals("ecck")){
 				normalize_k=Integer.parseInt(b);
+			}else if(a.equals("filterhdist")){
+				hdist_filter=Integer.parseInt(b);
+			}else if(a.equals("trimhdist")){
+				hdist_trim=Integer.parseInt(b);
+			}else if(a.equals("trimhdist2")){
+				hdist2_trim=Integer.parseInt(b);
 			}else if(a.equals("maq")){
 				maq=Byte.parseByte(b);
+			}else if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
+				forceTrimModulo=Integer.parseInt(b);
 			}else if(a.equals("trimq")){
 				trimq=Byte.parseByte(b);
 			}else if(a.equals("qtrim")){
@@ -216,19 +251,37 @@ public class RQCFilter {
 				maxNs=Integer.parseInt(b);
 			}else if(a.equals("usetmpdir")){
 				writeTempToTmpdir=Tools.parseBoolean(b);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
+			}else if(a.equals("tmpdir")){
+				tmpDir=b;
+				writeTempToTmpdir=(b!=null);
+			}else if(a.equals("humanpath")){
+				humanPath=b;
+			}else if(a.equals("humanref")){
+				humanRef=b;
+			}else if(a.equals("catref")){
+				catRef=b;
+			}else if(a.equals("dogref")){
+				dogRef=b;
+			}else if(a.equals("mapref") || a.equals("maprefs")){
+				if(b==null){mappingRefs.clear();}
 				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					System.err.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
+					for(String s : b.split(",")){
+						mappingRefs.add(s);
+					}
 				}
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
+			}else if(a.equals("chastityfilter") || a.equals("cf")){
+				chastityfilter=b;
+			}else if(a.equals("failnobarcode")){
+				failnobarcode=b;
+			}else if(a.equals("badbarcodes") || a.equals("barcodefilter")){
+				barcodefilter=b;
+			}else if(a.equals("barcodes") || a.equals("barcode")){
+				barcodes=b;
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					in1=b.replace("#", "1");
-					in2=b.replace("#", "2");
+					in1=arg.replace("#", "1");
+					in2=arg.replace("#", "2");
 				}
 			}else{
 				//Uncaptured arguments are passed to BBDuk
@@ -236,13 +289,19 @@ public class RQCFilter {
 			}
 		}
 		
-//		assert(false) : rnaFlag+"\n"+primaryArgList+"\n"+libType+"\n"+outDir;
+		doNextera=doNextera_;
 		
-		if(writeTempToTmpdir){tmpDir=Shared.TMPDIR;}
-		else{tmpDir=null;}
+//		assert(false) : rnaArtifactFlag+"\n"+primaryArgList+"\n"+libType+"\n"+outDir;
 		
-		//Set final field 'symbols'
-		symbols=(symbols_==null ? abbreviation() : symbols_);
+		if(writeTempToTmpdir){
+			if(tmpDir==null){tmpDir=Shared.TMPDIR;}
+			if(tmpDir!=null){
+				tmpDir=tmpDir.replace('\\', '/');
+				if(tmpDir.length()>0 && !tmpDir.endsWith("/")){tmpDir+="/";}
+			}
+		}else{tmpDir=null;}
+		
+		if(hdist2_trim<0){hdist2_trim=hdist_trim;}
 		
 		//Pass overwrite flag to BBDuk
 		primaryArgList.add("ow="+overwrite);
@@ -272,25 +331,76 @@ public class RQCFilter {
 				scaffoldStatsName_kt=outDir+"ktrim_"+scaffoldStatsName;
 				scaffoldStatsName=outDir+scaffoldStatsName;
 			}
+			if(refStatsName!=null){
+				refStatsName=outDir+refStatsName;
+			}
 		}
 		
+		//Determine execution path
+		if(libType==FRAG || ((libType==LFPE && lfpeLinker==null) || (libType==CLIP && clipLinker==null) || (libType==CLRS && clrsLinker==null))){
+			doTrim=(fragAdapterFlag || rnaAdapterFlag);
+			doFilter=true;
+		}else if(libType==LFPE){
+			doTrim=true;
+			doFilter=true;
+		}else if(libType==CLIP){
+			doTrim=true;
+			doFilter=true;
+		}else if(libType==CLRS){
+			doTrim=true;
+			doFilter=true;
+		}else{
+			throw new RuntimeException("Unknown library type.");
+		}
+		
+		if(catFlag && dogFlag && humanFlag){
+			catFlag=false;
+			dogFlag=false;
+			humanFlag=false;
+			catDogHumanFlag=true;
+		}
+		
+		if(dogFlag){mappingRefs.add(dogRef);}
+		if(catFlag){mappingRefs.add(catRef);}
+		doMerge=(ihistName!=null);
+		
+		//Set final field 'symbols'
+		symbols=(symbols_==null ? abbreviation() : symbols_);
+		
+		assert(in1!=null) : "No input file specified.";
+		
 		//Create output filename from input filename if no output filename is specified
-		if(out1==null && in1!=null){
+		if(out1==null){
+			
 			File f=new File(in1);
 			String name=f.getName();
-			String raw=ReadWrite.rawName(name);
-			int x=raw.lastIndexOf('.');
-			if(x>-1){
-				out1=raw.substring(0, x)+"."+symbols+raw.substring(x)+(compress ? ".gz" : "");
+			rawName=ReadWrite.rawName(name);
+			int dot=rawName.lastIndexOf('.');
+			if(dot>-1){
+				out1=rawName.substring(0, dot)+"."+symbols+rawName.substring(dot)+(compress ? ".gz" : "");
 			}else{
-				out1=raw+"."+symbols+".fastq"+(compress ? ".gz" : "");
+				out1=rawName+"."+symbols+".fastq"+(compress ? ".gz" : "");
 			}
+		}else{
+			File f=new File(out1);
+			String name=f.getName();
+			rawName=ReadWrite.rawName(name);
 		}
 		
 		tempSalt=KmerNormalize.getSalt(out1, 1);
 		trimPrefix="TEMP_TRIM_"+tempSalt+"_";
 		humanPrefix="TEMP_HUMAN_"+tempSalt+"_";
 		filterPrefix="TEMP_FILTER_"+tempSalt+"_";
+		
+		if(mappingRefs.size()>0){
+			mappingPrefix=new String[mappingRefs.size()];
+			for(int i=0; i<mappingRefs.size(); i++){
+				mappingPrefix[i]="TEMP_MAP_"+tempSalt+"_"+i+"_";
+			}
+		}else{
+			mappingPrefix=null;
+		}
+		
 	}
 
 	
@@ -325,55 +435,52 @@ public class RQCFilter {
 			assert(b) : "Can't write to "+fileListName;
 			
 			StringBuilder sb=new StringBuilder();
-			if(out1!=null){sb.append("filtered_fastq="+out1).append('\n');}
-			if(qfout1!=null){sb.append("filtered_qual="+qfout1).append('\n');}
-			if(out2!=null){sb.append("filtered_fastq_2="+out2).append('\n');}
-			if(qfout2!=null){sb.append("filtered_qual_2="+qfout2).append('\n');}
+			if(!doNextera){
+				if(out1!=null){sb.append("filtered_fastq="+out1).append('\n');}
+				if(qfout1!=null){sb.append("filtered_qual="+qfout1).append('\n');}
+				if(out2!=null){sb.append("filtered_fastq_2="+out2).append('\n');}
+				if(qfout2!=null){sb.append("filtered_qual_2="+qfout2).append('\n');}
+			}
 			if(ihistName!=null){sb.append("ihist="+ihistName).append('\n');}
+			if(scaffoldStatsName!=null){sb.append("scafstats="+scaffoldStatsName).append('\n');}
+			if(refStatsName!=null && catDogHumanFlag){sb.append("refstats="+refStatsName).append('\n');}
 			
 			if(sb.length()>0){
 				ReadWrite.writeString(sb, fileListName, false);
 			}
 		}
-
-		final boolean doFilter;
-		final boolean doTrim;
-		final boolean doHuman=humanFlag;
-		final boolean doMerge=(ihistName!=null);
-		
-		//Determine execution path
-		if(libType==FRAG || ((libType==LFPE && lfpeLinker==null) || (libType==CLIP && clipLinker==null) || (libType==CLRS && clrsLinker==null))){
-			doTrim=fragAdapterFlag;
-			doFilter=true;
-		}else if(libType==LFPE){
-			doTrim=true;
-			doFilter=true;
-		}else if(libType==CLIP){
-			doTrim=true;
-			doFilter=true;
-		}else if(libType==CLRS){
-			doTrim=true;
-			doFilter=true;
-		}else{
-			throw new RuntimeException("Unknown library type.");
-		}
 		
 		{
 			int step=0;
-			final int numSteps=(doFilter ? 1 : 0)+(doTrim ? 1 : 0)+(doHuman ? 1 : 0);
+			final int numSteps=(doFilter ? 1 : 0)+(doTrim ? 1 : 0)+(doNextera ? 1 : 0)+((humanFlag || catDogHumanFlag) ? 1 : 0)+mappingRefs.size();
 			String inPrefix=null, outPrefix=null;
 			if(doTrim){
 				step++;
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? trimPrefix : null);
 //				System.err.println("Trim. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+				
+				final String in1z, in2z, qfin1z, qfin2z, out1z, out2z, qfout1z, qfout2z;
 				if(step==1){
-					ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=in1; in2z=in2; qfin1z=qfin1; qfin2z=qfin2;
 				}else{
-					ktrim(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=stripDirs(out1); in2z=stripDirs(out2); qfin1z=stripDirs(qfout1); qfin2z=stripDirs(qfout2);
 				}
+				if(step>=numSteps){
+					out1z=out1; out2z=out2; qfout1z=qfout1; qfout2z=qfout2;
+				}else{
+					out1z=stripDirs(out1); out2z=stripDirs(out2); qfout1z=stripDirs(qfout1); qfout2z=stripDirs(qfout2);
+				}
+				
+				ktrim(in1z, in2z, out1z, out2z, qfin1z, qfin2z, qfout1z, qfout2z, inPrefix, outPrefix, step);
+				
+				if(in2!=null && out2==null){
+					FASTQ.FORCE_INTERLEAVED=true;
+					FASTQ.TEST_INTERLEAVED=false;
+				}
+				
 				if(inPrefix!=null){
-					delete(inPrefix, out1, out2, qfout1, qfout2);
+					delete(inPrefix, out1z, out2z, qfout1z, qfout2z);
 				}
 			}
 			
@@ -382,39 +489,134 @@ public class RQCFilter {
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? filterPrefix : null);
 //				System.err.println("Filter. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+				
+				final String in1z, in2z, qfin1z, qfin2z, out1z, out2z, qfout1z, qfout2z;
 				if(step==1){
-					filter(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=in1; in2z=in2; qfin1z=qfin1; qfin2z=qfin2;
 				}else{
-					filter(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=stripDirs(out1); in2z=stripDirs(out2); qfin1z=stripDirs(qfout1); qfin2z=stripDirs(qfout2);
 				}
+				if(step>=numSteps){
+					out1z=out1; out2z=out2; qfout1z=qfout1; qfout2z=qfout2;
+				}else{
+					out1z=stripDirs(out1); out2z=stripDirs(out2); qfout1z=stripDirs(qfout1); qfout2z=stripDirs(qfout2);
+				}
+				
+				filter(in1z, in2z, out1z, out2z, qfin1z, qfin2z, qfout1z, qfout2z, inPrefix, outPrefix, step);
+				
+				if(in2!=null && out2==null){
+					FASTQ.FORCE_INTERLEAVED=true;
+					FASTQ.TEST_INTERLEAVED=false;
+				}
+				
 				if(step>1){
-					delete(inPrefix, out1, out2, qfout1, qfout2);
+					delete(inPrefix, out1z, out2z, qfout1z, qfout2z);
 				}
 			}
 			
-			if(doHuman){
+			if(humanFlag || catDogHumanFlag){
 				step++;
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? humanPrefix : null);
 //				System.err.println("Human. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+				
+				final String in1z, in2z, qfin1z, qfin2z, out1z, out2z, qfout1z, qfout2z;
 				if(step==1){
-					dehumanize(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=in1; in2z=in2; qfin1z=qfin1; qfin2z=qfin2;
 				}else{
-					dehumanize(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
+					in1z=stripDirs(out1); in2z=stripDirs(out2); qfin1z=stripDirs(qfout1); qfin2z=stripDirs(qfout2);
 				}
+				if(step>=numSteps){
+					out1z=out1; out2z=out2; qfout1z=qfout1; qfout2z=qfout2;
+				}else{
+					out1z=stripDirs(out1); out2z=stripDirs(out2); qfout1z=stripDirs(qfout1); qfout2z=stripDirs(qfout2);
+				}
+				
+				dehumanize(in1z, in2z, out1z, out2z, qfin1z, qfin2z, qfout1z, qfout2z, inPrefix, outPrefix, step, catDogHumanFlag);
+				
+				if(in2!=null && out2==null){
+					FASTQ.FORCE_INTERLEAVED=true;
+					FASTQ.TEST_INTERLEAVED=false;
+				}
+				
 				Data.unloadAll();
 				if(step>1){
-					delete(inPrefix, out1, out2, qfout1, qfout2);
+					delete(inPrefix, out1z, out2z, qfout1z, qfout2z);
 				}
 			}
 			
-			if(doMerge){
+			if(mappingRefs.size()>0){
+				for(int i=0; i<mappingRefs.size(); i++){
+					step++;
+					inPrefix=outPrefix;
+					outPrefix=(step<numSteps ? mappingPrefix[i] : null);
+					//				System.err.println("Human. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+					
+					final String in1z, in2z, qfin1z, qfin2z, out1z, out2z, qfout1z, qfout2z;
+					if(step==1){
+						in1z=in1; in2z=in2; qfin1z=qfin1; qfin2z=qfin2;
+					}else{
+						in1z=stripDirs(out1); in2z=stripDirs(out2); qfin1z=stripDirs(qfout1); qfin2z=stripDirs(qfout2);
+					}
+					if(step>=numSteps){
+						out1z=out1; out2z=out2; qfout1z=qfout1; qfout2z=qfout2;
+					}else{
+						out1z=stripDirs(out1); out2z=stripDirs(out2); qfout1z=stripDirs(qfout1); qfout2z=stripDirs(qfout2);
+					}
+					
+					decontamByMapping(in1z, in2z, out1z, out2z, qfin1z, qfin2z, qfout1z, qfout2z, inPrefix, outPrefix, mappingRefs.get(i), step);
+					
+					if(in2!=null && out2==null){
+						FASTQ.FORCE_INTERLEAVED=true;
+						FASTQ.TEST_INTERLEAVED=false;
+					}
+					
+					Data.unloadAll();
+					if(step>1){
+						delete(inPrefix, out1z, out2z, qfout1z, qfout2z);
+					}
+				}
+			}
+			
+			if(doNextera){
+				step++;
+				inPrefix=outPrefix;
+				outPrefix=null;
+//				System.err.println("Nextera. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+				
+				final String in1z, in2z, out1z, out2z, qfout1z, qfout2z;
+				if(step==1){
+					in1z=in1; in2z=in2;
+				}else{
+					in1z=stripDirs(out1); in2z=stripDirs(out2);
+				}
+				
+				if(step>=numSteps){
+					out1z=out1; out2z=out2; qfout1z=qfout1; qfout2z=qfout2;
+				}else{
+					out1z=stripDirs(out1); out2z=stripDirs(out2); qfout1z=stripDirs(qfout1); qfout2z=stripDirs(qfout2);
+				}
+				
+				if(doMerge){merge(in1z, in2z, null, null, inPrefix, step);}
+				
+				splitNextera(in1z, in2z, inPrefix, outPrefix, step);
+				
+				if(in2!=null && out2==null){
+					FASTQ.FORCE_INTERLEAVED=true;
+					FASTQ.TEST_INTERLEAVED=false;
+				}
+				
+				Data.unloadAll();
+				if(step>1){
+					delete(inPrefix, out1z, out2z, qfout1z, qfout2z);
+				}
+			}else if(doMerge){
 				step++;
 //				System.err.println("Merge. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
 				if(step==1){
-					merge(in1, in2, qfin1, qfin2, null, null, step);
+					merge(in1, in2, qfin1, qfin2, null, step);
 				}else{
-					merge(out1, out2, qfout1, qfout2, null, null, step);
+					merge(out1, out2, qfout1, qfout2, null, step);
 				}
 			}
 		}
@@ -480,7 +682,7 @@ public class RQCFilter {
 		
 		{//Fill list with BBDuk arguments
 			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
-			if(minLen>0){argList.add("minlen="+minLen);}
+			if(minLen>0){argList.add("minlen="+minLen);} //TODO: Why is this repeated twice?
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 			if((libType!=CLIP)){
 				argList.add("mink="+mink);
@@ -489,11 +691,20 @@ public class RQCFilter {
 					argList.add("tpe");
 				}
 				argList.add("overwrite="+overwrite);
-				if(minLen>0){argList.add("minlen="+minLen);}
-				if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+//				if(minLen>0){argList.add("minlen="+minLen);}
+//				if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 				argList.add("k="+trim_k);
 				argList.add("hdist="+hdist_trim);
+				if(hdist2_trim>=0){
+					argList.add("hdist2="+hdist2_trim);
+				}
+				if(forceTrimModulo>0){
+					argList.add("ftm="+forceTrimModulo);
+				}
 			}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -510,15 +721,16 @@ public class RQCFilter {
 
 //			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName_kt);} //Old style for 2 log files
 			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
-			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName_kt);}
-			if(scaffoldStatsName!=null){argList.add("stats="+scaffoldStatsName_kt);}
+			if(kmerStatsName_kt!=null){argList.add("outduk="+kmerStatsName_kt);}
+			if(scaffoldStatsName_kt!=null){argList.add("stats="+scaffoldStatsName_kt);}
 		}
 		
 		{//Add BBDuk references
 			ArrayList<String> refs=new ArrayList<String>();
 
 			if(libType==FRAG){
-				refs.add(fragAdapter);
+				if(fragAdapterFlag){refs.add(fragAdapter);}
+				if(rnaAdapterFlag){refs.add(rnaAdapter);}
 			}else if(libType==LFPE){
 				refs.add(lfpeLinker);
 			}else if(libType==CLIP){
@@ -544,7 +756,7 @@ public class RQCFilter {
 			}else{
 				throw new RuntimeException("Unknown library type.");
 			}
-
+			
 			StringBuilder refstring=new StringBuilder();
 			for(String ref : refs){
 				if(ref!=null){
@@ -552,7 +764,7 @@ public class RQCFilter {
 					refstring.append(ref);
 				}
 			}
-
+			
 			if(refstring!=null && refstring.length()>0){
 				argList.add(refstring.toString());
 			}
@@ -619,6 +831,14 @@ public class RQCFilter {
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 			argList.add("k="+filter_k);
 			argList.add("hdist="+hdist_filter);
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
+
+			if(chastityfilter!=null){argList.add("cf="+chastityfilter);}
+			if(failnobarcode!=null){argList.add("failnobarcode="+failnobarcode);}
+			if(barcodefilter!=null){argList.add("barcodefilter="+barcodefilter);}
+			if(barcodes!=null){argList.add("barcodes="+barcodes);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -640,10 +860,16 @@ public class RQCFilter {
 		}
 		
 		{//Add BBDuk references
-			refs.add(mainArtifactFile);
-			refs.add(rnaFlag ? artifactFileRna : artifactFileDna);
+			bbdukFilterRefs.add(doNextera ? mainArtifactFile_noNextera : mainArtifactFile);
+			if(dnaArtifactFlag){
+				bbdukFilterRefs.add(doNextera ? artifactFileDna_noNextera : artifactFileDna);
+			}
+			if(rnaArtifactFlag){
+				bbdukFilterRefs.add(artifactFileRna);
+			}
 			
-			if(phixFlag){refs.add(phixRef);}
+			if(phixFlag){bbdukFilterRefs.add(phixRef);}
+			if(pjetFlag){bbdukFilterRefs.add(pjetRef);}
 
 			if(libType==FRAG){
 
@@ -658,7 +884,7 @@ public class RQCFilter {
 			}
 
 			StringBuilder refstring=new StringBuilder();
-			for(String ref : refs){
+			for(String ref : bbdukFilterRefs){
 				if(ref!=null){
 					refstring.append(refstring.length()==0 ? "ref=" : ",");
 					refstring.append(ref);
@@ -692,6 +918,93 @@ public class RQCFilter {
 		log("filter finish", true);
 	}
 	
+	
+	/**
+	 * Runs SplitNexteraLMP.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param inPrefix Append this prefix to input filenames
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void splitNextera(String in1, String in2, String inPrefix, String outPrefix, int stepNum){
+		
+		log("splitNextera start", true);
+		splitNexteraFlag=true;
+		
+		ArrayList<String> argList=new ArrayList<String>();
+
+		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
+		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		
+		final String lmpName, fragName, unknownName, singletonName;
+		final String statsName=outPre+nexteraStats;
+		
+		int dot=rawName.lastIndexOf('.');
+		if(dot>-1){
+			lmpName=outPre+rawName.substring(0, dot)+"."+symbols+".lmp"+rawName.substring(dot)+(compress ? ".gz" : "");
+			fragName=outPre+rawName.substring(0, dot)+"."+symbols+".frag"+rawName.substring(dot)+(compress ? ".gz" : "");
+			unknownName=outPre+rawName.substring(0, dot)+"."+symbols+".unknown"+rawName.substring(dot)+(compress ? ".gz" : "");
+			singletonName=outPre+rawName.substring(0, dot)+"."+symbols+".singleton"+rawName.substring(dot)+(compress ? ".gz" : "");
+		}else{
+			lmpName=outPre+rawName+"."+symbols+".lmp.fastq"+(compress ? ".gz" : "");
+			fragName=outPre+rawName+"."+symbols+".frag.fastq"+(compress ? ".gz" : "");
+			unknownName=outPre+rawName+"."+symbols+".unknown.fastq"+(compress ? ".gz" : "");
+			singletonName=outPre+rawName+"."+symbols+".singleton.fastq"+(compress ? ".gz" : "");
+		}
+		
+		{//Fill list with Nextera arguments
+			argList.add("mask");
+			argList.add("ow="+overwrite);
+			if(minLen>0){argList.add("minlen="+minLen);}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
+
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+inPre+in1);}
+			if(in2!=null){argList.add("in2="+inPre+in2);}
+
+			argList.add("out="+lmpName);
+			argList.add("outu="+unknownName);
+			argList.add("outf="+fragName);
+			argList.add("outs="+singletonName);
+			argList.add("stats="+statsName);
+		}
+		
+		String[] splitargs=argList.toArray(new String[0]);
+		
+		if(reproduceName!=null){
+			writeReproduceFile(reproduceName, "splitnextera.sh", splitargs, (stepNum>1), overwrite, (stepNum==1));
+		}
+		
+		{//run BBDuk
+			SplitNexteraLMP split=new SplitNexteraLMP(splitargs);
+			try {
+				split.process();
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		if(fileListName!=null){
+			StringBuilder sb=new StringBuilder();
+			sb.append("lmp="+lmpName).append('\n');
+			sb.append("frag="+fragName).append('\n');
+			sb.append("unknown="+unknownName).append('\n');
+			sb.append("singleton="+singletonName).append('\n');
+			sb.append("nexterastats="+statsName).append('\n');
+			
+			if(sb.length()>0){
+				ReadWrite.writeString(sb, fileListName, true);
+			}
+		}
+		
+		log("splitNextera finish", true);
+	}
+	
 	/**
 	 * Runs BBMap to perform:
 	 * Human contaminant removal.
@@ -708,7 +1021,7 @@ public class RQCFilter {
 	 * @param outPrefix Append this prefix to output filenames
 	 */
 	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix,
-			int stepNum){
+			int stepNum, boolean catDogHuman){
 		
 		log("dehumanize start", true);
 		
@@ -732,19 +1045,115 @@ public class RQCFilter {
 			argList.add("sam=1.4");
 			argList.add("usemodulo");
 			argList.add("printunmappedcount");
-			argList.add("usejni");
 			argList.add("ow="+overwrite);
 			
-			if(humanRefIndexedFlag){
-				argList.add("path="+humanPath);
+			if(catDogHuman){
+				argList.add("path="+catDogHumanPath);
+				if(refStatsName!=null){argList.add("refstats="+refStatsName);}
 			}else{
-				argList.add("ref="+humanRef);
-				argList.add("nodisk");
+				if(humanRef==null){
+					argList.add("path="+humanPath);
+				}else{
+					argList.add("ref="+humanRef);
+					argList.add("nodisk");
+				}
 			}
+
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
 
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+inPre+in1);}
+			if(in2!=null){argList.add("in2="+inPre+in2);}
+			if(out1!=null){argList.add("outu1="+outPre+out1);}
+			if(out2!=null){argList.add("outu2="+outPre+out2);}
+			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
+			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
+			if(qfout1!=null){argList.add("qfoutu1="+outPre+qfout1);}
+			if(qfout2!=null){argList.add("qfoutu2="+outPre+qfout2);}
+			
+		}
+		
+		String[] args=argList.toArray(new String[0]);
+		
+		{//Run BBMap
+			try {
+				if(catDogHuman){
+					BBSplitter.main(args);
+				}else{
+					BBMap.main(args);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		if(reproduceName!=null){
+			writeReproduceFile(reproduceName, "bbmap.sh", args, (stepNum>1), overwrite, (stepNum==1));
+		}
+		
+		//Optionally append files to file list here
+		
+		log("dehumanize finish", true);
+	}
+	
+	/**
+	 * Runs BBMap to perform:
+	 * Arbitrary contaminant removal.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param out1 Primary output reads file (required)
+	 * @param out2 Secondary output reads file
+	 * @param qfin1 Primary input qual file
+	 * @param qfin2 Secondary input qual file
+	 * @param qfout1 Primary output qual file
+	 * @param qfout2 Secondary output qual file
+	 * @param inPrefix Append this prefix to input filenames
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void decontamByMapping(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix,
+			String ref, int stepNum){
+		
+		log("decontamByMapping_"+ref+" start", true);
+		assert(ref!=null) : "Reference was null.";
+		
+		ArrayList<String> argList=new ArrayList<String>();
+		
+		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
+		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		
+		{
+			argList.add("minratio=.84");
+			argList.add("maxindel=6");
+			argList.add("fast="+true);
+			argList.add("minhits="+1);
+			argList.add("tipsearch="+4);
+			argList.add("bw=18");
+			argList.add("bwr=0.18");
+			argList.add("quickmatch=f");
+			argList.add("k="+map_k);
+//			argList.add("cigar=f");
+			argList.add("idtag=t");
+			argList.add("sam=1.4");
+			argList.add("usemodulo");
+			argList.add("printunmappedcount");
+			argList.add("ow="+overwrite);
+			argList.add("ref="+ref);
+			argList.add("nodisk");
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
+			
+			//Pass along uncaptured arguments
+			for(String s : primaryArgList){argList.add(s);}
+			
 			//Set read I/O files
 			if(in1!=null){argList.add("in1="+inPre+in1);}
 			if(in2!=null){argList.add("in2="+inPre+in2);}
@@ -775,7 +1184,7 @@ public class RQCFilter {
 		
 		//Optionally append files to file list here
 		
-		log("dehumanize finish", true);
+		log("decontamByMapping_"+ref+" finish", true);
 	}
 	
 	
@@ -787,18 +1196,16 @@ public class RQCFilter {
 	 * @param qfin1 Primary input qual file
 	 * @param qfin2 Secondary input qual file
 	 * @param ihist Histogram file name
-	 * @param inPrefix Append this prefix to input filenames
-	 * @param outPrefix Append this prefix to output filenames
+	 * @param prefix Append this prefix to input filenames
 	 */
-	private void merge(String in1, String in2, String qfin1, String qfin2, String inPrefix, String outPrefix,
-			int stepNum){
+	private void merge(String in1, String in2, String qfin1, String qfin2, String prefix, int stepNum){
 		
 		log("merge start", true);
 		mergeFlag=true;
 		
 		ArrayList<String> argList=new ArrayList<String>();
 
-		final String inPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		final String inPre=(prefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+prefix);
 		
 		{//Fill list with BBMerge arguments
 			if(mergeStrictness!=null){argList.add(mergeStrictness);}
@@ -811,6 +1218,9 @@ public class RQCFilter {
 			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
 			
 			if(ihistName!=null){argList.add("ihist="+ihistName);}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 		}
 		
 		String[] mergeargs=argList.toArray(new String[0]);
@@ -882,23 +1292,28 @@ public class RQCFilter {
 	private String abbreviation(){
 		StringBuilder sb=new StringBuilder();
 		
-		if(mainArtifactFile!=null || (rnaFlag ? artifactFileRna!=null : artifactFileDna!=null)){sb.append("a");}
+		if(mainArtifactFile!=null || (rnaArtifactFlag && artifactFileRna!=null) || (dnaArtifactFlag && artifactFileDna!=null)){sb.append("a");}
 		
 		if(maxNs>=0){sb.append("n");}
 //		if(qtrim!=null && !qtrim.equalsIgnoreCase("f") && !qtrim.equalsIgnoreCase("false")){sb.append("q");}
 		if(maq>0){sb.append("q");}
-		
-		if(rnaFlag){sb.append("r");}
-		else{sb.append("d");}
+
+		if(rnaArtifactFlag){sb.append("r");}
+		if(dnaArtifactFlag){sb.append("d");}
 		
 		if(libType==CLIP){sb.append("c");}
 		else if(libType==LFPE){sb.append("l");}
 		else if(libType==CLRS){sb.append("s");}
 
 		if(phixFlag){sb.append("p");}
-		if(humanFlag){sb.append("h");}
-		if(ktrimFlag){sb.append("k");}
-		if(qtrimFlag){sb.append("t");}
+		if(humanFlag || catDogHumanFlag){sb.append("h");}
+
+//		if(ktrimFlag){sb.append("k");}
+		
+//		if(doTrim){sb.append("k");}
+//		if(qtrimFlag){sb.append("t");}
+		
+		if(doTrim || qtrimFlag){sb.append("t");}
 		
 		return sb.toString();
 	}
@@ -916,6 +1331,19 @@ public class RQCFilter {
 //		sdf.setTimeZone(TimeZone.getTimeZone("PST"));
 		sdf.setTimeZone(TimeZone.getDefault());
 		return sdf.format(new Date());
+	}
+	
+	/**
+	 * Strips the directories, leaving only a filename
+	 * @param fname
+	 * @return
+	 */
+	public static String stripDirs(String fname){
+		if(fname==null){return null;}
+		if(fname.indexOf('\\')>=0){fname=fname.replace('\\', '/');}
+		final int index=fname.lastIndexOf('/');
+		if(index>=0){fname=fname.substring(index+1);}
+		return fname;
 	}
 	
 	/**
@@ -974,15 +1402,27 @@ public class RQCFilter {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	private final boolean doFilter;
+	private final boolean doTrim;
+	private final boolean doMerge;
+	private final boolean doNextera; //Nextera LMP
+	
 	/** Symbols to insert in output filename to denote operations performed */
 	private final String symbols;
 	
+	/** Name of raw input file, minus directory and file extension */
+	private final String rawName;
+	
 	/** Type of library; controls processing methods and references to use */
 	private int libType=FRAG;
-	/** True for rna artifacts, false for dna artifacts */
-	private boolean rnaFlag=false;
+	/** True to filter rna artifacts */
+	private boolean rnaArtifactFlag=false;
+	/** True to filter dna artifacts */
+	private boolean dnaArtifactFlag=true;
 	/** True if phix should be filtered out */
-	private boolean phixFlag=false;
+	private boolean phixFlag=true;
+	/** True if pjet should be filtered out */
+	private boolean pjetFlag=true;
 	
 	/** Unused */
 	private boolean tboFlag=false;
@@ -997,8 +1437,10 @@ public class RQCFilter {
 	private float minLenFraction=0.333f;
 	/** Trim bases at this quality or below */
 	private byte trimq=10;
-	/** Throw away reads below this average quality before trimming.  Default: 6 */
+	/** Throw away reads below this average quality before trimming.  Default: 5 */
 	private byte maq=5;
+	/** Trim reads to be equal to 0 modulo this value.  Mainly for 151, 251, and 301bp runs. */
+	private int forceTrimModulo=5;
 	/** Quality-trimming mode */
 	private String qtrim="f";//"rl";
 	/** Kmer-trimming mode */
@@ -1019,21 +1461,31 @@ public class RQCFilter {
 	private int hdist_filter=1;
 	/** Use this Hamming distance when kmer trimming */
 	private int hdist_trim=1;
+	/** Use this Hamming distance when kmer trimming with short kmers */
+	private int hdist2_trim=-1;
 	
 	/** Merge strictness: strict, normal, loose, vloose */
 	private String mergeStrictness="loose";
 	
-	/** Trim fragment adapters from right side of reads */
+	/** Trim Truseq and Nextera adapters from right side of reads */
 	private boolean fragAdapterFlag=false;
+	/** Trim Truseq-RNA adapters from right side of reads */
+	private boolean rnaAdapterFlag=false;
 
 	/** Performed quality-trimming on reads */
 	private boolean qtrimFlag=false;
 	/** Performed kmer-trimming on reads */
 	private boolean ktrimFlag=false;
+	/** Performed nextera splitting on reads */
+	private boolean splitNexteraFlag=false;
 	/** Remove reads mapping to human with high identity */
 	private boolean humanFlag=false;
-	/** Use indexed version of human reference, rather than regenerating from fasta */
-	private boolean humanRefIndexedFlag=true;
+	/** Remove reads mapping to dog with high identity */
+	private boolean dogFlag=false;
+	/** Remove reads mapping to cat with high identity */
+	private boolean catFlag=false;
+	/** Remove cat, dog, and human reads at the same time with BBSplit. */
+	private boolean catDogHumanFlag=false;
 	/** Merged reads to create an insert size histogram */
 	private boolean mergeFlag=true;
 	
@@ -1042,12 +1494,26 @@ public class RQCFilter {
 	private boolean append=false;
 	private boolean compress=true;
 	
-	private boolean writeTempToTmpdir=false;
+	private boolean writeTempToTmpdir=true;
+	
+	/** Captures the command line "pigz" flag */
+	private String pigz;
+	/** Captures the command line "unpigz" flag */
+	private String unpigz;
+	/** Captures the command line "zl" flag */
+	private String zl;
+
+	private String chastityfilter="t";
+	private String failnobarcode=null;
+	private String barcodefilter="crash";
+	private String barcodes=null;
 	
 	/** Arguments to pass to BBDuk */
 	private ArrayList<String> primaryArgList=new ArrayList<String>();
 	/** References to pass to BBDuk for artifact removal */
-	private ArrayList<String> refs=new ArrayList<String>();
+	private ArrayList<String> bbdukFilterRefs=new ArrayList<String>();
+	/** References to pass to BBMap for contaminant removal */
+	private ArrayList<String> mappingRefs=new ArrayList<String>();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Read Data Files       ----------------*/
@@ -1058,6 +1524,7 @@ public class RQCFilter {
 	private final String trimPrefix;
 	private final String humanPrefix;
 	private final String filterPrefix;
+	private final String[] mappingPrefix;
 	
 	/** Directory in which to write all files */
 	private String outDir="";
@@ -1082,6 +1549,8 @@ public class RQCFilter {
 	/** Secondary output qual file */
 	private String qfout2=null;
 	
+	private String nexteraStats="nexteraStats.txt";
+	
 	/*--------------------------------------------------------------*/
 	/*----------------           Log Files          ----------------*/
 	/*--------------------------------------------------------------*/
@@ -1093,6 +1562,7 @@ public class RQCFilter {
 	private String rqcStatsName="filterStats.txt";
 	private String kmerStatsName="kmerStats.txt";
 	private String scaffoldStatsName="scaffoldStats.txt";
+	private String refStatsName="refStats.txt";
 	
 	private String ihistName="ihist_merge.txt";
 	
@@ -1107,18 +1577,26 @@ public class RQCFilter {
 	/*----------------        Reference Files       ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	private String mainArtifactFile_noNextera = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/Illumina.artifacts.2013.12.no_DNA_RNA_spikeins_no_Nextera_junction.fa.gz";
 	private String mainArtifactFile = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/Illumina.artifacts.2013.12.no_DNA_RNA_spikeins.fa";
 	private String artifactFileRna = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/RNA_spikeins.artifacts.2012.10.NoPolyA.fa";
 	private String artifactFileDna = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/DNA_spikeins.artifacts.2012.10.fa";
+	private String artifactFileDna_noNextera = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/DNA_spikeins.artifacts_no_Nextera_junction.2012.10.fa.gz";
 	private String phixRef = "/global/dna/shared/rqc/ref_databases/qaqc/databases/phix174_ill.ref.fa";
 	private String lfpeLinker = "/global/dna/shared/rqc/ref_databases/qaqc/databases/lfpe.linker.fa";
 	private String clrsLinker = "/global/dna/shared/rqc/ref_databases/qaqc/databases/crelox.fa";
 	private String clipLinker = clipLinkerDefault; //A literal string; "CATG" is supposed to be the normal linker.
+	private String pjetRef = "/global/dna/shared/rqc/ref_databases/qaqc/databases/pJET1.2.fasta";
 	
 	private String allArtifactsLatest = "/global/projectb/sandbox/rqc/qcdb/illumina.artifacts/Illumina.artifacts.fa";
 	private String fragAdapter = "/global/projectb/sandbox/gaag/bbtools/data/adapters.fa";
+	private String rnaAdapter = "/global/projectb/sandbox/gaag/bbtools/data/truseq_rna.fa.gz";
 	private String humanPath = "/global/projectb/sandbox/gaag/bbtools/hg19/";
-	private String humanRef = "/global/projectb/sandbox/gaag/bbtools/hg19/hg19_masked.fa.gz";
+	private String dogRef = "/global/projectb/sandbox/gaag/bbtools/dog_genome/dog_masked.fa.gz";
+	private String catRef = "/global/projectb/sandbox/gaag/bbtools/cat_genome/cat_masked.fa.gz";
+	private String humanRef = null;
+	
+	private String catDogHumanPath = "/global/projectb/sandbox/gaag/bbtools/catdoghuman/";
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/

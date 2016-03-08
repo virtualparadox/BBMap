@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 23, 2014
+Last modified November 25, 2014
 
 Description:  Generates an identity matrix via all-to-all alignment.
 
@@ -19,6 +19,9 @@ threads=auto        (t) Set number of threads to use; default is number of
 percent=f           Output identity as percent rather than a fraction.
 edits=              Allow at most this much edit distance.  Default is the
                     length of the longest input sequence. Lower is faster.
+width=              Alignment bandwidth, lower is faster.  Default: 2*edits+1.
+usejni=f            (jni) Do alignments faster, in C code.  Requires 
+                    compiling the C code; details are in /jni/README.txt.
 
 Java Parameters:
 
@@ -33,6 +36,7 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+NATIVELIBDIR="$DIR""jni/"
 
 z="-Xmx2g"
 z2="-Xms2g"
@@ -60,9 +64,9 @@ idmatrix() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
-	local CMD="java $EA $z -cp $CP jgi.IdentityMatrix $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP jgi.IdentityMatrix $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 idmatrix "$@"

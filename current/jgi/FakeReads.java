@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.AminoAcid;
@@ -53,9 +53,9 @@ public class FakeReads {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(2, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
@@ -67,7 +67,13 @@ public class FakeReads {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
@@ -88,13 +94,7 @@ public class FakeReads {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+				Shared.setThreads(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
@@ -113,53 +113,12 @@ public class FakeReads {
 				extin=b;
 			}else if(a.equals("extout")){
 				extout=b;
-			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
-				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
-				boolean x=Tools.parseBoolean(b);
-				Read.NULLIFY_BROKEN_QUALITY=x;
-				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
-				int x=Integer.parseInt(b);
-				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
+				stream.FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 				minReadLength=Integer.parseInt(b);
 			}else if(a.equals("length") || a.equals("maxlen") || a.equals("length")){
@@ -173,7 +132,6 @@ public class FakeReads {
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
 					in1=b.replace("#", "1");
-//					in2=b.replace("#", "2");
 				}
 			}else if(out1==null && i==1 && !arg.contains("=")){
 				out1=arg;
@@ -182,6 +140,10 @@ public class FakeReads {
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 		if(identifier==null){identifier="";}
@@ -208,7 +170,7 @@ public class FakeReads {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -229,19 +191,6 @@ public class FakeReads {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
@@ -251,18 +200,16 @@ public class FakeReads {
 	void process(Timer t){
 		
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ffin1, null, qfin1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null, qfin1, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
 
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -273,7 +220,7 @@ public class FakeReads {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(out1))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
 			ros.start();
 		}
 		
@@ -301,16 +248,16 @@ public class FakeReads {
 					}
 					assert(r.mate==null);
 					
-					boolean remove=r.bases.length<minReadLength || (minReadLength+overlap)<2;
+					boolean remove=r.length()<minReadLength || (minReadLength+overlap)<2;
 					
 					if(remove){
 						//Do nothing
 					}else{
-						int len=Tools.min(r.bases.length, desiredLength);
-						if(SPLITMODE){len=Tools.min(r.bases.length, (r.bases.length+overlap+1)/2);}
+						int len=Tools.min(r.length(), desiredLength);
+						if(SPLITMODE){len=Tools.min(r.length(), (r.length()+overlap+1)/2);}
 						
 						byte[] bases1=Arrays.copyOfRange(r.bases, 0, len);
-						byte[] bases2=Arrays.copyOfRange(r.bases, r.bases.length-len, r.bases.length);
+						byte[] bases2=Arrays.copyOfRange(r.bases, r.length()-len, r.length());
 						AminoAcid.reverseComplementBasesInPlace(bases2);
 						
 						byte[] qual1=null;
@@ -332,12 +279,12 @@ public class FakeReads {
 				
 				if(ros!=null){ros.add(fake, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -373,7 +320,7 @@ public class FakeReads {
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=5       \tSet compression level, 1 (low) to 9 (max)");
 		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
@@ -403,16 +350,12 @@ public class FakeReads {
 	
 	private boolean overwrite=false;
 	private boolean append=false;
-	private boolean colorspace=false;
 	
 	private long maxReads=-1;
 	private int minReadLength=1;
 	private int desiredLength=250;
 	private int overlap=50;
 	private boolean SPLITMODE=false;
-	
-	private byte qin=-1;
-	private byte qout=-1;
 	
 	private final FileFormat ffin1;
 	

@@ -3,6 +3,8 @@ package jgi;
 import java.io.File;
 import java.util.ArrayList;
 
+import align2.Tools;
+
 /**
  * @author Brian Bushnell
  * @date Apr 17, 2013
@@ -21,7 +23,7 @@ public class AssemblyStatsWrapper {
 		alist.add("k=0");
 		
 		for(String arg : args){
-			if(!arg.contains("=")){
+			if(!arg.contains("=") && Tools.canRead(arg)){
 				ilist.add("in="+arg);
 			}else{
 				String[] split=arg.split("=");
@@ -42,10 +44,10 @@ public class AssemblyStatsWrapper {
 			}
 		}
 		
-		
 		String[] args2=alist.toArray(new String[alist.size()]);
 		for(int i=0; i<ilist.size(); i++){
 			String s=ilist.get(i);
+//			System.err.println("Processing "+s);
 			args2[0]=s;
 			if(i>0){
 				args2[1]="header=f";
@@ -59,6 +61,10 @@ public class AssemblyStatsWrapper {
 				Thread.yield();
 			}
 			AssemblyStats2 as2=new AssemblyStats2(args2);
+			if(i>0){
+				AssemblyStats2.overwrite=false;
+				AssemblyStats2.append=true;
+			}
 			as2.process();
 		}
 		

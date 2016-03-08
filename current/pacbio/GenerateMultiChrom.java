@@ -9,7 +9,6 @@ import align2.Tools;
 import dna.AminoAcid;
 import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
-import dna.ChromosomeArrayCompressed;
 import dna.Data;
 import dna.FastaToChromArrays2;
 import dna.Gene;
@@ -66,12 +65,7 @@ public class GenerateMultiChrom {
 			if(buffer>0){
 				addN(chb, mincontig, maxcontig, buffer);
 			}
-			if(Data.CHROMC){
-				ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(chb);
-				ReadWrite.write(cac, Data.ROOT_GENOME+build+"/chr"+i+Data.chromExtension(), false);
-			}else{
-				ReadWrite.write(chb, Data.ROOT_GENOME+build+"/chr"+i+Data.chromExtension(), false);
-			}
+			ReadWrite.write(chb, Data.ROOT_GENOME+build+"/chr"+i+Data.chromExtension(), false);
 		}
 		FastaToChromArrays2.writeInfo(build, copies, Data.name, "multiple_"+Data.GENOME_BUILD, false, false);
 		

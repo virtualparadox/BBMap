@@ -23,7 +23,7 @@ public class TestLockSpeed {
 		
 		int mode=0;
 		long max=1000000000;
-		int threads=Shared.THREADS;
+		int threads=Shared.threads();
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];

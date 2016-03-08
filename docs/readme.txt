@@ -1,18 +1,25 @@
 BBMap readme by Brian Bushnell
-Last updated November 24, 2014.
-Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
-BBMap and all other BBTools are free to use for noncommercial purposes, and investigators are free to publish results derived from them, as long as the source code is not published without explicit permission.
-The BBTools package was written by Brian Bushnell, with the exception of the (optional, but faster) C and JNI components, which were written by Jonathan Rood.
+Last updated May 26, 2015.
+Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors, or post in the relevant thread on SeqAnswers.
+The BBTools package was written by Brian Bushnell, with the exception of the (optional, but faster) C, JNI, and MPI components, which were written by Jonathan Rood.
+
+All tools in the BBMap package are free to use.  If you use BBMap in work leading to a publication, and BBMap has not yet been published, please cite it something like this:
+BBMap - Bushnell B. - sourceforge.net/projects/bbmap/
+
+This readme is primarily for BBMap.  Usage information for all tools is in the tool's individual shellscript.
+For information on installing BBMap or compiling JNI code, see compiling.txt
+For legal stuff, see Legal.txt and bbmap/license.txt
+For usage information about config files, see readme_config.txt
 
 Special thanks for help with shellscripts goes to:
-Alex Copeland (JGI), Douglas Jacobsen (JGI/NERSC), and sdriscoll (SeqAnswers).
+Alex Copeland (JGI), Douglas Jacobsen (JGI/NERSC), sdriscoll (SeqAnswers), and Jon Rood (JGI/NERSC).
 
 This is the official release of BBMap, version 34.x
 
 
 Basic Syntax:
 
-(Using shellscript, on Genepool, which autodetects RAM to set -Xmx parameter.  You can also include a flag like '-Xmx31g' in the shellscript arguments to set RAM usage.)
+(Using shellscript, under Unix, which autodetects RAM to set -Xmx parameter.  You can also include a flag like '-Xmx31g' in the shellscript arguments to set RAM usage.)
 To index:
 bbmap.sh ref=<reference.fa>
 To map:
@@ -75,7 +82,6 @@ Mapping Parameters:
 fast=<f>		The fast flag is a macro.  It will set many other paramters so that BBMap will run much faster, at slightly reduced sensitivity for most applications.  Not recommended for RNAseq, cross-species alignment, or other situations where long deletions or low identity matches are expected.
 minratio=<0.56>		Alignment sensitivity as a fraction of a read's max possible mapping score.  Lower is slower and more sensitive but gives more false positives.  Ranges from 0 (very bad alignment) to 1 (perfect alignment only).  Default varies between BBMap versions. 
 minidentity=<>		Or "minid".  Use this flag to set minratio more easily.  If you set minid=0.9, for example, minratio will be set to a value that will be APPROXIMATELY equivalent to 90% identity alignments.
-idfilter=<0>		Different than "minid".  No alignments will be allowed with an identity score lower than this value.  This filter occurs at the very end and is unrelated to minratio, and has no effect on speed unless set to 1.  Range is 0-1.
 minapproxhits=<1>	Controls minimum number of seed hits to examine a site.  Higher is less accurate but faster (on large genomes).  2 is maybe 2.5x as fast and 3 is maybe 5x as fast on a genome with of gigabases.  Does not speed up genomes under 100MB or so very much.
 padding=<4>		Sets extra padding for slow-aligning.  Higher numbers are more accurate for indels near the tips of reads, but slower.
 tipsearch=<100>		Controls how far to look for possible deletions near tips of reads by brute force.  tipsearch=0 disables this function.  Higher is more accurate.
@@ -101,6 +107,16 @@ usejni=<f>		Or "jni".  Do alignments in C code, which is faster.  Requires first
 maxsites2=<800>		Don't analyze (or print) more than this many alignments per read.
 minaveragequality=<0>	(maq) Discard reads with average quality below this.
 
+Post-Filtering Parameters:
+
+idfilter=0              Different than "minid".  No alignments will be allowed with an identity score lower than this value.  This filter occurs at the very end and is unrelated to minratio, and has no effect on speed unless set to 1.  Range is 0-1.
+subfilter=-1            Ban alignments with more than this many substitutions.
+insfilter=-1            Ban alignments with more than this many insertions.
+delfilter=-1            Ban alignments with more than this many deletions.
+indelfilter=-1          Ban alignments with more than this many indels.
+editfilter=-1           Ban alignments with more than this many edits.
+inslenfilter=-1         Ban alignments with an insertion longer than this.
+dellenfilter=-1         Ban alignments with a deletion longer than this.
 
 Output Parameters:
 out=<outfile.sam>	Write output to this file.  If out=null, output is suppressed.  If you want to output paired reads to paired files, use a "#" symbol, like out=mapped#.sam.  Then reads1 will go to mapped1.sam and reads2 will go to mapped2.sam. (NOTE: split output currently diabled for .sam format, but allowed for native .txt format).  To print to standard out, use "out=stdout"
@@ -110,8 +126,8 @@ outb=<>			Write only blacklisted reads to this file.  If a pair has one end mapp
 out2=<>			If you set out2, outu2, outm2, or outb2, the second read in each pair will go to this file.  Not currently allowed for SAM format, but OK for others (such as fasta, fastq, bread).
 overwrite=<f>		Or "ow".  Overwrite output file if it exists, instead of aborting.
 append=<f>		Or "app".  Append to output file if it exists, instead of aborting.
-ambiguous=<best>		Or "ambig". Sets how to handle ambiguous reads.  "first" or "best" uses the first encountered best site (fastest).  "all" returns all best sites.  "random" selects a random site from all of the best sites (does not yet work with paired-ends).  "toss" discards all sites and considers the read unmapped (same as discardambiguous=true).  Note that for all options (aside from toss) ambiguous reads in SAM format will have the extra field "XT:A:R" while unambiguous reads will have "XT:A:U".
-ambiguous2=<best>		Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
+ambiguous=<best>	Or "ambig". Sets how to handle ambiguous reads.  "first" or "best" uses the first encountered best site (fastest).  "all" returns all best sites.  "random" selects a random site from all of the best sites (does not yet work with paired-ends).  "toss" discards all sites and considers the read unmapped (same as discardambiguous=true).  Note that for all options (aside from toss) ambiguous reads in SAM format will have the extra field "XT:A:R" while unambiguous reads will have "XT:A:U".
+ambiguous2=<best>	(for BBSplit only) Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
 outputunmapped=<t>	Outputs unmapped reads to primary output stream (otherwise they are dropped).
 outputblacklisted=<t>	Outputs blacklisted reads to primary output stream (otherwise they are dropped).
 ordered=<f>		Set to true if you want reads to be output in the same order they were input.  This takes more memory, and can be slower, due to buffering in multithreaded execution.  Not needed for singlethreaded execution.
@@ -183,7 +199,6 @@ bincov=<file>		Print binned coverage per location (one line per X bases).
 covbinsize=1000		Set the binsize for binned coverage output.
 nzo=f			Only print scaffolds with nonzero coverage.
 twocolumn=f		Change to true to print only ID and Avg_fold instead of all 6 columns to the 'out=' file.
-uscov=t			Include secondary alignments when calculating coverage.
 32bit=f			Set to true if you need per-base coverage over 64k.
 bitset=f		Store coverage data in BitSets.
 arrays=t		Store coverage data in Arrays.
@@ -228,7 +243,7 @@ Different versions:
 BBMap			(bbmap.sh) Fastest version.  Finds single best mapping location.
 BBMapPacBio		(mapPacBio.sh) Optimized for PacBio's error profile (more indels, fewer substitutions).  Finds single best mapping location.  PacBio reads should be in fasta format.
 BBMapPacBioSkimmer	(bbmapskimmer.sh) Designed to find ALL mapping locations with alignment score above a certain threshold; also optimized for Pac Bio reads.
-BBSplit			(bbsplit.sh) Uses BBMap or BBMapPacBio to map to multiple references simultaneously, and output the reads to the file corresponding to the best-matching reference.  Designed to split metagenomes or contaminated datasets prior to assembly.
+BBSplitter		(bbsplit.sh) Uses BBMap or BBMapPacBio to map to multiple references simultaneously, and output the reads to the file corresponding to the best-matching reference.  Designed to split metagenomes or contaminated datasets prior to assembly.
 BBWrap			(bbwrap.sh) Maps multiple read files to the same reference, producing one sam file per input file.  The advantage is that the reference/index only needs to be read once.
 
 
@@ -243,8 +258,630 @@ Change Log:
 V34.
 34.00
 Fixed a bug in BandedAlignerConcrete related to width being allowed to be even.
+34.01
+IdentityMatrix is now much faster for ghigh-identity sequences, and allows the 'width' flag to increase speed.
+Updated FilterReadsByName to allow "names=<read filename>", supporting fastq, fasta, and sam.  So, one file will be filtered according to the names of reads in a second file.  "names=<file>" where the file is just a list of names is still supported.
+34.02
+Fixed a couple errors in ConcurrentReadInputStreamD.
+Added fetching of a dummy list from "empty" for crisD, both master and slave.
+Added A_SampleD, which uses crisD.  It now works correctly for master.
+Renamed various ConcurrentReadStreamInterface classes.
+Added an abstract superclass for all ConcurrentReadInputStreams, which extends Thread.  Now, cris can be started directly without making a new thread.
+Changed all instances of wrapping cirs in a thread to just use start directly.  These are mostly commented with "//4567" to find if something was missed (like starting the cris twice).
+Increased cris stability by removing "returnList(ListNum, boolean)" and replacing it with "returnList(long, boolean)".  Lists may no longer be recycled.
+34.03
+Added scaffoldstats to BBQC and RQCFilter fileList logs.  Requested by Bryce F.
+Fixed a strange deadlock in Dedupe/ConcurrentCollectionReadInputStream caused by making CRIS a Thread subclass.  This will still occur if CRIS goes back to being a Thread.  Noted by Shoudan.
+34.04
+Removed hitCount tracking from Seal.
+"qtrim=<integer>" is now allowed for all classes using Parser.parseTrim().
+Parser.parseZip, parseInterleaved, parseQuality, parseTrim, parseFasta, and parseCommonStatic were integrated into most classes; reduced code size by almost 200kb.
+Parser.parseTrim got some extra functionality, like maxNs.
+Made an abstract superclass for KmerCount* classes, allowing removal of some code.
+Removed all KmerCount.countFasta() methods; they must now use a CRIS.
+Retired ErrorCorrectMT (superceded ny KmerNormalize).
+Fixed bug in BBDuk, Seal, and ReformatReads - when quality trimming and force-trimming, count of trimmed reads could go over 100%.  Now these counts are independent.  Noted by ysnapus (SeqAnswers).
+Removed "minscaf" and "mincontig" flags from Parser.parseFasta() because they were conflated.
+Determined cause of Kurt's error message in Dedupe - lower-case letters can trigger a failure.
+Dedupe now defaults to "tuc=t" (all input is made upper-case).
+Moved CRIS factory from CGRIS to CRIS.
+Copied cc2-cc5 to /global/projectb/sandbox/gaag/TestData/SingleCell/SimMockCommunity/plate*/.  These are simulated cross-contaminated single cell plates.
+Removed conflated "qual" flag from RandomReads; "q" should be used instead to set all read quality values to a single number.
+Fixed conflated "renamebymapping" flag in RenameReads.
+"tbr" flag is conflated in KmerNormalize; adjusted so that it now controls both "tossBadReads" (reads with errors) and "tossBrokenReads" (reads with the wrong number of quality scores).
+Conflated "gzip" flag in ChromArrayMaker/FastaToChromArrays changed to "gz".
+Handled conflated "ziplevel" flag in AbstractMapper.
+Conflated "fakequality" flag resolved by moving from BBMap to Parser and renaming "fakefastaquality"/"ffq".
+Added hdist2 and edist2 to BBDuk.  These allow independently specifying hdist/edist for full-length kmers and short kmers when using mink.
+Added trimhdist2 to RQCFilter/BBQC.
+*** Added path and mapref flags to RQCFilter/BBQC; they can now map to an arbitrary genome instead of just human.
+Added Shared.USE_MPI field (parsed by Parser.parseCommonStatic; "mpi" or "usempi").
+Added Shared.MPI_RANK field (should be set automatically).
+Added Shared.MPI_KEEP_ALL field.  This controls whether CRISD objects retain all reads, or just some of them.
+CRIS now automatically returns a CRISD when USE_MPI is enabled, as a slave or master depending on whether rank==0.
+ListNum is now Serializable.
+CRISD now transmits ListNum objects rather than ArrayLists, so that the number is preserved.
+Added Maxns flag to reformat.
+Fixed BBQC and RQCFilter's unnecessary addition of "usejni" to BBMap phase, since it is now already parsed by parseCommonStatic.
+BBQC now defaults to normalization and ecc off, but can be enabled with the "ecc" and "norm" flags, and supports cecc flag.
+Added notes on compiling JNI version suggested by sdriscoll.
+34.05
+Commented out a reference to ErrorCorrectMT in MateReadsMT.
+34.06
+FindPrimers (msa.sh) now accepts multiple queries (primers) and will use the best-matching of them.
+Added a BBMap flag to disable score penalty due to ambiguous alignments ("penalizeambiguous" or "pambig").  Requested by Matthias.
+Fixed failure to start CRIS in A_SampleD.
+Fixed some incorrect division in CRISD.
+Added MPI_NUM_RANKS to Shared.  This is parsed by parser via e.g. "mpi=4".
+Added BBMap flags subfilter, insfilter, delfilter, inslenfilter, dellenfilter, indelfilter, editfilter.  These function similarly to idfilter.  Requested by sdriscoll.
+34.07
+Dedupe now automatically calls Dedupe2 if more than 2 affixes are requested.
+Added "subset" (sst) and "subsetcount" (sstc) flags to Dedupe.
+Added "printLengthInEdges" (ple) flag to Dedupe.
+34.08
+Finished Dedupe subset processing for graph file generation.
+34.09
+Fixed bug where 'k' was not added to filename in RQCFilter.  Noted by Vasanth.
+34.10
+Documented "ordered" and "trd" flags for BBDuk/Seal.
+Added crismpi flag to allow switching between crisd and crismpi.
+Added shared.mpi package, containing MPIWrapper and ConcurrentReadInputStreamMPI.
+34.11
+Added detection of read length, interleaving, and quality coding to FileFormat objects, but these fields are not currently read.
+FileFormat.main() now outputs read length, if in fastq format.
+Reformat will now allow sam -> sam conversion; not useful in practice, but maybe useful in testing.
+Added flag "mpikeepall", default true.
+Fixed deadlock when mpikeepall=false.  Noted by Jon Rood.
+34.12
+Added 'auto' option to gcbins and idbins flags.  Requested by Seung-jin.
+Added dedupe "addpairnum" flag to control whether ".1" is appended to numbered graph nodes.
+Added real quality to qhist plot, when mhist is being generated.
+Moved maxns and maq to AFTER quality trimming in RQCFilter and BBDuk.
+Added "ftm" (forcetrimmodulo) flag to BBDuk/Reformat/RQCFilter/BBQC.  Default 5 for RQCFilter/BBQC, 0 otherwise.
+34.13
+Fixed a missing "else" in RQCFilter/BBQC.  Noted by Kurt LaButti.
+34.14
+Added .size() to ListNum.
+CrisD gained "unicast" method.  Also, unicast and listen now have mandatory toRank parameter.
+Made CrisD MPI methods protected rather than private, so they can be overridden.
+Refactored RTextOutputStream3.
+34.15
+Added Shared.LOW_MEMORY:
+Disables multithreaded index gen.
+Disables multithreaded ReadWrite writeObjectInThread method.
+Disables ByteFile2.
+For some reason it does not really seem to reduce memory consumption...
+Added BBMap qfin1 and qfin2 flags.
+Updated BBMap to use more modern input stream initialization.
+Added mapnt.sh for mapping to nt on a 120g node.
+34.16
+Changed RQCFilter "t" to mean "trimmed"; "k" was removed.
+Added parser noheadersequences (nhs) flag for sam files with millions of ref sequences.
+Documented "ambig" flag in Seal.
+Fixed issue where Shared.READ_BUFFER_NUM_BUFFERS was not getting changed with THREADS was changed.  Now both are private and get set together.
+Verified that mapnt.sh works on 120G nodes.
+34.17
+RTextOutputStream3 renamed to ConcurrentReadOutputStream.
+ReadStreamByteWriter refactored to be cleaner.
+Merged MPI dev branch into master.
+34.18
+Moved Seal's maxns/maq to after trimming.
+Added chastity filter to bbduk and reformat (reads containing " 1:Y:" or " 2:Y:").  Requested by Lynn A.
+Dedupe outd stream now produces correctly interleaved reads.  Requested by Lynn A.
+Replaced Dedupe TextStreamWriters with ByteStreamWriters, for read output.
+34.19
+Added parseCommon() to BBDuk, allowing samplerate flag.
+34.20
+FASTA_WRAP moved to Shared.
+Numeric qual output is now wrapped after the same number of bases as fasta output.
+"Low quality discards:" line is now triggered by chastity filter.
+SPLIT_READS and MIN_READ_LEN are now disabled when processing reference in BBDuk/Seal.
+Seal gained parseCommon and parseQuality.
+34.21
+Fixed MIN_READ_LEN bug (set to 0; should have been set to 1)
+34.22
+Added qfin (qual file) flags to BBDuk/Seal.
+Applied BBDuk restrictleft and restrictright to filtering and masking; before, it was only valid for trimming.
+Added calcCigarBases.
+Required includeHardClip parameter for all calls to calcCigarLength(), start(), or stop().
+Fixed bug in pileup caused by hard-clipped reads.  Noted by Casey B.
+34.23
+DecontaminateByNormalization was excluding contigs with length under 50bp, which caused an assertion error.
+Fixed a crash in BBDuk2 when not using a reference.  Noted by Dave O.
+Added entropy filter to BBDuk/BBDuk2.  Set "entropy=X" where X is 0 to 1 to filter reads with less entropy than X.
+34.24
+Added maxreads flag to readlength.sh.
+Fixed bug in BBMap - when directly outputting coverage, secondary alignments were never being used.
+BBMap now uses the "ambig" and "secondary" flags to determine whether to include secondary site coverage.  Specifically, "ambig=all" will use secondary sites, while other modes will not unless "secondary=t".  In other words, use of secondary sites in coverage will be exactly the same as use of them in a sam output file.  Removed "uscov=t                 Include secondary alignments when calculating coverage." from shellscript.
+Fixed minid trumping minratio when both were specified.  Now, the last one specified will be used.
+Added pileup support for reads with asterisks instead of bases, as long as they have a cigar string.  Also sped up calculation of read stop position.
+Cigar string 'M' symbols are now converted to match string 'N' symbols if there is no reference.
+34.25
+BBMerge initialization order bug fixed; it was preventing jni from being used with the "loose" or "vloose" flags.  Noted by sarvidsson (SeqAnswers).
+34.26
+Fixed semiperfect mode allowing non-semiperfect rescued alignments.  Noted by Dave O.
+Fixed ReadStats columns header for qhist when mhist was also generated.
+Fixed an inequality in BBMergeOverlapper that favored shorter overlaps with an equal number of mismatches, in some cases.  Had no impact on a normal 1M read benchmark except when margin=0, where it tripled the false-positive rate.
+34.27
+Enabled verbose mode in BBMergeOverlapper.
+34.28
+Added "align2." to sam header command line of BBMap.
+Fixed bug in BBMap that could cause "=" to be printed for "rnext" even when pairs were on different scaffolds.  Noted by rkanwar (SeqAnswers).
+34.30
+Reformat can now produce indelhist from sam files prior to v1.4.
+Fixed a crash bug in BBMap caused by an improper assertion.  Noted by Rob Egan.
+34.31
+BBDuk/Seal now recognize "scafstats" flag as equivalent to "stats".
+Seal now defaults to 5 stats columns (includes #bp).
+Wrote BBTool_ST, and abstract superclass for singlethreaded BBTools.
+Clarified documentation of "trimq=X" as meaning "regions with average quality under X will be trimmed".
+Fixed major bug in RQCFilter/BBQC:  "forcetrimmod" was being set to same value as "ktrim".  Noted by Brian Foster.
+34.32
+Changed the way BBMerge handles qualities to make it 40% faster (in java mode).  Reduced size of jni matrix accordingly.
+Fixed lack of readgroup tags for unmapped reads in sam format.  Noted by Rahul (SeqAnswers).
+Ensured Read.CHANGE_QUALITY affects both lower (<0) and upper (>41) values.
+34.33
+Pushed BBMergeOverlapper.c to commit.
+34.34
+Documented trimfragadapter and removehuman in RQCFilter.
+Added Parser flag for Shared.READ_BUFFER_LENGTH (readbufferlength).
+Added Parser flag for Shared.READ_BUFFER_MAX_DATA (readbufferdata).
+Added Parser flag for Shared.READ_BUFFER_NUM_BUFFERS (readbuffers).
+RQCFilter now accepts multiple references for decontamination by mapping.
+Added FuseSequence (the first BBTool_ST subclass) and fuse.sh, for gluing contigs together with Ns.
+Reformatted many scripts' help info to remove echo statements.
+Fixed bugs in stats and countgc; they were not including undefined bases when printing the length in gcformat=1 and gcformat=4.
+Replaced all instances of .bases.length with .length(), to prevent null pointer exceptions (for example in sam lines with no bases).
+Added cat and dog flags to rqcfilter.
+Changed defaults of BBMask to reduce amount masked in cat and dog to ~1% of genome.  This still masks all of the coincidental low-complexity hits from fungi.
+Determined that dog is contaminated with fungus, particularly chr7 and chr13.
+34.35
+Fixed a bug in which data was retained from the prior index when indexing a second fasta file in nodisk mode.
+34.36
+Disabled an assertion in BBMerge that the input is paired; it crashes if the input file is empty.
+34.37
+NSLOTS is now ignored if at least 16, to account for new 20-core nodes. 
+ReadWrite.getOutputStream now creates the directory structure if it does not already exist.  Problem discovered by Brian Foster.
+BBQC and RQCFilter now strip directory names before writing temp files.
+BBDuk now correctly reports number of reads quality-filtered.
+Added "unmappedonly" flag to Reformat.
+RQCFilter now defaults to using TMPDIR.
+34.38
+BBMap now prints reads/second correctly.  Before, it actually displayed pairs/second with paired data.
+Added maxq flag to BBMerge, which allows quality values over 41 where reads overlap.  Requested by Eric J.
+Changed CoveragePileup from TextFiles to ByteFiles; increased read speed by 3.65x.
+Changed CoveragePileup from TextStreamWriters to ByteStreamWriters; increased write speed by 1.46x.
+Fixed a bug in BBQC/RQCFilter: paired input and interleaved output was getting its paired status lost.  Noted by Simon P.
+Reformat, when in "mappedonly" or "unmappedonly" mode, now excludes reads with no bases or secondary alignments.
+34.39
+Human contaminant removal is now optional in BBQC.
+34.40
+ConcurrentReadOutputStream made abstract superclass.
+Added ConcurrentGenericReadInputStream, the default implementation.
+Added ConurrentReadOutputStreamD, distributed template.
+Merged some duplicate methods in MPIWrapper/ConcurrentReadInputStreamMPI.
+34.41
+Added some features to CoveragePileup, FilterByCoverage, and DecontaminateByNormalization to quantify low-coverage regions on otherwise high-coverage contigs.
+Added parser fastadump flag to toggle dumping of kmers as fasta vs 2-columns.
+Fixed a couple bugs in RQCFilter which mixed up names of stats files for trimming and filtering.
+RQCFilter will now map to cat, dog, and human together with BBSplit if all three are specified, and produce "refstats.txt".
+BBDuk/Seal now support ambiguous IUPAC codes in reference sequences.
+34.42
+ByteFile now returns empty lines as byte[0] instead of null.  This allows processing of fastq files with 0-length reads.  Noted by lankage (SeqAnswers).
+Fixed a bug in FastaToChromArrays2 - blank lines in fasta files were interpreted as breaks between sequences.  Noted by Alex Spunde.
+Fixed "unmappedonly" flag in reformat.sh - it was providing inverted output.  Noted by Kristin T.
+34.43
+Improved MD tag generation.  Reference Ns were not being counted, and unnecessary zeros were appearing between adjacent substitutions.  Noted by Jason S.
+expectedErrors() and averageQuality() both now require a boolean parameter, includeUndefined.
+Fixed a bug in BBQC's output directory - primary output was going to scratch.  Noted by Simon P.
+Added path to BBSplit's help menu.  Noted by Ed K.
+34.44
+TranslateSixFrames now can accept AA input and produce NT output.
+Merged dev branch into master.
+Enabled CrosMPI to be created when CRIS_MPI is set to true.
+BBDuk and Seal now use MPI streams correctly for reading the reference (when MPI is enabled).
+Added truseq_rna.fa.gz to resources.
+34.45
+Added BBDuk skipr1/skipr2 flags.  Requested by Stephanie H.
+Fixed a null pointer in ConcurrentReadOutputStreamD.
+34.46
+Added SamLine.parseFlagOnly(byte[]) for rapid classification of sam lines.
+Revised SplitSamFile and added splitsam.sh to the public distribution.  It's now fast (~540MB/s).
+Added a table of contents to /resources/.
+34.47
+Fixed bug parens around in FindTipDeletions; it was sometimes running when it should have been disabled.
+Added swap flag to Reformat, for substituting one base for another (as in bisulfite treatment).
+Added underscore flag to Reformat.
+Fixed threads flag in BBDuk; it was getting parsed in 2 places and never set.
+Added qhdist/qhdist2 flags to BBDuk/Seal for mutating query kmers.  Suggested by sdriscoll (SeqAnswers).
+Corrected mkh flag in Seal.  Noted by Vasanth S.
+FastaReadInputStream now has a mandatory amino field in constructor.
+34.48
+Bitsets and coverage arrays can now both be disabled in pileup.
+Reorganized buffer lengths in BBIndexPacBio to reduce memory usage and support long (6000bp) reads with shorter kmers, down to 9bp.
+Added small rna adapter path to BBQC/RQCFilter.
+Fixed FilterReadsByName processing of sam files; bug found by Marissa Miller.
+Accelerated and reduced memory usage of FilterReadsByName; moved name parsing over to Tools.
+Added ReadStreamWriter.USE_ATTACHED_SAMLINE.
+34.49
+Fixed qin/qout flags in many classes; they were being ignored.  Noted by Jason H.
+Added Nextera LMP adapter sequences.
+34.50
+Added AssemblyStats format=7.  Requested by Andrew Tritt.
+34.51
+Added physical (aka fragment) coverage flag to Pileup and BBMap.
+Added rpkm/fpkm output to Piluep and BBMap.  Requested by Vasanth.
+Changed Seal FPKM calcluation; it was dividing by number of mapped reads rather than number of mapped fragments.
+34.52
+Added SmallKmerFrequency and commonkmers.sh. Requested by Bill A.
+Fixed a bug in ReadStreamByteWriter; "attachment" mode was printing a period instead of newline.
+34.53
+Added graphical display of GC level to gchist.  The gcplot flag works with all programs that use gchist.  Requested by Kecia D.
+Added reparse to BBTool_ST.  This allows parsing of subclass fields which are otherwise overwritten by their defaults.
+Added count output to SmallKmerFrequency.
+34.54
+Added cumulative column to gchist.  This is also enabled by the gcplot flag.  Requested by Seung-Jin.
+Added BBMap normcov and normcovo flags.  Requested by Vasanth.
+Added support for out= to stats and statswrapper.  Requested by Brian Foster.
+Fixed a bug in which stdout was being closed by closing a PrintWriter that wrapped it.
+Disabled a message about read pairing for sam input.
+Finished DedupeByMapping and created dedupebymapping.sh.
+34.55
+Fixed a bug in BBMap's coverage flags; normcovo was called normcovOverall.  Noted by Matt Nolan.
+34.56
+Fixed qin flag being ignored by BBMap.  Noted by Adrian P.
+Removed obsolete classes ReformatFasta and ReverseComplement (both handled by ReformatReads now).
+34.57
+Added BBMap timetag flag and thist output.
+Fixed bug in AssemblyStats GC output.  Noted by Jasmyn P.
+Added format=0 to stats (no output).
+34.58
+Version bump.
+34.59
+BBSplit now supports # operator in filenames.  Requested by Vicente G.
+BBMap now prevents cross-scaffold alignments if any output file is sam or bam, not just the primary one.
+Reformat now has a primaryonly flag to prevent output of secondary alignments.
+Added KillSwitch class.  This will kill the process after X seconds with under Y CPU utilization.  It is invoked by the command line argument "monitor" for post programs.
+34.60
+BBDuk can now remove reads with less than X% of any single base. Requested by Alicia C.
+Added reformat 'filterbits' and 'requiredbits' flags.
+Removed obsolete colorspace-specific fields Read.expectedErrors and Read.mapLength.
+Wrote SplitNexteraLMP.java and splitnextera.sh.
+Added Read.subRead(from, to).
+Added BBMap call to ReadStats.checkFiles() to force a crash before running, rather than after running, if there are problems.
+Changed nextera_LMP_linker.fa.gz to a double linker after examining real data.
+Modified BBTool_ST for greater flexibility with additional IO streams.
+Wrote MultiStateAligner9XFlat.java.  For testing.  A flatter, faster MSA.
+34.61
+Completely removed all support for Solid colorspace.
+Removed ChromosomeArrayCompressed.
+Removed MultiStateAligner9fs.
+Removed FastaStream, QualStream, FastqReadInputStream_old.
+Renamed FastaQualReadInputStream3 to FastaQualReadInputStream.
+Added kmer.TableLoaderLockfree.  This unifies the load portion of BBDuk and Seal for filling AbstractKmerTables.
+Added kmer.TableReader.  This makes it easy to read data from kmer tables.
+Added error message for KmerCountExact if k<1 or k>31.
+Added warning to BBDuk if no kmers are loaded but a kmer operation is specified.
+Added kmask flag to BBDuk.sh help and clarified ktrim flag.
+Timer now automatically self-starts upon creation.
+Added NexteraLMP support to rqcfilter.
+Added versions of Illumina contaminant files without Nextera adapter junctions.
+34.62
+Fixed null pointer in BBDukF.  Found by Alicia C.
+34.63
+Created tax package for processing NCBI taxonomy data.
+Added IntList.getUniqueCount()
+Added TaxNode and TaxTree, for accumulating taxa counts.
+Added GiToNcbi, for translating gi numbers to taxa ids.
+Added RenameGiToNcbi, for renaming sequences (e.g. nt) with their taxa id.
+Added SortByTaxa, for sorting sequences based on taxonomy for better compression.
+TaxTree and GiToNcbi now support serialized input; much smaller.
+Integrated taxonomy support into Seal.
+Seal now uses 9 ways, and uses pigz when loading the reference.
+Added ftr2 (forcetrimright2) flag, which allows trimming a fixed number of bases on the rightmost end.
+Added BBMap parsing logic to prevent bad vad values of maxsites and maxsites2.
+Fixed BBTools failure to find primes.txt.gz if there is a space in the classpath (Matt Kearse).
+All calls to average quality now require a max number of bases to process.
+Added maqb flag (min average quality bases); maq calculation will be restricted to that many leading bases.  (Shoudan)
+Retired FilterReads (superceded by Reformat and BBNorm).
+Added reformat "tossjunk", "fixjunk", and "aminoin" flags.
+34.64
+Fixed off-by-one error in forcetrimright2.
+34.65
+Made gi2taxid.sh, which calls RenameGiToNcbi.
+RenameGiToNcbi updated to split input into valid and invalid output, where invalid gets anything with no taxid.
+Added FileFormat.isFasta(String) method.
+Improved SortByTaxa.  Now does preorder traversal of tree, and supports dummy nodes, fusing, and promotion.
+Added sortbytaxa.sh.
+BBSplit ref= can now point to directories.  Requested by Manuel K.
+34.66
+Fixed an uncaught overflow in ByteBuilder.expand().
+Added SortByTaxa max fusion length.
+Added barcode filtering to Reformat and BBDuk.
+Sped up chastity filtering and allowed it to process reads with / before read number.
+Added chastity filtering and barcode filtering to RQCFilter.
+34.67
+Fixed BBDuk double-counting chastity/barcode-filtered reads.
+Fixed BBDuk overcounting of reads that were trimmed by overlap.
+BBMap nzo flag now affects refstats and scafstats in addition to covstats (Vasanth).
+Added BBMap sortstats flag.
+Added BBMap rebuild flag (Vasanth).
+34.68
+Added qtrim=window flag (Alicia).
+Added slashspace flag to Reformat (disable space when adding /1 and /2 to read names).
+Added clearzone to Seal (Vasanth).
+Added stoptag to Reformat.
+Added boundstag to Parser (Shoudan).
+34.69
+Slight fix for samline inbounds detection.
+Fixed a corrupt Truseq RNA adapter sequence.
+Added Truseq RNA adapters to adapters.fa.
+34.70
+Added BBMerge useratio mode (enabled by default in vloose mode).
+Added BBMerge adapter processing.
+Added BBDuk kmask=lowercase.
+34.71
+Added BBMerge uloose and vstrict modes.
+Added BBMerge requireratiomatch, ratiominoverlapreduction, and ratiooffset flags.
+34.72
+Adjusted BBMerge uloose settings.
+34.73
+Added RandomReads path flag.
+Increased BBMerge defaults to -Xmx1000m and readbufferlen=400 to improve scaling.
+baseToComplementExtended array now maps lowercase letters to lowercase letters.
+Changed BBMerge to use floating-point probabilities.
+Fixed missing quote mark in bbsplit.sh.  Noted by Manuel K.
+34.74
+Added Reformat quantize flag (Alicia Clum).
+34.75
+RandomReads ignored q=x in perfect mode, and perfect flag did not work without a number.
+Added Reformat skipreads flag.
+Added DualCris, for dual input files of unequal length.
+Repair.sh now works if r1 and r2 files are unequal length.
+Added flags for BBMerge normalmode and ratiomode.
+Made BBMerge default to ratiomode-only for default and loose stringencies.
+BBMerge efilter now enabled by default in all modes.
+Improved BBMerge efilter (now occurs after both merge modes).
+Updated BBMerge efilter to examine only the trailing X bases depending on mininsert setting.
+Made normalmode and ratiomode more independent, so requireratiomatch flag is more efficient.
+Added ratiomode settings for strict, vstrict and ustrict.  Ustrict has requireratiomatch enabled.
+Increased readlength.sh default memory and reduced number of reads in buffer.
+Added BBMerge ordered flag; disabled by default.
+34.76
+Accelerated BBMerge by using a buffer for quality values translated to probabilities.
+Added early exits before mininsert0 and minoverlap, and added mininsert0 flag.
+Added ecc mode, for correction only and no merging.
+Tested removal of runtime division; speed unchanged.
+34.77
+Added BBMerge pfilter flag; discards overlaps with low probability mismatches.
+Fixed BBMergeOverlapper.expectedMismatches() and probability().  Both were considering the wrong bases.
+Increased mateByOverlapRatioJava speed with altBadlimt.  Slightly increases false-positive rate.
+Added reformat itn flag (convert iupac symbols to N).
+Simplified mateByOverlap and mateByOverlapRatio - removed no-quality loop.
+BBMerge uloose settings tweaked; no longer uses normalmode.
+34.78
+Fixed BBDuk compatibility with new BBMergeOverlapper float array requirement.
+34.79
+Integrated new BBMergeOverlapper ratiomode call into BBDuk.  Uses settings similar to strict mode.
+Adjusted BBMerge defaults some more.
+34.80
+Added outu flag to demuxbyname.
+Added overlapWithoutQuality (owq) and overlapUsingQuality (ouq) flags to BBMerge; default is ouq=f owq=t.
+Made a quality-free loop in BBMergeOverlapper now that quality is disabled by default; 20% faster.
+Removed minoi flag and some legacy fields from Overlapper that dealt with mapping information.
+34.81
+Split read verification into a different function outside of constructor.
+Added a mode for worker threads to verify reads, instead of at construction time.
+Added input file check to BBMerge.
+Greatly increased speed of overlapper with findBestRatio function.
+34.82
+Minor changes to BBMerge entropy calculations.
+Added BBMerge static function errorCorrect().
+Changed fast from normalmode to ratiomode.
+Added ecc flag to BBDuk and Seal.
+34.83
+Fixed DualCris and SplitPairsAndSingles (repair.sh).  Crash bug found by GenoMax.
+34.84
+Added overlap flag to BBNorm to regulate whether overlapping is used for error correction.
+BBMerge now has static functions mergeableFraction() and makeInsertHistogram().
+Added ecc flag to kmercountexact.
+Added normbins flag to BBMap and fixed normcovo flag.
+34.85
+Finished ArrayListSet.
+Created MultiCros and a functional reference implementation in main().
+Upgraded Seal handling of refnames mode; now all sequences for a ref file get the same ID (in that mode).
+Added BBSplit-style output for Seal refstats.  Requested by Vasanth.
+Removed outsingle from Seal.
+Added multiple output streams to Seal with the pattern flag; acts like basename in BBSplit.
+DemuxByName now supports arbitrary output streams without needing a name list.
+Moved directory parsing from BBSplit to Tools.getFileOrFiles().
+34.86
+Fixed text string for output stats of FilterByName.  Noted by Alex C.
+Tiny change to BBMergeOverlapper regarding Ns.
+Added mkf (minkmerfraction) flag to Seal.  Requested by Vasanth S.
+34.87
+Added /ref/qual/ directory for recalibration matrices.
+Added recalibrate() function to CalcTrueQuality.
+recalibrate (recal) is now a parser flag and has been enabled for BBMerge, Reformat, and BBDuk.
+Added fixheader flag to parser.  Requested by Shijie.
+Changed parseInt to parseLong for matrix loading.
+Added qb123 matrix.
+Added estimate by max observed error rate rather than average.
+34.89
+Added unicode2ascii.sh for fixing files with strange symbols.
+34.90
+Fixed FastaReadInputStream's ability to process extended ascii characters (128-255).
+Fixed BBDuk, Reformat, and Seal sometimes ignoring the ftr2 flag.
+Added adapter sequence detection to BBMerge (outa flag).
+Made CalcTrueQuality multithreaded.
+Fixed ROOT_QUALITY not getting set with the path flag.
+Added path flag to BBDuk and BBMerge.
+Added notags flag to BBMap.
+34.91
+CalcTrueQuality now tracks paired reads independently.
+BBDuk and various programs no longer deadlock waiting for sam header to be read.
+Added BBMerge iupacton (itn) flag.
+Seal can now write sam output from sam input.
+BBDuk can write sam output from sam input, but only for quality recalibration, not other operations.
+Made RemapQuality to test recalibration.
+Internal 2-pass recalibration is now working.
+Changed $CMD to eval $CMD in all shellscripts, which allows escaping spaces in filenames using backslash.  Thanks Jon!
+Added qchist (qualityCountHistogram).  Gives counts of bases with each quality score.
+Fixed BBDuk not testing to see if qahist was set.
+Changed CalcTrueQuality default observationcutoff to 100, because higher settings cause odd-looking graphs.
+34.92
+Added RenameReads prefixonly flag.
+Added driver.SummarizeCoverage to summarize cross-contamination scafstats files.
+Changed calcmem.sh to work correctly even if ulimit fails.  Noted by Tomas B.  Thanks to vladr (stackoverflow)!
+Changed bbduk.sh/bbduk2.sh default ram to 1400m from 2000m so that they should work on 32-bit MacOS systems without setting the -Xmx flag.
+Removed some redundancy from TextFile.
+DecontaminateByNormalization now named CrossBlock.
+Added Read.uToT and parser utot flag for converting uracil to thymine in reads.
+BBMap now converts U to T when generating the reference, and all degenerate bases to N.
+Changed SummarizeCoverage to be memory-efficient with large files (e.g. coverage vs nt).
+Removed colorspace from ChromosomeArray.
+Fixed a bug in which cigar strings were sometimes not printed for secondary alignments or when using filters.  Noted by Jason S.
+Added qb12 matrix to CalcTrueQuality.
+Added support for adjusting read quality score limits beyond 2~41 with the mincalledquality and maxcalledquality flags.
+Recalibration matrices may be extended above Q41 with the recalqmax flag, for processing consensus reads.
+34.93
+Fixed version flag in parser; it was being ignored if there were arguments.
+Fixed calcmem.sh behavior on a Mac (or other system without /proc/mem) when ulimit=unlimited.
+Fixed issue where BBTool_ST subclasses were having params overridden by defaults.
+ReadStats now correctly tracks read1 and read2 for qhist using sam input, instead of lumping them together.
+Fixed CalcTrueQuality's recalibration of sam input; it was applying the read1 profile to both reads.  Finally works perfectly.
+Added BBSplit force-rebuild logic.
+Coverage histogram now goes to 1 million in 32bit mode, instead of 64k.
+Added pjet to rqcfilter/bbqc.
+Fixed a division-by-zero bug in ReadStats.  Noted by Seung-Jin.
+Removed confusing readme line stating that BBMap is free for noncommercial use.  This is true, but it is also free for commercial use.
+Added stdev to covstats output (as long as arrays are enabled).
+Added driver.SummarizeSealStats and summarizeseal.sh for analyzing cross-contamination results using Seal stats output.
+Added summarizescafstats.sh script for driver.SummarizeCoverage.
+Added jgi.FilterReadsWithSubs it select only those reads with substitution errors for bases in a specified quality range.
+Added phix_adapters.fa.gz to /resources and updated contents.
+Added qahist average deviation header line.
+34.94
+BBMap now produces an error message if indexing fastq files rather than just crashing.
+Added config file support to all BBTools via the config= flag.
+Added some sample config files and a config file readme.
+Moved bloom filter and count-min sketch data structures to bloom package.
+34.95
+Added trd flag to reformat.sh help.  Noted missing by Esther Singer.
+Added merge support to SplitNexteraLMP.  Currently unknown which is better, merge=t or f.
+Added better output names to RQCFilter.  Requested by Bryce F.
+Added kmer ownership to AbstractKmerTable.
+KmerLink is now an AbstractKmerTable subclass.
+Wrote Tadpole.
+Fixed bug when reading empty fasta files.  Noted by Matt K.
+Added SamLine.countTrailingClip, and modified countLeadingClip.  Now both have soft/hard clipping toggles.
+Removed static SamLine.SUBTRACT_LEADING_SOFT_CLIP and replaced with required parameter.
+Reduced default initial CoverageArray size from 16m to 500.
+Added mincov, maxcov, and delcov flags to BBMask.
+Updated BBMask readme.
+Split IntList/LongList toString method into SetView and ListView.
+Added Pileup toggle for including soft-clipped bases; default false.
+Made Tadpole shell script.
+Fixed Seal stats header indicating over 100% matched sequences with ambig=all.  Noted by Esther Singer.
+AbstractKmerTable classes now correctly return -1 instead of 0 if a key is not present.
+Added AbstractKmerTable.clearOwner() to clean up ownership trails of abandoned contigs.
+Fixed various bugs in Tadpole.
+Added substring and case flags to FilterByName.  Requested by Esther Singer.
+Tadpole now works correctly multithreaded.
+34.96
+Fixed a bug in FastaReadInputStream not shutting down subprocesses when done.
+Added LMP insert-size detection mode to Tadpole.
+Added ByteBuilder.appendKmer(kmer, k).
+Added Tadpole read-extension mode.
+Tadpole now builds contigs from kmer seeds rather than contig seeds.  Slower but more consistent.
+Tadpole is now a complete assembler.
+34.97
+Added length, coverage, and GC to Tadpole contig names.
+Added directional substrings for filterbyname.  Requested by Esther Singer.
+Disabled module lines in reformat.sh.  Noted by Xiaoli D.
+Renamed summarizecoverage to summarizescafstats.
+Added ambig and kfilter flags to CrossBlock.  Requested by Ken H.
 
+
+
+TODO: Include deletions toggle for Pileup.
+TODO: Soft-clipping coverage flag.
+TODO: Add match/cigar/SamLine trimming to TrimRead.
+TODO: Write Hollow.
+TODO: Multithread splitnextera.
+TODO: config flag in Parser
+TODO: Normalize CalcTrueQuality on 50% GC by tracking GC rates (etc) observed in reads.
+TODO: Make Recalibrate class and recalibrate.sh to automate everything.
+TODO: Track quality-score accuracy per base location.
+TODO: Track quality-score accuracy per base letter.
+TODO: Tool to extract reads mapped to a specific locus.
+TODO: Make it easy to test a decontam tool on the synth datasets.
+TODO: Map unknowns in 48-sample-plate.
+TODO: BBMerge return codes. -1 no solution, -2 ambig, -3 too long (short overlap), -4 too short.
+TODO: Seal speed and mkf flags should work together.
+TODO: Apply Seal refnames upgrade to taxonomy handling, if not already done.
+TODO: BBNorm histout with 1pass/ecc does not seem to generate anything.
+TODO: randomreads does not name reads by origin in fasta format.
+TODO: Hamming distance for demuxbyname.
+TODO: BBMerge has a lower merge rate when r1 and r2 are different lengths. (simple fix - swap them [done]).
+TODO: MultiCros wrapper and hash-based multi-listnum object.
+TODO: Reformat should be able to trim mapped sam files (Aldo J).
+TODO: Mask bases overlapping from Dedupe graph (Shoudan).
+TODO: Seal split capability, or BBSplit for short sequences (Manuel K).
+TODO: RQCFilter - dynamically switch between $TMPDIR or /dev/shm depending on input size and available disk space.
+TODO: BBMerge - trim adapters for unmerged reads (?)
+TODO: Fungal pipeline: FindErrors?
+*TODO: BBMap calls calcCorrectness even when data is not synthetic.
+TODO: BBMap File containing all reads/pairs that are not completely contained within a single contig. (Shoudan)
+TODO: BBDuk/Seal - enable tracking of kmers by reference file rather than reference sequence.
+TODO: Batch setting for BBDuk to operate on multiple files and auto-name output.
+TODO: Get data from Chris B, count mismatched pairs, send to E.
+TODO: Stats does not accurately estimate BBMap RAM usage for K=15.
+TODO: Accelerate maxindel=0 mode for BBMap by banning MSA usage.
+*TODO: BBMerge poster.
+TODO: Redo DedupeByMapping so that it can handle sorted input using a heap.
+TODO: MSA Flat - remove states to increase speed.
+TODO: Dedupe does not work with sam input. (Lynn A.)
+TODO: Change all instances of "remove bases with quality below minq" to "...trimq" in shellscripts.
+TODO: Parse extra part of sam lines into a byte array (optionally).
+*TODO: Dedupe crash on input in C:\temp\dd1\bad.fa (Shoudan).
+TODO: Tile-based statistics and filtering for BBMap, BBDuk, etc.
+TODO: Pileup could calculate ref/nonref coverage.
+TODO: Stats needs a fastq mode.
+TODO: Marcel wants a program to essentially sort reads and remove duplicates that are at least X identity.
+TODO: Move parsing of "threads" to parseCommonStatic and adjust all relevant classes.
+TODO: Add 'remap' from Reformat flag to BBMap.
+*TODO: BBMerge won't go below 17bp in normal mode or 26bp in loose mode, regardless of minoi flag.
+TODO: BBMerge dynamic mode - test to determine best overlap limits.
+TODO: Bed output of masked regions by BBMask, or regions with Ns.
+TODO: Bed output of regions with coverage abover or below X (Bob Bower).
+TODO: Document append in shellscripts.
+TODO: Genbank format parser (Sam D).  Looks confusing.
+TODO: Decontam should break at (or N-mask) low-coverage areas rather than discarding the whole contig.
+TODO: BED support for pileup.  And make Pileup faster by ignoring irrelevent sam fields.
+TODO: CrossMask.  Accept set of files; for each, mask using BBDuk with all others as ref.
+TODO: Study bisulfite data on BBMap.  Possibly use multiple reference copies with different transforms (C->T, A-G, both, neither).  
+TODO: Shellscripts are not able to handle paths containing spaces.
+TODO: Add mininsert flag to BBMap.  And maybe maxinsert.
+TODO: Parse MD tag when available.
+TODO: CC rates for all 3 platforms in one chart; ignore R1/R2 differences.
+*TODO: Dedupe loses reads when using paired data and run multithreaded.
+*TODO: strange bug in BBMap causing reads to be mapped to different chromosomes but display "=" for ref sequence.  Can replicate with GATK human ref.
+TODO: document nhs flag.
+TODO: Filter cross-contam plates with only depth and length, test cc rates.
+TODO: Fix dedupe crash when minclustersize=1.
+TODO: Clarify or fix what minid does in Dedupe.
+TODO: Add ribosomal filtering to rqc.
 TODO: Update BandedAlignerJNI for quicker width reset.
+TODO: Optional penalty when seq ends before ref in banded.
+TODO: Make sure AddAdapters is adding them correctly, i.e., reverse-complemented (or not).
+TODO: Make list of proposed higher stringency adapter trimming changes and send to Vasanth/Erika.
+TODO: Retire ErrorCorrect, and move the functionality over to another class.
+TODO: Implement ErrorCorrectBulk in KmerNormalize.  It is used in MateReadsMT.
+TODO: BBMerge should allow optional inline error-correction for reads that fail to merge, and revert if they still fail.
+TODO: Retire KmerCount7MT (non-atomic version).
+*TODO: It appears that timeslip is being correctly applied by fillLimited (etc), but not by calcDelScore() or calcAffineScore().
+TODO: Dedupe should warn if lowercase letters are present. (Kurt)
 
 
 v33.
@@ -509,7 +1146,6 @@ v33.79
 Changed the way "pos" and "pnext" are calculated for paired reads to be consistent.  Bug had been noted with soft-clipped reads by Rob Egan.
 Changed LOCAL_ALIGN_TIP_LENGTH from 8 to 1.  Previously, soft-clipping would only occur if at least 8 bases would be clipped; not sure why I did that.
 Changed the way "tlen" is calculated to compensate for clipping.
-
 v33.80
 Changed default decontaminate minratio from2 to 0 (disabling it) because of false negatives.
 Changed default decontaminate mincov from 4 to 5 due to a false negative.
@@ -616,6 +1252,45 @@ Added jni path flags to BBDuk shellscript command line.
 Wrote FindPrimers and msa.sh to locate primer sites.  Uses MultiStateAligner; outputs in sam format.
 Wrote CutPrimers and cutprimers.sh to cut regions flanked by mapped primer locations from sequences, e.g. V4.
 
+TODO: Plot correlation of V4 and 16s.
+TODO: Add length into edges of Dedupe output. (Ted)
+TODO: Benchmark Seal.  Speed seems inconsistent.
+TODO: Locking version of Seal.
+TODO: HashArray resize - grow fast up to a limit, then resize to exactly the max allowable.
+TODO: Alicia BBMap PacBio slowdown (try an older version...)
+TODO: BBMerge rename mode with insert sizes.
+TODO: Dump info about Seal kmer copy histogram.
+TODO: rpkm for pileup / BBMap.
+TODO: Dedupe crash bug. (Kurt)
+TODO: CallPeaks minwidth should be a subsumption threshold, not creation threshold.
+TODO: CallPeaks should not subsume peaks with valleys in between that are very low.
+*TODO: Make TextStreamWriter an abstract superclass.
+TODO: BBDuk split mode
+TODO: Add option for BBMap to convert U to T. (Asaf Levy)
+TODO: Add dedupe support for graphing containments and matches.
+TODO: Log normalization.
+TODO: Prefilterpasses (prepasses)
+TODO: Test forcing msa.scoreNoIndels to always run bidirectionally.
+TODO: Message for BBNorm indicating pairing (this is nontrivial)
+TODO: Average quality for pileup.sh
+TODO: Fix ChromArrayMaker which may skip every other scaffold (for now I have reverted to old, correct version). ***Possibly fixed by disabling interleaving; TODO: Test.
+TODO: Consider changing ConcurrentGenericReadInputStream to put read/base statistics into incrementGenerated(), or at least in a function.
+TODO: BBSplit produces alignments to the wrong reference in the output for a specific reference. (Shoudan)
+TODO: Change the way Ns are handled in cigar strings, both input and output.
+TODO: Add #clipped reads/bases to BBMap output.
+TODO: Add method for counting number of clipped bases in a read and unclipped length.
+TODO: Orientation statistics for BBMap ihist.
+TODO: Clarify documentation of 'reads' flag to note that it means reads OR pairs.
+TODO: bs flag does not work with BBWrap (Shoudan).
+TODO: Fasta input tries to sometimes keep reading from the file when a limited number of reads is specified.  Gives error message but output is fine.
+TODO: 'saa' flag sometimes does not work (Shoudan).
+TODO: Kmer transition probabilities for binning.
+TODO: One coverage file per scaffold; abort if over X scaffolds. (Andrew Tritt)
+TODO: Enable JNI by default for BBMap and Dedupe on Genepool.
+TODO: Disable cigar string generation when dumping coverage only (?).  This will disable stats, though.
+TODO: Pipethread spawned when decompressing from standard in with an external process.
+TODO: FileFormat should test interleaving and quality individually on files rather than relying on a static field.
+TODO: Refstats (BBSplit) still reports inflated rates for pairs that don't map to the same reference.  This behavior is difficult to change because it is conflated with BBSPlit's output streams.
 
 
 v32.

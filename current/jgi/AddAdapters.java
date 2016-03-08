@@ -7,10 +7,10 @@ import java.util.Arrays;
 import java.util.Random;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import align2.ListNum;
 import align2.QualityTools;
@@ -60,15 +60,13 @@ public class AddAdapters {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		boolean setxs=false, setintron=false;
-		boolean setInterleaved=false; //Whether it was explicitly set.
-
+		Parser parser=new Parser();
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
@@ -80,7 +78,15 @@ public class AddAdapters {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
@@ -96,13 +102,7 @@ public class AddAdapters {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+				Shared.setThreads(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 			}else if(a.equals("in2") || a.equals("input2")){
@@ -119,6 +119,8 @@ public class AddAdapters {
 				adapterFile=b;
 			}else if(a.equals("literal") || a.equals("literals")){
 				literals=(b==null ? null : b.split(","));
+			}else if(a.equals("rate") || a.equals("prob")){
+				adapterProb=Float.parseFloat(b);
 			}else if(a.equals("minlength") || a.equals("minlen") || a.equals("ml")){
 				minlen=Integer.parseInt(b);
 			}else if(a.equals("3'") || a.equalsIgnoreCase("3prime") || a.equalsIgnoreCase("3-prime") || a.equalsIgnoreCase("right") || a.equalsIgnoreCase("r")){
@@ -131,8 +133,6 @@ public class AddAdapters {
 				}if(b.equals("5'") || b.equalsIgnoreCase("5prime") || b.equalsIgnoreCase("5-prime") || b.equalsIgnoreCase("left") || a.equalsIgnoreCase("l")){
 					right=true;
 				}
-			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
-				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
 			}else if(a.equals("addslash")){
 				addslash=Tools.parseBoolean(b);
 			}else if(a.equals("adderrors")){
@@ -157,67 +157,8 @@ public class AddAdapters {
 				}else{
 					throw new RuntimeException("Unknown mode "+b);
 				}
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("lctn") || a.equals("lowercaseton")){
-				Read.LOWER_CASE_TO_N=Tools.parseBoolean(b);
-			}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
-				boolean x=Tools.parseBoolean(b);
-				Read.NULLIFY_BROKEN_QUALITY=x;
-				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-				setInterleaved=true;
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				setInterleaved=true;
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-					setInterleaved=true;
-				}
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					in1=b.replace("#", "1");
-					in2=b.replace("#", "2");
-				}
 			}else if(out1==null && i==1 && !arg.contains("=")){
 				out1=arg;
 			}else{
@@ -225,6 +166,10 @@ public class AddAdapters {
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
@@ -247,7 +192,7 @@ public class AddAdapters {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -261,7 +206,7 @@ public class AddAdapters {
 //			out1="stdout";
 		}
 		
-		if(!setInterleaved){
+		if(!parser.setInterleaved){
 			assert(in1!=null && (!writeMode || out1!=null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
@@ -280,18 +225,6 @@ public class AddAdapters {
 		
 		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
-		}
-		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
@@ -355,18 +288,16 @@ public class AddAdapters {
 	
 	void write(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, null, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
 
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -377,7 +308,7 @@ public class AddAdapters {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, null, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, null, null, buff, null, false);
 			ros.start();
 		}
 
@@ -400,7 +331,7 @@ public class AddAdapters {
 					final Read r2=r1.mate;
 					
 					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
+					final int initialLength2=(r1.mateLength());
 
 					addAdapter(r1, addPaired);
 					if(r2!=null && !addPaired){
@@ -423,12 +354,12 @@ public class AddAdapters {
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -566,13 +497,11 @@ public class AddAdapters {
 	
 	void read(Timer t){
 
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, null, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
@@ -598,12 +527,12 @@ public class AddAdapters {
 					grade(r1, r2);
 				}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -782,9 +711,6 @@ public class AddAdapters {
 	
 	private long maxReads=-1;
 	private int minlen=1;
-	
-	private byte qin=-1;
-	private byte qout=-1;
 	
 	private boolean writeMode=true;
 	private float adapterProb=0.5f;

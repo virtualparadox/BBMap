@@ -4,7 +4,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.Read;
 import align2.ListNum;
 import dna.Timer;
@@ -58,14 +58,12 @@ public class CountUniqueness {
 	
 	public void process(String fname){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff=FileFormat.testInput(fname, FileFormat.SAM, null, true, false);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ff, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff, null);
 			if(verbose){System.err.println("Starting cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		
 		{	
@@ -80,12 +78,12 @@ public class CountUniqueness {
 					assert(false);
 					process(r1, r2);
 				}
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		

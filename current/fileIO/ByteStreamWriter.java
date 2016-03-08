@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import align2.Shared;
+
 import kmer.AbstractKmerTable;
 
 import stream.ByteBuilder;
@@ -327,7 +329,7 @@ public class ByteStreamWriter extends Thread {
 	
 	public void print(Read r){
 		assert(!OTHER);
-		ByteBuilder x=(FASTQ ? r.toFastq(buffer) : FASTA ? r.toFasta(buffer) : SAM ? r.toSam(buffer) : 
+		ByteBuilder x=(FASTQ ? r.toFastq(buffer) : FASTA ? r.toFasta(FASTA_WRAP, buffer) : SAM ? r.toSam(buffer) : 
 			SITES ? r.toSitesB(buffer) : INFO ? r.toInfoB(buffer) : r.toText(true, buffer));
 		flushBuffer(false);
 	}
@@ -404,6 +406,8 @@ public class ByteStreamWriter extends Thread {
 	private final boolean SITES;
 	private final boolean INFO;
 	private final boolean OTHER;
+	
+	private final int FASTA_WRAP=Shared.FASTA_WRAP;
 	
 	/*--------------------------------------------------------------*/
 

@@ -95,8 +95,34 @@ public abstract class AbstractKmerTable {
 	abstract boolean canResize();
 	
 	/*--------------------------------------------------------------*/
+	/*---------------       Ownership Methods       ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/** Set the thread owning this kmer.  Return the new owner.
+	 * Will only change the owner if newOwner is greater than current owner. */
+	public abstract int setOwner(long kmer, int newOwner);
+	
+	/** Reset owner to -1 if this is the current owner. */
+	public abstract boolean clearOwner(long kmer, int owner);
+	
+	/** Return the thread ID owning this kmer, or -1. */
+	public abstract int getOwner(long kmer);
+	
+	/** Create data structures needed for ownership representation */
+	public abstract void initializeOwnership();
+	
+	/*--------------------------------------------------------------*/
 	/*----------------           Methods            ----------------*/
 	/*--------------------------------------------------------------*/
+	
+	public static final StringBuilder toText(long kmer, int k){
+		StringBuilder sb=new StringBuilder(k);
+		for(int i=k-1; i>=0; i--){
+			int x=(int)((kmer>>(2*i))&3);
+			sb.append((char)AminoAcid.numberToBase[x]);
+		}
+		return sb;
+	}
 
 	static final StringBuilder toText(long kmer, int count, int k){
 		StringBuilder sb=new StringBuilder(k+10);
@@ -177,6 +203,10 @@ public abstract class AbstractKmerTable {
 				int x=(int)((kmer>>(2*i))&3);
 				bb.append(AminoAcid.numberToBase[x]);
 			}
+		}else if(NUMERIC_DUMP){
+			bb.append(Long.toHexString(kmer));
+			bb.append('\t');
+			bb.append(count);
 		}else{
 			for(int i=k-1; i>=0; i--){
 				int x=(int)((kmer>>(2*i))&3);
@@ -201,6 +231,15 @@ public abstract class AbstractKmerTable {
 			for(int i=k-1; i>=0; i--){
 				int x=(int)((kmer>>(2*i))&3);
 				bb.append(AminoAcid.numberToBase[x]);
+			}
+		}else if(NUMERIC_DUMP){
+			bb.append(Long.toHexString(kmer));
+			bb.append('\t');
+			for(int i=0; i<values.length; i++){
+				int x=values[i];
+				if(x==-1){break;}
+				if(i>0){bb.append(',');}
+				bb.append(x);
 			}
 		}else{
 			for(int i=k-1; i>=0; i--){
@@ -249,7 +288,7 @@ public abstract class AbstractKmerTable {
 		final AbstractKmerTable[] tables=new AbstractKmerTable[ways];
 		
 		{
-			final int t=Tools.max(1, Tools.min(Shared.THREADS, 2, ways));
+			final int t=Tools.max(1, Tools.min(Shared.threads(), 2, ways));
 			final AllocThread[] allocators=new AllocThread[t];
 			for(int i=0; i<t; i++){
 				allocators[i]=new AllocThread(tableType, initialSize, i, t, growable, tables);
@@ -343,6 +382,7 @@ public abstract class AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	public static boolean FASTA_DUMP=true;
+	public static boolean NUMERIC_DUMP=false;
 	
 	public static final boolean verbose=false;
 	public static final boolean TESTMODE=false; //123 SLOW!

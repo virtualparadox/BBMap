@@ -7,10 +7,10 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.Parser;
@@ -43,6 +43,7 @@ public class FilterByCoverage {
 	
 	public FilterByCoverage(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -55,9 +56,9 @@ public class FilterByCoverage {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(20, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		Parser parser=new Parser();
@@ -94,6 +95,8 @@ public class FilterByCoverage {
 				minReads=Long.parseLong(b);
 			}else if(a.equals("minratio") || a.equals("ratio")){
 				minRatio=Double.parseDouble(b);
+			}else if(a.equals("basesundermin")){
+				basesUnderMin=Integer.parseInt(b);
 			}else if(a.equals("minl") || a.equals("minlen") || a.equals("minlength")){
 				minLength=Integer.parseInt(b);
 			}else if(a.equals("appendresults") || a.equals("logappend") || a.equals("appendlog") || a.equals("appendtolog")){
@@ -107,8 +110,8 @@ public class FilterByCoverage {
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
+					parser.in1=arg.replace("#", "1");
+					parser.in2=arg.replace("#", "2");
 				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
@@ -119,7 +122,8 @@ public class FilterByCoverage {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
@@ -157,21 +161,6 @@ public class FilterByCoverage {
 		if(!Tools.testOutputFiles(overwrite, append, false, outclean, outdirty)){
 			outstream.println((outclean==null)+", "+outclean+", "+(outdirty==null)+", "+outdirty);
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+outclean+", "+outdirty+"\n");
-		}
-		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
 		}
 
 		ffoutclean=FileFormat.testOutput(outclean, FileFormat.FASTA, extout, true, overwrite, append, false);
@@ -213,33 +202,31 @@ public class FilterByCoverage {
 			tf.close();
 		}
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, null, qfin1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null, qfin1, null);
 			if(verbose){outstream.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		assert(!cris.paired());
 		
-		final RTextOutputStream3 rosClean;
+		final ConcurrentReadOutputStream rosClean;
 		if(outclean!=null){
 			final int buff=4;
 			
 			assert(!outclean.equalsIgnoreCase(in1) && !outclean.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
-			rosClean=new RTextOutputStream3(ffoutclean, null, qfoutclean, null, buff, null, false);
+			rosClean=ConcurrentReadOutputStream.getStream(ffoutclean, null, qfoutclean, null, buff, null, false);
 			rosClean.start();
 		}else{rosClean=null;}
 		
-		final RTextOutputStream3 rosDirty;
+		final ConcurrentReadOutputStream rosDirty;
 		if(outdirty!=null){
 			final int buff=4;
 			
 			assert(!outdirty.equalsIgnoreCase(in1) && !outdirty.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
-			rosDirty=new RTextOutputStream3(ffoutdirty, null, qfoutdirty, null, buff, null, false);
+			rosDirty=ConcurrentReadOutputStream.getStream(ffoutdirty, null, qfoutdirty, null, buff, null, false);
 			rosDirty.start();
 		}else{rosDirty=null;}
 		
@@ -283,20 +270,45 @@ public class FilterByCoverage {
 					
 					readsProcessed++;
 					basesProcessed+=initialLength1;
-
+					
+					final double covRatio;
+					final boolean contam;
+					
 					final CovStatsLine csl0=cslMap0.get(r1.id);
 					final CovStatsLine csl1=cslMap1.get(r1.id);
-					final double ratio=(csl0==null ? 0 : csl0.avgFold/Tools.max(0.01, csl1.avgFold));
-					assert(csl1!=null) : "Could not find "+r1.id;
-					
-					final boolean contam;
-					if(csl1.reads()<minReads || csl1.length<minLength || csl1.coveredPercent()<minCoveredPercent){
-						contam=true;
-					}else if((csl1.avgFold<minCoverage && ratio>minRatio) || csl1.avgFold<0.5){
-						contam=true;
+					if(csl1!=null){
+						
+						if(csl0!=null){
+							covRatio=csl0.avgFold/Tools.max(0.01, csl1.avgFold);
+							int underMin=csl0.underMin-csl1.underMin;
+							
+							if(csl1.reads()<minReads || csl1.length<minLength || csl1.coveredPercent()<minCoveredPercent){
+								contam=true;
+							}else if((csl1.avgFold<minCoverage && covRatio>minRatio) || csl1.avgFold<0.5){
+								contam=true;
+							}else if(basesUnderMin>0 && underMin>basesUnderMin){
+								contam=true;
+							}else{
+								contam=false;
+							}
+						}else{
+							covRatio=0;
+							int underMin=csl1.underMin;
+							
+							if(csl1.reads()<minReads || csl1.length<minLength || csl1.coveredPercent()<minCoveredPercent || csl1.avgFold<0.5){
+								contam=true;
+							}else if(basesUnderMin>0 && underMin>basesUnderMin){
+								contam=true;
+							}else{
+								contam=false;
+							}
+						}
+						
 					}else{
-						contam=false;
+						contam=true;
+						covRatio=0;
 					}
+					
 					
 					if(!contam){
 						cleanList.add(r1);
@@ -307,13 +319,21 @@ public class FilterByCoverage {
 						readsFiltered++;
 						basesFiltered+=initialLength1;
 					}
-					if(tsw!=null && (csl1.length>=minLength || PRINT_SHORT_CONTIG_RESULTS)){
-						if(csl0==null){
+					if(tsw!=null && (r1.length()>=minLength || PRINT_SHORT_CONTIG_RESULTS)){
+						if(csl1==null){
+							if(ffCov0==null){
+								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, r1.id, contam ? "1" : "0", r1.length(), 0, 0, 0));
+							}else{
+								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", 
+										name, r1.id, contam ? "1" : "0", r1.length(), 0, 0, 0, 0, 0, 0));
+							}
+							
+						}else if(csl0==null){
 							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", csl1.length,
 									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent()));
 						}else{
 							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", csl1.length,
-									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent(), csl0.avgFold, csl0.plusReads+csl0.minusReads, ratio));
+									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent(), csl0.avgFold, csl0.plusReads+csl0.minusReads, covRatio));
 						}
 					}
 				}
@@ -321,12 +341,12 @@ public class FilterByCoverage {
 				if(rosClean!=null){rosClean.add(cleanList, ln.id);}
 				if(rosDirty!=null){rosDirty.add(dirtyList, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -362,7 +382,7 @@ public class FilterByCoverage {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
@@ -401,6 +421,8 @@ public class FilterByCoverage {
 	private double minCoveredPercent=40;
 	/** Scaffolds will NOT be discarded based on low coverage unless the coverage dropped by at least this factor. */
 	private double minRatio=0;
+	/** Scaffolds will be discarded if there are at least this many bases in windows below a coverage cutoff. */
+	private int basesUnderMin=-1;
 	
 	/*--------------------------------------------------------------*/
 	

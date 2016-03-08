@@ -8,7 +8,6 @@ import stream.SiteScore;
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.Gene;
 
 /** 
  * Based on MSA9ts, with transform scores tweaked for PacBio. */
@@ -21,15 +20,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 		
 		byte[] original=ref;
 		
-		boolean colorspace=false;
-		
-		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
-			colorspace=true;
-			read=AminoAcid.toColorspace(read);
-			ref=AminoAcid.toColorspace(ref);
-		}
-		
-		MultiStateAligner9PacBioAdapter_WithBarriers msa=new MultiStateAligner9PacBioAdapter_WithBarriers(read.length, ref.length, colorspace);
+		MultiStateAligner9PacBioAdapter_WithBarriers msa=new MultiStateAligner9PacBioAdapter_WithBarriers(read.length, ref.length);
 		
 		System.out.println("Initial: ");
 		for(int mode=0; mode<msa.packed.length; mode++){
@@ -64,7 +55,6 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 		int[] score=null;
 		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
-		if(colorspace){System.out.println(new String(original));}
 		System.out.println(new String(ref));
 		System.out.println(new String(read));
 		System.out.println(new String(out));
@@ -72,12 +62,11 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 	}
 	
 	
-	public MultiStateAligner9PacBioAdapter_WithBarriers(int maxRows_, int maxColumns_, boolean colorspace_){
+	public MultiStateAligner9PacBioAdapter_WithBarriers(int maxRows_, int maxColumns_){
 //		assert(maxColumns_>=200);
 //		assert(maxRows_>=200);
 		maxRows=maxRows_;
 		maxColumns=maxColumns_;
-		colorspace=colorspace_;
 		packed=new int[3][maxRows+1][maxColumns+1];
 		grefbuffer=new byte[maxColumns+2];
 
@@ -1091,9 +1080,9 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 				if(c==r){
 					out[outPos]='m';
 				}else{
-					if(!AminoAcid.isFullyDefined(c, colorspace)){
+					if(!AminoAcid.isFullyDefined(c)){
 						out[outPos]='N';
-					}else if(!AminoAcid.isFullyDefined(r, colorspace)){
+					}else if(!AminoAcid.isFullyDefined(r)){
 //						out[outPos]='X';
 						out[outPos]='N';
 					}else{
@@ -2262,7 +2251,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 	}
 	
 	public final static int maxQuality(byte[] baseScores){
-		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sum(baseScores);
+		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sumInt(baseScores);
 	}
 	
 	public final static int maxImperfectScore(int numBases){
@@ -2530,27 +2519,27 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 //	public final static int POINTS_DEL2=-2;
 //	public final static int POINTS_DEL3=-1;
 	
-	public static final int POINTS_NOREF=-8; //default -110
+	public static final int POINTS_NOREF=-8;
 	public static final int POINTS_NOCALL=-8;
-	public static final int POINTS_MATCH=90; //default 50
+	public static final int POINTS_MATCH=90;
 	public static final int POINTS_MATCH2=100; //Note:  Changing to 90 substantially reduces false positives
 	public static final int POINTS_COMPATIBLE=50;
-	public static final int POINTS_SUB=-141; //default -133
-	public static final int POINTS_SUBR=-159; //increased penalty if prior match streak was at most 1 (I have no idea why this improves things)
-	public static final int POINTS_SUB2=-49; //default -47
+	public static final int POINTS_SUB=-141;
+	public static final int POINTS_SUBR=-159; //increased penalty if prior match streak was at most 1
+	public static final int POINTS_SUB2=-49;
 	public static final int POINTS_SUB3=-27;
 	public static final int POINTS_MATCHSUB=-10;
-	public static final int POINTS_INS=-204; //default -395
-	public static final int POINTS_INS2=-42; //default -61
-	public static final int POINTS_INS3=-25; //default -20
-	public static final int POINTS_INS4=-8; //default -20
-	public static final int POINTS_DEL=-287; //default -472
-	public static final int POINTS_DEL2=-39; //default -30
-	public static final int POINTS_DEL3=-21; //default -7
-	public static final int POINTS_DEL4=-12; //default -1
-	public static final int POINTS_DEL5=-8; //default -1
-	public static final int POINTS_DEL_REF_N=-10; //default -10
-	public static final int POINTS_GAP=0-GAPCOST; //default -10
+	public static final int POINTS_INS=-204;
+	public static final int POINTS_INS2=-42;
+	public static final int POINTS_INS3=-25;
+	public static final int POINTS_INS4=-8;
+	public static final int POINTS_DEL=-287;
+	public static final int POINTS_DEL2=-39;
+	public static final int POINTS_DEL3=-21;
+	public static final int POINTS_DEL4=-12;
+	public static final int POINTS_DEL5=-8;
+	public static final int POINTS_DEL_REF_N=-10;
+	public static final int POINTS_GAP=0-GAPCOST;
 
 	public static final int TIMESLIP=4;
 	public static final int MASK5=TIMESLIP-1;
@@ -2595,8 +2584,6 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 	
 	private int rows;
 	private int columns;
-	
-	public final boolean colorspace;
 
 	public long iterationsLimited=0;
 	public long iterationsUnlimited=0;

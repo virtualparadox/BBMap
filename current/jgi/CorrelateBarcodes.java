@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.Parser;
@@ -42,6 +42,7 @@ public class CorrelateBarcodes {
 	
 	public CorrelateBarcodes(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -55,9 +56,9 @@ public class CorrelateBarcodes {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		Parser parser=new Parser();
@@ -94,10 +95,6 @@ public class CorrelateBarcodes {
 				minBarcodeMinQuality=Integer.parseInt(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
 				parser.out1=arg;
 			}else{
@@ -107,7 +104,8 @@ public class CorrelateBarcodes {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
@@ -149,7 +147,7 @@ public class CorrelateBarcodes {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -182,21 +180,6 @@ public class CorrelateBarcodes {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
@@ -211,20 +194,18 @@ public class CorrelateBarcodes {
 	void process(Timer t){
 		
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, qfin1, qfin2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, qfin1, qfin2);
 			if(verbose){outstream.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 //		if(verbose){
-			outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
+			if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
 //		}
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -235,7 +216,7 @@ public class CorrelateBarcodes {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, null, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, null, null, buff, null, false);
 			ros.start();
 		}else{ros=null;}
 		
@@ -273,7 +254,7 @@ public class CorrelateBarcodes {
 					final Read r2=r1.mate;
 					
 					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
+					final int initialLength2=(r1.mateLength());
 					
 					final byte[] barbases, barquals;
 					{
@@ -285,7 +266,7 @@ public class CorrelateBarcodes {
 						}
 					}
 					
-					final int qbar=Read.avgQualityByProbability(barbases, barquals);
+					final int qbar=Read.avgQualityByProbability(barbases, barquals, true, 0);
 					final int minqbar=Tools.min(barquals);
 					aqhistArray[qbar]++;
 					mqhistArray[minqbar]++;
@@ -302,13 +283,13 @@ public class CorrelateBarcodes {
 					{
 						readsProcessed++;
 						basesProcessed+=initialLength1;
-						final int q1=r1.avgQualityByProbability();
+						final int q1=r1.avgQualityByProbability(true, 0);
 						qualCor1[q1][qbar]++;
 					}
 					if(r2!=null){
 						readsProcessed++;
 						basesProcessed+=initialLength2;
-						final int q2=r2.avgQualityByProbability();
+						final int q2=r2.avgQualityByProbability(true, 0);
 						qualCor2[q2][qbar]++;
 					}
 					
@@ -330,12 +311,12 @@ public class CorrelateBarcodes {
 					ros.add(listOut, ln.id);
 				}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -390,7 +371,7 @@ public class CorrelateBarcodes {
 
 		
 		if(readstats!=null){
-			errorState|=ReadStats.writeAll(false);
+			errorState|=ReadStats.writeAll();
 		}
 		
 		errorState|=ReadWrite.closeStreams(cris, ros);
@@ -432,7 +413,7 @@ public class CorrelateBarcodes {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");

@@ -44,7 +44,7 @@ stats() {
 	#module load pigz
 	local CMD="java $EA -Xmx120m -cp $CP jgi.CallPeaks $@"
 #	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 stats "$@"

@@ -1,5 +1,7 @@
 package kmer;
 
+import java.util.concurrent.atomic.AtomicIntegerArray;
+
 import dna.CoverageArray;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
@@ -78,6 +80,35 @@ public class HashBuffer extends AbstractKmerTable {
 	public boolean contains(long kmer) {
 		final int way=(int)(kmer%ways);
 		return tables[way].contains(kmer);
+	}
+	
+
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		for(AbstractKmerTable t : tables){t.initializeOwnership();}
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		final int way=(int)(kmer%ways);
+		return tables[way].setOwner(kmer, newOwner);
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		final int way=(int)(kmer%ways);
+		return tables[way].clearOwner(kmer, owner);
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		final int way=(int)(kmer%ways);
+		return tables[way].getOwner(kmer);
 	}
 	
 	/*--------------------------------------------------------------*/

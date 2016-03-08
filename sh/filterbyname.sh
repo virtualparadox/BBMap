@@ -2,31 +2,42 @@
 #filterbyname in=<infile> out=<outfile>
 
 function usage(){
-	echo "Written by Brian Bushnell"
-	echo "Last modified October 10, 2014"
-	echo ""
-	echo "Description:  Filters reads by name."
-	echo ""
-	echo "Usage:  filterbyname.sh in=<file> in2=<file2> out=<outfile> out2=<outfile2> names=<string,string,string>"
-	echo ""
-	echo "in2 and out2 are for paired reads and are optional."
-	echo "If input is paired and there is only one output file, it will be written interleaved."
-	echo "Other parameters and their defaults:"
-	echo ""
-	echo "include=f    		Set to 'true' to include the filtered names rather than excluding them."
-	echo "ow=t         		(overwrite) Overwrites files that already exist."
-	echo "app=f        		(append) Append to files that already exist."
-	echo "zl=4            	(ziplevel) Set compression level, 1 (low) to 9 (max)."
-	echo "int=f		 	(interleaved) Determines whether INPUT file is considered interleaved."
-	echo ""
-	echo "Java Parameters:"
-	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
-	echo ""
-	echo "To read from stdin, set 'in=stdin'.  The format should be specified with an extension, like 'in=stdin.fq.gz'"
-	echo "To write to stdout, set 'out=stdout'.  The format should be specified with an extension, like 'out=stdout.fasta'"
-	echo ""
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+echo "
+Written by Brian Bushnell
+Last modified May 26, 2015
+
+Description:  Filters reads by name.
+
+Usage:  filterbyname.sh in=<file> in2=<file2> out=<outfile> out2=<outfile2> names=<string,string,string> include=<t/f>
+
+in2 and out2 are for paired reads and are optional.
+If input is paired and there is only one output file, it will be written interleaved.
+Other parameters and their defaults:
+
+include=f           Set to 'true' to include the filtered names rather than excluding them.
+substring=f         Allow one name to be a substring of the other, rather than a full match.
+                         f: No substring matching.
+                         t: Bidirectional substring matching.
+                         header: Allow input read headers to be substrings of names in list.
+                         name: Allow names in list to be substrings of input read headers.
+casesensitive=t     (case) Match case also.
+ow=t                (overwrite) Overwrites files that already exist.
+app=f               (append) Append to files that already exist.
+zl=4                (ziplevel) Set compression level, 1 (low) to 9 (max).
+int=f               (interleaved) Determines whether INPUT file is considered interleaved.
+names=              A list of strings or files.  The files can have one name per line, or
+                    be a standard read file (fasta, fastq, or sam).
+
+
+Java Parameters:
+-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
+				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+
+To read from stdin, set 'in=stdin'.  The format should be specified with an extension, like 'in=stdin.fq.gz'
+To write to stdout, set 'out=stdout'.  The format should be specified with an extension, like 'out=stdout.fasta'
+
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
@@ -61,7 +72,7 @@ function filterbyname() {
 	#module load samtools
 	local CMD="java $EA $z -cp $CP driver.FilterReadsByName $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 filterbyname "$@"

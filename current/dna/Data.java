@@ -16,7 +16,9 @@ import kmer.Primes;
 import var.Variation;
 
 import align2.AbstractIndex;
+import align2.AbstractMapper;
 import align2.ChromLoadThread;
+import align2.RefToIndex;
 import align2.Tools;
 
 
@@ -35,8 +37,11 @@ public class Data {
 	//TODO IMPORTANT!  Ensure that this unloads everything big, AND that reloading subsequently works OK.
 	public static void unloadAll(){
 		chromosomePlusMatrix=null;
-		chromosomeMinusMatrix=null;
 		AbstractIndex.clear();
+		RefToIndex.clear();
+		
+		AbstractMapper.minChrom=1;
+		AbstractMapper.maxChrom=Integer.MAX_VALUE;
 		
 		numChroms=0;
 		numBases=0;
@@ -166,27 +171,6 @@ public class Data {
 		return geneIDTable;
 	}
 	
-//	public static ChromosomeArray getChromosome(int chrom, boolean colorspace){
-//		assert(!colorspace) : "Colorspace no longer supported";
-//		if(colorspace){throw new RuntimeException("Colorspace no longer supported");}
-//		if(true){throw new RuntimeException("Colorspace no longer supported");}
-//		return getChromosome(chrom);
-//	}
-	
-	public static ChromosomeArray getChromosome(int chrom, byte strand){
-		if(strand==Gene.PLUS){return getChromosome(chrom);}
-		
-		if(chromosomeMinusMatrix[chrom]==null){
-			synchronized(CHROMLOCKS[chrom%CHROMLOCKS.length]){
-				if(chromosomeMinusMatrix[chrom]==null){
-					ChromosomeArray p=getChromosome(chrom);
-					chromosomeMinusMatrix[chrom]=p.complement();
-				}
-			}
-		}
-		return chromosomeMinusMatrix[chrom];
-	}
-	
 	public static ChromosomeArray getChromosome(int chrom){
 		assert(chromosomePlusMatrix!=null); 
 		assert(chromosomePlusMatrix.length>chrom) : chromosomePlusMatrix.length+", "+chrom;
@@ -214,7 +198,7 @@ public class Data {
 				
 				String fname=ROOT_GENE+"Build"+GENOME_BUILD+"/"+GENE_MAP+"/chr"+Gene.chromCodes[chrom]+".ga";
 				
-				Gene[] genes=ReadWrite.readArray(Gene.class, fname);
+				Gene[] genes=ReadWrite.readArray(Gene.class, fname, true);
 
 				Arrays.sort(genes);
 //				geneMatrix[chrom]=genes;
@@ -290,16 +274,12 @@ public class Data {
 		
 		String fname=chromFname(chrom, GENOME_BUILD);
 		sysout.println("Loading "+fname);
-		if(CHROMC){
-			chromosomePlusMatrix[chrom]=ReadWrite.read(ChromosomeArrayCompressed.class, fname).toChromosomeArray();
-		}else{
-			chromosomePlusMatrix[chrom]=ReadWrite.read(ChromosomeArray.class, fname);
-		}
+		chromosomePlusMatrix[chrom]=ReadWrite.read(ChromosomeArray.class, fname, false);
 		assert(chromosomePlusMatrix[chrom].chromosome==chrom);
 	}
 	
 	public static final String chromExtension(){
-		return ".chrom"+(CHROMC ? "C" : "") + (CHROMGZ ? ".gz" : "");
+		return ".chrom"+(CHROMGZ ? ".gz" : "");
 	}
 	
 	public static final String chromFname(int chrom, int genome){
@@ -732,7 +712,7 @@ public class Data {
 	
 	public static boolean isBaited(int chrom, int point, int thresh){
 		if(BAITS==null){
-			BAITS=(int[][][]) ReadWrite.readObject("UNDEFINED_ROOT"+"baits_"+BAIT_FILE+"_build"+GENOME_BUILD+".int3d");
+			BAITS=(int[][][]) ReadWrite.readObject("UNDEFINED_ROOT"+"baits_"+"BAIT_FILE"+"_build"+GENOME_BUILD+".int3d", false);
 		}
 		return isBaited(point, BAITS[chrom], thresh);
 	}
@@ -773,21 +753,6 @@ public class Data {
 	private static boolean overlap(int a1, int b1, int a2, int b2){
 		assert(a1<=b1 && a2<=b2) : a1+", "+b1+", "+a2+", "+b2;
 		return a2<=b1 && b2>=a1; 
-	}
-	
-	
-	
-	/** Note - this does not handle cases where the same instance uses different bait files. */
-	public static int[][][] getBaits(){
-		if(BAITS==null){
-			synchronized(BAITLOCK){
-				if(BAITS==null){
-					BAITS=(int[][][]) ReadWrite.readObject("UNDEFINED_ROOT"+"baits_"+BAIT_FILE+"_build"+GENOME_BUILD+".int3d");
-				}
-			}
-		}
-		assert(BAITS!=null);
-		return BAITS;
 	}
 	
 	
@@ -1254,7 +1219,7 @@ public class Data {
 				if(vb){System.err.println("Considering getResource");}
 				URL url=Primes.class.getResource("/"+fname);
 				if(url!=null){
-					String temp=url.toString();
+					String temp=url.toString().replace("%20", " ");
 					if(vb){System.err.println("Found URL "+temp);}
 					f=new File(temp);
 					//						if(f.exists()){fname=temp;}
@@ -1331,7 +1296,6 @@ public class Data {
 	public static final Range[][] geneNearbyRangeMatrix=new Range[63][];
 
 	public static ChromosomeArray[] chromosomePlusMatrix;
-	public static ChromosomeArray[] chromosomeMinusMatrix;
 
 	private static HashMap<Integer, String> geneIdToNameTable;
 	private static HashMap<String, Integer> geneNameToIdTable;
@@ -1346,9 +1310,6 @@ public class Data {
 
 	private static final int TX_RANGE=0;
 	private static final int CODE_RANGE=1;
-	private static final int CODEEXON_RANGE=2;
-	private static final int EXON_RANGE=3;
-	private static final int NEAR_RANGE=4;
 	
 	
 	public static final int NEAR=200;
@@ -1364,13 +1325,15 @@ public class Data {
 		Map<String,String> env=System.getenv();
 		String s=env.get("NSLOTS");
 		if(s!=null){
+			int x=slots;
 			try {
-				slots=Tools.max(1, Integer.parseInt(s));
+				x=Tools.max(1, Integer.parseInt(s));
 			} catch (NumberFormatException e) {
 				//ignore
 			}
+			if(x<16){slots=x;}
 		}
-		if(slots>8 && slots*2==procs){return procs;}//hyperthreading
+		if(slots>8 && (slots*2==procs || (slots==16 && procs==40))){return procs;}//hyperthreading
 		return Tools.min(slots, procs);
 	}
 	
@@ -1401,83 +1364,63 @@ public class Data {
 	private static String ROOT;
 	
 	public static String ROOT_BASE;
-	public static String ROOT_OUTPUT;
 	public static String ROOT_REF;
 	public static String ROOT_GENOME;
 	public static String ROOT_INDEX;
 	public static String ROOT_GENE;
 	public static String ROOT_CHAIN;
-	public static String ROOT_AFFY;
 	public static String ROOT_TEMPDIR;
 	public static String ROOT_CURRENT;
+	public static String ROOT_QUALITY;
 	
 	static{
 		ROOT=(new File(Data.class.getClassLoader().getResource(Data.class.getName().replace('.', '/') + ".class")
-				.getFile()).getAbsolutePath().replace('\\', '/').replace("dna/Data.class", ""));
-		setPath(WINDOWS ? "windows" : "unix");
-		if(!WINDOWS || true){setPath("local");}
+				.getFile()).getAbsolutePath().replace('\\', '/').replace("dna/Data.class", "").replace("%20", " "));
+		setPath(WINDOWS ? "?windows" : "?unix");
+		if(!WINDOWS || true){setPath("?local");}
 	}
 	
 	public static void setPath(String path){
 //		System.err.println("***"+path);
 		if(path.indexOf('\\')>=0){path=path.replace('\\', '/');}
 		String mode=(path==null ? "null" : path.toLowerCase());
-		boolean local=mode.equals("local") || mode.equals(".") || mode.equals("/.") || mode.equals("./");
-		boolean win=mode.contains("windows");
-		boolean unix=mode.contains("unix");
+		boolean local=mode.equals("?local") || mode.equals(".") || mode.equals("/.") || mode.equals("./");
+		boolean win=mode.equals("?windows");
+		boolean unix=mode.equals("?unix");
 		
 		ROOT_CURRENT=System.getProperty("user.dir");
 		
+		ROOT_BASE="";
+		ROOT_REF="ref/";
+		ROOT_GENOME=ROOT_REF+"genome/";
+		ROOT_INDEX=ROOT_REF+"index/";
+		ROOT_GENE=ROOT_REF+"genes/";
+		ROOT_CHAIN=ROOT_REF+"chain/";
+		ROOT_QUALITY=ROOT_REF+"qual/";
+		
 		if(local){
-			ROOT_BASE="";
-			ROOT_OUTPUT="";
-			ROOT_REF="ref/";
-			ROOT_GENOME=ROOT_REF+"genome/";
-			ROOT_INDEX=ROOT_REF+"index/";
-//			ROOT_GENE="D:/Data/ref/genes/";
-//			ROOT_CHAIN="D:/Data/ref/chain/";
-//			ROOT_AFFY="D:/Data/ref/affy/";
-//			ROOT_TEMPDIR="";
+			ROOT_TEMPDIR=ROOT_BASE;
 		}else if(win){
-			ROOT_BASE="C:/workspace/prune/";
-			ROOT_OUTPUT="C:/workspace/";
-			ROOT_REF="D:/Data/ref/";
-			ROOT_GENOME=ROOT_REF+"genome/";
-			ROOT_INDEX=ROOT_REF+"index/";
-			ROOT_GENE="D:/Data/ref/genes/";
-			ROOT_CHAIN="D:/Data/ref/chain/";
-			ROOT_AFFY="D:/Data/ref/affy/";
 			ROOT_TEMPDIR="C:/workspace/tempdir/";
 		}else if(unix){
-			ROOT_BASE="/house/homedirs/b/bushnell/prune/";
-			ROOT_OUTPUT="/house/homedirs/b/bushnell/prune/";
-			ROOT_REF="/house/homedirs/b/bushnell/Data/ref/";
-			ROOT_GENOME=ROOT_REF+"genome/";
-			ROOT_INDEX=ROOT_REF+"index/";
-			ROOT_GENE="/house/homedirs/b/bushnell/Data/ref/genes/";
-			ROOT_CHAIN="/house/homedirs/b/bushnell/Data/ref/chain/";
-			ROOT_AFFY="/house/homedirs/b/bushnell/Data/ref/affy/";
 			String s=System.getenv().get("TEMPDIR");
-			ROOT_TEMPDIR=(s==null ? "" : s+"/");
+			ROOT_TEMPDIR=(s==null ? ROOT_BASE : s+"/");
 		}else if(!"null".equals(mode)){
 			if(!path.endsWith("/")){path=path+"/";}
 			ROOT_BASE=path;
-			ROOT_OUTPUT=path;
 			ROOT_REF=path+"ref/";
 			ROOT_GENOME=ROOT_REF+"genome/";
 			ROOT_INDEX=ROOT_REF+"index/";
-//			ROOT_GENE="D:/Data/ref/genes/";
-//			ROOT_CHAIN="D:/Data/ref/chain/";
-//			ROOT_AFFY="D:/Data/ref/affy/";
-//			ROOT_TEMPDIR="";
+			ROOT_GENE=ROOT_REF+"genes/";
+			ROOT_CHAIN=ROOT_REF+"chain/";
+			ROOT_QUALITY=ROOT_REF+"qual/";
 		}else{
 			ROOT_BASE=null;
-			ROOT_OUTPUT=null;
 			ROOT_REF=null;
 			ROOT_GENOME=null;
 			ROOT_GENE=null;
 			ROOT_CHAIN=null;
-			ROOT_AFFY=null;
+			ROOT_QUALITY=null;
 			ROOT_TEMPDIR=null;
 		}
 	}
@@ -1487,22 +1430,12 @@ public class Data {
 	
 	public static int GENOME_BUILD=-1;
 	private static int genome_set_to=-1;
-	public static int DBSNP_BUILD=132;
-	
-	public static final byte CGI=0;
-	public static final byte CORE_SOLID=1;
-	public static final byte CORE_ILLUMINA=2;
-	public static final byte OTOGEN_ILLUMINA=3;
 	
 	public static final boolean verbose=false;
 	
 	/** seqGene, knownGene, refGene, unionGene, seqRefGene, ccs */
-	public static String GENE_MAP="seqRefGene"; 
+	public static String GENE_MAP="seqRefGene";
 	
-	/** 30M, 50M, nimblegen, truseq_60M */
-	public static String BAIT_FILE="truseq_60M"; 
-	
-	private static final String BAITLOCK=new String("BAITLOCK");
 	private static final String GENEIDLOCK=new String("GENEIDLOCK");
 	
 	private static final String[] CHROMLOCKS=new String[256];
@@ -1591,7 +1524,6 @@ public class Data {
 	
 	public static PrintStream sysout=System.err;//System.out;
 	
-	public static boolean CHROMC=false;
 	public static boolean CHROMGZ=true;
 	public static boolean LOAD_SCAFFOLDS=true;
 

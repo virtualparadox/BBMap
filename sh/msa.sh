@@ -4,18 +4,19 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 24, 2014
+Last modified December 5, 2014
 
 Description:  Aligns a query sequence to reference sequences.
 Outputs the best matching position per reference sequence.
+If there are multiple queries, only the best-matching query will be used.
 
-Usage:	msa.sh in=<file> out=<file> query=<literal>
+Usage:	msa.sh in=<file> out=<file> query=<literal,literal,...>
 
 Parameters:
 
-in=<file>           File containing reads. in=stdin.fa will pipe from stdin.
-out=<file>          Matrix output. out=stdout will pipe to stdout.
-literal=            A sequence of bases to match.
+in=<file>           File containing reads.
+out=<file>          Sam output file.
+literal=            A sequence of bases to match, or a comma-delimited list.
 
 Java Parameters:
 
@@ -59,7 +60,7 @@ msa() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.FindPrimers $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 msa "$@"

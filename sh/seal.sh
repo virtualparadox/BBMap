@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 24, 2014
+Last modified April 28, 2015
 
 Description:  Performs high-speed alignment-free sequence quantification,
 by counting the number of long kmers that match between a read and
@@ -23,12 +23,15 @@ Input parameters:
 
 in=<file>           Main input. in=stdin.fq will pipe from stdin.
 in2=<file>          Input for 2nd read of pairs in a different file.
-ref=<file,file>     Comma-delimited list of reference files.
+ref=<file,file>     Comma-delimited list of reference files or directories.
 literal=<seq,seq>   Comma-delimited list of literal reference sequences.
 touppercase=f       (tuc) Change all bases upper-case.
 interleaved=auto    (int) t/f overrides interleaved autodetection.
 qin=auto            Input quality offset: 33 (Sanger), 64, or auto.
 reads=-1            If positive, quit after processing X reads or pairs.
+copyundefined=f     (cu) Process non-AGCT IUPAC reference bases by making all
+                    possible unambiguous copies.  Intended for short motifs
+                    or adapter barcodes, as time/memory use is exponential.
 
 Output parameters:
 
@@ -40,6 +43,10 @@ outu=<file>         (outunmatched) Write reads here that do not contain kmers
                     matching the database.
 outu2=<file>        (outunmatched2) Use this to write 2nd read of pairs to a 
                     different file.
+pattern=<file>      Use this to write reads to one stream per ref sequence
+                    match, replacing the % character with the sequence name.
+                    For example, pattern=%.fq for ref sequences named dog and 
+                    cat would create dog.fq and cat.fq.
 stats=<file>        Write statistics about which contamininants were detected.
 refstats=<file>     Write statistics on a per-reference-file basis.
 rpkm=<file>         Write RPKM for each reference sequence (for RNA-seq).
@@ -50,10 +57,16 @@ showspeed=t         (ss) 'f' suppresses display of processing speed.
 ziplevel=2          (zl) Compression level; 1 (min) through 9 (max).
 fastawrap=80        Length of lines in fasta output.
 qout=auto           Output quality offset: 33 (Sanger), 64, or auto.
-statscolumns=3      (cols) Number of columns for stats output, 3 or 5.
+statscolumns=5      (cols) Number of columns for stats output, 3 or 5.
                     5 includes base counts.
 rename=f            Rename reads to indicate which sequences they matched.
 refnames=f          Use names of reference files rather than scaffold IDs.
+                    With multiple reference files, this is more efficient
+                    than tracking statistics on a per-sequence bases.
+trd=f               Truncate read and ref names at the first whitespace.
+ordered=f           Set to true to output reads in same order as input.
+kpt=t               (keepPairsTogether) Paired reads will always be assigned
+                    to the same ref sequence.
 
 Processing parameters:
 
@@ -63,21 +76,66 @@ rcomp=t             Look for reverse-complements of kmers in addition to
                     forward kmers.
 maskmiddle=t        (mm) Treat the middle base of a kmer as a wildcard, to 
                     increase sensitivity in the presence of errors.
-minkmerhits=1       (mkh) Reads with more than this many contaminant kmers 
-                    will be discarded.
-hammingdistance=0   (hdist) Maximum Hamming distance from ref kmers (subs only).
+minkmerhits=1       (mkh) A read needs at least this many kmer hits to be 
+                    considered a match.
+minkmerfraction=0.0 (mkf) A reads needs at least this fraction of its total
+                    kmers to hit a ref, in order to be considered a match.
+hammingdistance=0   (hdist) Maximum Hamming distance for ref kmers (subs only).
                     Memory use is proportional to (3*K)^hdist.
+qhdist=0            Hamming distance for query kmers; impacts speed, not memory.
 editdistance=0      (edist) Maximum edit distance from ref kmers (subs and 
                     indels).  Memory use is proportional to (8*K)^edist.
 forbidn=f           (fn) Forbids matching of read kmers containing N.  
                     By default, these will match a reference 'A' if hdist>0
                     or edist>0, to increase sensitivity.
-maxns=-1            If non-negative, reads with more Ns than this 
-                    (before trimming) will be discarded.
 match=all           Determines when to quit looking for kmer matches.  Values:
                          all:    Attempt to match all kmers in each read.
                          first:  Quit aftet the first matching kmer.
                          unique: Quit after the first uniquely matching kmer.
+ambiguous=random    (ambig) Set behavior on ambiguously-mapped reads (with an
+                    equal number of kmer matches to multiple sequences).
+                         first:  Use the first best-matching sequence.
+                         toss:   Consider unmapped.
+                         random: Select one best-matching sequence randomly.
+                         all:    Use all best-matching sequences.
+clearzone=0         (cz) Threshhold for ambiguity.  If the best match shares X 
+                    kmers with the read, the read will be considered
+                    also ambiguously mapped to any sequence sharing at least
+                    [X minus clearzone] kmers.
+ecc=f               For overlapping paired reads only.  Performs error-
+                    correction with BBMerge prior to kmer operations.
+
+
+Taxonomy parameters (only use when doing taxonomy):
+
+tax=<file>          Output destination for taxonomy information.
+taxnames=<file>     Location of names.dmp from NCBI.
+taxnodes=<file>     Location of nodes.dmp from NCBI.
+taxtree=<file>      A serialized TaxTree (instead of names and nodes).
+gi=<file>           Location of gi_taxid_nucl.dmp.  Not needed if reference 
+                    sequence names start with ncbi id.
+mincount=1          Only display taxa with at least this many hits.
+maxnodes=-1         If positive, display at most this many top hits.
+minlevel=subspecies Do not display nodes below this taxonomic level.
+maxlevel=life       Do not display nodes above this taxonomic level.
+Valid levels are subspecies, species, genus, family, order, class,
+phylum, kingdom, domain, life
+
+
+threads=auto        (t) Set number of threads to use; default is number of 
+                    logical processors.
+prealloc=f          Preallocate memory in table.  Allows faster table loading 
+                    and more efficient memory usage, for a large reference.
+monitor=f           Kill this process if CPU usage drops to zero for a long
+                    time.  monitor=600,0.01 would kill after 600 seconds 
+                    under 1% usage.
+rskip=1             Skip reference kmers to reduce memory usage.
+                    1 means use all, 2 means use every other kmer, etc.
+qskip=1             Skip query kmers to increase speed.  1 means use all.
+speed=0             Ignore this fraction of kmer space (0-15 out of 16) in both
+                    reads and reference.  Increases speed and reduces memory.
+Note: Do not use more than one of 'speed', 'qskip', and 'rskip'.
+
 
 Speed and Memory parameters:
 
@@ -85,6 +143,9 @@ threads=auto        (t) Set number of threads to use; default is number of
                     logical processors.
 prealloc=f          Preallocate memory in table.  Allows faster table loading 
                     and more efficient memory usage, for a large reference.
+monitor=f           Kill this process if CPU usage drops to zero for a long
+                    time.  monitor=600,0.01 would kill after 600 seconds 
+                    under 1% usage.
 rskip=1             Skip reference kmers to reduce memory usage.
                     1 means use all, 2 means use every other kmer, etc.
 qskip=1             Skip query kmers to increase speed.  1 means use all.
@@ -94,27 +155,34 @@ Note: Do not use more than one of 'speed', 'qskip', and 'rskip'.
 
 Trimming/Masking parameters:
 
-qtrim=f             Trim read ends to remove bases with quality below minq.
+qtrim=f             Trim read ends to remove bases with quality below trimq.
                     Performed AFTER looking for kmers.  Values: 
                          t (trim both ends), 
                          f (neither end), 
                          r (right end only), 
                          l (left end only).
-trimq=6             Trim quality threshold.
+trimq=6             Regions with average quality BELOW this will be trimmed.
 minlength=1         (ml) Reads shorter than this after trimming will be 
                     discarded.  Pairs will be discarded only if both are shorter.
-maxlength=          Reads longer than this after trimming will be discarded.  Pairs 
-                    will be discarded only if both are longer.
-minavgquality=0     (maq) Reads with average quality (before trimming) below 
+maxlength=          Reads longer than this after trimming will be discarded.
+                    Pairs will be discarded only if both are longer.
+minavgquality=0     (maq) Reads with average quality (after trimming) below 
                     this will be discarded.
+maqb=0              If positive, calculate maq from this many initial bases.
+maxns=-1            If non-negative, reads with more Ns than this 
+                    (after trimming) will be discarded.
 forcetrimleft=0     (ftl) If positive, trim bases to the left of this position 
                     (exclusive, 0-based).
 forcetrimright=0    (ftr) If positive, trim bases to the right of this position 
                     (exclusive, 0-based).
+forcetrimright2=0   (ftr2) If positive, trim this many bases on the right end. 
+forcetrimmod=0      (ftm) If positive, right-trim length to be equal to zero,
+                    modulo this number.
 restrictleft=0      If positive, only look for kmer matches in the 
                     leftmost X bases.
 restrictright=0     If positive, only look for kmer matches in the 
                     rightmost X bases.
+
 
 Java Parameters:
 
@@ -160,7 +228,7 @@ seal() {
 	#module load samtools
 	local CMD="java $EA $z $z2 -cp $CP jgi.Seal $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 seal "$@"

@@ -1,6 +1,31 @@
 BBDuk readme by Brian Bushnell
-Last updated November 24, 2014.
+Last updated February 17, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
+
+Version 34.49:
+Fixed qin/qout flags - they were being ignored.
+
+Version 34.47:
+Add qhdist and qhdist2, to allow query hamming distance instead of ref hamming distance. 
+
+Version 34:
+Added skipr1 and skipr2 flags, to skip kmer processing on read 1 or read 2.
+
+Version 33:
+Added support for processing non-ACGT IUPAC codes in references (copyundefined flag).  This uses time and memory exponential with the number of undefined symbols per sequence, so it should never be used with assemblies, only short motifs and adapters with barcodes.
+
+Version 32:
+Fixed a crash in BBDuk2 when not using a reference.
+Added entropy filter.  Set "entropy=X" where X is 0 to 1 to filter reads with less entropy than X.
+entropywindow and entropyk flags also added (defaults 50 and 5).
+
+Version 31:
+Moved "maxns" and "maq" processing to after trimming.
+Added "auto" option for "idbins" and "gcbins".
+Added "chastityfilter".
+
+Version 30:
+Added hdist2 and edist2 flags.  These allow independent control of hdist/edist for kmers shorter than k when trimming.
 
 Version 29:
 Fixed a slowdown in caused by sorting list of ID hits.

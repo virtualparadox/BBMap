@@ -74,7 +74,8 @@ public class MeasureGene {
 	
 	
 	public static float analyzeGene(Gene g){
-		ChromosomeArray ca=Data.getChromosome(g.chromosome, g.strand);
+		assert(g.strand==Gene.PLUS) : "TODO";
+		ChromosomeArray ca=Data.getChromosome(g.chromosome);
 
 		System.out.println("\nchr"+g.chromosome+"\t"+g.symbol+"\t"+g.mrnaAcc);
 		
@@ -146,7 +147,8 @@ public class MeasureGene {
 		double sum=0;
 		int count=0;
 		
-		ChromosomeArray ca=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		for(int i=start; i<stop; i++){
 			int number=0;

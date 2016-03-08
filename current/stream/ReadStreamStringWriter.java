@@ -51,14 +51,14 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 						for(final Read r : job.list){
 							if(r!=null){
 								{
-									CharSequence cs=(r.bases==null ? "\n" : toQualitySB(r.quality, r.bases.length).append('\n'));
+									CharSequence cs=(r.bases==null ? "\n" : toQualitySB(r.quality, r.length(), FASTA_WRAP).append('\n'));
 									myQWriter.print('>');
 									myQWriter.println(r.id);
 									myQWriter.print(cs);
 								}
 								Read r2=r.mate;
 								if(OUTPUT_INTERLEAVED && r2!=null){
-									CharSequence cs=(r2.bases==null ? "\n" : toQualitySB(r2.quality, r2.bases.length).append('\n'));
+									CharSequence cs=(r2.bases==null ? "\n" : toQualitySB(r2.quality, r2.length(), FASTA_WRAP).append('\n'));
 									myQWriter.print('>');
 									myQWriter.println(r2.id);
 									myQWriter.print(cs);
@@ -70,7 +70,7 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							if(r1!=null){
 								final Read r2=r1.mate;
 								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
-								CharSequence cs=(r2.bases==null ? "\n" : toQualitySB(r2.quality, r2.bases.length).append('\n'));
+								CharSequence cs=(r2.bases==null ? "\n" : toQualitySB(r2.quality, r2.length(), FASTA_WRAP).append('\n'));
 								myQWriter.print('>');
 								myQWriter.println(r2.id);
 								myQWriter.print(cs);
@@ -84,16 +84,16 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 					for(final Read r : job.list){
 						Read r2=(r==null ? null : r.mate);
 
-						SamLine sl1=(r==null ? null : new SamLine(r, 0));
-						SamLine sl2=(r2==null ? null : new SamLine(r2, 1));
-
+						SamLine sl1=(r==null ? null : (USE_ATTACHED_SAMLINE && r.obj!=null ? (SamLine)r.obj : new SamLine(r, 0)));
+						SamLine sl2=(r2==null ? null : (USE_ATTACHED_SAMLINE && r2.obj!=null ? (SamLine)r2.obj : new SamLine(r2, 1)));
+						
 						if(r!=null){
 							job.writer.print(sl1.toText().append('\n'));
 
 							readsWritten++;
-							basesWritten+=(r.bases!=null ? r.bases.length : 0);
+							basesWritten+=(r.bases!=null ? r.length() : 0);
 							validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-							validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+							validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 							ArrayList<SiteScore> list=r.sites;
 							if(OUTPUT_SAM_SECONDARY_ALIGNMENTS && list!=null && list.size()>1){
 								final Read clone=r.clone();
@@ -110,9 +110,9 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 									job.writer.print(sl.toText().append('\n'));
 
 //									readsWritten++;
-//									basesWritten+=(r.bases!=null ? r.bases.length : 0);
+//									basesWritten+=(r.bases!=null ? r.length() : 0);
 //									validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-//									validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+//									validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 								}
 							}
 						}
@@ -123,9 +123,9 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							job.writer.print(sl2.toText().append('\n'));
 
 							readsWritten++;
-							basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+							basesWritten+=(r2.bases!=null ? r2.length() : 0);
 							validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-							validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+							validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 							
 							ArrayList<SiteScore> list=r2.sites;
 							if(OUTPUT_SAM_SECONDARY_ALIGNMENTS && list!=null && list.size()>1){
@@ -143,9 +143,9 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 									job.writer.print(sl.toText().append('\n'));
 
 //									readsWritten++;
-//									basesWritten+=(r.bases!=null ? r.bases.length : 0);
+//									basesWritten+=(r.bases!=null ? r.length() : 0);
 //									validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-//									validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+//									validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 								}
 							}
 						}
@@ -160,17 +160,17 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							job.writer.print(r.toSites().append('\n'));
 
 							readsWritten++;
-							basesWritten+=(r.bases!=null ? r.bases.length : 0);
+							basesWritten+=(r.bases!=null ? r.length() : 0);
 							validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-							validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+							validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 						}
 						if(r2!=null){
 							job.writer.print(r2.toSites().append('\n'));
 
 							readsWritten++;
-							basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+							basesWritten+=(r2.bases!=null ? r2.length() : 0);
 							validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-							validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+							validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 						}
 					}
 				}else if(OUTPUT_FASTQ){
@@ -179,16 +179,16 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							if(r!=null){
 								job.writer.print(r.toFastq().append('\n'));
 								readsWritten++;
-								basesWritten+=(r.bases!=null ? r.bases.length : 0);
+								basesWritten+=(r.bases!=null ? r.length() : 0);
 								validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 								Read r2=r.mate;
 								if(OUTPUT_INTERLEAVED && r2!=null){
 									job.writer.print(r2.toFastq().append('\n'));
 									readsWritten++;
-									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									basesWritten+=(r2.bases!=null ? r2.length() : 0);
 									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 								}
 							}
 						}
@@ -199,9 +199,9 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
 								job.writer.print(r2.toFastq().append('\n'));
 								readsWritten++;
-								basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+								basesWritten+=(r2.bases!=null ? r2.length() : 0);
 								validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 							}
 						}
 					}
@@ -209,18 +209,18 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 					if(read1){
 						for(final Read r : job.list){
 							if(r!=null){
-								job.writer.print(r.toFasta().append('\n'));
+								job.writer.print(r.toFasta(FASTA_WRAP).append('\n'));
 								readsWritten++;
-								basesWritten+=(r.bases!=null ? r.bases.length : 0);
+								basesWritten+=(r.bases!=null ? r.length() : 0);
 								validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 								Read r2=r.mate;
 								if(OUTPUT_INTERLEAVED && r2!=null){
-									job.writer.print(r2.toFasta().append('\n'));
+									job.writer.print(r2.toFasta(FASTA_WRAP).append('\n'));
 									readsWritten++;
-									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									basesWritten+=(r2.bases!=null ? r2.length() : 0);
 									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 								}
 							}
 						}
@@ -229,11 +229,11 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							if(r1!=null){
 								final Read r2=r1.mate;
 								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
-								job.writer.print(r2.toFasta().append('\n'));
+								job.writer.print(r2.toFasta(FASTA_WRAP).append('\n'));
 								readsWritten++;
-								basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+								basesWritten+=(r2.bases!=null ? r2.length() : 0);
 								validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 							}
 						}
 					}
@@ -273,16 +273,16 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 							if(r!=null){
 								job.writer.print(r.toText(true).append('\n'));
 								readsWritten++;
-								basesWritten+=(r.bases!=null ? r.bases.length : 0);
+								basesWritten+=(r.bases!=null ? r.length() : 0);
 								validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
-								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.bases.length : 0);
+								validBasesWritten+=(r.valid() && r.mapped() && r.bases!=null ? r.length() : 0);
 								Read r2=r.mate;
 								if(OUTPUT_INTERLEAVED && r2!=null){
 									job.writer.print(r2.toText(true).append('\n'));
 									readsWritten++;
-									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									basesWritten+=(r2.bases!=null ? r2.length() : 0);
 									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 								}
 								
 							}
@@ -295,9 +295,9 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 								if(r2!=null){
 									job.writer.print(r2.toText(true).append('\n'));
 									readsWritten++;
-									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									basesWritten+=(r2.bases!=null ? r2.length() : 0);
 									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.length() : 0);
 								}else{
 									job.writer.print(".\n");
 								}

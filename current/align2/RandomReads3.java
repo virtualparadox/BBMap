@@ -42,7 +42,7 @@ public final class RandomReads3 {
 		String ref=null;
 		String out=null;
 		
-		int number=0;
+		long maxReads=0;
 		int minlen=100;
 		int maxlen=100;
 
@@ -92,7 +92,6 @@ public final class RandomReads3 {
 		int minInsert=-1, maxInsert=-1, insertDev=-1, insert=-1;
 		
 		boolean paired=false;
-		boolean colorspace=false;
 		String prefix_=null;
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -115,8 +114,10 @@ public final class RandomReads3 {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
 			}else if(a.equals("reads")){
-				number=x;
+				maxReads=(int)Tools.parseKMG(b);
 			}else if(a.equals("len") || a.equals("length") || a.equals("readlen") || a.equals("readlength")){
 				minlen=maxlen=x;
 			}else if(a.equals("append") || a.equals("app")){
@@ -176,11 +177,13 @@ public final class RandomReads3 {
 			}else if(a.startsWith("minnlen")){
 				minNLen=Integer.parseInt(b);
 			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+				Shared.FASTA_WRAP=Integer.parseInt(b);
 			}else if(a.startsWith("seed")){
 				seed2=Long.parseLong(b);
 			}else if(a.equals("ref") || a.equals("reference")){
 				ref=b;
+			}else if(a.equals("path")){
+				Data.setPath(b);
 			}else if(a.equals("nodisk")){
 				assert(false) : "'nodisk' has not been implemented; please remove that flag.";
 				RefToIndex.NODISK=NODISK=Tools.parseBoolean(b);
@@ -225,7 +228,7 @@ public final class RandomReads3 {
 				maxQuality=x;
 				midQuality=Tools.min(midQuality,  maxQuality);
 				minQuality=Tools.min(minQuality,  maxQuality);
-			}else if(a.startsWith("qual") || a.equals("q")){
+			}else if(a.equals("q")){
 				minQuality=midQuality=maxQuality=x;
 			}else if(a.equals("qv") || a.equals("variance") || a.equals("qvariance")){
 				qVariance=x;
@@ -285,20 +288,14 @@ public final class RandomReads3 {
 				REPLACE_NOREF=Tools.parseBoolean(b);
 			}else if(a.equals("out")){
 				out=b;
-			}else if(a.equals("colorspace")){
-				colorspace=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				if(x>=0){
-					ReadWrite.ZIPLEVEL=Tools.min(x, 9);
-				}
 			}else if(a.equals("ext") || a.equals("extension")){
 				fileExt=b;
 				if(fileExt==null){fileExt=".fq.gz";}
 				if(!fileExt.startsWith(".")){fileExt="."+fileExt;}
 			}else if(a.equals("perfect")){
-				PERFECT_READ_RATIO=Float.parseFloat(b);
+				PERFECT_READ_RATIO=(Tools.parseBoolean(b) ? 1 : Float.parseFloat(b));
 			}else if(a.equals("singlescaffold")){
 				FORCE_SINGLE_SCAFFOLD=Tools.parseBoolean(b);
 			}else if(a.equals("samestrand")){
@@ -309,15 +306,6 @@ public final class RandomReads3 {
 				prefix_=b;
 			}else if(a.equals("in")){
 				in1=(b==null || b.equalsIgnoreCase("null") ? null : b);
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				if(b.equalsIgnoreCase("auto")){
-					FASTQ.DETECT_QUALITY_OUT=true;
-				}else{
-					byte ascii_offset=Byte.parseByte(b);
-					FASTQ.ASCII_OFFSET_OUT=ascii_offset;
-					System.err.println("Set fastq output ASCII offset to "+FASTQ.ASCII_OFFSET_OUT);
-					FASTQ.DETECT_QUALITY_OUT=false;
-				}
 			}else{throw new RuntimeException("Unknown parameter "+args[i]);}
 
 		}
@@ -354,7 +342,7 @@ public final class RandomReads3 {
 		}
 		if(Shared.TRIM_READ_COMMENTS){Data.trimScaffoldNames();}
 		
-		if(number<1){
+		if(maxReads<1){
 			Data.sysout.println("No reads to generate; quitting.");
 			return;
 		}
@@ -427,12 +415,12 @@ public final class RandomReads3 {
 		}
 		
 //		assert(false) : OUTPUT_INTERLEAVED;
-		String fname1="reads_B"+Data.GENOME_BUILD+"_"+number+"x"+maxlen+"bp_"
+		String fname1="reads_B"+Data.GENOME_BUILD+"_"+maxReads+"x"+maxlen+"bp_"
 			+(maxSnps==0 || snpRate==0 ? 0 : maxSnps)+"S_"+(maxInss==0 || insRate==0 ? 0 : +maxInsLen)+"I_"+(maxDels==0 || delRate==0 ? 0 : maxDelLen)+"D_"+
 			(maxSubs==0 || subRate==0 ? 0 : maxSubLen)+"U_"+
 			(maxNs==0 || nRate==0 ? 0 : maxNs)+"N"/*+"_chr"+minChrom+"-"+maxChrom*/+(paired ? (OUTPUT_INTERLEAVED ? "_interleaved" : "_1") : "")+fileExt;
 		
-		String fname2=(!paired || OUTPUT_INTERLEAVED) ? null : "reads_B"+Data.GENOME_BUILD+"_"+number+"x"+maxlen+"bp_"
+		String fname2=(!paired || OUTPUT_INTERLEAVED) ? null : "reads_B"+Data.GENOME_BUILD+"_"+maxReads+"x"+maxlen+"bp_"
 			+(maxSnps==0 || snpRate==0 ? 0 : maxSnps)+"S_"+(maxInss==0 || insRate==0 ? 0 : +maxInsLen)+"I_"+(maxDels==0 || delRate==0 ? 0 : maxDelLen)+"D_"+
 			(maxSubs==0 || subRate==0 ? 0 : maxSubLen)+"U_"+
 			(maxNs==0 || nRate==0 ? 0 : maxNs)+"N"/*+"_chr"+minChrom+"-"+maxChrom*/+"_2"+fileExt;
@@ -442,12 +430,12 @@ public final class RandomReads3 {
 			fname2=(!out.contains("#") || !paired || OUTPUT_INTERLEAVED) ? null : out.replaceFirst("#", "2");
 		}
 		
-		rr.writeRandomReadsX(number, minlen, maxlen,
+		rr.writeRandomReadsX(maxReads, minlen, maxlen,
 				maxSnps, maxInss, maxDels, maxSubs, maxNs,
 				snpRate, insRate, delRate, subRate, nRate,
 				minInsLen, minDelLen, minSubLen, minNLen,
 				maxInsLen, maxDelLen, maxSubLen, maxNLen,
-				minChrom, maxChrom, colorspace, minQuality, midQuality, maxQuality, fname1, fname2);
+				minChrom, maxChrom, minQuality, midQuality, maxQuality, fname1, fname2);
 		
 		t.stop();
 		Data.sysout.println("Wrote "+fname1);
@@ -485,7 +473,7 @@ public final class RandomReads3 {
 				if(!f.exists() || !f.isFile() || !f.canRead()){throw new RuntimeException("Cannot read file "+f.getAbsolutePath());}
 			}
 			{
-				String s=align2.IndexMaker4.fname(1, 1, 13, 1, false);
+				String s=align2.IndexMaker4.fname(1, 1, 13, 1);
 				String dir=new File(s).getParent();
 				dir=dir.replace('\\', '/');
 				dir=dir.replace("ref/index/", "ref/genome/");
@@ -549,7 +537,7 @@ public final class RandomReads3 {
 			minScaf=minScaf>-1 ? minScaf : FastaToChromArrays2.MIN_SCAFFOLD;
 			midPad=midPad>-1 ? midPad : FastaToChromArrays2.MID_PADDING;
 			String[] ftcaArgs=new String[] {reference, ""+build, "writeinthread=false", "genscaffoldinfo="+genScaffoldInfo, "retain", "waitforwriting=false",
-					"gzip="+(Data.CHROMGZ), "chromc="+Data.CHROMC, "maxlen="+maxChromLen,
+					"gz="+(Data.CHROMGZ), "maxlen="+maxChromLen,
 							"writechroms="+(!NODISK), "minscaf="+minScaf, "midpad="+midPad, "nodisk="+NODISK};
 			
 			chromlist=FastaToChromArrays2.main2(ftcaArgs);
@@ -575,7 +563,6 @@ public final class RandomReads3 {
 		randy=new Random(seed+1);
 		randy2=new Random(seed+2);
 		randyMutationType=new Random(seed+3);
-		randyCSError=new Random(seed+4);
 		randyQual=new Random(seed+5);
 		randyAdapter=new Random(seed+25);
 		paired=paired_;
@@ -588,14 +575,12 @@ public final class RandomReads3 {
 			randyMate=new Random(seed+6);
 			randy2Mate=new Random(seed+7);
 			randyMutationTypeMate=new Random(seed+8);
-			randyCSErrorMate=new Random(seed+9);
 			randyQualMate=new Random(seed+10);
 			randyAdapterMate=new Random(seed+30);
 		}else{
 			randyMate=null;
 			randy2Mate=null;
 			randyMutationTypeMate=null;
-			randyCSErrorMate=null;
 			randyQualMate=null;
 			randyAdapterMate=null;
 		}
@@ -609,23 +594,6 @@ public final class RandomReads3 {
 	
 	private final void addErrorsFromQuality(Read r, Random randy){
 		addErrorsFromQuality(r, randy, 0, r.length());
-	}
-	
-	private final void addErrorsFromQualityColorspace(Read r, Random rand, final int from, final int to){
-		final byte[] quals=r.quality;
-		for(int i=from; i<to; i++){
-			if(r.bases[i]!='N'){
-				float prob=quals==null ? 0.001f : QualityTools.PROB_ERROR[r.quality[i]];
-				if(rand.nextFloat()<prob){
-					byte old=r.bases[i];
-					if(!r.colorspace()){old=AminoAcid.baseToNumber[old];}
-					byte b=(byte)((old+rand.nextInt(3)+1)%4);
-					if(!r.colorspace()){b=AminoAcid.numberToBase[b];}
-					assert(old!=b);
-					r.bases[i]=b;
-				}
-			}
-		}
 	}
 	
 	private final void addErrorsFromQuality(Read r, Random rand, final int from, final int to){
@@ -1000,12 +968,12 @@ public final class RandomReads3 {
 		return new int[] {start, readlen};
 	}
 	
-	public void writeRandomReadsX(int numReads, int minlen, int maxlen,
+	public void writeRandomReadsX(long numReads, int minlen, int maxlen,
 			int maxSnps, int maxInss, int maxDels, int maxSubs, int maxNs,
 			float snpRate, float insRate, float delRate, float subRate, float nRate,
 			int minInsLen, int minDelLen, int minSubLen, int minNLen,
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
-			int minChrom, int maxChrom, boolean colorspace,
+			int minChrom, int maxChrom,
 			int minQual, int midQual, int maxQual, String fname1, String fname2){
 		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
 		
@@ -1040,16 +1008,28 @@ public final class RandomReads3 {
 			final byte baseQuality;
 			final byte slant;
 			{
-				byte baseSlant=(perfect ? (byte)5 : (byte)(maxQual-minQual+1));
+//				byte baseSlant=(perfect ? (byte)5 : (byte)(maxQual-minQual+1));
+//				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
+//				if(randyQual.nextBoolean()){
+//					int range=(perfect ? maxQualP-midQualP+1 : maxQual-midQual+1);
+//					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
+//					baseQuality=(byte)((perfect ? midQualP : midQual)+delta);
+//				}else{
+//					int range=perfect ? midQualP-minQualP+1 : midQual-minQual+1;
+//					int delta=randyQual.nextInt(range);
+//					baseQuality=(byte)((perfect ? midQualP : midQual)-delta);
+//				}
+
+				byte baseSlant=(byte)(maxQual-minQual+1);
 				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
 				if(randyQual.nextBoolean()){
-					int range=(perfect ? maxQualP-midQualP+1 : maxQual-midQual+1);
+					int range=maxQual-midQual+1;
 					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
-					baseQuality=(byte)((perfect ? midQualP : midQual)+delta);
+					baseQuality=(byte)(midQual+delta);
 				}else{
-					int range=perfect ? midQualP-minQualP+1 : midQual-minQual+1;
+					int range=midQual-minQual+1;
 					int delta=randyQual.nextInt(range);
-					baseQuality=(byte)((perfect ? midQualP : midQual)-delta);
+					baseQuality=(byte)(midQual-delta);
 				}
 			}
 			
@@ -1100,7 +1080,7 @@ public final class RandomReads3 {
 					maxInsLen, maxDelLen, maxSubLen, maxNLen, 
 					mateMiddleMin, mateMiddleMax, mateSameStrand, 
 					minQual, midQual, maxQual, baseQuality, slant, 
-					perfect, colorspace, nextReadID, locs, bits, forceChrom, forceLoc);
+					perfect, nextReadID, locs, bits, forceChrom, forceLoc);
 
 //			assert(false) : r1;
 			if(paired && r1!=null){
@@ -1114,7 +1094,7 @@ public final class RandomReads3 {
 							maxInsLen, maxDelLen, maxSubLen, maxNLen, 
 							mateMiddleMin, mateMiddleMax, mateSameStrand, 
 							minQual, midQual, maxQual, baseQuality, slant, 
-							perfect, colorspace, nextReadID, locs, bits, -1, -1);
+							perfect, nextReadID, locs, bits, -1, -1);
 				}
 				
 				if(r2!=null){
@@ -1182,17 +1162,13 @@ public final class RandomReads3 {
 			float snpRate, float insRate, float delRate, float subRate, float nRate,
 			int minInsLen, int minDelLen, int minSubLen, int minNLen,
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
-			int minChrom, int maxChrom, boolean colorspace,
+			int minChrom, int maxChrom,
 			int minQual, int midQual, int maxQual){
 		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
 		
 		assert(minQual<=midQual);
 		assert(midQual<=maxQual);
 		assert(minQual>=0 && maxQual<60);
-		
-		final int maxQualP=maxQual;//Tools.max(35, maxQual);
-		final int midQualP=midQual;//30;
-		final int minQualP=minQual;//Tools.min(25, maxQual);
 
 		if(bits_cached==null){bits_cached=new BitSet(maxlen+1);}
 		if(locs_cached==null || locs_cached.length<Tools.min(300000000, maxlen+(maxDelLen*(long)maxDels))){
@@ -1213,16 +1189,28 @@ public final class RandomReads3 {
 			final byte baseQuality;
 			final byte slant;
 			{
-				byte baseSlant=(perfect ? (byte)5 : (byte)(maxQual-minQual+1));
+//				byte baseSlant=(perfect ? (byte)5 : (byte)(maxQual-minQual+1));
+//				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
+//				if(randyQual.nextBoolean()){
+//					int range=(perfect ? maxQualP-midQualP+1 : maxQual-midQual+1);
+//					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
+//					baseQuality=(byte)((perfect ? midQualP : midQual)+delta);
+//				}else{
+//					int range=perfect ? midQualP-minQualP+1 : midQual-minQual+1;
+//					int delta=randyQual.nextInt(range);
+//					baseQuality=(byte)((perfect ? midQualP : midQual)-delta);
+//				}
+				
+				byte baseSlant=(byte)(maxQual-minQual+1);
 				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
 				if(randyQual.nextBoolean()){
-					int range=(perfect ? maxQualP-midQualP+1 : maxQual-midQual+1);
+					int range=maxQual-midQual+1;
 					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
-					baseQuality=(byte)((perfect ? midQualP : midQual)+delta);
+					baseQuality=(byte)(midQual+delta);
 				}else{
-					int range=perfect ? midQualP-minQualP+1 : midQual-minQual+1;
+					int range=midQual-minQual+1;
 					int delta=randyQual.nextInt(range);
-					baseQuality=(byte)((perfect ? midQualP : midQual)-delta);
+					baseQuality=(byte)(midQual-delta);
 				}
 			}
 			
@@ -1267,7 +1255,7 @@ public final class RandomReads3 {
 					maxInsLen, maxDelLen, maxSubLen, maxNLen, 
 					mateMiddleMin, mateMiddleMax, mateSameStrand, 
 					minQual, midQual, maxQual, baseQuality, slant, 
-					perfect, colorspace, nextReadID, locs, bits, forceChrom, forceLoc);
+					perfect, nextReadID, locs, bits, forceChrom, forceLoc);
 
 //			assert(false) : r1;
 			if(paired && r1!=null){
@@ -1281,7 +1269,7 @@ public final class RandomReads3 {
 							maxInsLen, maxDelLen, maxSubLen, maxNLen, 
 							mateMiddleMin, mateMiddleMax, mateSameStrand, 
 							minQual, midQual, maxQual, baseQuality, slant, 
-							perfect, colorspace, nextReadID, locs, bits, -1, -1);
+							perfect, nextReadID, locs, bits, -1, -1);
 				}
 				
 				if(r2!=null){
@@ -1342,7 +1330,7 @@ public final class RandomReads3 {
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
 			int minMiddle, int maxMiddle, boolean sameStrand, 
 			int minQual, int midQual, int maxQual, byte baseQuality, byte slant, 
-			boolean perfect, boolean colorspace, long rid, int[] locs, BitSet bits,
+			boolean perfect, long rid, int[] locs, BitSet bits,
 			int FORCE_CHROM, int FORCE_LOC){
 		
 //		verbose=(rid==3860);
@@ -1539,11 +1527,11 @@ public final class RandomReads3 {
 		if(USE_FIXED_QUALITY){
 			quals=getFixedQualityRead(bases.length);
 		}else{
-			if(perfect){
-				quals=QualityTools.makeQualityArray(bases.length, randyQual, 30, 40, baseQuality, slant, qVariance);
-			}else{
+//			if(perfect){
+//				quals=QualityTools.makeQualityArray(bases.length, randyQual, 30, 40, baseQuality, slant, qVariance);
+//			}else{
 				quals=QualityTools.makeQualityArray(bases.length, randyQual, minQual, maxQual, baseQuality, slant, qVariance);
-			}
+//			}
 		}
 		for(int j=0; j<quals.length; j++){
 			if(!AminoAcid.isFullyDefined(bases[j])){quals[j]=0;}
@@ -1551,26 +1539,21 @@ public final class RandomReads3 {
 		
 		
 //		Read r=new Read(bases, chrom, (byte)strand, loc, loc+bases.length-1, rid, quals, false);
-		Read r=new Read(bases, chrom, (byte)strand, x, y, rid, quals, false);
+		Read r=new Read(bases, chrom, (byte)strand, x, y, rid, quals);
 		r.setSynthetic(true);
-		assert(r.bases.length==readlen);
+		assert(r.length()==readlen);
 
 		if(ADD_ERRORS_FROM_QUALITY && !perfect){addErrorsFromQuality(r, randyQual);}
 		if(ADD_PACBIO_ERRORS && !perfect){
 			addPacBioErrors(r, randyQual.nextFloat()*(pbMaxErrorRate-pbMinErrorRate)+pbMinErrorRate, (1+randyQual.nextFloat())*(pbMaxErrorRate-pbMinErrorRate)*0.25f);
 		}else{
-			assert(r.bases.length==readlen);
+			assert(r.length()==readlen);
 		}
 		
 //		r.stop=r.start+readlen+dif[0]-1;
 		
 		assert(r.stop>r.start) : r;
 		
-		if(colorspace){
-			r=r.translateToColorspace(true);
-			r.obj=new String(r.bases); //TODO - for testing
-		}
-		r.mapLength=r.bases.length;
 		if(adapters>0){r.setHasAdapter(true);}
 		if(FORCE_SINGLE_SCAFFOLD && !Data.isSingleScaffold(r.chrom, r.start, r.stop)){return null;}
 		if(MIN_SCAFFOLD_OVERLAP>0 && Data.scaffoldOverlapLength(r.chrom, r.start, r.stop)<MIN_SCAFFOLD_OVERLAP){return null;}
@@ -1613,22 +1596,9 @@ public final class RandomReads3 {
 		if(r.quality!=null){
 			r.quality=qq.toBytes();
 //			byte q=QualityTools.probCorrectToPhred(1-errorRate);
-//			byte[] qual=new byte[r.bases.length];
+//			byte[] qual=new byte[r.length()];
 //			Arrays.fill(qual, q);
 //			r.quality=qual;
-		}
-	}
-	
-	
-	public void addColorspaceErrors(Read r, int errors){
-		assert(r.colorspace());
-		for(int i=0; i<errors; i++){
-			int loc=randyCSError.nextInt(r.bases.length);
-			if(r.bases[loc]!='N'){
-				assert(r.quality[loc]>=4);
-				r.quality[loc]=(byte) (4+randyCSError.nextInt(r.quality[loc]));
-				r.bases[loc]=(byte)((r.bases[loc]+randyCSError.nextInt(3)+1)&3);
-			}
 		}
 	}
 
@@ -1676,14 +1646,12 @@ public final class RandomReads3 {
 	private final Random randy;
 	private final Random randy2;
 	private final Random randyMutationType;
-	private final Random randyCSError;
 	private final Random randyQual;
 	private final Random randyAdapter;
 	
 	private final Random randyMate;
 	private final Random randy2Mate;
 	private final Random randyMutationTypeMate;
-	private final Random randyCSErrorMate;
 	private final Random randyQualMate;
 	private final Random randyAdapterMate;
 

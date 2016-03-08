@@ -4,7 +4,7 @@
 function usage(){
 	echo "BBMergeGapped v2.0"
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Merges paired reads into single reads by overlap detection."
 	echo "With sufficient coverage, can also merge nonoverlapping reads using gapped kmers."
@@ -87,7 +87,7 @@ function merge() {
 	#module load samtools
 	local CMD="java $EA $z $z2 -cp $CP jgi.MateReadsMT $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 merge "$@"

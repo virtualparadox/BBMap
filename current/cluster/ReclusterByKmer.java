@@ -8,10 +8,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import align2.ListNum;
 import align2.Shared;
@@ -53,7 +53,7 @@ public class ReclusterByKmer {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
@@ -97,14 +97,8 @@ public class ReclusterByKmer {
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					in1=b.replace("#", "1");
-					in2=b.replace("#", "2");
-				}
 			}else if(out1==null && i==1 && !arg.contains("=")){
 				out1=arg;
 			}else{
@@ -114,7 +108,8 @@ public class ReclusterByKmer {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			overwrite=parser.overwrite;
@@ -156,7 +151,7 @@ public class ReclusterByKmer {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 //			if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
@@ -191,19 +186,6 @@ public class ReclusterByKmer {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		
-		if(parser.qin!=-1 && parser.qout!=-1){
-			FASTQ.ASCII_OFFSET=parser.qin;
-			FASTQ.ASCII_OFFSET_OUT=parser.qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(parser.qin!=-1){
-			FASTQ.ASCII_OFFSET=parser.qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(parser.qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=parser.qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
@@ -232,18 +214,16 @@ public class ReclusterByKmer {
 	void process(Timer t){
 		
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ffin1, ffin2, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, null, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Input is "+(paired ? "paired" : "unpaired"));}
 
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -254,7 +234,7 @@ public class ReclusterByKmer {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, null, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, null, null, buff, null, false);
 			ros.start();
 		}
 		
@@ -295,12 +275,12 @@ public class ReclusterByKmer {
 				
 				if(ros!=null){ros.add(reads, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -355,11 +335,10 @@ public class ReclusterByKmer {
 	private void findKmerSpectra(Timer t){
 		
 		/* Create read input stream */
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2);
-			Thread cristhread=new Thread(cris);
-			cristhread.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2);
+			cris.start(); //4567
 			if(verbose){System.err.println("Started cris");}
 		}
 		
@@ -396,11 +375,10 @@ public class ReclusterByKmer {
 	private void recluster(Timer t){
 		
 		/* Create read input stream */
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2);
-			Thread cristhread=new Thread(cris);
-			cristhread.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2);
+			cris.start(); //4567
 			if(verbose){System.err.println("Started cris");}
 		}
 		
@@ -433,7 +411,7 @@ public class ReclusterByKmer {
 	
 	private class ClusterThread extends Thread{
 		
-		public ClusterThread(int id_, int clusterMode_, int ambigMode_, ConcurrentReadStreamInterface cris_){
+		public ClusterThread(int id_, int clusterMode_, int ambigMode_, ConcurrentReadInputStream cris_){
 			id=id_;
 			ambigMode=ambigMode_; 
 			clusterMode=clusterMode_;
@@ -456,11 +434,11 @@ public class ReclusterByKmer {
 				}
 				
 				//Fetch a new read list
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 		}
 		
 		
@@ -575,7 +553,7 @@ public class ReclusterByKmer {
 		final int id;
 		final int clusterMode;
 		final int ambigMode;
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		
 		final ThreadLocalRandom randy;
 		
@@ -615,12 +593,8 @@ public class ReclusterByKmer {
 	
 	private boolean overwrite=false;
 	private boolean append=false;
-	private boolean colorspace=false;
 	
 	private long maxReads=-1;
-	
-//	private byte qin=-1;
-//	private byte qout=-1;
 	
 	private int ambigMode=AMBIG_MODE_RAND;
 	
@@ -632,7 +606,7 @@ public class ReclusterByKmer {
 	
 	private PrintStream outstream=System.err;
 	
-	private int THREADS=Shared.THREADS;
+	private int THREADS=Shared.threads();
 	
 	/*--------------------------------------------------------------*/
 

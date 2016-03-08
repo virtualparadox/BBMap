@@ -138,7 +138,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 			}
 			
 			if(s!=null){
-				Read r=new Read(s, chrom, Gene.PLUS, start, stop, id, null, false);
+				Read r=new Read(s, chrom, Gene.PLUS, start, stop, id, null);
 				if(alternateStrand && (r.numericID&1)==1){r.reverseComplement();}
 				r.setSynthetic(true);
 //				System.out.println("Made read: "+r);

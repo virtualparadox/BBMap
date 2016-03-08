@@ -33,6 +33,10 @@ public final class LongList{
 		size=max(size, loc+1);
 	}
 	
+	public final void increment(int loc){
+		increment(loc, 1);
+	}
+	
 	public final void add(LongList b){
 		for(int i=b.size-1; i>=0; i--){
 			increment(i, b.get(i));
@@ -91,6 +95,10 @@ public final class LongList{
 	}
 	
 	public String toString(){
+		return toStringListView();
+	}
+	
+	public String toStringSetView(){
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
 		String comma="";
@@ -102,6 +110,26 @@ public final class LongList{
 		}
 		sb.append(']');
 		return sb.toString();
+	}
+	
+	public String toStringListView(){
+		StringBuilder sb=new StringBuilder();
+		sb.append('[');
+		String comma="";
+		for(int i=0; i<size; i++){
+				sb.append(comma+array[i]);
+				comma=", ";
+		}
+		sb.append(']');
+		return sb.toString();
+	}
+	
+	public long[] toArray(){
+		long[] x=new long[size];
+		for(int i=0; i<x.length; i++){
+			x[i]=array[i];
+		}
+		return x;
 	}
 	
 	public void sort() {

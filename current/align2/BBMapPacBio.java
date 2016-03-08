@@ -66,7 +66,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		MAX_SITESCORES_TO_PRINT=100;
 		PRINT_SECONDARY_ALIGNMENTS=false;
 		AbstractIndex.MIN_APPROX_HITS_TO_KEEP=1;
-		Shared.READ_BUFFER_LENGTH=Tools.min(Shared.READ_BUFFER_LENGTH, 20);
+		Shared.READ_BUFFER_LENGTH=Tools.mid(1, Shared.READ_BUFFER_LENGTH, 20);
 	}
 	
 	@Override
@@ -372,10 +372,11 @@ public final class BBMapPacBio extends AbstractMapper  {
 			t.start();
 		}
 		
-		if(coverageBinned!=null || coverageBase!=null || coverageHist!=null || coverageStats!=null){
-			String[] cvargs=("covhist="+coverageHist+"\tcovstats="+coverageStats+"\tbasecov="+coverageBase+"\tbincov="+coverageBinned+
-					"\t32bit="+cov32bit+"\tnzo="+covNzo+"\ttwocolumn="+covTwocolumn+"\tsecondary="+covSecondary+"\tcovminscaf="+coverageMinScaf+
-					"\tksb="+covKsb+"\tbinsize="+covBinSize+"\tstartcov="+covStartOnly+"\tstrandedcov="+covStranded+
+		if(coverageBinned!=null || coverageBase!=null || coverageHist!=null || coverageStats!=null || coverageRPKM!=null || normcov!=null || normcovOverall!=null){
+			String[] cvargs=("covhist="+coverageHist+"\tcovstats="+coverageStats+"\tbasecov="+coverageBase+"\tbincov="+coverageBinned+"\tphyscov="+coveragePhysical+
+					"\t32bit="+cov32bit+"\tnzo="+covNzo+"\ttwocolumn="+covTwocolumn+"\tsecondary="+PRINT_SECONDARY_ALIGNMENTS+"\tcovminscaf="+coverageMinScaf+
+					"\tksb="+covKsb+"\tbinsize="+covBinSize+"\tstartcov="+covStartOnly+"\tstrandedcov="+covStranded+"\trpkm="+coverageRPKM+
+					"\tnormcov="+normcov+"\tnormcovo="+normcovOverall+(in1==null ? "" : "\tin1="+in1)+(in2==null ? "" : "\tin2="+in2)+
 					(covSetbs ? ("\tbitset="+covBitset+"\tarrays="+covArrays) : "")).split("\t");
 			pileup=new CoveragePileup(cvargs);
 			pileup.createDataStructures();
@@ -384,7 +385,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		if(!forceanalyze && (in1==null || maxReads==0)){return;}
 		
-		BBIndexPacBio.analyzeIndex(minChrom, maxChrom, colorspace, BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE, keylen);
+		BBIndexPacBio.analyzeIndex(minChrom, maxChrom, BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE, keylen);
 		
 		t.stop();
 		sysout.println("Analyzed Index:   \t"+t);
@@ -409,17 +410,17 @@ public final class BBMapPacBio extends AbstractMapper  {
 		adjustThreadsforMemory(680);
 		
 		AbstractMapThread.CALC_STATISTICS=CALC_STATISTICS;
-		AbstractMapThread[] mtts=new AbstractMapThread[Shared.THREADS];
+		AbstractMapThread[] mtts=new AbstractMapThread[Shared.threads()];
 		for(int i=0; i<mtts.length; i++){
 			try {
 				mtts[i]=new BBMapThreadPacBio(cris, keylen, 
-						pileup, colorspace, SLOW_ALIGN, THRESH, minChrom, 
+						pileup, SLOW_ALIGN, CORRECT_THRESH, minChrom, 
 						maxChrom, keyDensity, maxKeyDensity, minKeyDensity, maxDesiredKeys, REMOVE_DUPLICATE_BEST_ALIGNMENTS, 
-						SAVE_AMBIGUOUS_XY, MINIMUM_ALIGNMENT_SCORE_RATIO, TRIM_LIST, MAKE_MATCH_STRING, QUICK_MATCH_STRINGS, rosA, rosM, rosU, rosB, translateToBaseSpace,
-						SLOW_ALIGN_PADDING, SLOW_RESCUE_PADDING, DONT_OUTPUT_UNMAPPED_READS, DONT_OUTPUT_BLACKLISTED_READS, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS,
+						SAVE_AMBIGUOUS_XY, MINIMUM_ALIGNMENT_SCORE_RATIO, TRIM_LIST, MAKE_MATCH_STRING, QUICK_MATCH_STRINGS, rosA, rosM, rosU, rosB,
+						SLOW_ALIGN_PADDING, SLOW_RESCUE_PADDING, OUTPUT_MAPPED_ONLY, DONT_OUTPUT_BLACKLISTED_READS, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS,
 						REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, KILL_BAD_PAIRS, rcompMate, 
 						PERFECTMODE, SEMIPERFECTMODE, FORBID_SELF_MAPPING, TIP_SEARCH_DIST,
-						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, TRIM_LEFT, TRIM_RIGHT, UNTRIM, TRIM_QUALITY, MIN_TRIM_LENGTH, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
+						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, qtrimLeft, qtrimRight, untrim, TRIM_QUALITY, minTrimLength, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
 			} catch (Exception e) {
 				e.printStackTrace();
 				abort(mtts, "Aborting due to prior error.");
@@ -431,8 +432,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 			}
 		}
 		
-		Thread cristhread=new Thread(cris);
-		cristhread.start();
+		cris.start(); //4567
 		sysout.println("Processing reads in "+(paired ? "paired" : "single")+"-ended mode.");
 		sysout.println("Started read stream.");
 		
@@ -447,7 +447,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		closeStreams(cris, rosA, rosM, rosU, rosB);
 		sysout.println();
 		printSettings(keylen);
-		printOutput(mtts, t, keylen, paired, false, pileup);
+		printOutput(mtts, t, keylen, paired, false, pileup, scafNzo, sortStats);
 		if(broken>0 || errorState){throw new RuntimeException("BBMap terminated in an error state; the output may be corrupt.");}
 	}
 	

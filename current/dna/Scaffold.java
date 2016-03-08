@@ -15,6 +15,12 @@ public class Scaffold implements Comparable<Scaffold> {
 	
 	/** Assumes SAM format.
 	 * e.g.<br> @SQ	SN:scaffold_0	LN:1785514	AS:build 9 */
+	public Scaffold(byte[] s){
+		this(new String(s).split("\t"));
+	}
+	
+	/** Assumes SAM format.
+	 * e.g.<br> @SQ	SN:scaffold_0	LN:1785514	AS:build 9 */
 	public Scaffold(String s){
 		this(s.split("\t"));
 	}
@@ -61,6 +67,8 @@ public class Scaffold implements Comparable<Scaffold> {
 	public int length=-1;
 	public long basehits=0;
 	public long readhits=0;
+	/** For calculating FPKM */
+	public long fraghits=0;
 	public long readhitsMinus=0;
 	
 	/** {A,C,G,T,N} */

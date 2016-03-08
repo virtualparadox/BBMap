@@ -5,22 +5,27 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SamLine;
+import align2.IntList;
 import align2.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
+import dna.CoverageArray;
+import dna.CoverageArray2;
+import dna.CoverageArray3;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
@@ -59,13 +64,15 @@ public class BBMask{
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=16;
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+		
+		Parser parser=new Parser();
 		boolean setEntropyMode=false;
-
+		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
 			String[] split=arg.split("=");
@@ -75,7 +82,13 @@ public class BBMask{
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
@@ -91,13 +104,7 @@ public class BBMask{
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+				Shared.setThreads(Integer.parseInt(b));
 			}else if(a.equals("sampad") || a.equals("sampadding") || a.equals("sp")){
 				samPad=Integer.parseInt(b);
 			}else if(a.equals("entropymode")){
@@ -123,87 +130,50 @@ public class BBMask{
 				extoutRef=b;
 			}else if(a.equals("split")){
 				splitMode=Tools.parseBoolean(b);
-			}else if(a.equals("mink") || a.equals("kmin")){	
+			}else if(a.equals("mink") || a.equals("kmin")){
 				mink=mink2=Integer.parseInt(b);
-			}else if(a.equals("maxk") || a.equals("kmax")){	
+			}else if(a.equals("maxk") || a.equals("kmax")){
 				maxk=maxk2=Integer.parseInt(b);
-			}else if(a.equals("k")){	
+			}else if(a.equals("k")){
 				mink=maxk=mink2=maxk2=Integer.parseInt(b);
-			}else if(a.equals("minkr") || a.equals("krmin")){	
+			}else if(a.equals("minkr") || a.equals("krmin")){
 				mink=Integer.parseInt(b);
-			}else if(a.equals("maxkr") || a.equals("krmax")){	
+			}else if(a.equals("maxkr") || a.equals("krmax")){
 				maxk=Integer.parseInt(b);
-			}else if(a.equals("kr")){	
+			}else if(a.equals("kr")){
 				mink=maxk=Integer.parseInt(b);
-			}else if(a.equals("mink2") || a.equals("kmin2") || a.equals("minke") || a.equals("kemin")){	
+			}else if(a.equals("mink2") || a.equals("kmin2") || a.equals("minke") || a.equals("kemin")){
 				mink2=Integer.parseInt(b);
-			}else if(a.equals("maxk2") || a.equals("kmax2") || a.equals("maxke") || a.equals("kemax")){	
+			}else if(a.equals("maxk2") || a.equals("kmax2") || a.equals("maxke") || a.equals("kemax")){
 				maxk2=Integer.parseInt(b);
-			}else if(a.equals("k2") || a.equals("ke")){	
+			}else if(a.equals("k2") || a.equals("ke")){
 				mink2=maxk2=Integer.parseInt(b);
+			}else if(a.equals("mincov")){
+				mincov=Integer.parseInt(b);
+			}else if(a.equals("maxcov")){
+				maxcov=Integer.parseInt(b);
+			}else if(a.equals("delcov")){
+				includeDeletionCoverage=Tools.parseBoolean(b);
 			}else if(a.equals("window") || a.equals("w")){
 				window=Integer.parseInt(b);
-			}else if(a.equals("ratio")){	
+			}else if(a.equals("ratio")){
 				ratio=Float.parseFloat(b);
 				if(!setEntropyMode){entropyMode=false;}
-			}else if(a.equals("entropy") || a.equals("e")){	
+			}else if(a.equals("entropy") || a.equals("e")){
 				entropyCutoff=Float.parseFloat(b);
 				if(!setEntropyMode){entropyMode=true;}
-			}else if(a.equals("lowercase") || a.equals("lc")){	
+			}else if(a.equals("lowercase") || a.equals("lc")){
 				MaskByLowercase=Tools.parseBoolean(b);
-			}else if(a.equals("minlen")){	
+			}else if(a.equals("minlen")){
 				minlen=Integer.parseInt(b);
-			}else if(a.equals("mincount")){	
+			}else if(a.equals("mincount")){
 				mincount=Integer.parseInt(b);
-			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
-				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
-			}else if(a.equals("parsecustom")){
-				parsecustom=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
-				boolean x=Tools.parseBoolean(b);
-				Read.NULLIFY_BROKEN_QUALITY=x;
-				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
-				int x=Integer.parseInt(b);
-				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
+				stream.FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}
 			else if(inRef==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				inRef=arg;
@@ -217,6 +187,12 @@ public class BBMask{
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		
+		bits32=(mincov>=Character.MAX_VALUE || maxcov>=Character.MAX_VALUE);
+		
+		{//Process parser fields
+			Parser.processQuality();
+		}
 
 		assert(FastaReadInputStream.settingsOK());
 
@@ -224,7 +200,7 @@ public class BBMask{
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 
@@ -235,19 +211,6 @@ public class BBMask{
 		}
 
 		FASTQ.PARSE_CUSTOM=parsecustom;
-
-
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
-		}
 		
 		ffoutRef=FileFormat.testOutput(outRef, FileFormat.FASTA, extoutRef, true, overwrite, append, false);
 
@@ -302,7 +265,8 @@ public class BBMask{
 			outstream.println("Loading Time:                 \t"+t);
 		}
 		
-		long repeats=0, mapping=0, lowcomplexity=0;
+		long repeats=0, lowcomplexity=0;
+		long mapping=0;
 
 		if(processRepeats && maxk>0){
 			t.start();
@@ -418,6 +382,28 @@ public class BBMask{
 	
 	/*--------------------------------------------------------------*/
 	
+	private int setHighCoverage(BitSet bs, CoverageArray ca, int maxAllowedCoverage, int maxLen){
+		int numSet=0;
+		for(int i=0; i<maxLen; i++){
+			if(ca.get(i)>maxAllowedCoverage){
+				bs.set(i);
+				numSet++;
+			}
+		}
+		return numSet;
+	}
+	
+	private int setLowCoverage(BitSet bs, CoverageArray ca, int minAllowedCoverage, int maxLen){
+		int numSet=0;
+		for(int i=0; i<maxLen; i++){
+			if(ca.get(i)<minAllowedCoverage){
+				bs.set(i);
+				numSet++;
+			}
+		}
+		return numSet;
+	}
+	
 	private long maskFromBitsets(final boolean lowercase){
 		System.err.println("\nConverting masked bases to "+(lowercase ? "lower case" : "N")); //123
 		long sum=0;
@@ -519,10 +505,10 @@ public class BBMask{
 	
 	private void writeOutput(){
 		
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(ffoutRef!=null){
 			final int buff=16;
-			ros=new RTextOutputStream3(ffoutRef, null, qfoutRef, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffoutRef, null, qfoutRef, null, buff, null, false);
 			ros.start();
 		}
 		
@@ -556,16 +542,14 @@ public class BBMask{
 	
 	private void maskSam_MT(FileFormat ff){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ff, null, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff, null, null, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		
-		MaskSamThread[] threads=new MaskSamThread[Shared.THREADS];
+		MaskSamThread[] threads=new MaskSamThread[Shared.threads()];
 //		outstream.println("Spawning "+numThreads+" threads.");
 		for(int i=0; i<threads.length; i++){threads[i]=new MaskSamThread(cris);}
 		for(int i=0; i<threads.length; i++){threads[i].start();}
@@ -579,7 +563,21 @@ public class BBMask{
 				}
 			}
 		}
-
+		
+		if(covmap!=null){//Move coverage array information to BitSets.
+			for(String rs : map.keySet()){
+				Read r=map.get(rs);
+				BitSet bs=(BitSet)r.obj;
+				CoverageArray ca=covmap.remove(rs);
+				if(maxcov>-1){
+					setHighCoverage(bs, ca, maxcov, r.length());
+				}
+				if(mincov>-1){
+					setLowCoverage(bs, ca, mincov, r.length());
+				}
+			}
+		}
+		
 		errorState|=ReadWrite.closeStreams(cris);
 
 		if(errorState){
@@ -589,7 +587,7 @@ public class BBMask{
 	
 	private class MaskSamThread extends Thread{
 		
-		MaskSamThread(ConcurrentReadStreamInterface cris_){
+		MaskSamThread(ConcurrentReadInputStream cris_){
 			cris=cris_;
 		}
 		
@@ -598,19 +596,18 @@ public class BBMask{
 			maskSam(cris);
 		}
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
+		
 		
 	}
 	
 	private void maskSam_ST(FileFormat ff){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ff, null, null, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff, null, null, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		
 		maskSam(cris);
@@ -622,10 +619,11 @@ public class BBMask{
 		}
 	}
 	
-	private void maskSam(ConcurrentReadStreamInterface cris){
+	private void maskSam(ConcurrentReadInputStream cris){
 		
 		long samReads=0;
 		long samBases=0;
+		IntList ranges=new IntList(16);
 		
 		{
 
@@ -649,30 +647,31 @@ public class BBMask{
 							assert(sl!=null) : "No sam line for read "+r;
 							byte[] rname=sl.rname();
 							assert(rname!=null) : "No rname for sam line "+sl;
-							Read ref=map.get(new String(rname));
 							final String rs=new String(rname);
+							Read ref=map.get(rs);
 							if(ref==null){
 								handleNoRef(rs);
 							}else{
+								final int reflen=ref.length();
 								assert(ref!=null) : "Could not find reference scaffold '"+rs+"' for samline \n"+sl+"\n in set \n"+map.keySet()+"\n";
-								BitSet bs=(BitSet)ref.obj;
-								int start=Tools.max(0, sl.start()-samPad);
-								int stop=Tools.min(sl.stop()+1+samPad, ref.bases.length);
-								if(stop>start){
-									bs.set(start, stop);
+								if(covmap==null){
+									BitSet bs=(BitSet)ref.obj;
+									mask(bs, sl, reflen);
+								}else{
+									CoverageArray ca=covmap.get(rs);
+									increment(ca, sl, r.match, reflen, ranges, includeDeletionCoverage, samPad);
 								}
 							}
 						}
-						
 					}
 				}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
@@ -680,6 +679,104 @@ public class BBMask{
 			this.samBases+=samBases;
 			this.samReads+=samReads;
 		}
+	}
+	
+	private void mask(BitSet bs, SamLine sl, int reflen){
+		final int start=Tools.max(0, sl.start(true, false)-samPad);
+		final int stop=Tools.min(sl.stop(start, true, false)+1+samPad, reflen);
+		if(stop>start){
+			synchronized(bs){//Potential bottleneck
+				bs.set(start, stop);
+			}
+		}
+	}
+	
+	public static void increment(CoverageArray ca, SamLine sl, byte[] match, int reflen, IntList ranges, boolean includeDels, int samPad){
+		final int start=Tools.max(0, sl.start(true, false));
+		final int stop=Tools.min(sl.stop(start, true, false)+1, reflen);
+		if(stop>start){
+			ranges.clear();
+			boolean numeric=false;
+			if(match==null){
+				assert(sl.cigar!=null);
+				match=SamLine.cigarToShortMatch(sl.cigar, true);
+				numeric=true;
+			}else{
+				for(byte b : match){
+					if(Character.isDigit(b)){
+						numeric=true;
+						break;
+					}
+				}
+			}
+			if(numeric){match=Read.toLongMatchString(match);}
+			fillRanges(match, start, stop, ranges, includeDels);
+//			assert(false) : ranges;
+			if(ranges.size>0){
+				if(samPad!=0){//Pad the ranges, but don't let them overlap
+					ranges.set(0, Tools.mid(0, reflen, ranges.get(0)-samPad));
+					ranges.set(1, Tools.mid(0, reflen, ranges.get(1)+samPad));
+					for(int i=2; i<ranges.size; i+=2){
+						ranges.set(i, Tools.mid(ranges.get(i-1), reflen, ranges.get(i)-samPad));
+						ranges.set(i+1, Tools.mid(0, reflen, ranges.get(i+1)+samPad));
+					}
+				}
+				synchronized(ca){//Potential bottleneck
+					ca.incrementRanges(ranges, 1);
+				}
+			}
+		}
+	}
+	
+	public static void fillRanges(byte[] longmatch, int start, int stop, IntList ranges, boolean includeDels){
+		assert(ranges.size==0);
+		byte mode='?', lastMode='?';
+		int rpos=start;
+		int lastRpos=start;
+		int rstart=start;
+		for(int mpos=0; mpos<longmatch.length; mpos++){
+			byte m=longmatch[mpos];
+			if(m=='m' || m=='s' || m=='S' || m=='N' || m=='B'){//Little 's' is for a match classified as a sub to improve the affine score.
+				mode='m';
+				rpos++;
+			}else if(m=='I' || m=='X' || m=='Y'){
+				mode='I';
+			}else if(m=='D'){
+				mode='D';
+				rpos++;
+			}else if(m=='C'){
+				mode='C';
+				rpos++;
+			}else{
+				throw new RuntimeException("Invalid match string character '"+(char)m+"' = "+m+" (ascii).  " +
+						"Match string should be in long format here.");
+			}
+			if(mode!=lastMode){
+				if(mpos>0){
+					if(lastMode=='m'){
+						ranges.add(rstart);
+						ranges.add(lastRpos);
+					}else if(mode=='D' && includeDels){
+						ranges.add(rstart);
+						ranges.add(lastRpos);
+					}
+				}
+				rstart=lastRpos;
+			}
+			lastMode=mode;
+			lastRpos=rpos;
+		}
+//		assert(false) : rstart+", "+rpos+", "+(char)mode+", "+(char)lastMode;
+		//Final cycle
+		if(lastMode=='m'){
+			ranges.add(rstart);
+			ranges.add(lastRpos);
+		}else if(mode=='D' && includeDels){
+			ranges.add(rstart);
+			ranges.add(lastRpos);
+		}
+		assert(rpos==stop) : start+", "+stop+", "+rpos+", "+rstart+", "+lastRpos+"\n"+new String(longmatch)+"\n"+ranges;
+		assert((ranges.size&1)==0);
 	}
 	
 	private void handleNoRef(String rname){
@@ -695,16 +792,17 @@ public class BBMask{
 	private LinkedHashMap<String, Read> hashRef(){
 
 
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ffinRef, null, qfinRef, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffinRef, null, qfinRef, null);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		
 		final LinkedHashMap<String, Read> hmr=new LinkedHashMap<String, Read>();
+		if(ffinSam!=null && (mincov>=0 || maxcov>=0)){
+			covmap=new HashMap<String, CoverageArray>();
+		}
 		
 		{
 
@@ -715,35 +813,43 @@ public class BBMask{
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r=reads.get(idx);
+					final int len=r.length();
 					final byte[] bases=r.bases;
-
-					final int initialLength1=(bases==null ? 0 : bases.length);
-
-					final BitSet bs=new BitSet(initialLength1);
+					
+//					refLengths.add(len);
+					final BitSet bs=new BitSet(len);
 					r.obj=bs;
 					
+					if(covmap!=null){
+						if(bits32){
+							covmap.put(r.id, new CoverageArray3(covmap.size(), len));
+						}else{
+							covmap.put(r.id, new CoverageArray2(covmap.size(), len));
+						}
+					}
+					
 					if(MaskByLowercase){
-						for(int i=0; i<bases.length; i++){
+						for(int i=0; i<len; i++){
 							if(bases[i]=='N' || Character.isLowerCase(bases[i])){bs.set(i);}
 						}
 					}else{
-						for(int i=0; i<bases.length; i++){
+						for(int i=0; i<len; i++){
 							if(bases[i]=='N'){bs.set(i);}
 						}
 					}
 					
 					refReads++;
-					refBases+=initialLength1;
+					refBases+=len;
 					Read old=hmr.put(r.id, r);
 					assert(old==null) : "Duplicate reference scaffold name "+r.id;
 				}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 
@@ -877,7 +983,7 @@ public class BBMask{
 	private long maskLowEntropy(){
 		ArrayBlockingQueue<Read> queue=new ArrayBlockingQueue<Read>(map.size());
 		for(Read r : map.values()){queue.add(r);}
-		int numThreads=Tools.min(Shared.THREADS, queue.size());
+		int numThreads=Tools.min(Shared.threads(), queue.size());
 		MaskLowEntropyThread[] threads=new MaskLowEntropyThread[numThreads];
 		long sum=0;
 //		outstream.println("Spawning "+numThreads+" threads.");
@@ -1074,7 +1180,7 @@ public class BBMask{
 	private long maskRepeats(){
 		ArrayBlockingQueue<Read> queue=new ArrayBlockingQueue<Read>(map.size());
 		for(Read r : map.values()){queue.add(r);}
-		int numThreads=Tools.min(Shared.THREADS, queue.size());
+		int numThreads=Tools.min(Shared.threads(), queue.size());
 		MaskRepeatThread[] threads=new MaskRepeatThread[numThreads];
 		long sum=0;
 		for(int i=0; i<threads.length; i++){threads[i]=new MaskRepeatThread(queue, mink, maxk, mincount, minlen);}
@@ -1205,7 +1311,7 @@ public class BBMask{
 		outstream.println("Other parameters and their defaults:\n");
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
-		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
@@ -1216,6 +1322,8 @@ public class BBMask{
 
 	private LinkedHashMap<String, Read> map=null;
 	private ConcurrentHashMap<String, String> norefSet=new ConcurrentHashMap<String, String>(256, .75f, 16);
+	private HashMap<String, CoverageArray> covmap=null;
+//	private IntList refLengths=new IntList();
 	
 	private long refReads=0;
 	private long refBases=0;
@@ -1242,18 +1350,14 @@ public class BBMask{
 	private boolean parsecustom=false;
 	private boolean overwrite=false;
 	private boolean append=false;
-	private boolean colorspace=false;
 
 	private long maxReads=-1;
-
-	private byte qin=-1;
-	private byte qout=-1;
 
 	private boolean processRepeats=false;
 	private int mink=5;
 	private int maxk=5;
-	private int minlen=30;
-	private int mincount=3;
+	private int minlen=40;
+	private int mincount=4;
 
 	private boolean processEntropy=true;
 	private boolean entropyMode=true;
@@ -1261,9 +1365,19 @@ public class BBMask{
 	private int mink2=5;
 	private int maxk2=5;
 	private int window=80;
-	private float ratio=0.35f;
-	private float entropyCutoff=0.75f;
+	private float ratio=0.35f; //For complexity, if not in entropyMode
+	private float entropyCutoff=0.70f;
+	
+	/** Use 32-bit coverage arrays */
+	private boolean bits32=true;
+	/** Include deletions when calculating coverage */
+	private boolean includeDeletionCoverage=true;
 
+	/** If nonnegative, mask bases with coverage outside this range. */
+	private int mincov=-1;
+	/** If nonnegative, mask bases with coverage outside this range. */
+	private int maxcov=-1;
+	
 	private int samPad=0;
 
 	private final FileFormat ffinRef;

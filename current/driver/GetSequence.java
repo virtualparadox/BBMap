@@ -48,7 +48,8 @@ public class GetSequence {
 //		System.out.println(chrom);
 //		System.out.println(strand);
 		
-		ChromosomeArray cha=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray cha=Data.getChromosome(chrom);
 		
 		String[] array=new String[args.length];
 		
@@ -88,7 +89,8 @@ public class GetSequence {
 	}
 	
 	public static String get(int chrom, int a, int b, byte strand){
-		ChromosomeArray cha=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray cha=Data.getChromosome(chrom);
 		return cha.getString(a, b);
 	}
 	

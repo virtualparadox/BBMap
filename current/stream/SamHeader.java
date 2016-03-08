@@ -298,9 +298,7 @@ public class SamHeader {
 					}
 				}
 			}
-			//			sb.append(' ');
-			sb.append(" align2.");
-			sb.append(Shared.BBMAP_CLASS);
+			sb.append(" align2."+Shared.BBMAP_CLASS);
 			if(Shared.COMMAND_LINE!=null){
 				for(String s : Shared.COMMAND_LINE){
 					sb.append(' ');
@@ -345,8 +343,7 @@ public class SamHeader {
 					}
 				}
 			}
-			sb.append(' ');
-			sb.append(Shared.BBMAP_CLASS);
+			sb.append(" align2."+Shared.BBMAP_CLASS);
 			if(Shared.COMMAND_LINE!=null){
 				for(String s : Shared.COMMAND_LINE){
 					sb.append(' ');

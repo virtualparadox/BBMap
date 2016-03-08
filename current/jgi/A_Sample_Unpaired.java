@@ -7,10 +7,10 @@ import java.util.Arrays;
 
 import stream.ByteBuilder;
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import align2.ListNum;
 import align2.ReadStats;
@@ -40,6 +40,7 @@ public class A_Sample_Unpaired {
 	
 	public A_Sample_Unpaired(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -51,9 +52,9 @@ public class A_Sample_Unpaired {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
 		
@@ -90,7 +91,8 @@ public class A_Sample_Unpaired {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
@@ -125,21 +127,6 @@ public class A_Sample_Unpaired {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+"\n");
 		}
 		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
@@ -147,28 +134,24 @@ public class A_Sample_Unpaired {
 	
 	void process(Timer t){
 		
-		ByteBuilder bb=new ByteBuilder();
-		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, null, qfin1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null, qfin1, null);
+			cris.start();
 			if(verbose){outstream.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
 		}
 		boolean paired=cris.paired();
 //		if(verbose){
-			outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
+			if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
 //		}
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;		
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, null, qfout1, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, null, qfout1, null, buff, null, false);
 			ros.start();
 		}else{ros=null;}
 		
@@ -202,16 +185,16 @@ public class A_Sample_Unpaired {
 				
 				if(ros!=null){ros.add(listOut, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		
-		errorState|=ReadStats.writeAll(paired);
+		errorState|=ReadStats.writeAll();
 		
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
@@ -246,7 +229,7 @@ public class A_Sample_Unpaired {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");

@@ -2,7 +2,7 @@ package dna;
 
 public class Timer {
 	
-	public Timer(){}
+	public Timer(){start();}
 	
 	public long start(){
 		time1=time2=System.nanoTime();

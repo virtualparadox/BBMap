@@ -39,6 +39,7 @@ public class CallPeaks {
 	
 	public CallPeaks(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);

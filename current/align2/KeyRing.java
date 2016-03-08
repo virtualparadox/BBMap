@@ -20,22 +20,7 @@ public final class KeyRing {
 		System.out.println(Arrays.toString(offsets));
 	}
 	
-	public static final int[] makeKeys(String s, int[] offsets, int chunksize){
-		if(offsets==null){return null;}
-		assert(chunksize>0 && chunksize<16);
-		assert(offsets!=null) : s.length()+", "+s;
-		int[] keys=new int[offsets.length];
-		
-//		System.out.println(Arrays.toString(offsets));
-		
-		for(int i=0; i<offsets.length; i++){
-//			System.out.println(s.length()+", "+offsets.length+", "+chunksize+", "+keys.length+", "+i);
-			keys[i]=ChromosomeArray.toNumber(offsets[i], offsets[i]+chunksize-1, s);
-		}
-		return keys;
-	}
-	
-	private static int[] makeKeys(byte[] s, int[] offsets, int chunksize){
+	public static int[] makeKeys(byte[] s, int[] offsets, int chunksize){
 		if(offsets==null){return null;}
 		assert(chunksize>0 && chunksize<16);
 		assert(offsets!=null) : s.length+", "+new String(s);
@@ -50,8 +35,8 @@ public final class KeyRing {
 		return keys;
 	}
 	
-	public static int[] reverseComplementKeys(int[] keys, int k, boolean cs){
-		assert(!cs);
+	public static int[] reverseComplementKeys(int[] keys, int k){
+//		assert(!cs);
 		int[] r=new int[keys.length];
 		for(int i=0, x=keys.length-1; i<r.length; i++){
 			r[i]=AminoAcid.reverseComplementBinaryFast(keys[x-i], k);
@@ -59,60 +44,11 @@ public final class KeyRing {
 		return r;
 	}
 	
-	public static int reverseComplementKey(int key, int k, boolean cs){
+	public static int reverseComplementKey(int key, int k){
 //		return cs ? reverseComplementKey_old(key, k, cs) : AminoAcid.reverseComplementBinaryFast(key, k);
-		assert(!cs);
 		return AminoAcid.reverseComplementBinaryFast(key, k);
 	}
 	
-	public static int reverseComplementKey_old(int key, final int keylen, final boolean cs){
-		int rkey=0;
-		final int mask=0x3;
-//		System.out.println("key = "+key +", keylen = "+keylen);
-//		System.out.println(Integer.toBinaryString(rkey));
-		if(cs){
-			for(int i=0; i<keylen; i++){
-				int base=(key&mask);
-				assert(base>=0 && base<=3);
-				key>>=2;
-				rkey<<=2;
-				rkey|=base;
-//				System.out.println("base="+Integer.toBinaryString(base));
-//				System.out.println("rkey="+rkey);
-			}
-		}else{
-			for(int i=0; i<keylen; i++){
-				int base=(key&mask);
-				assert(base>=0 && base<=3);
-				key>>=2;
-				rkey<<=2;
-				rkey|=AminoAcid.numberToComplement[base];
-			}
-		}
-		
-//		System.out.println(Integer.toBinaryString(rkey));
-		
-		return rkey;
-	}
-	
-	public static final int[] makeKeys(byte[] s, int[] offsets, int chunksize, boolean colorspace){
-		return (colorspace ? makeKeysColorspace(s, offsets, chunksize) : makeKeys(s, offsets, chunksize));
-	}
-	
-	public static final int[] makeKeysColorspace(byte[] s, int[] offsets, int chunksize){
-		if(offsets==null){return null;}
-		assert(chunksize>0 && chunksize<16);
-		assert(offsets!=null) : s.length+", "+new String(s);
-		int[] keys=new int[offsets.length];
-		
-//		System.out.println(Arrays.toString(offsets));
-		
-		for(int i=0; i<offsets.length; i++){
-//			System.out.println(s.length()+", "+offsets.length+", "+chunksize+", "+keys.length+", "+i);
-			keys[i]=ChromosomeArray.toNumberColorspace(offsets[i], offsets[i]+chunksize-1, s);
-		}
-		return keys;
-	}
 	
 	public static final String decode(int key, int chunksize){
 		StringBuilder sb=new StringBuilder();

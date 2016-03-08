@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified October 23, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Separates paired reads into files of 'good' pairs and 'good' singletons by removing 'bad' reads that are shorter than a min length."
 	echo "Designed to handle situations where reads become too short to be useful after trimming.  This program also optionally performs quality trimming."
@@ -24,7 +24,7 @@ usage(){
 	echo "overwrite=t      	(ow) Set to false to force the program to abort rather than overwrite an existing file."
 	echo "showspeed=t      	(ss) Set to 'f' to suppress display of processing speed."
 	echo "interleaved=auto 	(int) If true, forces fastq input to be paired and interleaved."
-	echo "qtrim=f           	Trim read ends to remove bases with quality below minq."
+	echo "qtrim=f           	Trim read ends to remove bases with quality below trimq."
 	echo "                 	Values: rl (trim both ends), f (neither end), r (right end only), l (left end only)."
 	echo "trimq=6           	Trim quality threshold."
 	echo "minlen=20         	(ml) Reads shorter than this after trimming will be discarded."
@@ -65,7 +65,7 @@ splitpairs() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.SplitPairsAndSingles $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 splitpairs "$@"

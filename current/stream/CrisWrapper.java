@@ -8,34 +8,35 @@ import fileIO.ReadWrite;
 import align2.ListNum;
 
 /**
+ * Wraps a cris to allow single-read next() capability, and the ability to go back.
  * @author Brian Bushnell
  * @date Jul 18, 2014
  *
  */
 public class CrisWrapper {
 	
-	public CrisWrapper(long maxReads, boolean colorspace, boolean keepSamHeader, FileFormat ff1, FileFormat ff2){
-		this(maxReads, colorspace, keepSamHeader, ff1, ff2, (String)null, (String)null);
+	public CrisWrapper(long maxReads, boolean keepSamHeader, FileFormat ff1, FileFormat ff2){
+		this(maxReads, keepSamHeader, ff1, ff2, (String)null, (String)null);
 	}
 	
-	public CrisWrapper(long maxReads, boolean colorspace, boolean keepSamHeader, FileFormat ff1, FileFormat ff2, String qf1, String qf2){
-		this(ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ff1, ff2, qf1, qf2), true);
+	public CrisWrapper(long maxReads, boolean keepSamHeader, FileFormat ff1, FileFormat ff2, String qf1, String qf2){
+		this(ConcurrentReadInputStream.getReadInputStream(maxReads, ff1.samOrBam(), ff1, ff2, qf1, qf2), true);
 	}
 		
 
-	public CrisWrapper(ConcurrentReadStreamInterface cris_, boolean start){
+	public CrisWrapper(ConcurrentReadInputStream cris_, boolean start){
 		initialize(cris_, start);
 	}
 	
-	public void initialize(ConcurrentReadStreamInterface cris_, boolean start){
+	public void initialize(ConcurrentReadInputStream cris_, boolean start){
 		cris=cris_;
-		if(start){new Thread(cris).start();}
+		if(start){cris.start();}
 		ln=cris.nextList();
 		reads=(ln==null ? null : ln.list);
 		if(reads==null || reads.size()==0){
 			reads=null;
 			//System.err.println("Empty.");
-			cris.returnList(ln, true);
+			cris.returnList(ln.id, true);
 			errorState|=ReadWrite.closeStream(cris);
 		}
 		index=0;
@@ -51,16 +52,16 @@ public class CrisWrapper {
 			index=0;
 			if(reads.size()==0){
 				reads=null;
-				cris.returnList(ln, true);
+				cris.returnList(ln.id, true);
 				errorState|=ReadWrite.closeStream(cris);
 				return null;
 			}
-			cris.returnList(ln, false);
+			cris.returnList(ln.id, false);
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 			if(reads==null){
 				//System.err.println("*******3");
-				cris.returnList(ln, true);
+				cris.returnList(ln.id, true);
 				errorState|=ReadWrite.closeStream(cris);
 				//System.err.println("Returning null (2)");
 				return null;
@@ -89,7 +90,7 @@ public class CrisWrapper {
 	private ListNum<Read> ln;
 	private ArrayList<Read> reads;
 	private int index;
-	public ConcurrentReadStreamInterface cris;
+	public ConcurrentReadInputStream cris;
 	public boolean errorState=false;
 	
 }

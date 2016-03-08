@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified October 20, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Makes chimeric PacBio reads from nonchimeric reads."
 	echo ""
@@ -59,7 +59,7 @@ makechimeras() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.MakeChimeras $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 makechimeras "$@"

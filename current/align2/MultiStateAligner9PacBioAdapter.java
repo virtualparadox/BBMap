@@ -1477,7 +1477,7 @@ public final class MultiStateAligner9PacBioAdapter {
 	}
 	
 	public final static int maxQuality(byte[] baseScores){
-		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sum(baseScores);
+		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sumInt(baseScores);
 	}
 	
 	public final static int maxImperfectScore(int numBases){
@@ -1694,25 +1694,25 @@ public final class MultiStateAligner9PacBioAdapter {
 	private static final byte MODE_INS=2;
 	private static final byte MODE_SUB=3;
 	
-	public static final int POINTS_NOREF=-10; //default -110
+	public static final int POINTS_NOREF=-10;
 	public static final int POINTS_NOCALL=-10;
-	public static final int POINTS_MATCH=90; //default 50
+	public static final int POINTS_MATCH=90;
 	public static final int POINTS_MATCH2=100; //Note:  Changing to 90 substantially reduces false positives
 	public static final int POINTS_COMPATIBLE=50;
-	public static final int POINTS_SUB=-143; //default -133
-	public static final int POINTS_SUBR=-161; //increased penalty if prior match streak was at most 1 (I have no idea why this improves things)
-	public static final int POINTS_SUB2=-54; //default -47
+	public static final int POINTS_SUB=-143;
+	public static final int POINTS_SUBR=-161; //increased penalty if prior match streak was at most 1
+	public static final int POINTS_SUB2=-54;
 	public static final int POINTS_SUB3=-35;
 	public static final int POINTS_MATCHSUB=-10;
-	public static final int POINTS_INS=-207; //default -395
-	public static final int POINTS_INS2=-51; //default -61
-	public static final int POINTS_INS3=-37; //default -20
-	public static final int POINTS_INS4=-15; //default -20
-	public static final int POINTS_DEL=-273; //default -472
-	public static final int POINTS_DEL2=-38; //default -30
-	public static final int POINTS_DEL3=-27; //default -7
-	public static final int POINTS_DEL4=-15; //default -1
-	public static final int POINTS_DEL_REF_N=-10; //default -10
+	public static final int POINTS_INS=-207;
+	public static final int POINTS_INS2=-51;
+	public static final int POINTS_INS3=-37;
+	public static final int POINTS_INS4=-15;
+	public static final int POINTS_DEL=-273;
+	public static final int POINTS_DEL2=-38;
+	public static final int POINTS_DEL3=-27;
+	public static final int POINTS_DEL4=-15;
+	public static final int POINTS_DEL_REF_N=-10;
 	
 
 	public static final int LIMIT_FOR_COST_3=5;

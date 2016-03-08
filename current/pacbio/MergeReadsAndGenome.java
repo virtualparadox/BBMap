@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.ConcurrentReadInputStream;
-import stream.ConcurrentReadStreamInterface;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
@@ -55,6 +55,12 @@ public class MergeReadsAndGenome {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("in")){
@@ -67,25 +73,15 @@ public class MergeReadsAndGenome {
 				out=b;
 			}else if(a.equals("build") || a.equals("genome")){
 				genome=Integer.parseInt(b);
-			}else if(a.startsWith("fastareadlen")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.startsWith("fastaminread") || a.startsWith("fastaminlen")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 				System.out.println("Set overwrite to "+overwrite);
-			}else if(a.endsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				System.out.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.equals("reads")){
 				reads=Tools.parseKMG(b);
 			}else if(a.equals("readlen") || a.equals("length") || a.equals("len")){
 				readlen=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("sequentialoverlap")){
 				sequentialOverlap=Integer.parseInt(b);
 			}else if(a.equals("sequentialstrandalt")){
@@ -118,21 +114,20 @@ public class MergeReadsAndGenome {
 			SequentialReadInputStream.UNLOAD=true;
 //			SequentialReadInputStream.verbose=true;
 			SequentialReadInputStream ris=new SequentialReadInputStream(reads, readlen, Tools.max(50, readlen/2), sequentialOverlap, sequentialStrandAlt);
-			ConcurrentReadInputStream cris=new ConcurrentReadInputStream(ris, reads);
-			new Thread(cris).start();
+			ConcurrentLegacyReadInputStream cris=new ConcurrentLegacyReadInputStream(ris, reads);
+			cris.start();
 			id=appendReads(cris, tsw, id);
 			ReadWrite.closeStream(cris);
 		}
 		
 		if(in!=null){
 			for(String s : in){
-				final ConcurrentReadStreamInterface cris;
+				final ConcurrentReadInputStream cris;
 				{
 					FileFormat ff1=FileFormat.testInput(s, FileFormat.FASTQ, null, true, false);
-					cris=ConcurrentGenericReadInputStream.getReadInputStream(-1, false, true, ff1, null);
+					cris=ConcurrentReadInputStream.getReadInputStream(-1, true, ff1, null);
 					if(verbose){System.err.println("Started cris");}
-					Thread th=new Thread(cris);
-					th.start();
+					cris.start(); //4567
 				}
 				id=appendReads(cris, tsw, id);
 				ReadWrite.closeStream(cris);
@@ -143,7 +138,7 @@ public class MergeReadsAndGenome {
 		tsw.waitForFinish();
 	}
 	
-	public static long appendReads(ConcurrentReadStreamInterface cris, TextStreamWriter tsw, long id){
+	public static long appendReads(ConcurrentReadInputStream cris, TextStreamWriter tsw, long id){
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 		while(reads!=null && reads.size()>0){
@@ -162,13 +157,13 @@ public class MergeReadsAndGenome {
 				}
 			}
 			
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			//System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		if(verbose){System.err.println("Finished reading");}
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 		if(verbose){System.err.println("Returned list");}
 		return id;
 	}
@@ -180,14 +175,13 @@ public class MergeReadsAndGenome {
 		if(r.chrom<1){return r;}
 		
 		int startN=0;
-		int stopN=r.bases.length-1;
-		while(startN<r.bases.length && r.bases[startN]=='N'){startN++;}
+		int stopN=r.length()-1;
+		while(startN<r.length() && r.bases[startN]=='N'){startN++;}
 		while(stopN>0 && r.bases[stopN]=='N'){stopN--;}
-		if(startN>0 || stopN<r.bases.length-1){
-			if(r.bases.length-startN-stopN<50){return null;}
+		if(startN>0 || stopN<r.length()-1){
+			if(r.length()-startN-stopN<50){return null;}
 			r.bases=Arrays.copyOfRange(r.bases, startN, stopN+1);
 			if(r.quality!=null){r.quality=Arrays.copyOfRange(r.quality, startN, stopN+1);}
-			r.mapLength=r.bases.length;
 		}
 		return r;
 	}

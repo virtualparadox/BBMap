@@ -12,24 +12,20 @@ public class FastqReadInputStream extends ReadInputStream {
 	
 	public static void main(String[] args){
 		
-		FASTQ.PARSE_CUSTOM=false;
-		
-		FastqReadInputStream fris=new FastqReadInputStream(args[0], false, true);
+		FastqReadInputStream fris=new FastqReadInputStream(args[0], true);
 		
 		Read r=fris.next();
 		System.out.println(r.toText(false));
 		
 	}
 	
-	public FastqReadInputStream(String fname, boolean colorspace_, boolean allowSubprocess_){
-		this(FileFormat.testInput(fname, FileFormat.FASTQ, null, allowSubprocess_, false), colorspace_);
+	public FastqReadInputStream(String fname, boolean allowSubprocess_){
+		this(FileFormat.testInput(fname, FileFormat.FASTQ, null, allowSubprocess_, false));
 	}
 
 	
-	public FastqReadInputStream(FileFormat ff, boolean colorspace_){
-		if(verbose){System.err.println("FastqReadInputStream("+ff+", "+colorspace_+")");}
-
-		colorspace=colorspace_;
+	public FastqReadInputStream(FileFormat ff){
+		if(verbose){System.err.println("FastqReadInputStream("+ff+")");}
 		
 		stdin=ff.stdio();
 		if(!ff.fastq()){
@@ -61,7 +57,7 @@ public class FastqReadInputStream extends ReadInputStream {
 				if(Data.WINDOWS){System.err.println("Note: Filename indicates non-synthetic data, but FASTQ.PARSE_CUSTOM="+FASTQ.PARSE_CUSTOM);}
 			}
 		}
-		
+//		interleaved=false;
 		interleaved=(ff.stdio()) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(ff.name(), false);
 		tf=ByteFile.makeByteFile(ff, false);
 //		assert(false) : interleaved;
@@ -69,7 +65,7 @@ public class FastqReadInputStream extends ReadInputStream {
 
 	@Override
 	public void start() {
-//		if(cris!=null){new Thread(cris).start();}
+//		if(cris!=null){cris.start();}
 	}
 	
 	
@@ -109,7 +105,6 @@ public class FastqReadInputStream extends ReadInputStream {
 		buffer=null;
 		if(list!=null && list.size()==0){list=null;}
 		consumed+=(list==null ? 0 : list.size());
-//		System.err.println(hashCode()+" produced "+r[0].numericID);
 		return list;
 	}
 	public final boolean preferArrays(){return false;}
@@ -121,7 +116,7 @@ public class FastqReadInputStream extends ReadInputStream {
 		buffer=null;
 		next=0;
 		
-		buffer=FASTQ.toReadList(tf, BUF_LEN, colorspace, nextReadID, interleaved);
+		buffer=FASTQ.toReadList(tf, BUF_LEN, nextReadID, interleaved);
 		int bsize=(buffer==null ? 0 : buffer.size());
 		nextReadID+=bsize;
 		if(bsize<BUF_LEN){tf.close();}
@@ -171,7 +166,6 @@ public class FastqReadInputStream extends ReadInputStream {
 	public long consumed=0;
 	private long nextReadID=0;
 	
-	public final boolean colorspace;
 	public final boolean stdin;
 	public static boolean verbose=false;
 

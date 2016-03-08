@@ -20,6 +20,19 @@ public abstract class BandedAligner {
 		return ba;
 	}
 	
+	public final int alignQuadrupleProgressive(final byte[] query, final byte[] ref, int minEdits, int maxEdits, final boolean exact){
+		maxEdits=Tools.min(maxEdits, Tools.max(query.length, ref.length));
+		minEdits=Tools.min(minEdits, maxEdits);
+		for(long i=minEdits, me=-1; me<maxEdits; i=i*4){
+			me=Tools.min(i, maxEdits);
+			if(me*2>maxEdits){me=maxEdits;}
+			int edits=alignQuadruple(query, ref, (int)me, exact);
+//			System.err.println("i="+i+", me="+me+", minEdits="+minEdits+", maxEdits="+maxEdits+", edits="+edits);
+			if(edits<me){return edits;}
+		}
+		return maxEdits;
+	}
+	
 	public final int alignQuadruple(final byte[] query, final byte[] ref, final int maxEdits, final boolean exact){
 		final int a=alignForward(query, ref, 0, 0, maxEdits, exact);
 		final int b=alignReverse(query, ref, query.length-1, ref.length-1, maxEdits, exact);

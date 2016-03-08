@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified September 19, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Generates a kmer uniqueness histogram, binned by file position."
 	echo "There are 3 columns for single reads, 6 columns for paired:"
@@ -79,7 +79,7 @@ bbcountunique() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.CalcUniqueness $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 bbcountunique "$@"

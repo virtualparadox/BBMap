@@ -3,12 +3,9 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.FASTQ;
+import stream.ConcurrentReadInputStream;
 import stream.Read;
 
 import dna.Data;
@@ -27,6 +24,7 @@ public class SortReadsByID {
 	
 	public static void main(String[] args){
 		
+		Parser parser=new Parser();
 		String in1=null;
 		String in2=null;
 		String out="raw_idsorted#.txt.gz";
@@ -41,6 +39,14 @@ public class SortReadsByID {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
 			}else if(a.equals("i") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 				if(b.indexOf('#')>=0){
@@ -51,25 +57,8 @@ public class SortReadsByID {
 				in2=b;
 			}else if(a.equals("o") || a.equals("out") || a.equals("output")){
 				out=b;
-			}else if(a.endsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				Data.sysout.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.endsWith("renumber")){
 				RENUMBER=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				Data.sysout.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				Data.sysout.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					Data.sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -107,13 +96,12 @@ public class SortReadsByID {
 		tAll.start();
 		
 		final long maxReads=-1;
-		ConcurrentReadStreamInterface cris;
+		ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
-			Thread th=new Thread(cris);
-			th.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
+			cris.start(); //4567
 		}
 		
 		HashMap<Integer, Block> map=new HashMap<Integer, Block>();
@@ -137,13 +125,13 @@ public class SortReadsByID {
 					b.add(r);
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			ReadWrite.closeStream(cris);
 		}
 		
@@ -169,9 +157,8 @@ public class SortReadsByID {
 			{
 				FileFormat ff1=FileFormat.testInput(b.out1, FileFormat.FASTQ, null, true, true);
 				FileFormat ff2=FileFormat.testInput(b.out2, FileFormat.FASTQ, null, true, true);
-				cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
-				Thread th=new Thread(cris);
-				th.start();
+				cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
+				cris.start(); //4567
 			}
 			ArrayList<Read> reads2=new ArrayList<Read>((int)b.count);
 			count+=b.count;
@@ -183,13 +170,13 @@ public class SortReadsByID {
 				while(reads!=null && reads.size()>0){
 					reads2.addAll(reads);
 					//System.err.println("returning list");
-					cris.returnList(ln, ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list.isEmpty());
 					//System.err.println("fetching list");
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ReadWrite.closeStream(cris);
 			}
 			

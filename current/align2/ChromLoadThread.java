@@ -107,6 +107,6 @@ public class ChromLoadThread extends Thread {
 	private final ChromosomeArray[] array;
 	
 	public static final int[] lock=new int[1];
-	public static int MAX_CONCURRENT=Shared.THREADS;
+	public static int MAX_CONCURRENT=Shared.threads();
 	
 }

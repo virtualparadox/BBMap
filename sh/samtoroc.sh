@@ -50,7 +50,7 @@ samtoroc() {
 	#module load samtools
 	local CMD="java $EA $z -cp $CP align2.MakeRocCurve $@"
 #	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 samtoroc "$@"

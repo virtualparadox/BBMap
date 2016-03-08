@@ -40,14 +40,14 @@ public class CopyFile {
 
 				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseCommonStatic(arg, a, b)){
+					//do nothing
 				}else if(Parser.parseZip(arg, a, b)){
 					//do nothing
 				}else if(a.equals("in")){
 					in=b;
 				}else if(a.equals("out")){
 					out=b;
-				}else if(a.equals("bf2")){
-					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
 				}else if(a.equals("append") || a.equals("app")){
 					append=ReadStats.append=Tools.parseBoolean(b);
 				}else if(a.equals("overwrite") || a.equals("ow")){

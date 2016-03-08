@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 24, 2014
+Last modified February 17, 2015
 
 Description:  Cuts out sequences corresponding to primers identified in sam files.
 
@@ -60,7 +60,7 @@ cutprimers() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.CutPrimers $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 cutprimers "$@"

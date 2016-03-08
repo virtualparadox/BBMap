@@ -71,9 +71,9 @@ public final class HashArray1D extends HashArray {
 	/*--------------------------------------------------------------*/
 	/*----------------      Nonpublic Methods       ----------------*/
 	/*--------------------------------------------------------------*/
-	
+
 	@Override
-	protected final int readCellValue(int cell) {
+	public final int readCellValue(int cell) {
 		return values[cell];
 	}
 	

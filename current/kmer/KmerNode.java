@@ -136,7 +136,7 @@ public abstract class KmerNode extends AbstractKmerTable {
 	@Override
 	public final int getValue(long kmer){
 		KmerNode n=get(kmer);
-		return n==null ? 0 : n.value();
+		return n==null ? -1 : n.value();
 	}
 	
 	@Override
@@ -290,6 +290,49 @@ public abstract class KmerNode extends AbstractKmerTable {
 	abstract int numValues();
 	
 	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		//do nothing
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		KmerNode n=get(kmer);
+		assert(n!=null);
+		if(n.owner<=newOwner){
+			synchronized(n){
+				if(n.owner<newOwner){
+					n.owner=newOwner;
+				}
+			}
+		}
+		return n.owner;
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		KmerNode n=get(kmer);
+		assert(n!=null);
+		synchronized(n){
+			if(n.owner==owner){
+				n.owner=-1;
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		KmerNode n=get(kmer);
+		assert(n!=null);
+		return n.owner;
+	}
+	
+	/*--------------------------------------------------------------*/
 	/*----------------       Invalid Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
@@ -298,6 +341,7 @@ public abstract class KmerNode extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	
 	long pivot;
+	int owner=-1;
 	KmerNode left, right;
 	
 }

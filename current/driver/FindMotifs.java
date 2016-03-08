@@ -148,7 +148,8 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStarts(int chrom, Motif m, ArrayList<Integer> list, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		ChromosomeArray ca=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){
@@ -181,7 +182,8 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStartsStronger(int chrom, Motif m, ArrayList<Integer> list, ArrayList<Integer> listBeat, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		ChromosomeArray ca=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){
@@ -228,7 +230,8 @@ public class FindMotifs {
 	
 	public static long analyzeChromosomeGStartsStrongerInFrame(int chrom, Motif m, ArrayList<Integer> list, ArrayList<Integer> listBeat, boolean in, byte strand){
 		GeneSet[] genes=Data.getGeneSets(chrom);
-		ChromosomeArray ca=Data.getChromosome(chrom, strand);
+		assert(strand==Gene.PLUS) : "TODO";
+		ChromosomeArray ca=Data.getChromosome(chrom);
 		
 		HashSet<Integer> eset=new HashSet<Integer>();
 		for(GeneSet g : genes){

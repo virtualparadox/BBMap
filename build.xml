@@ -2,34 +2,38 @@
     <description>
         Brian Bushnell's tools!
     </description>
+
+    <!-- genepool specific values; you can override these from the command line -->
+    <property name="jcompiler" value="org.eclipse.jdt.core.JDTCompilerAdapter"/>
+    <property name="mpijar" location="/usr/common/usg/hpc/openmpi/gnu4.6/sge/1.8.1/ib_2.1-1.0.0/lib/mpi.jar"/>
+
     <!-- set global properties for this build -->
     <property name="src" location="current"/>
     <property name="build" location="build"/>
-    <property name="dist"  location="dist"/>
-    <property name="resources"  location="resources"/>
-    <property name="build.compiler" value="org.eclipse.jdt.core.JDTCompilerAdapter"/>
+    <property name="dist" location="dist"/>
+    <property name="resources" location="resources"/>
+
+    <path id="class.path">
+        <pathelement location="${mpijar}"/>
+    </path>
+
     <target name="init">
         <!-- Create the time stamp -->
         <tstamp/>
         <!-- Create the build directory structure used by compile -->
         <mkdir dir="${build}"/>
     </target>
+
     <target name="compile" depends="init"
         description="compile the source " >
 
         <!-- Compile the java code from ${src} into ${build} -->
-        <javac srcdir="${src}" destdir="${build}" compiler="org.eclipse.jdt.core.JDTCompilerAdapter" nowarn="true" includeantruntime="false" source="1.7" target="1.7" debug="true" debuglevel="lines, vars, and source" >
+        <javac srcdir="${src}" destdir="${build}" compiler="${jcompiler}" nowarn="true" includeantruntime="false" source="1.7" target="1.7" debug="true" debuglevel="lines,vars,source" >
+            <classpath refid="class.path" />
             <exclude name="jgi/KmerNormalizeExact.java" />
-            <exclude name="distributed/MPIDedupe.java" />
-        </javac>
-
-        <!-- Need to make sure this isn't overwriting class files built in the non-mpi compile step -->
-        <!-- Compile the MPI java code from ${src} into ${build} -->
-        <javac srcdir="${src}" destdir="${build}" fork="true" executable="mpijavac" compiler="javac1.7" nowarn="true" includeantruntime="false" debug="true">
-            <include name="distributed/MPIDedupe.java" />
-            <exclude name="*" />
         </javac>
     </target>
+
     <target name="dist" depends="compile"
         description="generate the distribution" >
 
@@ -37,10 +41,11 @@
         <mkdir dir="${dist}/lib"/>
         <!-- Put everything in ${build} into the MyProject-${DSTAMP}.jar file -->
         <jar jarfile="${dist}/lib/BBTools.jar">
-			<fileset dir="${build}"/>
-			<fileset dir="${resources}"/>
-	    </jar>
+            <fileset dir="${build}"/>
+            <fileset dir="${resources}"/>
+        </jar>
     </target>
+
     <target name="clean"
         description="clean up" >
 

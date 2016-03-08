@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified August 22, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Renames reads to <prefix>_<number> where you specify the prefix and the numbers are ordered."
 	echo ""
@@ -16,7 +16,7 @@ function usage(){
 	echo "ow=f         		(overwrite) Overwrites files that already exist."
 	echo "zl=4            	(ziplevel) Set compression level, 1 (low) to 9 (max)."
 	echo "int=f		 	(interleaved) Determines whether INPUT file is considered interleaved."
-	echo "fastawrap=100    	Length of lines in fasta output."
+	echo "fastawrap=70    	Length of lines in fasta output."
 	echo "fastareadlen=0   	Set to a non-zero number to break fasta files into reads of at most this length."
 	echo "minscaf=1       	Ignore fasta reads shorter than this."
 	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
@@ -72,7 +72,7 @@ function rename() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.RenameReads $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 rename "$@"

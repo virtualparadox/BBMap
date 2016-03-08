@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
-import stream.ConcurrentReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
@@ -59,9 +59,9 @@ public class StackSites {
 	public static void stack(String fname1, String fname2, String outname, String pcovoutname){
 		assert(pcovoutname.contains("#"));
 		RTextInputStream rtis=new RTextInputStream(fname1, (fname2==null || fname2.equals("null") ? null : fname2), -1);
-		ConcurrentReadInputStream cris=new ConcurrentReadInputStream(rtis, -1);
+		ConcurrentLegacyReadInputStream cris=new ConcurrentLegacyReadInputStream(rtis, -1);
 		
-		new Thread(cris).start();
+		cris.start();
 		System.err.println("Started cris");
 		boolean paired=cris.paired();
 		System.err.println("Paired: "+paired);
@@ -101,13 +101,13 @@ public class StackSites {
 										b=true;
 									}else{//Check for no-refs
 										int len=ss.stop-ss.start+1;
-										if(len==r.bases.length && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
+										if(len==r.length() && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
 											b=checkPerfection(ss.start, ss.stop, r.bases, Data.getChromosome(ss.chrom), ss.strand==Gene.MINUS, 0.5f);
 										}
 									}
 									if(b){
 										while(pcov.size()<=ss.chrom){
-											pcov.add(new CoverageArray2(pcov.size()));
+											pcov.add(new CoverageArray2(pcov.size(), 500));
 										}
 										CoverageArray ca=pcov.get(ss.chrom);
 										for(int i=ss.start; i<=ss.stop; i++){
@@ -116,7 +116,7 @@ public class StackSites {
 									}
 								}
 								
-								SiteScoreR ssr=new SiteScoreR(ss, r.bases.length, r.numericID, (byte)r.pairnum());
+								SiteScoreR ssr=new SiteScoreR(ss, r.length(), r.numericID, (byte)r.pairnum());
 								
 								if(original!=null){
 									ssr.correct=isCorrectHitLoose(ss, original.chrom, original.strand, original.start, original.stop, 40, false);
@@ -142,13 +142,13 @@ public class StackSites {
 										b=true;
 									}else{//Check for no-refs
 										int len=ss.stop-ss.start+1;
-										if(len==r2.bases.length && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
+										if(len==r2.length() && ss.slowScore>=0.5f*MultiStateAligner9PacBio.POINTS_MATCH2){
 											b=checkPerfection(ss.start, ss.stop, r2.bases, Data.getChromosome(ss.chrom), ss.strand==Gene.MINUS, 0.5f);
 										}
 									}
 									if(b){
 										while(pcov.size()<=ss.chrom){
-											pcov.add(new CoverageArray2(pcov.size()));
+											pcov.add(new CoverageArray2(pcov.size(), 500));
 										}
 										CoverageArray ca=pcov.get(ss.chrom);
 										for(int i=ss.start; i<=ss.stop; i++){
@@ -157,7 +157,7 @@ public class StackSites {
 									}
 								}
 								
-								SiteScoreR ssr=new SiteScoreR(ss, r2.bases.length, r2.numericID, (byte)r2.pairnum());
+								SiteScoreR ssr=new SiteScoreR(ss, r2.length(), r2.numericID, (byte)r2.pairnum());
 								
 								if(original!=null){
 									ssr.correct=isCorrectHitLoose(ss, original.chrom, original.strand, original.start, original.stop, 40, false);
@@ -174,13 +174,13 @@ public class StackSites {
 					
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			System.err.println("Finished reading");
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			System.err.println("Returned list");
 			ReadWrite.closeStream(cris);
 			System.err.println("Closed stream");

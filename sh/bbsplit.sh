@@ -1,9 +1,9 @@
 #!/bin/bash
 
 function usage(){
-	echo "BBSplit / BBMap v33.x"
+	echo "BBSplit / BBMap v34.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified November 2, 2014"
+	echo "Last modified April 13, 2015"
 	echo ""
 	echo "Description:  Maps reads to multiple references simultaneously."
 	echo "Outputs reads to a file for the reference they best match, with multiple options for dealing with ambiguous mappings."
@@ -13,17 +13,23 @@ function usage(){
 	echo ""
 	echo "To be concise, and do everything in one command:"
 	echo "bbsplit.sh ref=x.fa,y.fa in=reads.fq basename=o%.sam"
-	echo "which is equivalent to"
+	echo ""
+	echo "that is equivalent to"
 	echo "bbsplit.sh build=1 in=reads.fq ref_x=x.fa ref_y=y.fa out_x=ox.sam out_y=oy.sam"
+	echo ""
+	echo "By default paired reads will yield interleaved output, but you can use the # symbol to produce twin output files."
+	echo "For example, basename=o%_#.fq will produce ox_1.fq, ox_2.fq, oy_1.fq, and oy_2.fq."
 	echo ""
 	echo "in=stdin will accept reads from standard in, and out=stdout will write to standard out,"
 	echo "but file extensions are still needed to specify the format of the input and output files."
 	echo "e.g. in=stdin.fa.gz will read gzipped fasta from standard in; out=stdout.sam.gz will write gzipped sam."
 	echo ""	
 	echo "Indexing Parameters (required when building the index):"
-	echo "ref_<name>=<ref.fasta>  	Specify the reference sequence for the given name; e.g., ref_ecoli=ecoli.fasta"
+       echo "ref=<file,file>              A list of references, or directories containing fasta files."
+	echo "ref_<name>=<ref.fasta>  	Alternate, longer way to specify references. e.g., ref_ecoli=ecoli.fasta"
 	echo "                      	These can also be comma-delimited lists of files; e.g., ref_a=a1.fa,a2.fa,a3.fa"
 	echo "build=<1>        		If multiple references are indexed in the same directory, each needs a unique build ID."
+	echo "path=<.>         		Specify the location to write the index, if you don't want it in the current working directory."
 	echo ""
 	echo "Input Parameters:"
 	echo "build=<1>        		Designate index to use.  Corresponds to the number specified when building the index."
@@ -101,9 +107,9 @@ function bbsplit() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBSplitter build=1 overwrite=true match=long fastareadlen=500 minhits=2 minratio=0.9 maxindel=20 trim=both untrim=true $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBSplitter build=1 ow=t fastareadlen=500 minhits=2 minratio=0.9 maxindel=20 trim=rl untrim=t $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 bbsplit "$@"

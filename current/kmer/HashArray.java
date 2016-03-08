@@ -1,6 +1,8 @@
 package kmer;
 
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 import dna.CoverageArray;
 
@@ -8,8 +10,6 @@ import dna.CoverageArray;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
-import align2.IntList;
-import align2.LongList;
 import align2.Tools;
 
 /**
@@ -213,6 +213,68 @@ public abstract class HashArray extends AbstractKmerTable {
 		return true;
 	}
 	
+	public final long getKmer(int cell) {
+		return array[cell];
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		assert(owners==null);
+		owners=new AtomicIntegerArray(array.length);
+		for(int i=0; i<array.length; i++){
+			owners.set(i, -1);
+		}
+		victims.initializeOwnership();
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		final int cell=findKmer(kmer);
+		if(cell<0){return victims.setOwner(kmer, newOwner);}
+		return setOwner(kmer, newOwner, cell);
+	}
+	
+	public final int setOwner(final long kmer, final int newOwner, final int cell){
+		assert(array[cell]==kmer);
+		final int original=owners.get(cell);
+		int current=original;
+		while(current<newOwner){
+			boolean success=owners.compareAndSet(cell, current, newOwner);
+			if(!success){current=owners.get(cell);}
+			else{current=newOwner;}
+		}
+		assert(current>=original) : "original="+original+", current="+current+", newOwner="+newOwner+", re-read="+owners.get(cell);
+		return current;
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		final int cell=findKmer(kmer);
+		if(cell<0){return victims.clearOwner(kmer, owner);}
+		return clearOwner(kmer, owner, cell);
+	}
+	
+	public final boolean clearOwner(final long kmer, final int owner, final int cell){
+		assert(array[cell]==kmer);
+		boolean success=owners.compareAndSet(cell, owner, -1);
+		return success;
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		final int cell=findKmer(kmer);
+		if(cell<0){return victims.getOwner(kmer);}
+		return getCellOwner(cell);
+	}
+	
+	public final int getCellOwner(final int cell){
+		return owners.get(cell);
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------      Nonpublic Methods       ----------------*/
 	/*--------------------------------------------------------------*/
@@ -332,6 +394,7 @@ public abstract class HashArray extends AbstractKmerTable {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	AtomicIntegerArray owners;
 	long[] array;
 	int prime;
 	long size=0;

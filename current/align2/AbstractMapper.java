@@ -6,23 +6,16 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import jgi.CalcTrueQuality;
 import jgi.CoveragePileup;
 
-import stream.ConcurrentGenericReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.ConcurrentReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.ConcurrentSolidInputStream;
 import stream.FASTQ;
-import stream.FastaReadInputStream;
-import stream.FastqReadInputStream;
-import stream.RTextInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.RandomReadInputStream3;
 import stream.Read;
 import stream.ReadStreamWriter;
 import stream.SamLine;
-import stream.SamReadInputStream;
 import stream.SequentialReadInputStream;
 
 import dna.ChromosomeArray;
@@ -79,11 +72,11 @@ public abstract class AbstractMapper {
 		long amemory=mmemory-umemory-40;
 //		System.err.println("mmemory="+mmemory+", tmemory="+tmemory+", fmemory="+fmemory+", umemory="+umemory+", amemory="+amemory);
 		int maxThreads=(int)(amemory/threadMem);
-		if(Shared.THREADS>maxThreads){
+		if(Shared.threads()>maxThreads){
 			System.err.println("\nMax Memory = "+mmemory+" MB\nAvailable Memory = "+amemory+" MB");
 			if(maxThreads<1){abort(null, "\n\nNot enough memory.  Please run on a node with at least "+((long)((umemory+40+threadMem)*1.15))+" MB.\n");}
-			System.err.println("Reducing threads from "+Shared.THREADS+" to "+maxThreads+" due to low system memory.");
-			Shared.THREADS=maxThreads;
+			System.err.println("Reducing threads from "+Shared.threads()+" to "+maxThreads+" due to low system memory.");
+			Shared.setThreads(maxThreads);
 		}
 	}
 	
@@ -113,6 +106,7 @@ public abstract class AbstractMapper {
 		sysout.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -124,7 +118,10 @@ public abstract class AbstractMapper {
 		Read.TO_UPPER_CASE=true;
 
 		boolean setMaxIndel1=false, setMaxIndel2=false;
+		boolean forceRebuild=false;
 		Parser parser=new Parser();
+		parser.minTrimLength=minTrimLength;
+		
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=(args[i]==null ? "null" : args[i]);
@@ -136,25 +133,32 @@ public abstract class AbstractMapper {
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
-				//do nothing
+				if(a.equals("ziplevel") || a.equals("zl")){//Handle conflated term
+					ziplevel=Integer.parseInt(b);
+				}
 			}else if(Parser.parseHist(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseSam(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
 			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
 			}else if(parser.parseMapping(arg, a, b)){
+				//do nothing
+			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
 			}else if(a.equals("printtoerr")){
 				if(Tools.parseBoolean(b)){
 					sysout=System.err; 
 					Data.sysout=System.err;
 				}
-			}else if(a.equals("colorspace") || a.equals("cs")){
-				colorspace=Tools.parseBoolean(b);
-				sysout.println("Set colorspace to "+colorspace);
 			}else if(a.equals("path") || a.equals("root")){
 				Data.setPath(b);
 			}else if(a.equals("ref") || a.equals("reference") || a.equals("fasta")){
@@ -163,6 +167,10 @@ public abstract class AbstractMapper {
 				in1=b;
 			}else if(a.equals("in2")){
 				in2=b;
+			}else if(a.equals("qfin") || a.equals("qfin1")){
+				qfin1=b;
+			}else if(a.equals("qfin2")){
+				qfin2=b;
 			}else if(a.equals("out")){
 				if(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")){
 					outFile=null;
@@ -206,34 +214,12 @@ public abstract class AbstractMapper {
 				splitterOutputs.add(b);
 			}else if(a.equals("bamscript") || a.equals("bs")){
 				bamscript=b;
-			}else if(a.equals("fakequal") || a.equals("fakequality")){
-				if(b==null || b.length()<1){b="f";}
-				if(Character.isLetter(b.charAt(0))){
-					FastaReadInputStream.FAKE_QUALITY=Tools.parseBoolean(b);
-				}else{
-					int x=Integer.parseInt(b);
-					if(x<1){
-						FastaReadInputStream.FAKE_QUALITY=false;
-					}else{
-						FastaReadInputStream.FAKE_QUALITY=true;
-						FastaReadInputStream.FAKE_QUALITY_LEVEL=(byte)Tools.min(x, 50);
-					}
-				}
 			}else if(a.equals("local")){
 				LOCAL_ALIGN=Tools.parseBoolean(b);
-			}else if(a.equals("minidentity") || a.equals("minid")){
-				if(b.lastIndexOf('%')==b.length()-1){minid=Double.parseDouble(b.substring(b.length()-1))/100;}
-				else{minid=Double.parseDouble(b);}
-				assert(minid>=0 && minid<=100) : "min identity must be between 0 and 1.  Values from 1 to 100 will be assumed percent and divided by 100.";
-			}else if(a.equals("parsecustom") || a.equals("fastqparsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				sysout.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.equals("skipreads")){
 				AbstractMapThread.SKIP_INITIAL=Tools.parseKMG(b);
 			}else if(a.equals("readlen") || a.equals("length") || a.equals("len")){
 				synthReadlen=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ziplevel=Integer.parseInt(b);
 			}else if(a.equals("kfilter")){
 				KFILTER=Integer.parseInt(b);
 			}else if(a.equals("msa")){
@@ -245,46 +231,10 @@ public abstract class AbstractMapper {
 				float x=Tools.max(0, Float.parseFloat(b));
 				MSA.bandwidthRatio=x;
 				assert(x>=0) : "Bandwidth ratio should be at least 0.";
-			}else if(a.equals("trim") || a.equals("qtrim")){
-				if(b==null){TRIM_RIGHT=TRIM_LEFT=true;}
-				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){TRIM_LEFT=true;TRIM_RIGHT=false;}
-				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){TRIM_LEFT=false;TRIM_RIGHT=true;}
-				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){TRIM_LEFT=TRIM_RIGHT=true;}
-				else{TRIM_RIGHT=TRIM_LEFT=Tools.parseBoolean(b);}
-			}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
-				if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
-					TrimRead.optimalMode=true;
-					TrimRead.optimalBias=Float.parseFloat(b);
-					assert(TrimRead.optimalBias>=0 && TrimRead.optimalBias<1);
-				}else{
-					TrimRead.optimalMode=Tools.parseBoolean(b);
-				}
-			}else if(a.equals("trimright")){
-				TRIM_RIGHT=Tools.parseBoolean(b);
-			}else if(a.equals("trimleft")){
-				TRIM_LEFT=Tools.parseBoolean(b);
-			}else if(a.equals("trimq") || a.equals("trimquality")){
-				TRIM_QUALITY=Byte.parseByte(b);
-			}else if(a.equals("mintl") || a.equals("mintrimlen") || a.equals("mintrimlength")){
-				MIN_TRIM_LENGTH=Integer.parseInt(b);
-			}else if(a.equals("untrim") || a.equals("outputuntrimmed")){
-				UNTRIM=Tools.parseBoolean(b);
 			}else if(a.equals("eono") || a.equals("erroronnooutput")){
 				ERROR_ON_NO_OUTPUT=Tools.parseBoolean(b);
 			}else if(a.equals("log")){
 				RefToIndex.LOG=Tools.parseBoolean(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				sysout.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				sysout.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
 			}else if(a.equals("sitesonly") || a.equals("outputsitesonly")){
 				outputSitesOnly=Tools.parseBoolean(b);
 				sysout.println("Set outputSitesOnly to "+outputSitesOnly);
@@ -306,11 +256,17 @@ public abstract class AbstractMapper {
 					throw new RuntimeException(arg);
 				}
 //				sysout.println("Set REMOVE_DUPLICATE_BEST_ALIGNMENTS to "+REMOVE_DUPLICATE_BEST_ALIGNMENTS);
+			}else if(a.equals("penalizeambiguous") || a.equals("penalizeambig") || a.equals("pambig")){
+				AbstractMapThread.PENALIZE_AMBIG=SamLine.PENALIZE_AMBIG=Tools.parseBoolean(b);
 			}else if(a.equals("maxsites")){
-				MAX_SITESCORES_TO_PRINT=Integer.parseInt(b);
+				int x=Integer.parseInt(b);
+				assert(x>0) : "maxsites must be at least 1.";
+				MAX_SITESCORES_TO_PRINT=Tools.max(x, 1);
 				AbstractMapThread.MAX_TRIM_SITES_TO_RETAIN=Tools.max(MAX_SITESCORES_TO_PRINT*2, AbstractMapThread.MAX_TRIM_SITES_TO_RETAIN);
 			}else if(a.equals("maxsites2")){
-				AbstractMapThread.MAX_TRIM_SITES_TO_RETAIN=Integer.parseInt(b);
+				int x=Integer.parseInt(b);
+				assert(x>1) : "maxsites2 must be at least 2.";
+				AbstractMapThread.MAX_TRIM_SITES_TO_RETAIN=Tools.max(x, 2);
 			}else if(a.equals("secondary")){
 				PRINT_SECONDARY_ALIGNMENTS=Tools.parseBoolean(b);
 				ReadStreamWriter.OUTPUT_SAM_SECONDARY_ALIGNMENTS=PRINT_SECONDARY_ALIGNMENTS;
@@ -372,8 +328,11 @@ public abstract class AbstractMapper {
 				OUTPUT_ORDERED_READS=Tools.parseBoolean(b);
 				sysout.println("Set OUTPUT_ORDERED_READS to "+OUTPUT_ORDERED_READS);
 			}else if(a.equals("outputunmapped")){
-				DONT_OUTPUT_UNMAPPED_READS=!Tools.parseBoolean(b);
-				sysout.println("Set DONT_OUTPUT_UNMAPPED_READS to "+DONT_OUTPUT_UNMAPPED_READS);
+				OUTPUT_MAPPED_ONLY=!Tools.parseBoolean(b);
+				sysout.println("Set OUTPUT_MAPPED_ONLY to "+OUTPUT_MAPPED_ONLY);
+			}else if(a.equals("mappedonly")){
+				OUTPUT_MAPPED_ONLY=Tools.parseBoolean(b);
+				sysout.println("Set OUTPUT_MAPPED_ONLY to "+OUTPUT_MAPPED_ONLY);
 			}else if(a.equals("outputblacklisted")){
 				DONT_OUTPUT_BLACKLISTED_READS=!Tools.parseBoolean(b);
 				sysout.println("Set DONT_OUTPUT_BLACKLISTED_READS to "+DONT_OUTPUT_BLACKLISTED_READS);
@@ -397,31 +356,11 @@ public abstract class AbstractMapper {
 			}else if(a.equals("minratio")){
 				MINIMUM_ALIGNMENT_SCORE_RATIO=Float.parseFloat(b);
 				sysout.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+String.format("%.3f",MINIMUM_ALIGNMENT_SCORE_RATIO));
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				if(b.equalsIgnoreCase("auto")){
-					FASTQ.DETECT_QUALITY=true;
-				}else{
-					byte x;
-					if(b.equalsIgnoreCase("sanger")){x=33;}
-					else if(b.equalsIgnoreCase("illumina")){x=64;}
-					else{x=Byte.parseByte(b);}
-					FASTQ.ASCII_OFFSET=x;
-					sysout.println("Set fastq input ASCII offset to "+FASTQ.ASCII_OFFSET);
-					FASTQ.DETECT_QUALITY=false;
-				}
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				if(b.equalsIgnoreCase("auto")){
-					FASTQ.DETECT_QUALITY_OUT=true;
-				}else{
-					byte ascii_offset=Byte.parseByte(b);
-					FASTQ.ASCII_OFFSET_OUT=ascii_offset;
-					sysout.println("Set fastq output ASCII offset to "+FASTQ.ASCII_OFFSET_OUT);
-					FASTQ.DETECT_QUALITY_OUT=false;
-				}
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
+				minid=-1;
+			}else if(a.equals("minidentity") || a.equals("minid")){
+				if(b.lastIndexOf('%')==b.length()-1){minid=Double.parseDouble(b.substring(b.length()-1))/100;}
+				else{minid=Double.parseDouble(b);}
+				assert(minid>=0 && minid<=100) : "min identity must be between 0 and 1.  Values from 1 to 100 will be assumed percent and divided by 100.";
 			}else if(a.equals("rcompmate") || a.equals("reversecomplementmate")){
 				rcompMate=Tools.parseBoolean(b);
 				sysout.println("Set RCOMP_MATE to "+rcompMate);
@@ -441,19 +380,6 @@ public abstract class AbstractMapper {
 				maxInsLen=Integer.parseInt(b);
 			}else if(a.equals("maxsublen")){
 				maxSubLen=Integer.parseInt(b);
-			}else if(a.equals("maxlen") || a.equals("maxlength") || a.equals("maxreadlen") || a.equals("maxreadlength")){
-				AbstractMapThread.MAX_READ_LENGTH=Integer.parseInt(b);
-			}else if(a.equals("minlen") || a.equals("minlength") || a.equals("minreadlen") || a.equals("minreadlength")){
-				AbstractMapThread.MIN_READ_LENGTH=Integer.parseInt(b);
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("forcesectionname")){
-				FastaReadInputStream.FORCE_SECTION_NAME=Tools.parseBoolean(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("minqual")){
 				minQuality=Byte.parseByte(b);
 				midQuality=Tools.max(minQuality, midQuality);
@@ -538,11 +464,10 @@ public abstract class AbstractMapper {
 			}else if(a.equals("rescue")){
 				RESCUE=Tools.parseBoolean(b);
 			}else if(a.equals("tipsearch")){
-				TIP_SEARCH_DIST=Tools.max(0, Integer.parseInt(b));
+				if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){TIP_SEARCH_DIST=0;}
+				else{TIP_SEARCH_DIST=Tools.max(0, Integer.parseInt(b));}
 			}else if(a.equals("dper") || a.equals("dprr")){
 				DOUBLE_PRINT_ERROR_RATE=Tools.parseBoolean(b);
-			}else if(a.equals("chromc")){
-				Data.CHROMC=Tools.parseBoolean(b);
 			}else if(a.equals("chromgz")){
 				Data.CHROMGZ=Tools.parseBoolean(b);
 			}else if(a.equals("nodisk")){
@@ -564,10 +489,10 @@ public abstract class AbstractMapper {
 			}else if(a.equals("showprogress")){
 				if(b!=null && Character.isDigit(b.charAt(0))){
 					long x=Tools.max(1, Long.parseLong(b));
-					ConcurrentGenericReadInputStream.PROGRESS_INCR=x;
-					ConcurrentGenericReadInputStream.SHOW_PROGRESS=(x>0);
+					ConcurrentReadInputStream.PROGRESS_INCR=x;
+					ConcurrentReadInputStream.SHOW_PROGRESS=(x>0);
 				}else{
-					ConcurrentGenericReadInputStream.SHOW_PROGRESS=Tools.parseBoolean(b);
+					ConcurrentReadInputStream.SHOW_PROGRESS=Tools.parseBoolean(b);
 				}
 			}else if(a.equals("scafstats") || a.equals("scaffoldstats")){
 				if(b==null && arg.indexOf('=')<0){b="stdout";}
@@ -601,6 +526,14 @@ public abstract class AbstractMapper {
 				KeyRing.KEEP_BAD_KEYS=Tools.parseBoolean(b);
 			}else if(a.equals("usemodulo") || a.equals("um")){
 				USE_MODULO=AbstractMapThread.USE_MODULO=IndexMaker4.USE_MODULO=IndexMaker5.USE_MODULO=Tools.parseBoolean(b);
+			}else if(a.equals("lowmem") || a.equals("lowram") || a.equals("lowmemory")){
+				boolean x=Tools.parseBoolean(b);
+				if(x){
+					Shared.LOW_MEMORY=true;
+					USE_MODULO=AbstractMapThread.USE_MODULO=IndexMaker4.USE_MODULO=IndexMaker5.USE_MODULO=Tools.parseBoolean(b);
+				}else{
+					Shared.LOW_MEMORY=false;
+				}
 			}else if(a.equals("coveragestats") || a.equals("covstats")){
 				coverageStats=b;
 			}else if(a.equals("coverageminscaf") || a.equals("covminscaf")){
@@ -609,8 +542,20 @@ public abstract class AbstractMapper {
 				coverageBinned=b;
 			}else if(a.equals("coverage") || a.equals("basecov")){
 				coverageBase=b;
+			}else if(a.equals("secondarycoverage") || a.equals("secondarycov")){
+				CoveragePileup.USE_SECONDARY=Tools.parseBoolean(b);
 			}else if(a.equals("coveragehistogram") || a.equals("covhist")){
 				coverageHist=b;
+			}else if(a.equals("normcov")){
+				normcov=b;
+			}else if(a.equals("normcovo")){
+				normcovOverall=b;
+			}else if(a.equals("normb") || a.equals("normbins")){
+				CoveragePileup.NORMALIZE_LENGTH_BINS=Integer.parseInt(b);
+			}else if(a.equals("rpkm") || a.equals("fpkm")){
+				coverageRPKM=b;
+			}else if(a.equals("physicalcoverage") || a.equals("physcov")){
+				coveragePhysical=Tools.parseBoolean(b);
 			}else if(a.equals("32bit") || a.equals("32bits") || a.equals("bits32")){
 				cov32bit=Tools.parseBoolean(b);
 			}else if(a.equals("bitset")){
@@ -620,11 +565,11 @@ public abstract class AbstractMapper {
 				covArrays=Tools.parseBoolean(b);
 				covSetbs=true;
 			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
-				covNzo=Tools.parseBoolean(b);
+				covNzo=scafNzo=Tools.parseBoolean(b);
+			}else if(a.equals("sortstats") || a.equals("sortscafs")){
+				sortStats=Tools.parseBoolean(b);
 			}else if(a.equals("twocolumn")){
 				covTwocolumn=Tools.parseBoolean(b);
-			}else if(a.equals("uscov") || a.equals("usesecondarycoverage")){
-				covSecondary=Tools.parseBoolean(b);
 			}else if(a.equals("ksb") || a.equals("keepshortbins")){
 				covKsb=Tools.parseBoolean(b);
 			}else if(a.equals("covbinsize")){
@@ -635,16 +580,43 @@ public abstract class AbstractMapper {
 				covStartOnly=Tools.parseBoolean(b);
 			}else if(a.equals("concisecov")){
 				CoveragePileup.CONCISE=Tools.parseBoolean(b);
+			}else if(a.equals("covwindow")){
+				if(b==null || b.length()<1 || Character.isLetter(b.charAt(0))){
+					CoveragePileup.USE_WINDOW=Tools.parseBoolean(b);
+				}else{
+					CoveragePileup.LOW_COV_WINDOW=Integer.parseInt(b);
+					CoveragePileup.USE_WINDOW=(CoveragePileup.LOW_COV_WINDOW>0);
+				}
+			}else if(a.equals("covwindowavg")){
+				CoveragePileup.LOW_COV_DEPTH=Double.parseDouble(b);
+			}else if(a.equals("rebuild")){
+				forceRebuild=Tools.parseBoolean(b);
 			}else if(a.equals("printunmappedcount")){
 				PRINT_UNMAPPED_COUNT=Tools.parseBoolean(b);
-			}else if(a.equals("maq") || a.equals("minaveragequality")){
-				AbstractMapThread.MIN_AVERAGE_QUALITY=Byte.parseByte(b);
+			}else if(a.equals("timetag")){
+				boolean x=Tools.parseBoolean(b);
+				AbstractMapThread.TIME_TAG=x;
+				SamLine.MAKE_TIME_TAG=x;
+				if(x){AbstractMapThread.CLEAR_ATTACHMENT=false;}
+			}else if(a.equals("correctthresh")){
+				CORRECT_THRESH=Integer.parseInt(b);
 			}else{
 				throw new RuntimeException("Unknown parameter: "+arg);
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
+			
+			qtrimLeft=parser.qtrimLeft;
+			qtrimRight=parser.qtrimRight;
+			TRIM_QUALITY=parser.trimq;
+			AbstractMapThread.MIN_AVERAGE_QUALITY=parser.minAvgQuality;
+			AbstractMapThread.MIN_AVERAGE_QUALITY_BASES=parser.minAvgQualityBases;
+			AbstractMapThread.MIN_READ_LENGTH=parser.minReadLength;
+			AbstractMapThread.MAX_READ_LENGTH=parser.maxReadLength;
+			minTrimLength=parser.minTrimLength;
+			untrim=parser.untrim;
 			
 			maxReads=parser.maxReads;
 			overwrite=ReadStats.overwrite=CoveragePileup.overwrite=parser.overwrite;
@@ -659,6 +631,24 @@ public abstract class AbstractMapper {
 				if(IDFILTER==1f){PERFECTMODE=true;}
 				MAKE_MATCH_STRING=true;
 			}
+			
+			if(parser.subfilter>-1){AbstractMapThread.SUBFILTER=parser.subfilter;}
+			if(parser.delfilter>-1){AbstractMapThread.DELFILTER=parser.delfilter;}
+			if(parser.insfilter>-1){AbstractMapThread.INSFILTER=parser.insfilter;}
+			if(parser.indelfilter>-1){AbstractMapThread.INDELFILTER=parser.indelfilter;}
+			if(parser.dellenfilter>-1){AbstractMapThread.DELLENFILTER=parser.dellenfilter;}
+			if(parser.inslenfilter>-1){AbstractMapThread.INSLENFILTER=parser.inslenfilter;}
+			if(parser.editfilter>-1){AbstractMapThread.EDITFILTER=parser.editfilter;}
+			
+			if(ReadStats.COLLECT_TIME_STATS){AbstractMapThread.TIME_TAG=true;}
+		}
+		
+		if(forceRebuild){
+			String sf=RefToIndex.summaryLoc(build);
+			if(sf!=null){
+				File f=new File(sf);
+				if(f.exists() && f.isFile()){f.delete();}
+			}
 		}
 		
 		gzip=ReadWrite.USE_GZIP;
@@ -666,9 +656,7 @@ public abstract class AbstractMapper {
 		pigz=ReadWrite.USE_PIGZ;
 		unpigz=ReadWrite.USE_UNPIGZ;
 		
-		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
-		
-		ChromosomeArray.UNDEFINED_TO_N=(!INDEX_LOADED);
+		ChromosomeArray.CHANGE_UNDEFINED_TO_N_ON_READ=(!INDEX_LOADED);
 		
 		if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_SPLIT && splitterOutputs!=null){
 			ArrayList<String> clone=(ArrayList<String>) splitterOutputs.clone();
@@ -697,6 +685,8 @@ public abstract class AbstractMapper {
 		}
 		
 		if(maxReads>0 && maxReads<Long.MAX_VALUE){sysout.println("Max reads: "+maxReads);}
+		
+		ReadStats.testFiles(false);
 		
 		assert(synthReadlen<0 || synthReadlen>=keylen);
 	}
@@ -767,50 +757,55 @@ public abstract class AbstractMapper {
 		ReadWrite.USE_GUNZIP=gunzip;
 		ReadWrite.USE_UNPIGZ=unpigz;
 		
-		cris=getReadInputStream(in1, in2);
+		cris=getReadInputStream(in1, in2, qfin1, qfin2);
 		final boolean paired=cris.paired();
 		cris.setSampleRate(samplerate, sampleseed);
 		
-		final int buff=(!OUTPUT_ORDERED_READS ? 12 : Tools.max(32, 2*Shared.THREADS));
+		final int buff=(!OUTPUT_ORDERED_READS ? 12 : Tools.max(32, 2*Shared.threads()));
 		if(OUTPUT_READS){
 			ReadStreamWriter.MINCHROM=minChrom;
 			ReadStreamWriter.MAXCHROM=maxChrom;
-
+			
+			AbstractMapThread.OUTPUT_SAM=false;
 			if(outFile!=null){
 				FileFormat ff1=FileFormat.testOutput(outFile, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
 				FileFormat ff2=outFile2==null ? null : FileFormat.testOutput(outFile2, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
-				rosA=new RTextOutputStream3(ff1, ff2, qfout, qfout2, buff, null, false);
+				rosA=ConcurrentReadOutputStream.getStream(ff1, ff2, qfout, qfout2, buff, null, false);
 				rosA.start();
 				t.stop();
 				sysout.println("Started output stream:\t"+t);
 				t.start();
+				AbstractMapThread.OUTPUT_SAM|=ff1.samOrBam();
 			}
 			if(outFileM!=null){
 				FileFormat ff1=FileFormat.testOutput(outFileM, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
 				FileFormat ff2=outFileM2==null ? null : FileFormat.testOutput(outFileM2, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
-				rosM=new RTextOutputStream3(ff1, ff2, qfoutM, qfoutM2, buff, null, false);
+				rosM=ConcurrentReadOutputStream.getStream(ff1, ff2, qfoutM, qfoutM2, buff, null, false);
 				rosM.start();
 				t.stop();
 				sysout.println("Started output stream:\t"+t);
 				t.start();
+				AbstractMapThread.OUTPUT_SAM|=ff1.samOrBam();
 			}
 			if(outFileU!=null){
 				FileFormat ff1=FileFormat.testOutput(outFileU, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
 				FileFormat ff2=outFileU2==null ? null : FileFormat.testOutput(outFileU2, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
-				rosU=new RTextOutputStream3(ff1, ff2, qfoutU, qfoutU2, buff, null, false);
+				rosU=ConcurrentReadOutputStream.getStream(ff1, ff2, qfoutU, qfoutU2, buff, null, false);
 				rosU.start();
 				t.stop();
 				sysout.println("Started output stream:\t"+t);
 				t.start();
+				AbstractMapThread.OUTPUT_SAM|=ff1.samOrBam();
 			}
 			if(outFileB!=null && !Data.scaffoldPrefixes){
 				FileFormat ff1=FileFormat.testOutput(outFileB, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
 				FileFormat ff2=outFileB2==null ? null : FileFormat.testOutput(outFileB2, FileFormat.SAM, 0, 0, true, overwrite, append, OUTPUT_ORDERED_READS);
-				rosB=new RTextOutputStream3(ff1, ff2, qfoutB, qfoutB2, buff, null, false);
+				rosB=ConcurrentReadOutputStream.getStream(ff1, ff2, qfoutB, qfoutB2, buff, null, false);
 				rosB.start();
 				t.stop();
 				sysout.println("Started output stream:\t"+t);
 				t.start();
+				AbstractMapThread.OUTPUT_SAM|=ff1.samOrBam();
 			}
 		}
 
@@ -902,68 +897,38 @@ public abstract class AbstractMapper {
 		return broken;
 	}
 	
-	static final boolean closeStreams(ConcurrentReadStreamInterface cris, RTextOutputStream3 rosA, RTextOutputStream3 rosM, RTextOutputStream3 rosU, RTextOutputStream3 rosB){
+	static final boolean closeStreams(ConcurrentReadInputStream cris, ConcurrentReadOutputStream rosA, ConcurrentReadOutputStream rosM, ConcurrentReadOutputStream rosU, ConcurrentReadOutputStream rosB){
 		errorState|=ReadWrite.closeStreams(cris, rosA, rosM, rosU, rosB);
 		if(BBSplitter.streamTable!=null){
-			for(RTextOutputStream3 tros : BBSplitter.streamTable.values()){
+			for(ConcurrentReadOutputStream tros : BBSplitter.streamTable.values()){
 				errorState|=ReadWrite.closeStream(tros);
 			}
 		}
 		if(BBSplitter.streamTableAmbiguous!=null){
-			for(RTextOutputStream3 tros : BBSplitter.streamTableAmbiguous.values()){
+			for(ConcurrentReadOutputStream tros : BBSplitter.streamTableAmbiguous.values()){
 				errorState|=ReadWrite.closeStream(tros);
 			}
 		}
 		return errorState;
 	}
 	
-	static final ConcurrentReadStreamInterface getReadInputStream(String in1, String in2){
+	static final ConcurrentReadInputStream getReadInputStream(String in1, String in2, String qf1, String qf2){
 		
 		assert(in1!=null);
 		assert(!in1.equalsIgnoreCase(in2)) : in1+", "+in2;
 		
-		BBIndex.COLORSPACE=colorspace;
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 
 		FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, 0, 0, true, true, false);
 		FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, 0, 0, true, true, false);
 		
-		if(ff1.sequential()){
+		if(ff1.fastq() || ff1.fasta() || ff1.samOrBam() || ff1.scarf() || ff1.bread()){
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, ff1.samOrBam(), ff1, ff2, qf1, qf2);
+		}else if(ff1.sequential()){
 			if(maxReads<0){maxReads=Long.MAX_VALUE;}
 //			assert(false) : trials;
 			SequentialReadInputStream ris=new SequentialReadInputStream(maxReads, synthReadlen, Tools.max(50, synthReadlen/2), sequentialOverlap, sequentialStrandAlt);
-			cris=new ConcurrentReadInputStream(ris, maxReads);
-			
-		}else if(ff1.csfasta()){
-			colorspace=true;
-			BBIndex.COLORSPACE=colorspace;
-			
-			if(in2!=null){
-				cris=new ConcurrentSolidInputStream(in1, in1.replace(".csfasta", ".qual"), in2, in2.replace(".csfasta", ".qual"), maxReads);
-			}else{
-				cris=new ConcurrentSolidInputStream(in1, in1.replace(".csfasta", ".qual"), maxReads, null);
-			}
-		}else if(ff1.fastq()){
-			FastqReadInputStream fris1=new FastqReadInputStream(ff1, colorspace);
-			FastqReadInputStream fris2=(ff2==null ? null : new FastqReadInputStream(ff2, colorspace));
-			cris=new ConcurrentGenericReadInputStream(fris1, fris2, maxReads);
-			
-		}else if(ff1.samOrBam()){
-			
-			SamReadInputStream fris1=new SamReadInputStream(ff1, colorspace, false, FASTQ.FORCE_INTERLEAVED);
-			cris=new ConcurrentGenericReadInputStream(fris1, null, maxReads);
-			
-		}else if(ff1.fasta()){
-			
-			FastaReadInputStream fris1=new FastaReadInputStream(ff1, colorspace, (FASTQ.FORCE_INTERLEAVED && ff2==null), ff2==null ? Shared.READ_BUFFER_MAX_DATA : -1);
-			FastaReadInputStream fris2=(ff2==null ? null : new FastaReadInputStream(ff2, colorspace, false, -1));
-			cris=new ConcurrentGenericReadInputStream(fris1, fris2, maxReads);
-			
-		}else if(ff1.bread()){
-			
-			RTextInputStream rtis=new RTextInputStream(in1, in2, maxReads);
-			cris=new ConcurrentReadInputStream(rtis, maxReads);
-			
+			cris=new ConcurrentLegacyReadInputStream(ris, maxReads);
 			
 		}else if(ff1.random()){
 			
@@ -976,9 +941,9 @@ public abstract class AbstractMapper {
 					maxSnps, maxInss, maxDels, maxSubs,
 					baseSnpRate, baseInsRate, baseDelRate, baseSubRate,
 					maxInsLen, maxDelLen, maxSubLen,
-					minChrom, maxChrom, colorspace, PAIRED_RANDOM_READS,
+					minChrom, maxChrom, PAIRED_RANDOM_READS,
 					minQuality, midQuality, maxQuality);
-			cris=new ConcurrentReadInputStream(ris, maxReads);
+			cris=new ConcurrentLegacyReadInputStream(ris, maxReads);
 		}else{
 			throw new RuntimeException("Can't determine read input source: ff1="+ff1+", ff2="+ff2);
 		}
@@ -986,9 +951,10 @@ public abstract class AbstractMapper {
 	}
 	
 	
-	static void printOutput(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER, final CoveragePileup pile){
+	static void printOutput(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER, final CoveragePileup pile,
+			boolean nzoStats, boolean sortStats){
 		if(MACHINE_OUTPUT){
-			printOutput_Machine(mtts, t, keylen, paired, false);
+			printOutput_Machine(mtts, t, keylen, paired, false, nzoStats, sortStats);
 			return;
 		}
 		
@@ -1153,16 +1119,6 @@ public abstract class AbstractMapper {
 			if(mtt.msa!=null){
 				msaIterationsLimited+=mtt.msa.iterationsLimited;
 				msaIterationsUnlimited+=mtt.msa.iterationsUnlimited;
-			}
-			if(mtt.tcr!=null){
-				if(mtt.tcr.msaBS!=null){
-					msaIterationsLimited+=mtt.tcr.msaBS.iterationsLimited;
-					msaIterationsUnlimited+=mtt.tcr.msaBS.iterationsUnlimited;
-				}
-				if(mtt.tcr.msaCS!=null){
-					msaIterationsLimited+=mtt.tcr.msaCS.iterationsLimited;
-					msaIterationsUnlimited+=mtt.tcr.msaCS.iterationsUnlimited;
-				}
 			}
 			
 			readsUsed1+=mtt.readsUsed1;
@@ -1364,7 +1320,7 @@ public abstract class AbstractMapper {
 		final double outerLengthAvg=(outerLengthSum*1d/numMated);
 		final double insertSizeAvg=(insertSizeSum*1d/numMated);
 		
-		final double readsPerSecond=(maxReads*1000000000d)/nanos;
+		final double readsPerSecond=((readsUsed1+readsUsed2)*1000000000d)/nanos;
 		final double fragsPerSecond=(keysUsed*1000000000d)/nanos;
 		final double kiloBasesPerSecond=(basesUsed*1000000d)/nanos;
 		
@@ -1834,14 +1790,14 @@ public abstract class AbstractMapper {
 		}
 		
 		if(BBSplitter.TRACK_SCAF_STATS){
-			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2);
+			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
 		}
 		
 		if(BBSplitter.TRACK_SET_STATS){
-			BBSplitter.printCounts(BBSplitter.SET_STATS_FILE, BBSplitter.setCountTable, true, readsUsed1+readsUsed2);
+			BBSplitter.printCounts(BBSplitter.SET_STATS_FILE, BBSplitter.setCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
 		}
 		
-		ReadStats.writeAll(paired);
+		ReadStats.writeAll();
 		if(pile!=null){
 			CoveragePileup.overwrite=overwrite;
 			CoveragePileup.append=append;
@@ -1860,7 +1816,8 @@ public abstract class AbstractMapper {
 	}
 	
 	
-	static void printOutput_Machine(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER){
+	static void printOutput_Machine(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER,
+			boolean nzoStats, boolean sortStats){
 		
 		long readsUsed1=0;
 		long readsUsed2=0;
@@ -2005,16 +1962,16 @@ public abstract class AbstractMapper {
 				msaIterationsLimited+=mtt.msa.iterationsLimited;
 				msaIterationsUnlimited+=mtt.msa.iterationsUnlimited;
 			}
-			if(mtt.tcr!=null){
-				if(mtt.tcr.msaBS!=null){
-					msaIterationsLimited+=mtt.tcr.msaBS.iterationsLimited;
-					msaIterationsUnlimited+=mtt.tcr.msaBS.iterationsUnlimited;
-				}
-				if(mtt.tcr.msaCS!=null){
-					msaIterationsLimited+=mtt.tcr.msaCS.iterationsLimited;
-					msaIterationsUnlimited+=mtt.tcr.msaCS.iterationsUnlimited;
-				}
-			}
+//			if(mtt.tcr!=null){
+//				if(mtt.tcr.msaBS!=null){
+//					msaIterationsLimited+=mtt.tcr.msaBS.iterationsLimited;
+//					msaIterationsUnlimited+=mtt.tcr.msaBS.iterationsUnlimited;
+//				}
+//				if(mtt.tcr.msaCS!=null){
+//					msaIterationsLimited+=mtt.tcr.msaCS.iterationsLimited;
+//					msaIterationsUnlimited+=mtt.tcr.msaCS.iterationsUnlimited;
+//				}
+//			}
 			
 			readsUsed1+=mtt.readsUsed1;
 			readsUsed2+=mtt.readsUsed2;
@@ -2188,7 +2145,7 @@ public abstract class AbstractMapper {
 		final double outerLengthAvg=(outerLengthSum*1d/numMated);
 		final double insertSizeAvg=(insertSizeSum*1d/numMated);
 		
-		final double readsPerSecond=(maxReads*1000000000d)/nanos;
+		final double readsPerSecond=((readsUsed1+readsUsed2)*1000000000d)/nanos;
 		final double fragsPerSecond=(keysUsed*1000000000d)/nanos;
 		final double kiloBasesPerSecond=(basesUsed*1000000d)/nanos;
 		
@@ -2455,14 +2412,14 @@ public abstract class AbstractMapper {
 		}
 		
 		if(BBSplitter.TRACK_SCAF_STATS){
-			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2);
+			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
 		}
 		
 		if(BBSplitter.TRACK_SET_STATS){
-			BBSplitter.printCounts(BBSplitter.SET_STATS_FILE, BBSplitter.setCountTable, true, readsUsed1+readsUsed2);
+			BBSplitter.printCounts(BBSplitter.SET_STATS_FILE, BBSplitter.setCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
 		}
 		
-		errorState|=ReadStats.writeAll(paired);
+		errorState|=ReadStats.writeAll();
 		
 		assert(!CALC_STATISTICS || truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1==maxReads) : 
 			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed.\n"+
@@ -2522,8 +2479,8 @@ public abstract class AbstractMapper {
 	/* ------------ Non-static fields ----------- */
 	
 
-	ConcurrentReadStreamInterface cris;
-	RTextOutputStream3 rosA=null, rosM=null, rosU=null, rosB=null;
+	ConcurrentReadInputStream cris;
+	ConcurrentReadOutputStream rosA=null, rosM=null, rosU=null, rosB=null;
 	
 	float fractionGenomeToExclude=-1;
 	int maxIndel1=-1;
@@ -2555,7 +2512,7 @@ public abstract class AbstractMapper {
 	private boolean unpigz=false;
 	boolean setxs=false, setintron=false;
 	String bamscript=null;
-	String in1=null, in2=null;
+	String in1=null, in2=null, qfin1=null, qfin2=null;
 	String qfout=null, qfout2=null, qfoutM=null, qfoutM2=null, qfoutU=null, qfoutU2=null, qfoutB=null, qfoutB2=null;
 	
 	/** Scores below the (max possible alignment score)*(MINIMUM_ALIGNMENT_SCORE_RATIO) will be discarded.
@@ -2582,15 +2539,17 @@ public abstract class AbstractMapper {
 	/* ------------ Coverage ----------- */
 	
 	CoveragePileup pileup;
-	String coverageStats=null, coverageBinned=null, coverageBase=null, coverageHist=null;
+	String coverageStats=null, coverageBinned=null, coverageBase=null, coverageHist=null, coverageRPKM=null, normcov=null, normcovOverall=null;
 	int coverageMinScaf=0;
+	boolean coveragePhysical=false;
 	boolean cov32bit=false;
 	boolean covBitset=false;
 	boolean covSetbs=false;
 	boolean covArrays=true;
 	boolean covNzo=false;
+	boolean scafNzo=true;
+	boolean sortStats=true;
 	boolean covTwocolumn=false;
-	boolean covSecondary=true;
 	boolean covKsb=true;
 	boolean covStranded=false;
 	boolean covStartOnly=false;
@@ -2604,7 +2563,7 @@ public abstract class AbstractMapper {
 	static final int AMBIG_RANDOM=2;
 	static final int AMBIG_ALL=3;
 	
-	static int THRESH=0; //Threshold for calculating true positives on synthetic data, or something. 
+	static int CORRECT_THRESH=0; //Threshold for calculating true positives on synthetic data, or something. 
 	
 	static int synthReadlen=150;
 
@@ -2629,10 +2588,6 @@ public abstract class AbstractMapper {
 	
 	//Extra work for rare cases in human only.
 	static boolean SAVE_AMBIGUOUS_XY=false;
-	
-	static boolean colorspace=false;
-	
-	static boolean translateToBaseSpace=false; //Translate (colorspace) reads before outputting them
 	
 
 	static boolean TRIM_LIST=true; //Increases speed many times; reduces accuracy a bit
@@ -2666,20 +2621,20 @@ public abstract class AbstractMapper {
 	static float IDFILTER=0f;
 	
 	/** Quality-trim left side of read before mapping */
-	static boolean TRIM_LEFT=false;
+	static boolean qtrimLeft=false;
 	/** Quality-trim right side of read before mapping */
-	static boolean TRIM_RIGHT=false;
+	static boolean qtrimRight=false;
 	/** Restore read to untrimmed state after mapping (and destroy match string) */
-	static boolean UNTRIM=false;
+	static boolean untrim=false;
 	/** Trim bases with quality less than or equal to this value */
-	static byte TRIM_QUALITY=7;
+	static byte TRIM_QUALITY=6;
 	/** Don't trim reads to be shorter than this */
-	static int MIN_TRIM_LENGTH=60;
+	static int minTrimLength=60;
 	/** Produce local alignments instead of global alignments */
 	static boolean LOCAL_ALIGN=false;
 	
-	static int minChrom=1;
-	static int maxChrom=Integer.MAX_VALUE;
+	public static int minChrom=1;
+	public static int maxChrom=Integer.MAX_VALUE;
 
 	static long maxReads=-1;
 	
@@ -2687,7 +2642,7 @@ public abstract class AbstractMapper {
 
 	static boolean QUICK_MATCH_STRINGS=false;
 	static boolean OUTPUT_READS=false;
-	static boolean DONT_OUTPUT_UNMAPPED_READS=false;
+	static boolean OUTPUT_MAPPED_ONLY=false;
 	static boolean DONT_OUTPUT_BLACKLISTED_READS=false;
 	
 	static boolean OUTPUT_ORDERED_READS=false;

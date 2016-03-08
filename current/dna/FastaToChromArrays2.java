@@ -104,10 +104,8 @@ public class FastaToChromArrays2 {
 					MAX_LENGTH=(int)len;
 				}else if(a.equals("writechroms")){
 					writeChroms=Tools.parseBoolean(b);
-				}else if(a.equals("gzip")){
+				}else if(a.equals("chromgz") || a.equals("gz")){
 					Data.CHROMGZ=Tools.parseBoolean(b);
-				}else if(a.equals("chromc")){
-					Data.CHROMC=Tools.parseBoolean(b);
 				}else if(a.equals("retain")){
 					RETAIN=Tools.parseBoolean(b);
 				}else if(a.equals("scafprefixes")){
@@ -352,12 +350,7 @@ public class FastaToChromArrays2 {
 			if(writeChroms){
 				String x=outRoot+"chr"+chrom+Data.chromExtension();
 				if(new File(x).exists() && !overwrite){throw new RuntimeException("Tried to overwrite existing file "+x+", but overwrite=false.");}
-				if(Data.CHROMC){
-					ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(ca);
-					ReadWrite.writeObjectInThread(cac, x, false);
-				}else{
-					ReadWrite.writeObjectInThread(ca, x, false);
-				}
+				ReadWrite.writeObjectInThread(ca, x, false);
 				System.err.println("Writing chunk "+chrom);
 			}
 			chrom++;
@@ -437,7 +430,7 @@ public class FastaToChromArrays2 {
 	}
 	
 	private ChromosomeArray makeNextChrom(ByteFile1 tf, int chrom, TextStreamWriter infoWriter, TextStreamWriter scafWriter, ArrayList<String> infolist, ArrayList<String> scaflist){
-		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING, false);
+		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING);
 		ca.maxIndex=-1;
 		for(int i=0; i<START_PADDING; i++){ca.set(i, 'N');}
 		
@@ -538,7 +531,12 @@ public class FastaToChromArrays2 {
 		
 		byte[] s=tf.nextLine();
 		
-		for(; s!=null && s[0]!='>'; s=tf.nextLine()){
+		for(; s!=null && (s.length==0 || s[0]!='>'); s=tf.nextLine()){
+//			if(TRANSLATE_U_TO_T){
+//				for(int i=0; i<s.length; i++){
+//					if(s[i]=='U'){s[i]='T';}
+//				}
+//			}
 			sb.append(s);
 //			for(int i=0; i<s.length(); i++){
 //				char c=s.charAt(i);
@@ -575,6 +573,7 @@ public class FastaToChromArrays2 {
 	public static int contigTrigger=10;
 	public static int VERSION=5;
 	public static int MAX_LENGTH=(1<<29)-200000;
+//	public static boolean TRANSLATE_U_TO_T;
 	
 	public static boolean verbose=false;
 	public static boolean RETAIN=false;

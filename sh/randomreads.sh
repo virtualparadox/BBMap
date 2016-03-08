@@ -2,7 +2,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified October 30, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Generates random synthetic reads from a reference genome.  Read names indicate their genomic origin."
 	echo "Allows precise customization of things like insert size and synthetic mutation type, sizes, and rates."
@@ -122,7 +122,7 @@ randomreads() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP align2.RandomReads3 build=1 $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 randomreads "$@"

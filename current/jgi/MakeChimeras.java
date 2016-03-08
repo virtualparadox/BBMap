@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.Random;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
@@ -42,6 +42,7 @@ public class MakeChimeras {
 	
 	public MakeChimeras(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -53,9 +54,9 @@ public class MakeChimeras {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		
@@ -83,10 +84,6 @@ public class MakeChimeras {
 				ReadWrite.verbose=verbose;
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
 			}else if(a.equals("forcelength")){
 				forceLength=Integer.parseInt(b);
 			}else if(a.equals("readsout") || a.equals("chimeras")){
@@ -98,7 +95,8 @@ public class MakeChimeras {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			readsIn=parser.maxReads;
 			
@@ -117,7 +115,7 @@ public class MakeChimeras {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -126,21 +124,6 @@ public class MakeChimeras {
 		if(!Tools.testOutputFiles(overwrite, append, false, out1)){
 			outstream.println((out1==null)+", "+out1);
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output file "+out1+"\n");
-		}
-		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
 		}
 		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
@@ -153,13 +136,11 @@ public class MakeChimeras {
 		
 		ArrayList<Read> source=new ArrayList<Read>();
 		{
-			final ConcurrentReadStreamInterface cris;
-			final Thread cristhread;
+			final ConcurrentReadInputStream cris;
 			{
-				cris=ConcurrentGenericReadInputStream.getReadInputStream(readsIn, false, false, ffin1, null, qfin1, null);
+				cris=ConcurrentReadInputStream.getReadInputStream(readsIn, false, ffin1, null, qfin1, null);
 				if(verbose){outstream.println("Started cris");}
-				cristhread=new Thread(cris);
-				cristhread.start();
+				cris.start(); //4567
 			}
 			assert(!cris.paired());
 			
@@ -194,12 +175,12 @@ public class MakeChimeras {
 						basesProcessed+=initialLength1;
 					}
 					
-					cris.returnList(ln, ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list.isEmpty());
 					ln=cris.nextList();
 					reads=(ln!=null ? ln.list : null);
 				}
 				if(ln!=null){
-					cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+					cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 				}
 			}
 			
@@ -329,17 +310,17 @@ public class MakeChimeras {
 	 * @return
 	 */
 	private Read getPiece(Read a, Random randy) {
-		int len=randy.nextInt(a.bases.length)+1;
+		int len=randy.nextInt(a.length())+1;
 		
 		final int start;
 		if(randy.nextBoolean()){
 			if(randy.nextBoolean()){
 				start=0;
 			}else{
-				start=a.bases.length-len;
+				start=a.length()-len;
 			}
 		}else{
-			int range=a.bases.length-len;
+			int range=a.length()-len;
 			start=randy.nextInt(range+1);
 		}
 		
@@ -357,7 +338,7 @@ public class MakeChimeras {
 	 * @return
 	 */
 	private Read getPiece(Read a, Random randy, int len) {
-		len=Tools.min(len, a.bases.length);
+		len=Tools.min(len, a.length());
 		if(len<1){return null;}
 		
 		final int start;
@@ -365,10 +346,10 @@ public class MakeChimeras {
 			if(randy.nextBoolean()){
 				start=0;
 			}else{
-				start=a.bases.length-len;
+				start=a.length()-len;
 			}
 		}else{
-			int range=a.bases.length-len;
+			int range=a.length()-len;
 			start=randy.nextInt(range+1);
 		}
 		
@@ -391,7 +372,7 @@ public class MakeChimeras {
 //		outstream.println("overwrite=false  \tOverwrites files that already exist");
 //		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
 //		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 //		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 //		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 //		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");

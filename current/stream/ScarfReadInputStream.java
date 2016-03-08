@@ -11,21 +11,19 @@ public class ScarfReadInputStream extends ReadInputStream {
 	
 	public static void main(String[] args){
 		
-		ScarfReadInputStream fris=new ScarfReadInputStream(args[0], false, true);
+		ScarfReadInputStream fris=new ScarfReadInputStream(args[0], true);
 		
 		Read r=fris.next();
 		System.out.println(r.toText(false));
 		
 	}
 	
-	public ScarfReadInputStream(String fname, boolean colorspace_, boolean allowSubprocess_){
-		this(FileFormat.testInput(fname, FileFormat.SCARF, null, allowSubprocess_, false), colorspace_);
+	public ScarfReadInputStream(String fname, boolean allowSubprocess_){
+		this(FileFormat.testInput(fname, FileFormat.SCARF, null, allowSubprocess_, false));
 	}
 	
-	public ScarfReadInputStream(FileFormat ff, boolean colorspace_){
+	public ScarfReadInputStream(FileFormat ff){
 		if(verbose){System.err.println("ScarfReadInputStream("+ff.name()+")");}
-
-		colorspace=colorspace_;
 		
 		stdin=ff.stdio();
 		if(!ff.scarf()){
@@ -40,7 +38,7 @@ public class ScarfReadInputStream extends ReadInputStream {
 
 	@Override
 	public void start() {
-//		if(cris!=null){new Thread(cris).start();}
+//		if(cris!=null){cris.start();}
 	}
 	
 	
@@ -92,7 +90,7 @@ public class ScarfReadInputStream extends ReadInputStream {
 		buffer=null;
 		next=0;
 		
-		buffer=FASTQ.toScarfReadList(tf, BUF_LEN, colorspace, nextReadID, interleaved);
+		buffer=FASTQ.toScarfReadList(tf, BUF_LEN, nextReadID, interleaved);
 		int bsize=(buffer==null ? 0 : buffer.size());
 		nextReadID+=bsize;
 		if(bsize<BUF_LEN){tf.close();}
@@ -142,7 +140,6 @@ public class ScarfReadInputStream extends ReadInputStream {
 	public long consumed=0;
 	private long nextReadID=0;
 	
-	public final boolean colorspace;
 	public final boolean stdin;
 	public static boolean verbose=false;
 

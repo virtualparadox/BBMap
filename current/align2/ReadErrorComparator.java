@@ -18,12 +18,12 @@ public final class ReadErrorComparator implements Comparator<Read>{
 		int b=(r2.errors+(r2.mate==null ? 0 : r2.mate.errors));
 		if(a!=b){return a-b;}
 		
-		a=(r1.bases.length+(r1.mate==null ? 0 : r1.mate.bases.length));
-		b=(r2.bases.length+(r2.mate==null ? 0 : r2.mate.bases.length));
+		a=(r1.length()+(r1.mate==null ? 0 : r1.mateLength()));
+		b=(r2.length()+(r2.mate==null ? 0 : r2.mateLength()));
 		if(a!=b){return b-a;}
 		
-		float a2=(r1.expectedErrors()+(r1.mate==null ? 0 : r1.mate.expectedErrors()));
-		float b2=(r2.expectedErrors()+(r2.mate==null ? 0 : r2.mate.expectedErrors()));
+		float a2=(r1.expectedErrors(true, 0)+(r1.mate==null ? 0 : r1.mate.expectedErrors(true, 0)));
+		float b2=(r2.expectedErrors(true, 0)+(r2.mate==null ? 0 : r2.mate.expectedErrors(true, 0)));
 		if(a2!=b2){return a2>b2 ? 1 : -1;}
 		
 		if(r1.numericID<r2.numericID){return -1;}

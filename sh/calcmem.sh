@@ -2,10 +2,10 @@
 #calcmem
 
 #function usage(){
-#	echo "CalcMem v1.01"
+#	echo "CalcMem v1.02"
 #	echo "Written by Brian Bushnell, Doug Jacobsen, Alex Copeland"
 #	echo "Calculates available memory in megabytes"
-#	echo "Last modified April 25, 2014"
+#	echo "Last modified May 5, 2015"
 #}
 
 function parseXmx () {
@@ -78,6 +78,8 @@ function freeRam(){
 	#echo "default = $defaultMem"
 	
 	local ulimit=$(ulimit -v)
+	ulimit="${ulimit:-0}"
+	if [ "$ulimit" = "unlimited" ]; then ulimit=0; fi
 	local x=$ulimit
 	
 	if [ -e /proc/meminfo ]; then
@@ -102,7 +104,7 @@ function freeRam(){
 		#echo $vfree
 		#echo $pfree
 		
-		if [ "$x" = "unlimited" ] || (($x > $x2)); then x=$x2; fi
+		if [ "$x" = "unlimited" ] || (("$x" > $x2)); then x=$x2; fi
 		
 	fi
 	
@@ -114,7 +116,7 @@ function freeRam(){
 		#echo "ram is unlimited"
 		RAM=$((defaultMem/1024))
 		echo "Max memory cannot be determined.  Attempting to use $RAM MB." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to roughly 85 percent of physical RAM)." 1>&2
+		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
 	else
 		#echo "hello 1"
 		#echo $x

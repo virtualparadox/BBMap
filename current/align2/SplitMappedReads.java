@@ -6,7 +6,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.zip.ZipOutputStream;
 
-import stream.ConcurrentReadInputStream;
+import stream.ConcurrentLegacyReadInputStream;
 import stream.RTextInputStream;
 import stream.Read;
 import stream.SiteScore;
@@ -113,7 +113,7 @@ public class SplitMappedReads {
 			
 		}
 		
-		cris=(USE_CRIS ? new ConcurrentReadInputStream(stream, -1) : null);
+		cris=(USE_CRIS ? new ConcurrentLegacyReadInputStream(stream, -1) : null);
 	}
 	
 	public void process(){
@@ -122,17 +122,17 @@ public class SplitMappedReads {
 		t.start();
 		
 		if(cris!=null){
-			new Thread(cris).start();
+			cris.start();
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
 			while(reads!=null && reads.size()>0){
 				processReads(reads);
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 		}else{
 			ArrayList<Read> reads=stream.nextList();
 			while(reads!=null && reads.size()>0){
@@ -290,7 +290,7 @@ public class SplitMappedReads {
 	
 	public final String outname;
 	private final RTextInputStream stream;
-	private final ConcurrentReadInputStream cris;
+	private final ConcurrentLegacyReadInputStream cris;
 	
 	private final OutputStream[] outArraySingle1;
 	private final PrintWriter[] printArraySingle1;

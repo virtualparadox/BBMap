@@ -10,7 +10,6 @@ import stream.SiteScore;
 import align2.Tools;
 import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
-import dna.ChromosomeArrayCompressed;
 import dna.CoverageArray;
 import dna.CoverageArray2;
 import dna.Data;
@@ -144,7 +143,7 @@ public class SplitOffPerfectContigs {
 				}
 			}else{
 				assert(covfile!=null && covfile.contains("#"));
-				ca=ReadWrite.read(CoverageArray.class, covfile.replaceFirst("#", ""+chrom));
+				ca=ReadWrite.read(CoverageArray.class, covfile.replaceFirst("#", ""+chrom), true);
 				if(ca==null){System.out.println("Can't find coverage for chrom "+chrom+" in file "+covfile.replaceFirst("#", ""+chrom));}
 			}
 			if(ca!=null){
@@ -324,8 +323,7 @@ public class SplitOffPerfectContigs {
 			}
 		}
 		
-		ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(cha2);
-		ReadWrite.write(cac, fname, false);
+		ReadWrite.write(cha2, fname, false);
 		
 		return contig;
 	}
@@ -354,7 +352,7 @@ public class SplitOffPerfectContigs {
 				for(String s : split){
 					SiteScore ss=SiteScore.fromText(s);
 					while(pcov.size()<=ss.chrom){
-						pcov.add(new CoverageArray2(pcov.size()));
+						pcov.add(new CoverageArray2(pcov.size(), 500));
 					}
 					if(ss.perfect || ss.semiperfect){
 						CoverageArray ca=pcov.get(ss.chrom);

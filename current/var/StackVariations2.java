@@ -378,7 +378,6 @@ public class StackVariations2 {
 
 		int maxMapScore=0;
 		int bestLen=0;
-		int bestMapLen=0;
 		int minReadStart=Integer.MAX_VALUE;
 		int maxReadStop=-999999;
 		
@@ -412,7 +411,6 @@ public class StackVariations2 {
 			
 			if(bestLen==0 || (v.mapScore>=maxMapScore && v.readLen>=bestLen)){
 				bestLen=v.readLen;
-				bestMapLen=v.readMapLen;
 			}
 
 			maxHeadDist=Tools.max(maxHeadDist, v.headDist);
@@ -457,7 +455,7 @@ public class StackVariations2 {
 		
 		Varlet v=new Varlet(bestVar.chromosome, ((plusReads1+plusReads2>0) && (minusReads1+minusReads2>0) ? Gene.PLUS : bestVar.strand), 
 				bestVar.beginLoc, bestVar.endLoc, bestVar.matchStart, bestVar.matchStop, bestVar.varType, bestVar.ref, bestVar.call,
-				netQuality, netReadQuality, maxMapScore, minErrors, minExpectedErrors, pairedReads, bestVar.readID, bestLen, bestMapLen,
+				netQuality, netReadQuality, maxMapScore, minErrors, minExpectedErrors, pairedReads, bestVar.readID, bestLen,
 				minReadStart, maxReadStop, numReads, maxHeadDist, maxTailDist, maxEndDist, bestVar.pairNum());
 		
 		

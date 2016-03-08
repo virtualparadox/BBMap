@@ -129,7 +129,7 @@ public class Block implements Serializable{
 		final int[] a, b;
 		{
 			LoadThread<int[]> lta=LoadThread.load(fname, int[].class);
-			b=ReadWrite.read(int[].class, fname2);
+			b=ReadWrite.read(int[].class, fname2, false);
 			lta.waitForThisToFinish();
 			a=lta.output;
 		}

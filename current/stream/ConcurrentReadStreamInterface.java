@@ -4,17 +4,17 @@ import align2.ListNum;
 
 public interface ConcurrentReadStreamInterface extends Runnable{
 	
+	/** Start this in a new thread. */
+	public void start();
+	
 	/** Fetch the next list of reads.  Returns an empty list when end of input is reached. */
 	public ListNum<Read> nextList();
 	
 	/** When the nextList() caller is done processing a list, it MUST be returned using this method. 
 	 * The 'poison' flag should be set to false normally.  When a consumer thread receives an empty list from nextList(),
 	 * it should be returned with the poison flag set to true, then the consumer should terminate.  
-	 * This will return the list to the 'full' queue, allowing another thread to pull the empty list and terminate.  */
-	public void returnList(ListNum<Read> list, boolean poison);
-	
-	/** Same functionality as returnList but does not require an actual list to be present.  */
-	public void returnList(boolean poison);
+	 * This will return a list to the 'full' queue, allowing another thread to pull the empty list and terminate.  */
+	public void returnList(long listNumber, boolean poison);
 	
 	/** This must be called (indirectly, via Thread.start()) before reads will be generated. */
 	public void run();
@@ -54,5 +54,12 @@ public interface ConcurrentReadStreamInterface extends Runnable{
 	 * @return Number of reads read by this stream.
 	 */
 	public long readsIn();
-
+	
+	/**
+	 * @return Value of verbose field.
+	 */
+	public boolean verbose();
+	
+//	public String classname(); //e.g. getClass().getName()
+	
 }

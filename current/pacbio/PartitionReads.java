@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
@@ -44,7 +44,6 @@ public class PartitionReads {
 		
 		String outname1=null;
 		String outname2=null;
-		FASTQ.PARSE_CUSTOM=false;
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
@@ -56,6 +55,14 @@ public class PartitionReads {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
 			}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 				Data.setPath(b);
 			}else if(a.equals("fasta") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
@@ -66,20 +73,8 @@ public class PartitionReads {
 				}
 			}else if(a.equals("in2") || a.equals("input2")){
 				in2=b;
-			}else if(a.startsWith("fastareadlen")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.startsWith("fastaminread") || a.startsWith("fastaminlen")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.endsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				System.out.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.startsWith("partition")){
 				partitions=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -102,18 +97,15 @@ public class PartitionReads {
 					outname2=b;
 					assert(!outname2.equalsIgnoreCase(outname1));
 				}
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte ascii_offset=Byte.parseByte(b);
-				FASTQ.ASCII_OFFSET=ascii_offset;
-				System.out.println("Set fastq input ASCII offset to "+FASTQ.ASCII_OFFSET);
-				FASTQ.DETECT_QUALITY=false;
 			}else if(a.startsWith("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else{
 				throw new RuntimeException("Unknown parameter: "+args[i]);
 			}
+		}
+		
+		{//Process parser fields
+			Parser.processQuality();
 		}
 		
 		assert(FastaReadInputStream.settingsOK());
@@ -124,13 +116,13 @@ public class PartitionReads {
 		if(in1==null){throw new RuntimeException("Please specify input file.");}
 		
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 			if(verbose){System.err.println("Started cris");}
-//			Thread th=new Thread(cris);
+//			cris.start(); //4567
 //			th.start();
 		}
 		
@@ -156,11 +148,10 @@ public class PartitionReads {
 		System.out.println("Time:  \t"+t);
 	}
 	
-	public static long process(TextStreamWriter[] tsw1, TextStreamWriter[] tsw2, ConcurrentReadStreamInterface cris){
+	public static long process(TextStreamWriter[] tsw1, TextStreamWriter[] tsw2, ConcurrentReadInputStream cris){
 		for(TextStreamWriter tsw : tsw1){if(tsw!=null){tsw.start();}}
 		for(TextStreamWriter tsw : tsw2){if(tsw!=null){tsw.start();}}
-		Thread cristhread=new Thread(cris);
-		cristhread.start();
+		cris.start(); //4567
 		
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> readlist=ln.list;
@@ -205,7 +196,7 @@ public class PartitionReads {
 				}
 			}
 			
-			cris.returnList(ln, readlist.isEmpty());
+			cris.returnList(ln.id, readlist.isEmpty());
 			
 			//System.err.println("Waiting on a list...");
 			ln=cris.nextList();
@@ -214,7 +205,7 @@ public class PartitionReads {
 		
 		//System.err.println("Returning a list... (final)");
 		assert(readlist.isEmpty());
-		cris.returnList(ln, readlist.isEmpty());
+		cris.returnList(ln.id, readlist.isEmpty());
 		
 		
 		for(TextStreamWriter tsw : tsw1){if(tsw!=null){tsw.poison();}}

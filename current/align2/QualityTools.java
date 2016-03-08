@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Random;
 
 import stream.FASTQ;
+import stream.Read;
 
 import dna.AminoAcid;
 
@@ -25,7 +26,7 @@ public class QualityTools {
 		
 		for(int i=0; i<MATRIX_SIZE; i++){
 			for(int j=0; j<MATRIX_SIZE; j++){
-				System.err.print((int)qualsToPhred((byte)i, (byte)j)+",");
+				System.err.print((int)qualsToPhredSafe((byte)i, (byte)j)+",");
 			}
 			System.err.println();
 		}
@@ -425,16 +426,34 @@ public class QualityTools {
 		return offsets;
 	}
 	
+	/** Requires qualities under MATRIX_SIZE */
 	public static byte qualsToPhred(byte qa, byte qb){
-		qa=Tools.min(qa, MATRIX_SIZE);
-		qb=Tools.min(qb, MATRIX_SIZE);
+		return PHRED_MATRIX[qa][qb];
+	}
+	
+	/** Safe version for qualities >=MATRIX_SIZE */ 
+	public static byte qualsToPhredSafe(byte qa, byte qb){
+		qa=Tools.max((byte)0, Tools.min(qa, MATRIX_SIZE));
+		qb=Tools.max((byte)0, Tools.min(qb, MATRIX_SIZE));
 		return (qa<=qb) ? PHRED_MATRIX[qa][qb] : PHRED_MATRIX[qb][qa];
 	}
 	
 	public static float qualsToProbError(byte qa, byte qb){
-		qa=Tools.min(qa, MATRIX_SIZE);
-		qb=Tools.min(qb, MATRIX_SIZE);
+		return ERROR_MATRIX[qa][qb];
+	}
+	
+	public static float qualsToProbCorrect(byte qa, byte qb){
+		return 1-qualsToProbError(qa, qb);
+	}
+	
+	public static float qualsToProbErrorSafe(byte qa, byte qb){
+		qa=Tools.max((byte)0, Tools.min(qa, MATRIX_SIZE));
+		qb=Tools.max((byte)0, Tools.min(qb, MATRIX_SIZE));
 		return (qa<=qb) ? ERROR_MATRIX[qa][qb] : ERROR_MATRIX[qb][qa];
+	}
+	
+	public static float qualsToProbCorrectSafe(byte qa, byte qb){
+		return 1-qualsToProbErrorSafe(qa, qb);
 	}
 
 	public static byte[] fakeQuality(int q, int len){
@@ -476,14 +495,17 @@ public class QualityTools {
 	}
 	
 	public static byte probCorrectToPhred(double prob){
-		double phred=probErrorToPhredDouble(1-prob);
-//		System.out.println("phred1="+phred);
-		phred=Math.round(phred);
-//		System.out.println("phred2="+phred);
-		byte q=(byte)Tools.mid(0, (int)phred, 41);
-//		System.out.println("phred3="+q);
-//		System.out.println("phred4="+(char)(q+33));
-		return (byte)q;
+		return probErrorToPhred(1-prob);
+	}
+	
+	public static byte probErrorToPhred(double prob){
+		return probErrorToPhred(prob, true);
+	}
+	
+	public static byte probErrorToPhred(double prob, boolean round){
+		double phred=probErrorToPhredDouble(prob);
+		final int q=round ? (int)Math.round(phred) : (int)phred;
+		return  (byte)Tools.mid(0, q, Read.MAX_CALLED_QUALITY);
 	}
 	
 	public static double probErrorToPhredDouble(double prob){

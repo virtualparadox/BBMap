@@ -8,8 +8,8 @@ import align2.ListNum;
 import align2.Tools;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SamLine;
 
@@ -37,6 +37,7 @@ public class CutPrimers {
 	
 	public CutPrimers(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -70,7 +71,9 @@ public class CutPrimers {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
+			
 			maxReads=parser.maxReads;
 			in1=parser.in1;
 			out1=parser.out1;
@@ -82,16 +85,15 @@ public class CutPrimers {
 	
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null);
 			if(verbose){outstream.println("Started cris");}
-			final Thread cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -101,7 +103,7 @@ public class CutPrimers {
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, null, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, null, buff, null, false);
 			ros.start();
 		}else{ros=null;}
 
@@ -132,8 +134,10 @@ public class CutPrimers {
 					int oldSize=readsOut.size();
 					
 					if(sl1!=null && sl2!=null){
-						final int a1=sl1.start(), b1=sl1.stop();
-						final int a2=sl2.start(), b2=sl2.stop();
+						final int a1=sl1.start(true, false);
+						final int a2=sl2.start(true, false);
+						final int b1=sl1.stop(a1, true, false);
+						final int b2=sl2.stop(a2, true, false);
 						if(Tools.overlap(a1, b1, a2, b2)){
 							
 						}else{
@@ -145,25 +149,25 @@ public class CutPrimers {
 								bases=Arrays.copyOfRange(r.bases, b2+1, a1);
 								quals=(r.quality==null ? null : Arrays.copyOfRange(r.quality, b2+1, a1));
 							}
-							readsOut.add(new Read(bases, -1, (byte)0, -1, -1, r.id, quals, false, r.numericID));
+							readsOut.add(new Read(bases, -1, (byte)0, -1, -1, r.id, quals, r.numericID));
 							readsSuccess++;
 						}
 					}
 					
 					if(oldSize==readsOut.size() && ADD_FAKE_READS){
-						readsOut.add(new Read(new byte[] {'N'}, -1, (byte)0, -1, -1, r.id, null, false, r.numericID));
+						readsOut.add(new Read(new byte[] {'N'}, -1, (byte)0, -1, -1, r.id, null, r.numericID));
 					}
 				}
 				
 				if(ros!=null){ros.add(readsOut, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				if(verbose){outstream.println("Returned a list.");}
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
 			}
 		}
 		ReadWrite.closeStreams(cris, ros);

@@ -3,9 +3,7 @@ package jgi;
 import java.io.File;
 import java.util.ArrayList;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
-import stream.FASTQ;
+import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
 
@@ -18,6 +16,7 @@ import fileIO.TextStreamWriter;
 
 import align2.ListNum;
 import align2.ReadStats;
+import align2.Shared;
 import align2.Tools;
 
 /**
@@ -36,6 +35,8 @@ public class MakeLengthHistogram {
 		
 		Data.GENOME_BUILD=-1;
 		ReadWrite.USE_UNPIGZ=true;
+		Shared.READ_BUFFER_LENGTH=Tools.mid(1, Shared.READ_BUFFER_LENGTH, 20);
+		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
 
@@ -50,6 +51,10 @@ public class MakeLengthHistogram {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(a.equals("reads") || a.equals("maxreads")){
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -79,6 +84,10 @@ public class MakeLengthHistogram {
 			}
 		}
 		
+		{//Process parser fields
+			Parser.processQuality();
+		}
+		
 		MAX_LENGTH/=MULT;
 		
 		calc(in1, in2, out);
@@ -89,18 +98,14 @@ public class MakeLengthHistogram {
 	public static void calc(String in1, String in2, String out){
 		FastaReadInputStream.SPLIT_READS=false;
 		FastaReadInputStream.MIN_READ_LEN=1;
-		FASTQ.PARSE_CUSTOM=false;
 		
-		long maxReads=-1;
-		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 //			if(verbose){System.err.println("Started cris");}
-			Thread th=new Thread(cris);
-			th.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
 //		if(verbose){System.err.println("Paired: "+paired);}
@@ -131,7 +136,7 @@ public class MakeLengthHistogram {
 					
 					if(r1!=null && r1.bases!=null){
 						readsProcessed++;
-						final int x=r1.bases.length;
+						final int x=r1.length();
 						final int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
 						readHist[y]++;
 						baseHist[y]+=x;
@@ -141,7 +146,7 @@ public class MakeLengthHistogram {
 					
 					if(r2!=null && r2.bases!=null){
 						readsProcessed++;
-						final int x=r2.bases.length;
+						final int x=r2.length();
 						final int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
 						readHist[y]++;
 						baseHist[y]+=x;
@@ -151,13 +156,13 @@ public class MakeLengthHistogram {
 					
 				}
 				//System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(verbose){System.err.println("Finished reading");}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			if(verbose){System.err.println("Returned list");}
 			ReadWrite.closeStream(cris);
 			if(verbose){System.err.println("Closed stream");}
@@ -213,6 +218,7 @@ public class MakeLengthHistogram {
 		tsw.poisonAndWait();
 	}
 	
+	public static long maxReads=-1;
 	public static long readsProcessed=0;
 	public static int MAX_LENGTH=80000;
 	public static int MULT=10;

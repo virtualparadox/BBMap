@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import align2.ListNum;
@@ -62,6 +62,14 @@ public class RemoveAdapters3 {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
 			}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 				Data.setPath(b);
 			}else if(a.equals("fasta") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
@@ -74,20 +82,8 @@ public class RemoveAdapters3 {
 				in2=b;
 			}else if(a.equals("query") || a.equals("adapter")){
 				query=b;
-			}else if(a.endsWith("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				System.out.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.equals("split")){
 				splitReads=Tools.parseBoolean(b);
-			}else if(a.startsWith("fastareadlen")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.startsWith("fastaminread") || a.startsWith("fastaminlen")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ziplevel=Integer.parseInt(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -119,13 +115,6 @@ public class RemoveAdapters3 {
 			}else if(a.equals("minratio")){
 				MINIMUM_ALIGNMENT_SCORE_RATIO=Float.parseFloat(b);
 				System.out.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+MINIMUM_ALIGNMENT_SCORE_RATIO);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte ascii_offset=Byte.parseByte(b);
-				FASTQ.ASCII_OFFSET=ascii_offset;
-				System.out.println("Set fastq input ASCII offset to "+FASTQ.ASCII_OFFSET);
-				FASTQ.DETECT_QUALITY=false;
 			}else if(a.startsWith("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else{
@@ -133,40 +122,41 @@ public class RemoveAdapters3 {
 			}
 		}
 		
+		Parser.processQuality();
+		
 		assert(FastaReadInputStream.settingsOK());
 		if(in1==null){throw new RuntimeException("Please specify input file.");}
 		
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 //			if(verbose){System.err.println("Started cris");}
-//			Thread th=new Thread(cris);
+//			cris.start(); //4567
 //			th.start();
 		}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Paired: "+paired);}
 		
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(OUTPUT_READS){
 			final int buff=(!OUTPUT_ORDERED_READS ? THREADS : Tools.max(24, 2*THREADS));
 			
 			FileFormat ff1=FileFormat.testOutput(outname1, FileFormat.FASTQ, null, true, overwrite, append, OUTPUT_ORDERED_READS);
 			FileFormat ff2=FileFormat.testOutput(outname2, FileFormat.FASTQ, null, true, overwrite, append, OUTPUT_ORDERED_READS);
-			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
+			ros=ConcurrentReadOutputStream.getStream(ff1, ff2, buff, null, true);
 		}
 		process(cris, ros, query, splitReads);
 	}
 	
-	public static void process(ConcurrentReadStreamInterface cris, RTextOutputStream3 ros, String query, boolean split){
+	public static void process(ConcurrentReadInputStream cris, ConcurrentReadOutputStream ros, String query, boolean split){
 
 		Timer t=new Timer();
 		t.start();
 		
-		Thread cristhread=new Thread(cris);
-		cristhread.start();
+		cris.start(); //4567
 		
 		System.out.println("Started read stream.");
 		
@@ -264,8 +254,8 @@ public class RemoveAdapters3 {
 		 * @param ros
 		 * @param mINIMUM_ALIGNMENT_SCORE_RATIO
 		 */
-		public ProcessThread(ConcurrentReadStreamInterface cris_,
-				RTextOutputStream3 ros_, float minRatio_, String query_, boolean split_) {
+		public ProcessThread(ConcurrentReadInputStream cris_,
+				ConcurrentReadOutputStream ros_, float minRatio_, String query_, boolean split_) {
 			cris=cris_;
 			ros=ros_;
 			minRatio=minRatio_;
@@ -282,7 +272,7 @@ public class RemoveAdapters3 {
 			assert(window<ALIGN_COLUMNS);
 
 			msa=new MultiStateAligner9PacBioAdapter(ALIGN_ROWS, ALIGN_COLUMNS);
-			msaR=new MultiStateAligner9PacBio(ALIGN_ROWS, ALIGN_COLUMNS, false);
+			msaR=new MultiStateAligner9PacBio(ALIGN_ROWS, ALIGN_COLUMNS); //TODO: Why is this not 'adapter' version?
 
 			maxSwScore=msa.maxQuality(query1.length);
 			minSwScore=(int)(maxSwScore*MINIMUM_ALIGNMENT_SCORE_RATIO);
@@ -333,7 +323,7 @@ public class RemoveAdapters3 {
 					}
 				}
 				
-				cris.returnList(ln, readlist.isEmpty());
+				cris.returnList(ln.id, readlist.isEmpty());
 				
 				//System.err.println("Waiting on a list...");
 				ln=cris.nextList();
@@ -342,7 +332,7 @@ public class RemoveAdapters3 {
 			
 			//System.err.println("Returning a list... (final)");
 			assert(readlist.isEmpty());
-			cris.returnList(ln, readlist.isEmpty());
+			cris.returnList(ln.id, readlist.isEmpty());
 		}
 
 		/**
@@ -369,7 +359,7 @@ public class RemoveAdapters3 {
 			ArrayList<Read> sections=new ArrayList<Read>();
 			
 			int lastX=-1;
-			for(int i=0; i<r.bases.length; i++){
+			for(int i=0; i<r.length(); i++){
 				if(r.bases[i]=='X'){
 					if(i-lastX>minContig){
 						byte[] b=Arrays.copyOfRange(r.bases, lastX+1, i);
@@ -380,7 +370,7 @@ public class RemoveAdapters3 {
 					lastX=i;
 				}
 			}
-			int i=r.bases.length;
+			int i=r.length();
 			if(i-lastX>minContig){
 				byte[] b=Arrays.copyOfRange(r.bases, lastX+1, i);
 				byte[] q=r.quality==null ? null : Arrays.copyOfRange(r.quality, lastX+1, i);
@@ -396,8 +386,8 @@ public class RemoveAdapters3 {
 		private int processRead(Read r) {
 			
 			int begin=0;
-			while(begin<r.bases.length && r.bases[begin]=='N'){begin++;} //Skip reads made of 'N'
-			if(begin>=r.bases.length){return 0;}
+			while(begin<r.length() && r.bases[begin]=='N'){begin++;} //Skip reads made of 'N'
+			if(begin>=r.length()){return 0;}
 			
 			final byte[] array=npad(r.bases, npad);
 			
@@ -499,7 +489,7 @@ public class RemoveAdapters3 {
 			minusAdaptersFound+=minusFound;
 			int found=plusFound+minusFound;
 			if(found>0){
-				for(int i=npad, j=0; j<r.bases.length; i++, j++){r.bases[j]=array[i];}
+				for(int i=npad, j=0; j<r.length(); i++, j++){r.bases[j]=array[i];}
 				if(DONT_OUTPUT_BROKEN_READS){r.setDiscarded(true);}
 				badReadsFound++;
 			}else{
@@ -554,8 +544,8 @@ public class RemoveAdapters3 {
 		private byte[] padbuffer=null;
 		private final byte[] rcomp1, rcomp2;
 		private final byte[] query1, query2;
-		private final ConcurrentReadStreamInterface cris;
-		private final RTextOutputStream3 ros;
+		private final ConcurrentReadInputStream cris;
+		private final ConcurrentReadOutputStream ros;
 		private final float minRatio;
 		private final MultiStateAligner9PacBioAdapter msa;
 		private final MultiStateAligner9PacBio msaR;

@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified November 3, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Filters an assembly by contig coverage."
 	echo ""
@@ -70,7 +70,7 @@ function filterbycoverage() {
 	#module load samtools
 	local CMD="java $EA $z -cp $CP jgi.FilterByCoverage $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 filterbycoverage "$@"

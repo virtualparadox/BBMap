@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description:  Randomly adds adapters to a file, or grades a trimmed file."
 	echo ""
@@ -24,6 +24,9 @@ function usage(){
 	echo "left         		Adapters are on the left (3') end of the read."
 	echo "right         		Adapters are on the right (5') end of the read.  Default mode."
 	echo "adderrors=t  		Add errors to adapters based on the quality scores."
+	echo "addpaired=t  		Add adapters to the same location for read 1 and read 2."
+	echo "arc=f        		Add reverse-complemented adapters as well as forward."
+	echo "rate=0.5     		Add adapters to this fraction of reads."
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 }
@@ -51,7 +54,7 @@ function rename() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.AddAdapters $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 rename "$@"

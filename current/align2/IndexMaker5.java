@@ -21,11 +21,11 @@ public class IndexMaker5 {
 	
 	
 	public static Block[] makeIndex(final int genome, int minChrom, int maxChrom, int k, int CHROMBITS, 
-			int MAX_ALLOWED_CHROM_INDEX, int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, boolean COLORSPACE, boolean WRITE, boolean DISK_INVALID, Block[] index){
+			int MAX_ALLOWED_CHROM_INDEX, int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, boolean WRITE, boolean DISK_INVALID, Block[] index){
 		Timer t=new Timer();
 		t.start();
 		
-		MAX_CONCURRENT_BLOCKS=(Data.WINDOWS ? 1 : Tools.max(1, Shared.THREADS/4));
+		MAX_CONCURRENT_BLOCKS=(Data.WINDOWS ? 1 : Tools.max(1, Shared.threads()/4));
 		
 		minChrom=Tools.max(1, minChrom);
 		if(genome>=0 && Data.GENOME_BUILD!=genome){
@@ -45,7 +45,7 @@ public class IndexMaker5 {
 				int b=maxChrom(i, minChrom, maxChrom, CHROM_MASK_LOW);
 				assert(b>=i);
 				
-				BlockMaker idm=new BlockMaker(a, b, k, CHROMBITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, WRITE, DISK_INVALID, index);
+				BlockMaker idm=new BlockMaker(a, b, k, CHROMBITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, WRITE, DISK_INVALID, index);
 				list.add(idm);
 				incrementActiveBlocks(1);
 				idm.start();
@@ -74,9 +74,9 @@ public class IndexMaker5 {
 	}
 	
 	public static Block makeBlock(int minChrom, int maxChrom, int k, int CHROMBITS, int MAX_ALLOWED_CHROM_INDEX, 
-			int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, boolean COLORSPACE, boolean WRITE, boolean DISK_INVALID, Block[] matrix){
+			int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, boolean WRITE, boolean DISK_INVALID, Block[] matrix){
 		assert(false) : maxChrom+", "+MAX_ALLOWED_CHROM_INDEX;
-		BlockMaker idm=new BlockMaker(minChrom, maxChrom, k, CHROMBITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, WRITE, DISK_INVALID, matrix);
+		BlockMaker idm=new BlockMaker(minChrom, maxChrom, k, CHROMBITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, WRITE, DISK_INVALID, matrix);
 		Block block=idm.makeArrays();
 		
 		assert(false) : maxChrom+", "+MAX_ALLOWED_CHROM_INDEX;
@@ -98,13 +98,12 @@ public class IndexMaker5 {
 
 		public BlockMaker(int minChrom_, int maxChrom_, int k, int CHROMBITS_,
 				int MAX_ALLOWED_CHROM_INDEX_, int CHROM_MASK_LOW_, int CHROM_MASK_HIGH_, int SITE_MASK_, int SHIFT_LENGTH_, 
-				boolean COLORSPACE_, boolean WRITE_TO_DISK_, boolean DISK_INVALID_, Block[] matrix_){
+				boolean WRITE_TO_DISK_, boolean DISK_INVALID_, Block[] matrix_){
 			
 			KEYLEN=k;
 			CHROMBITS=CHROMBITS_;
 			KEYSPACE=1<<(2*KEYLEN);
 			MAX_ALLOWED_CHROM_INDEX=MAX_ALLOWED_CHROM_INDEX_;
-			COLORSPACE=COLORSPACE_;
 			WRITE_TO_DISK=WRITE_TO_DISK_;
 			DISK_INVALID=DISK_INVALID_;
 
@@ -132,7 +131,7 @@ public class IndexMaker5 {
 		private Block makeArrays(){
 			
 			{
-				String fname=fname(minChrom, maxChrom, KEYLEN, CHROMBITS, COLORSPACE);
+				String fname=fname(minChrom, maxChrom, KEYLEN, CHROMBITS);
 				File f=new File(fname);
 
 				if(f.exists() && new File(fname+"2.gz").exists()){
@@ -194,7 +193,7 @@ public class IndexMaker5 {
 			}
 
 			if(WRITE_TO_DISK){
-				String fname=fname(minChrom, maxChrom, KEYLEN, CHROMBITS, COLORSPACE);
+				String fname=fname(minChrom, maxChrom, KEYLEN, CHROMBITS);
 //				File f=new File(fname);
 //				assert(!f.exists()) : "Tried to overwrite file "+f.getAbsolutePath();
 				indexHolder[0].write(fname, true);
@@ -247,11 +246,7 @@ public class IndexMaker5 {
 			public void run(){
 
 				//Data.sysout.println("Thread "+id+" counting sizes for ("+minChrom+", "+maxChrom+")");
-				if(COLORSPACE){
-					for(int i=minChrom; i<=maxChrom; i++){countSizesColorspace(i);}
-				}else{
-					for(int i=minChrom; i<=maxChrom; i++){countSizes(i);}
-				}
+				for(int i=minChrom; i<=maxChrom; i++){countSizes(i);}
 				
 				final Block b;
 				synchronized(intercom){
@@ -302,11 +297,7 @@ public class IndexMaker5 {
 
 				//Data.sysout.println("Thread "+id+" filling arrays for ("+minChrom+", "+maxChrom+")");
 
-				if(COLORSPACE){
-					for(int i=minChrom; i<=maxChrom; i++){fillArraysColorspace(i);}
-				}else{
-					for(int i=minChrom; i<=maxChrom; i++){fillArrays(i);}
-				}
+				for(int i=minChrom; i<=maxChrom; i++){fillArrays(i);}
 				//Data.sysout.println("Thread "+id+" finished.");
 			}
 
@@ -314,7 +305,6 @@ public class IndexMaker5 {
 
 				//			System.err.println("Thread "+id+" using chr"+chrom+" for countSizes");
 				ChromosomeArray ca=dna.Data.getChromosome(chrom);
-				assert(!ca.colorspace);
 
 				//			int baseChrom=baseChrom(chrom);
 
@@ -355,7 +345,6 @@ public class IndexMaker5 {
 
 				//			System.err.println("Thread "+id+" using chr"+chrom+" for fillArrays");
 				ChromosomeArray ca=dna.Data.getChromosome(chrom);
-				assert(!ca.colorspace);
 
 				int baseChrom=baseChrom(chrom);
 
@@ -427,92 +416,6 @@ public class IndexMaker5 {
 
 			}
 
-			private void countSizesColorspace(final int chrom){
-
-				//System.err.println("Thread "+id+" using chr"+chrom+" for countSizes");
-				ChromosomeArray ca=dna.Data.getChromosome(chrom);
-				assert(ca.colorspace==COLORSPACE);
-
-				//			int baseChrom=baseChrom(chrom);
-
-				if(ca.maxIndex>MAX_ALLOWED_CHROM_INDEX){
-					throw new RuntimeException("Chrom "+chrom+": "+ca.maxIndex+" > "+MAX_ALLOWED_CHROM_INDEX);
-				}
-
-				final int max=ca.maxIndex-KEYLEN+1;
-				final int skip=KEYLEN-1;
-				assert(skip>0);
-
-
-				int start=ca.minIndex;
-				while(start<max && ca.getNumber(start+skip, COLORSPACE)==-1){start+=skip;}
-				while(start<max && ca.getNumber(start, COLORSPACE)==-1){start++;}
-
-				Data.sysout.println("Entering hash loop.");
-
-				// "a" is site start, "b" is site end
-				for(int a=start, b=start+skip; a<max; a++, b++){
-					if(ca.getNumber(a)==id){
-						int key=ca.getNumber(a, b, COLORSPACE);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
-							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+", "+ca.getString(a, b)+"\n"
-									+minIndex+", "+maxIndex+"\n";
-							sizes[key]++;
-						}
-					}
-				}
-
-				Data.sysout.println("Left hash loop.");
-
-			}
-
-			private void fillArraysColorspace(final int chrom){
-
-				//System.err.println("Thread "+id+" using chr"+chrom+" for fillArrays");
-				ChromosomeArray ca=dna.Data.getChromosome(chrom);
-				assert(ca.colorspace==COLORSPACE);
-
-				int baseChrom=baseChrom(chrom);
-
-				if(ca.maxIndex>MAX_ALLOWED_CHROM_INDEX){
-					throw new RuntimeException("Chrom "+chrom+": "+ca.maxIndex+" > "+MAX_ALLOWED_CHROM_INDEX);
-				}
-
-				final int max=ca.maxIndex-KEYLEN+1;
-				final int skip=KEYLEN-1;
-				assert(skip>0);
-
-
-				int start=ca.minIndex;
-				while(start<max && ca.getNumber(start+skip, COLORSPACE)==-1){start+=skip;}
-				while(start<max && ca.getNumber(start, COLORSPACE)==-1){start++;}
-
-				Data.sysout.println("Entering hash loop.");
-
-				
-				int[] sites=indexHolder[0].sites;
-				
-				for(int a=start, b=start+skip; a<max; a++, b++){
-					if(ca.array[a]==idb){
-						int key=ca.getNumber(a, b, COLORSPACE);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
-							assert(key>=minIndex && key<=maxIndex);
-							int number=toNumber(a, chrom);
-							assert(numberToChrom(number, baseChrom)==chrom);
-							assert(numberToSite(number)==a);
-							int loc=sizes[key];
-							assert(sites[loc]==0);
-							sites[loc]=number;
-							sizes[key]++;
-						}
-					}
-					//				Data.sysout.println("a="+a+", b="+b+", max="+max);
-				}
-
-				Data.sysout.println("Left hash loop.");
-
-			}
-
 		}
 		
 
@@ -549,7 +452,6 @@ public class IndexMaker5 {
 		private final int CHROMBITS;
 		private final int KEYSPACE;
 		private final int MAX_ALLOWED_CHROM_INDEX;
-		private final boolean COLORSPACE;
 		public final boolean WRITE_TO_DISK;
 		public final boolean DISK_INVALID;
 
@@ -568,8 +470,8 @@ public class IndexMaker5 {
 	public static final int minChrom(int chrom, int MINCHROM, int CHROM_MASK_HIGH){return Tools.max(MINCHROM, chrom&CHROM_MASK_HIGH);}
 	public static final int maxChrom(int chrom, int MINCHROM, int MAXCHROM, int CHROM_MASK_LOW){return Tools.max(MINCHROM, Tools.min(MAXCHROM, chrom|CHROM_MASK_LOW));}
 	
-	public static final String fname(int minChrom, int maxChrom, int k, int chrombits, boolean cs){
-		String suffix="_index_k"+k+"_c"+chrombits+"_b"+Data.GENOME_BUILD+(cs ? "_cs" : "")+".blockB";
+	public static final String fname(int minChrom, int maxChrom, int k, int chrombits){
+		String suffix="_index_k"+k+"_c"+chrombits+"_b"+Data.GENOME_BUILD+".blockB";
 		if(minChrom!=maxChrom){
 			return Data.ROOT_INDEX+Data.GENOME_BUILD+"/chr"+minChrom+"-"+maxChrom+suffix;
 		}else{

@@ -6,8 +6,8 @@ import java.util.Collections;
 
 import jgi.CoveragePileup;
 
-import stream.ConcurrentReadStreamInterface;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadInputStream;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SiteScore;
 
@@ -77,13 +77,13 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 	@Override
 	final int CLEARZONE1(){return CLEARZONE1;}
 
-	public BBMapThreadAcc(ConcurrentReadStreamInterface cris_, int keylen_, 
-			CoveragePileup pileup_, boolean colorspace_, boolean SMITH_WATERMAN_, int THRESH_, int minChrom_, 
+	public BBMapThreadAcc(ConcurrentReadInputStream cris_, int keylen_, 
+			CoveragePileup pileup_, boolean SMITH_WATERMAN_, int THRESH_, int minChrom_, 
 			int maxChrom_, float keyDensity_, float maxKeyDensity_, float minKeyDensity_, int maxDesiredKeys_,
 			boolean REMOVE_DUPLICATE_BEST_ALIGNMENTS_, boolean SAVE_AMBIGUOUS_XY_,
 			float MINIMUM_ALIGNMENT_SCORE_RATIO_, boolean TRIM_LIST_, boolean MAKE_MATCH_STRING_, boolean QUICK_MATCH_STRINGS_,
-			RTextOutputStream3 outStream_, RTextOutputStream3 outStreamMapped_, RTextOutputStream3 outStreamUnmapped_, RTextOutputStream3 outStreamBlack_,
-			boolean translateToBaseSpace_, int SLOW_ALIGN_PADDING_, int SLOW_RESCUE_PADDING_, boolean DONT_OUTPUT_UNMAPPED_READS_, boolean DONT_OUTPUT_BLACKLISTED_READS_,
+			ConcurrentReadOutputStream outStream_, ConcurrentReadOutputStream outStreamMapped_, ConcurrentReadOutputStream outStreamUnmapped_, ConcurrentReadOutputStream outStreamBlack_,
+			int SLOW_ALIGN_PADDING_, int SLOW_RESCUE_PADDING_, boolean DONT_OUTPUT_UNMAPPED_READS_, boolean DONT_OUTPUT_BLACKLISTED_READS_,
 			int MAX_SITESCORES_TO_PRINT_, boolean PRINT_SECONDARY_ALIGNMENTS_,
 			boolean REQUIRE_CORRECT_STRANDS_PAIRS_, boolean SAME_STRAND_PAIRS_, boolean KILL_BAD_PAIRS_, boolean RCOMP_MATE_,
 			boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, int TIP_DELETION_SEARCH_RANGE_,
@@ -92,10 +92,10 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		
 		super(cris_,
 				outStream_, outStreamMapped_, outStreamUnmapped_, outStreamBlack_,
-				pileup_, colorspace_, SMITH_WATERMAN_, LOCAL_ALIGN_, REMOVE_DUPLICATE_BEST_ALIGNMENTS_, 
+				pileup_, SMITH_WATERMAN_, LOCAL_ALIGN_, REMOVE_DUPLICATE_BEST_ALIGNMENTS_, 
 				AMBIGUOUS_RANDOM_, AMBIGUOUS_ALL_, TRIM_LEFT_, TRIM_RIGHT_, UNTRIM_, TRIM_QUAL_, TRIM_MIN_LEN_, THRESH_, 
 				minChrom_, maxChrom_, KFILTER_, IDFILTER_, KILL_BAD_PAIRS_, SAVE_AMBIGUOUS_XY_,
-				translateToBaseSpace_, REQUIRE_CORRECT_STRANDS_PAIRS_,
+				REQUIRE_CORRECT_STRANDS_PAIRS_,
 				SAME_STRAND_PAIRS_, RESCUE_, STRICT_MAX_INDEL_, SLOW_ALIGN_PADDING_, SLOW_RESCUE_PADDING_,
 				MSA_TYPE_, keylen_, PERFECTMODE_, SEMIPERFECTMODE_, FORBID_SELF_MAPPING_, RCOMP_MATE_, 
 				MAKE_MATCH_STRING_, DONT_OUTPUT_UNMAPPED_READS_, DONT_OUTPUT_BLACKLISTED_READS_, PRINT_SECONDARY_ALIGNMENTS_, 
@@ -108,14 +108,14 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		assert(!(RCOMP_MATE/* || FORBID_SELF_MAPPING*/)) : "RCOMP_MATE: TODO";
 		
 		if(SLOW_ALIGN || MAKE_MATCH_STRING){
-//			msa=MSA.makeMSA(ALIGN_ROWS, ALIGN_COLUMNS, colorspace, MSA_TYPE);
+//			msa=MSA.makeMSA(ALIGN_ROWS, ALIGN_COLUMNS, MSA_TYPE);
 //			POINTS_MATCH=msa.POINTS_MATCH();
 //			POINTS_MATCH2=msa.POINTS_MATCH2();
 			CLEARZONE1=(int)(CLEARZONE_RATIO1*POINTS_MATCH2);
 			CLEARZONE1b=(int)(CLEARZONE_RATIO1b*POINTS_MATCH2);
 			CLEARZONE1c=(int)(CLEARZONE_RATIO1c*POINTS_MATCH2);
 			CLEARZONEP=(int)(CLEARZONE_RATIOP*POINTS_MATCH2);
-			CLEARZONE3=(int)(CLEARZONE_RATIO3*POINTS_MATCH2);
+			CLEARZONE3=PENALIZE_AMBIG ? (int)(CLEARZONE_RATIO3*POINTS_MATCH2) : 0;
 //			CLEARZONE1e=(int)(2*POINTS_MATCH2-POINTS_MATCH-msa.POINTS_SUB())+1;
 		}else{
 //			POINTS_MATCH=70;
@@ -438,8 +438,8 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		int maxImperfectSwScore=0;
 
 		if(SLOW_ALIGN || USE_AFFINE_SCORE){
-			maxSwScore=msa.maxQuality(r.bases.length);
-			maxImperfectSwScore=msa.maxImperfectScore(r.bases.length);
+			maxSwScore=msa.maxQuality(r.length());
+			maxImperfectSwScore=msa.maxImperfectScore(r.length());
 		}
 		
 		if(TRIM_LIST && r.numSites()>1){
@@ -656,7 +656,7 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		if(r.sites!=null && r.mapScore<=0){//This came from BBMapThreadPacBio; not sure if needed for other modes
 			if(!STRICT_MAX_INDEL && !Shared.anomaly){
 				System.err.println("Note: Read "+r.id+" failed cigar string generation and will be marked as unmapped.\t"+(r.match==null)+"\t"+r.mapScore+"\t"+r.topSite()+"\t"+new String(r.bases));
-				if(MSA.bandwidth>0 || MSA.bandwidthRatio>0){Shared.anomaly=true;}
+				if(MSA.bandwidth>0 || MSA.bandwidthRatio>0 || MSA.flatMode){Shared.anomaly=true;}
 			}
 			r.mapScore=0;
 			r.setMapped(false);
@@ -717,6 +717,11 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		
 		if(r.ambiguous() && AMBIGUOUS_TOSS){r.sites=null; r.clearSite(); r.setMapped(false);}
 		
+		if(r.mapped() && r.numSites()>1 && PRINT_SECONDARY_ALIGNMENTS){
+			ensureMatchStringsOnSiteScores(r, basesM, maxImperfectSwScore, maxSwScore);
+			assert(Read.CHECKSITES(r, basesM));
+		}
+		
 		assert(checkTopSite(r));
 		if(r.mapped() && (LOCAL_ALIGN || r.containsXY2())){
 			msa.toLocalAlignment(r, r.topSite(), basesM, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
@@ -726,10 +731,12 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		if(r.numSites()==0 || (!r.ambiguous() && r.mapScore<maxSwScore*MINIMUM_ALIGNMENT_SCORE_RATIO)){
 			r.clearMapping();
 		}
-		processIDFilter(r);
+		postFilterRead(r, basesM, maxImperfectSwScore, maxSwScore);
 		
-		int penalty=calcTipScorePenalty(r, maxSwScore, 7);
-		applyScorePenalty(r, penalty);
+		if(PENALIZE_AMBIG){
+			int penalty=calcTipScorePenalty(r, maxSwScore, 7);
+			applyScorePenalty(r, penalty);
+		}
 		
 		if(CALC_STATISTICS){
 			calcStatistics1(r, maxSwScore, maxPossibleQuickScore);
@@ -761,12 +768,12 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 //		int i=0, j=0;
 		final int ilimit=r.sites.size()-1;
 		final int jlimit=r2.sites.size()-1;
-		final int maxReadLen=Tools.max(r.bases.length, r2.bases.length);
+		final int maxReadLen=Tools.max(r.length(), r2.length());
 		
-//		final int outerDistLimit=MIN_PAIR_DIST+r.bases.length+r2.bases.length;
-		final int outerDistLimit=(Tools.max(r.bases.length, r2.bases.length)*(OUTER_DIST_MULT))/OUTER_DIST_DIV;//-(SLOW_ALIGN ? 100 : 0);
+//		final int outerDistLimit=MIN_PAIR_DIST+r.length()+r2.length();
+		final int outerDistLimit=(Tools.max(r.length(), r2.length())*(OUTER_DIST_MULT))/OUTER_DIST_DIV;//-(SLOW_ALIGN ? 100 : 0);
 		final int innerDistLimit=MAX_PAIR_DIST;//+(FIND_TIP_DELETIONS ? TIP_DELETION_SEARCH_RANGE : 0);
-		final int expectedFragLength=AVERAGE_PAIR_DIST+r.bases.length+r2.bases.length;
+		final int expectedFragLength=AVERAGE_PAIR_DIST+r.length()+r2.length();
 		
 		int numPerfectPairs=0;
 		
@@ -1317,13 +1324,21 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 			if(r.sites!=null){r.sites=null;}
 			r.clearSite();
 			r.setMapped(false);
-			//TODO: Unclear if I should set paired to false here
+			r.setPaired(false);
+			r2.setPaired(false);
+		}else if(r.mapped() && r.numSites()>1 && PRINT_SECONDARY_ALIGNMENTS){
+			ensureMatchStringsOnSiteScores(r, basesM1, maxImperfectSwScore1, maxSwScore1);
+			assert(Read.CHECKSITES(r, basesM1));
 		}
 		if(r2.ambiguous() && AMBIGUOUS_TOSS){
 			if(r2.sites!=null){r2.sites=null;}
 			r2.clearSite();
 			r2.setMapped(false);
-			//TODO: Unclear if I should set paired to false here
+			r.setPaired(false);
+			r2.setPaired(false);
+		}else if(r2.mapped() && r2.numSites()>1 && PRINT_SECONDARY_ALIGNMENTS){
+			ensureMatchStringsOnSiteScores(r2, basesM2, maxImperfectSwScore2, maxSwScore2);
+			assert(Read.CHECKSITES(r2, basesM2));
 		}
 //		assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 
@@ -1344,8 +1359,8 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 //			assert(Read.CHECKSITES(r2, basesM2)); //TODO: This can fail; see bug#0001
 		}
 		
-		processIDFilter(r);
-		processIDFilter(r2);
+		postFilterRead(r, basesM1, maxImperfectSwScore1, maxSwScore1);
+		postFilterRead(r2, basesM2, maxImperfectSwScore2, maxSwScore2);
 		
 		if(CALC_STATISTICS){
 			calcStatistics1(r, maxSwScore1, maxPossibleQuickScore1);

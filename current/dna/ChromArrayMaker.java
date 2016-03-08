@@ -62,6 +62,8 @@ public class ChromArrayMaker {
 
 				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseZip(arg, a, b)){
+					//do nothing
 				}else if(a.equals("null")){
 					//do nothing
 				}if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
@@ -107,16 +109,12 @@ public class ChromArrayMaker {
 					MAX_LENGTH=(int)len;
 				}else if(a.equals("writechroms")){
 					writeChroms=Tools.parseBoolean(b);
-				}else if(a.equals("gzip")){
+				}else if(a.equals("chromgz") || a.equals("gz")){
 					Data.CHROMGZ=Tools.parseBoolean(b);
-				}else if(a.equals("chromc")){
-					Data.CHROMC=Tools.parseBoolean(b);
 				}else if(a.equals("retain")){
 					RETAIN=Tools.parseBoolean(b);
 				}else if(a.equals("scafprefixes")){
 					scafprefixes=Tools.parseBoolean(b);
-				}else if(a.equals("ziplevel") || a.equals("zl")){
-					ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 				}else if(a.equals("waitforwriting")){
 					WAIT_FOR_WRITING=Tools.parseBoolean(b);
 				}else{
@@ -300,10 +298,10 @@ public class ChromArrayMaker {
 		
 		final boolean OLD_SPLIT_READS=FastaReadInputStream.SPLIT_READS;
 		FastaReadInputStream.SPLIT_READS=false;
-		final int oldNum=Shared.READ_BUFFER_NUM_BUFFERS;
-		Shared.READ_BUFFER_NUM_BUFFERS=4;
-		final CrisWrapper criswrapper=new CrisWrapper(-1, false, false, ffin, null, null, null);
-		Shared.READ_BUFFER_NUM_BUFFERS=oldNum;
+		final int oldNum=Shared.numBuffers();
+		Shared.setBuffers(4);
+		final CrisWrapper criswrapper=new CrisWrapper(-1, false, ffin, null, null, null);
+		Shared.setBuffers(oldNum);
 		
 		
 		int chrom=1;
@@ -373,12 +371,7 @@ public class ChromArrayMaker {
 			if(writeChroms){
 				String x=outRoot+"chr"+chrom+Data.chromExtension();
 				if(new File(x).exists() && !overwrite){throw new RuntimeException("Tried to overwrite existing file "+x+", but overwrite=false.");}
-				if(Data.CHROMC){
-					ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(ca);
-					ReadWrite.writeObjectInThread(cac, x, false);
-				}else{
-					ReadWrite.writeObjectInThread(ca, x, false);
-				}
+				ReadWrite.writeObjectInThread(ca, x, false);
 				System.err.println("Writing chunk "+chrom);
 			}
 			chrom++;
@@ -459,7 +452,7 @@ public class ChromArrayMaker {
 	
 	private ChromosomeArray makeNextChrom(CrisWrapper criswrapper, int chrom, TextStreamWriter infoWriter, TextStreamWriter scafWriter, ArrayList<String> infolist, ArrayList<String> scaflist){
 		assert(FastaReadInputStream.SPLIT_READS==false);
-		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING, false);
+		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING);
 		ca.maxIndex=-1;
 		for(int i=0; i<START_PADDING; i++){ca.set(i, 'N');}
 		

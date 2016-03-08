@@ -13,6 +13,8 @@ public final class IntList{
 		array=new int[initial];
 	}
 	
+	public void clear(){size=0;}
+	
 	public final void set(int loc, int value){
 		if(loc>=array.length){
 			resize((loc+1)*2);
@@ -80,6 +82,10 @@ public final class IntList{
 	}
 	
 	public String toString(){
+		return toStringListView();
+	}
+	
+	public String toStringSetView(){
 		StringBuilder sb=new StringBuilder();
 		sb.append('[');
 		String comma="";
@@ -93,8 +99,48 @@ public final class IntList{
 		return sb.toString();
 	}
 	
+	public String toStringListView(){
+		StringBuilder sb=new StringBuilder();
+		sb.append('[');
+		String comma="";
+		for(int i=0; i<size; i++){
+				sb.append(comma+array[i]);
+				comma=", ";
+		}
+		sb.append(']');
+		return sb.toString();
+	}
+	
 	public void sort() {
 		if(size>1){Arrays.sort(array, 0, size);}
+	}
+	
+	/** Assumes this is sorted.
+	 * Reduces the list to a set of unique values;
+	 * stores their counts in a second list. */
+	public void getUniqueCounts(IntList counts) {
+		counts.size=0;
+		if(size<=0){return;}
+
+		int unique=1;
+		int count=1;
+		
+		for(int i=1; i<size; i++){
+			assert(array[i]>=array[i-1]);
+			if(array[i]==array[i-1]){
+				count++;
+			}else{
+				array[unique]=array[i];
+				unique++;
+				counts.add(count);
+				count=1;
+			}
+		}
+		if(count>0){
+			counts.add(count);
+		}
+		size=unique;
+		assert(counts.size==size);
 	}
 	
 	private static final int min(int x, int y){return x<y ? x : y;}

@@ -15,7 +15,6 @@ import dna.AminoAcid;
 import dna.FastaToChromArrays2;
 import dna.Parser;
 import dna.Timer;
-import fileIO.ByteFile;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 
@@ -30,7 +29,7 @@ public final class AssemblyStats2 {
 	/*--------------------------------------------------------------*/
 	
 	private static void printOptions(){
-		System.out.println("\nUsage: java -Xmx120m jgi.AssemblyStats3 <input file>");
+		System.out.println("\nUsage: java -Xmx120m jgi.AssemblyStats2 <input file>");
 		System.out.println("\nOptional flags:");
 		System.out.println("in=<file>    \tThe 'in=' flag is only needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
 		System.out.println("format=1     \tUses variable units like MB and KB, and is designed for compatibility with existing tools.");
@@ -39,6 +38,7 @@ public final class AssemblyStats2 {
 		System.out.println("format=4     \tLike 3 but with scaffold data only.");
 		System.out.println("format=5     \tLike 3 but with contig data only.");
 		System.out.println("format=6     \tLike 3 but the header starts with a #.");
+		System.out.println("format=7     \tLike 1 but without scaffold data.");
 		System.out.println("gc=<file>    \tPrint gc statistics per scaffold to a file (or stdout).");
 		System.out.println("gcformat=1   \tid start stop A C G T N GC");
 		System.out.println("gcformat=2   \tid gc");
@@ -64,6 +64,7 @@ public final class AssemblyStats2 {
 	
 	public AssemblyStats2(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
@@ -89,11 +90,15 @@ public final class AssemblyStats2 {
 				
 				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseCommonStatic(arg, a, b)){
+					//do nothing
 				}else if(Parser.parseZip(arg, a, b)){
+					//do nothing
+				}else if(Parser.parseQuality(arg, a, b)){
 					//do nothing
 				}else if(arg.contains("=") && (a.equals("in") || a.equals("ref"))){
 					in=b;
-				}else if(a.equals("gc")){
+				}else if(a.equals("gc") || a.equals("gcout")){
 					gc=b;
 					if(b==null || "summaryonly".equalsIgnoreCase(b) || "none".equalsIgnoreCase(b)){
 						gc=null;
@@ -130,8 +135,8 @@ public final class AssemblyStats2 {
 					}
 				}else if(a.equals("format")){
 					FORMAT=Integer.parseInt(b);
-					if(FORMAT<1 || FORMAT>6){
-						throw new RuntimeException("\nUnknown format: "+FORMAT+"; valid values are 1 through 6.\n");
+					if(FORMAT<0 || FORMAT>7){
+						throw new RuntimeException("\nUnknown format: "+FORMAT+"; valid values are 1 through 7.\n");
 					}
 				}else if(a.equals("gcformat")){
 					GCFORMAT=Integer.parseInt(b);
@@ -146,8 +151,6 @@ public final class AssemblyStats2 {
 					overwrite=Tools.parseBoolean(b);
 				}else if(a.equals("n_")){
 					N_UNDERSCORE=Tools.parseBoolean(b);
-				}else if(a.equals("bf2")){
-					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
 				}else if(a.equals("header") || a.equals("useheader")){
 					useheader=Tools.parseBoolean(b);
 				}else if(a.equals("addfilename") || a.equals("addname")){
@@ -183,6 +186,11 @@ public final class AssemblyStats2 {
 				}
 			}
 		}
+		
+		{//Process parser fields
+			Parser.processQuality();
+		}
+		
 		minScaffold=MINSCAF_;
 		gcbins=GCBINS_;
 		
@@ -262,7 +270,7 @@ public final class AssemblyStats2 {
 //			System.err.println("\nclist="+clist+"\nslist="+slist+"\nsclist1="+sclist1+"\nsclist2="+sclist2+"\nllist="+llist+"\ntlist="+tlist+"\n"); //***
 //			System.err.println("\nclist.size="+clist.size+"\nslist.size="+slist.size+"\nsclist1.size="+sclist1.size+"\nsclist2.size="+sclist2.size+"\nllist.size="+llist.size+"\ntlist.size()="+tlist.size()+"\n"); //***
 			printResults(t, counts, sum, gc_std, in, clist, slist, sclist1, sclist2, llist, tlist, out);
-			
+//			System.err.println("Printed results to "+out);
 			writeHistFile(scaffoldHistFile, slist, tlist, false);
 			
 			if(gchistFile!=null){printGCHist(gchistFile);}
@@ -271,19 +279,30 @@ public final class AssemblyStats2 {
 	
 	/*--------------------------------------------------------------*/
 	
-	public long[] countFasta(final InputStream is, final String out) throws IOException{
+	public long[] countFasta(final InputStream is, String gcout) throws IOException{
 		
 		long limsum=0;
 		long headerlen=0;
-		final byte[] buf=new byte[32768]; 
-		final TextStreamWriter tsw=(out==null ? null : new TextStreamWriter(out, overwrite, false, false));
-		if(tsw!=null){
-			tsw.start();
-			tsw.println("#A\tC\tG\tT\tN\tIUPAC\tOther\tGC");
+		final byte[] buf=new byte[32768];
+		final TextStreamWriter tswgc=(gcout==null ? null : new TextStreamWriter(gcout, overwrite, false, false));
+		if(tswgc!=null){
+			tswgc.start();
+			if(GCFORMAT==0 || GCFORMAT==1){
+				tswgc.println("#Name\tLength\tA\tC\tG\tT\tN\tIUPAC\tOther\tGC");
+			}else if(GCFORMAT==2){
+				tswgc.println("#Name\tGC");
+			}else if(GCFORMAT==3){
+				tswgc.println("#Name\tLength\tA\tC\tG\tT\tN\tIUPAC\tOther\tGC");
+			}else if(GCFORMAT==4){
+				tswgc.println("#Name\tLength\tGC");
+			}else{
+				throw new RuntimeException("Unknown format.");
+			}
 		}
+//		assert(false) : GCFORMAT+", "+out+", "+tswgc;
 		final long[] counts=new long[8];
 		final long[] overall=new long[8];
-		final StringBuilder hdr=(out==null ? null : new StringBuilder());
+		final StringBuilder hdr=(gcout==null ? null : new StringBuilder());
 		boolean hdmode=false;
 		
 		int i=0;
@@ -382,7 +401,7 @@ public final class AssemblyStats2 {
 
 
 								if(hdr!=null){
-									tsw.print(toString2(hdr, counts));
+									tswgc.print(toString2(hdr, counts));
 									headerlen+=hdr.length();
 									hdr.setLength(0);
 								}
@@ -504,7 +523,7 @@ public final class AssemblyStats2 {
 //				sclist2.increment(scaffoldlen, contiglensum);
 
 				if(hdr!=null){
-					tsw.print(toString2(hdr, counts));
+					tswgc.print(toString2(hdr, counts));
 					hdr.setLength(0);
 				}
 
@@ -527,9 +546,14 @@ public final class AssemblyStats2 {
 //		System.err.println("clist="+clist+"\nslist="+slist+"\nsclist1="+sclist1+"\nsclist2="+sclist2+"\nllist="+llist+"\ntlist="+tlist); //***
 		
 		
-		if(tsw!=null){
-			tsw.poison();
-			tsw.waitForFinish();
+		if(tswgc!=null){
+			if(tswgc.fname.equalsIgnoreCase("stdout") || tswgc.fname.startsWith("stdout.")){
+				if(FORMAT>0 && (out==null || out.equalsIgnoreCase("stdout") || out.startsWith("stdout."))){
+					tswgc.print("\n");
+				}
+			}
+			tswgc.poison();
+			tswgc.waitForFinish();
 		}
 		LIMSUM=limsum;
 		HEADERLENSUM=headerlen;
@@ -645,9 +669,12 @@ public final class AssemblyStats2 {
 		if(FORMAT<3){
 			sb.append("Main genome scaffold total:         \t"+scaffolds+"\n");
 			sb.append("Main genome contig total:           \t"+contigs+"\n");
+		}else if(FORMAT==7){
+			sb.append("Main genome contig total:           \t"+contigs+"\n");
 		}
 		
-		if(FORMAT==1){
+		if(FORMAT==0){
+		}else if(FORMAT==1){
 			sb.append("Main genome scaffold sequence total:\t"+String.format("%.3f MB",scaflen/1000000f)+"\n");
 			sb.append("Main genome contig sequence total:  \t"+String.format("%.3f MB  \t%.3f%% gap",contiglen/1000000f,(scaflen-contiglen)*100f/scaflen)+"\n");
 		}else if(FORMAT==2){
@@ -659,17 +686,59 @@ public final class AssemblyStats2 {
 			
 		}else if(FORMAT==5){
 			
+		}else if(FORMAT==7){
+			sb.append("Main genome contig sequence total:  \t"+String.format("%.3f MB",contiglen/1000000f)+"\n");
 		}else{throw new RuntimeException("Unknown format");}
 		
 		if(FORMAT<3){
-			sb2.append("\nMinimum \tNumber        \tNumber        \tTotal         \tTotal         \tScaffold\n");
+			sb2.append("\n");
+			sb2.append("Minimum \tNumber        \tNumber        \tTotal         \tTotal         \tScaffold\n");
 			sb2.append("Scaffold\tof            \tof            \tScaffold      \tContig        \tContig  \n");
 			sb2.append("Length  \tScaffolds     \tContigs       \tLength        \tLength        \tCoverage\n");
 			sb2.append("--------\t--------------\t--------------\t--------------\t--------------\t--------\n");
+		}else if(FORMAT==7){
+			sb2.append("\n");
+			sb2.append("Minimum \tNumber        \tTotal         \n");
+			sb2.append("Contig  \tof            \tContig        \n");
+			sb2.append("Length  \tContigs       \tLength        \n");
+			sb2.append("--------\t--------------\t--------------\n");
 		}
 		
-		int[] lims=new int[] {0, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 
-				250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000};
+		final int[] lims;
+		
+		if(FORMAT==7){
+			int minScaf=-1;
+			for(int i=0; i<carray.length && minScaf<0; i++){
+				long x=sarray[i];
+				if(x>0){minScaf=i;}
+			}
+			if(minScaf<0 && !tlist.isEmpty()){
+				minScaf=(int)Tools.min(tlist.get(0).length, 250000000);
+			}
+			if(minScaf<1){minScaf=1;}
+			int[] temp=new int[] {0, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 
+					250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000};
+			ArrayList<Integer> tempList=new ArrayList<Integer>();
+			tempList.add(0);
+			for(int i=1; i<temp.length; i++){
+				int x=temp[i];
+				int prev=temp[i-1];
+				if(x>=minScaf || i==temp.length-1){
+					if(prev<minScaf){
+						tempList.add(minScaf);
+					}else{
+						tempList.add(x);
+					}
+				}
+			}
+			lims=new int[tempList.size()];
+			for(int i=0; i<lims.length; i++){
+				lims[i]=tempList.get(i);
+			}
+		}else{
+			lims=new int[] {0, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 
+					250000, 500000, 1000000, 2500000, 5000000, 10000000, 25000000, 50000000, 100000000, 250000000};
+		}
 		
 		int lidx=0;
 		int next=0;
@@ -685,7 +754,9 @@ public final class AssemblyStats2 {
 		
 		long shalf=slen/2;
 		long chalf=clen/2;
-		
+
+		final int numOverCutoff=(FORMAT==7 ? 1000 : 50000);
+		final int numOverCutoffPlusOne=numOverCutoff+1;
 		long numOver50=0;
 		float fractionOver50=0;
 		
@@ -729,9 +800,11 @@ public final class AssemblyStats2 {
 				if(i==next){
 					prevLine=formatX(next, ssum, csum, slen, clen);
 //					if(!skipDuplicateLines || ssum!=prevSsum || csum!=prevCsum || slen!=prevSlen || clen!=prevClen){
+					if(prevLine!=null){
 						sb2.append(prevLine);
 						sb2.append('\n');
 						prevLine=null;
+					}
 //					}
 					prevSsum=ssum; prevCsum=csum; prevSlen=slen; prevClen=clen;
 					
@@ -739,11 +812,11 @@ public final class AssemblyStats2 {
 					if(lidx<lims.length){next=lims[lidx];}
 					else{next=-1;}
 					//				System.out.println("<A2>\ti="+i+", lidx="+lidx+", lims.length="+lims.length+", next="+next+", sarray.length="+sarray.length+", slen="+slen);
-					//				System.out.println(sb2);
+					//				System.out.prontln(sb2);
 				}
 				//			System.out.println("<A3>\ti="+i+", lidx="+lidx+", lims.length="+lims.length+", next="+next+", sarray.length="+sarray.length+", slen="+slen);
 
-				if(i==50001){
+				if(i==numOverCutoffPlusOne){
 					numOver50=ssum;
 					fractionOver50=slen*100f/scaflen;
 				}
@@ -776,9 +849,11 @@ public final class AssemblyStats2 {
 					
 					prevLine=formatX(next, ssum, csum, slen, clen);
 //					if(!skipDuplicateLines || ssum!=prevSsum || csum!=prevCsum || slen!=prevSlen || clen!=prevClen){
-						sb2.append(prevLine);
-						sb2.append('\n');
-						prevLine=null;
+						if(prevLine!=null){
+							sb2.append(prevLine);
+							sb2.append('\n');
+							prevLine=null;
+						}
 //					}
 					prevSsum=ssum; prevCsum=csum; prevSlen=slen; prevClen=clen;
 					
@@ -788,7 +863,7 @@ public final class AssemblyStats2 {
 					//				else{next=-1;}
 				}
 
-				if(numOver50==0 && tp.length>50000){
+				if(numOver50==0 && tp.length>numOverCutoff){
 					numOver50=ssum;
 					fractionOver50=slen*100f/scaflen;
 				}
@@ -847,9 +922,15 @@ public final class AssemblyStats2 {
 		ln50=Tools.max(ln50, 0);
 		cl50=Tools.max(cl50, 0);
 		ll50=Tools.max(ll50, 0);
-		
-		if(FORMAT<3){
 
+//		ByteStreamWriter tsw=new ByteStreamWriter((out==null ? "stdout" : out) , overwrite, append, false);
+		TextStreamWriter tsw=new TextStreamWriter((out==null ? "stdout" : out) , overwrite, append, false);
+		tsw.start();
+		
+		if(FORMAT<1){
+			//Do nothing
+		}else if(FORMAT<3){
+			
 			if(addfilename){sb.append("Filename:                           \t"+name+"\n");}
 			sb.append("Main genome scaffold N/L50:         \t"+ll50+"/"+formatKB(ln50, 3, 0)+"\n");
 			sb.append("Main genome contig N/L50:           \t"+cl50+"/"+formatKB(cn50, 3, 0)+"\n");
@@ -874,15 +955,15 @@ public final class AssemblyStats2 {
 				//Print nothing
 			}else{
 				if(GCFORMAT==1 || GCFORMAT==3 || GCFORMAT==4){
-					System.out.println("A\tC\tG\tT\tN\tIUPAC\tOther\tGC\tGC_stdev");
+					tsw.println("A\tC\tG\tT\tN\tIUPAC\tOther\tGC\tGC_stdev");
 				}else{
-					System.out.println("GC\tGC_stdev");
+					tsw.println("GC\tGC_stdev");
 				}
-				System.out.println(toString3(new StringBuilder(/*"Base Content"*/), counts, gc_std));
+				tsw.println(toString3(new StringBuilder(/*"Base Content"*/), counts, gc_std));
 			}
-
-			System.out.println(sb);
-			System.out.println(sb2);
+			
+			tsw.println(sb);
+			tsw.println(sb2);
 		}else if(FORMAT==3 || FORMAT==6){
 			
 			if(useheader){
@@ -926,7 +1007,7 @@ public final class AssemblyStats2 {
 			sb.append(String.format("%.5f", gc_std));
 			if(addfilename){sb.append('\t').append(name);}
 			
-			System.out.println(sb);
+			tsw.println(sb);
 		}else if(FORMAT==4){
 			
 			if(useheader){
@@ -967,7 +1048,7 @@ public final class AssemblyStats2 {
 			sb.append(String.format("%.3f", fractionOver50));
 //			sb.append(String.format("%.5f", (counts[1]+counts[2])*1.0/(counts[0]+counts[1]+counts[2]+counts[3])));
 			if(addfilename){sb.append('\t').append(name);}
-			System.out.println(sb);
+			tsw.println(sb);
 		}else if(FORMAT==5){
 			
 			if(useheader){
@@ -1008,8 +1089,31 @@ public final class AssemblyStats2 {
 			sb.append(String.format("%.5f", (counts[1]+counts[2])*1.0/(counts[0]+counts[1]+counts[2]+counts[3]))+"\t");
 			sb.append(String.format("%.5f", gc_std));
 			if(addfilename){sb.append('\t').append(name);}
-			System.out.println(sb);
+			tsw.println(sb);
+		}else if(FORMAT==7){
+
+			if(addfilename){sb.append("Filename:                           \t"+name+"\n");}
+			sb.append("Main genome contig N/L50:           \t"+cl50+"/"+formatKB(cn50, 3, 0)+"\n");
+			sb.append("Max contig length:                  \t"+formatKB(maxContig, 3, 0)+"\n");
+			sb.append("Number of contigs > 1 KB:           \t"+numOver50+"\n");
+			sb.append("% main genome in contigs > 1 KB:    \t"+String.format("%.2f%%", fractionOver50)+"\n");
+			if(printheadersize){sb.append("Header:\t"+formatKB(HEADERLENSUM, 3, 0)+(HEADERLENSUM<1000 ? " bytes" : ""));}
+			
+			if(GCFORMAT==0){
+				//Print nothing
+			}else{
+				if(GCFORMAT==1 || GCFORMAT==3 || GCFORMAT==4){
+					tsw.println("A\tC\tG\tT\tGC\tGC_stdev");
+				}else{
+					tsw.println("GC\tGC_stdev");
+				}
+				tsw.println(toString3(new StringBuilder(/*"Base Content"*/), counts, gc_std));
+			}
+
+			tsw.println(sb);
+			tsw.println(sb2);
 		}
+		tsw.poisonAndWait();
 		
 		if(showspeed){
 			if(!printheadersize){System.err.println("Header:\t"+formatKB(HEADERLENSUM, 3, 0)+(HEADERLENSUM<1000 ? " bytes" : ""));}
@@ -1161,14 +1265,14 @@ public final class AssemblyStats2 {
 		if(other>0 && otherD<0.0001){otherD=0.0001;}
 		if(GCFORMAT==0 || GCFORMAT==1){
 			return sb.append(String.format("\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", 
-					sumDef, a*invDef, c*invDef, g*invDef, t*invDef, n*invAll, iupacD, otherD, (g+c)*invDef)).toString();
+					sumAll, a*invDef, c*invDef, g*invDef, t*invDef, n*invAll, iupacD, otherD, (g+c)*invDef)).toString();
 		}else if(GCFORMAT==2){
 			return sb.append(String.format("\t%.4f\n", (g+c)*invDef)).toString();
 		}else if(GCFORMAT==3){
 			return sb.append(String.format("\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", 
-					sumDef, a*invDef, c*invDef, g*invDef, t*invDef, n*invAll, iupacD, otherD, (g+c)*invDef)).toString();
+					sumAll, a*invDef, c*invDef, g*invDef, t*invDef, n*invAll, iupacD, otherD, (g+c)*invDef)).toString();
 		}else if(GCFORMAT==4){
-			return sb.append(String.format("\t%d\t%.4f\n", sumDef, (g+c)*invDef)).toString();
+			return sb.append(String.format("\t%d\t%.4f\n", sumAll, (g+c)*invDef)).toString();
 		}else{
 			throw new RuntimeException("Unknown format.");
 		}
@@ -1183,7 +1287,10 @@ public final class AssemblyStats2 {
 		double otherD=other*invAll;
 		if(iupac>0 && iupacD<0.0001){iupacD=0.0001;}
 		if(other>0 && otherD<0.0001){otherD=0.0001;}
-		if(GCFORMAT==0 || GCFORMAT==1 || GCFORMAT==3 || GCFORMAT==4){
+		if(FORMAT==7){
+			return sb.append(String.format("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", 
+					a*invDef, c*invDef, g*invDef, t*invDef, (g+c)*invDef, gc_std)).toString();
+		}else if(GCFORMAT==0 || GCFORMAT==1 || GCFORMAT==3 || GCFORMAT==4){
 			return sb.append(String.format("%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n", 
 					a*invDef, c*invDef, g*invDef, t*invDef, n*invAll, iupacD, otherD, (g+c)*invDef, gc_std)).toString();
 		}else if(GCFORMAT==2){
@@ -1199,8 +1306,11 @@ public final class AssemblyStats2 {
 		float cov=clen*100f/slen;
 		
 		final String s;
-		if(FORMAT==1){
+		if(FORMAT<=1){
 			s=formatKB_all(next, 1, 7)+" \t"+formatComma(ssum, 14)+"\t"+formatComma(csum, 14)+"\t"+formatComma(slen, 14)+"\t"+formatComma(clen, 14)+"\t"+formatPercent(cov);
+		}else if(FORMAT==7){
+			if(next==0){return null;}
+			s=formatKB_all(next, 1, 7)+" \t"+formatComma(csum, 14)+"\t"+formatComma(clen, 14);
 		}else if(FORMAT>=2){
 			s=formatKB_all(next, 1, 7)+" \t"+formatComma(ssum, 14)+"\t"+formatComma(csum, 14)+"\t"+formatComma(slen, 14)+"\t"+formatComma(clen, 14)+"\t"+formatPercent(cov);
 		}else{
@@ -1248,7 +1358,7 @@ public final class AssemblyStats2 {
 	
 	private static final StringBuilder formatComma(long x, int width){
 		StringBuilder sb=new StringBuilder(width);
-		if(FORMAT==1){
+		if(FORMAT<=1){
 			sb.append(x%1000);
 			x/=1000;
 			int len=3;

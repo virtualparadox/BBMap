@@ -1,11 +1,9 @@
 package fileIO;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 
 import dna.Data;
 
@@ -94,6 +92,13 @@ public class TextFile {
 		br=open();
 	}
 	
+	public static final String[] toStringLines(String fname){
+		TextFile tf=new TextFile(fname);
+		String[] lines=tf.toStringLines();
+		tf.close();
+		return lines;
+	}
+	
 	public final String[] toStringLines(){
 		
 		String s=null;
@@ -169,58 +174,11 @@ public class TextFile {
 	}
 	
 	public String nextLine(){
-//		throw new RuntimeException("Please implement "+getClass()+".nextLine()");
-		return readLine();
+		return readLine(true);
 	}
 	
 	public final String readLine(){
-		String currentLine=null;
-		
-		
-		//Note:  Disabling this block seems to speed things up maybe 5%.
-//		boolean ready=false;
-//		try {
-//			ready=br.ready();
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
-//		if(!ready){return null;}
-		
-		if(!open || br==null){
-			if(Data.WINDOWS){System.err.println("Attempting to read from a closed file: "+name);}
-			return null;
-		}
-		try{
-			lineNum++;
-			currentLine=br.readLine();
-		}catch(Exception e){
-			System.err.println("Oops! Bad read in file "+name+" at line "+lineNum);
-			File f=new File(name);
-			try {
-				System.err.println("path and length: \t"+f.getAbsolutePath()+"\t"+f.length());
-			} catch (Exception e1) {
-				//e1.printStackTrace();
-			}
-			System.err.println(""+open+", "+(br==null));
-			throw new RuntimeException(e);
-		}
-		if(currentLine==null){return null;}
-//		System.out.println("Read "+line);
-		
-//		currentLine=currentLine.trim();
-		
-		//Note! This may generate a new String for every line and thus be slow.
-//		if(currentLine.trim().length()==0){return readLine();} //Skips blank lines
-		
-		if(currentLine.length()==0 || 
-				(Character.isWhitespace(currentLine.charAt(0)) && 
-						(Character.isWhitespace(currentLine.charAt(currentLine.length()-1)))) &&
-						currentLine.trim().length()==0){
-			return readLine(); //Skips blank lines
-		}
-		
-		return currentLine;
+		return readLine(true);
 	}
 	
 	public final String readLine(boolean skipBlank){
@@ -248,6 +206,12 @@ public class TextFile {
 		}catch(Exception e){
 			System.err.println("Oops! Bad read in file "+name+" at line "+lineNum);
 			System.err.println(""+open+", "+(br==null));
+			try {
+				File f=new File(name);
+				System.err.println("path and length: \t"+f.getAbsolutePath()+"\t"+f.length());
+			} catch (Exception e1) {
+				//e1.printStackTrace();
+			}
 			throw new RuntimeException(e);
 		}
 		if(currentLine==null){return null;}
@@ -277,8 +241,6 @@ public class TextFile {
 		is=ReadWrite.getInputStream(name, true, allowSubprocess);
 		isr=new InputStreamReader(is);
 		
-
-//		BufferedReader b=new BufferedReader(fr, 16384);
 		BufferedReader b=new BufferedReader(isr, 32768);
 		
 		return b;
@@ -295,14 +257,9 @@ public class TextFile {
 	
 	public InputStream is;
 	public InputStreamReader isr;
-//	public FileReader fr;
 	public BufferedReader br;
 	
 	public long lineNum=-1;
-	
-//	public BufferedInputStream bis;
-//	public FileInputStream fis;
-//	public InputStreamReader isr;
 
 	public static boolean verbose=false;
 	

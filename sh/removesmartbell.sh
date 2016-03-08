@@ -2,21 +2,23 @@
 #removesmartbell in=<infile> out=<outfile>
 
 usage(){
-	echo "Written by Brian Bushnell"
-	echo "Last modified June 17, 2014"
-	echo ""
-	echo "Description:  Remove Smart Bell adapters from PacBio reads."
-	echo ""
-	echo "Usage:	removesmartbell in=<input> out=<output> split=t"
-	echo ""
-	echo "Input may be a fasta or fastq file, compressed or uncompressed (not H5 files)."
-	echo ""
-	echo "Parameters:"
-	echo "in=file     	Specify the input file, or stdin."
-	echo "out=file    	Specify the output file, or stdout."
-	echo "split=f     	To split reads at adapters, set split=t.  To mask the adapters, set split=f."
-	echo ""
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+echo "
+Written by Brian Bushnell
+Last modified February 17, 2015
+
+Description:  Remove Smart Bell adapters from PacBio reads.
+
+Usage:  removesmartbell in=<input> out=<output> split=t
+
+Input may be a fasta or fastq file, compressed or uncompressed (not H5 files).
+
+Parameters:
+in=file         Specify the input file, or stdin.
+out=file        Specify the output file, or stdout.
+split=f         'split=t' splits reads at adapters; split=f masks adapters.
+
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
@@ -42,7 +44,7 @@ removesmartbell() {
 	#module load oracle-jdk/1.7_64bit
 	local CMD="java $EA $z -cp $CP pacbio.RemoveAdapters2 $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 removesmartbell "$@"

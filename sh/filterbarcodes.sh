@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified July 9, 2014"
+	echo "Last modified February 17, 2015"
 	echo ""
 	echo "Description: Filters barcodes by quality, and generates quality histograms."
 	echo ""
@@ -70,7 +70,7 @@ filterbarcodes() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.CorrelateBarcodes $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 filterbarcodes "$@"

@@ -57,7 +57,7 @@ convert() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.PhylipToFasta $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 convert "$@"

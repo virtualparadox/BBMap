@@ -1,6 +1,5 @@
 package jgi;
 
-import java.io.File;
 import java.io.PrintStream;
 import java.util.Arrays;
 
@@ -91,35 +90,6 @@ public class SplitSam4Way {
 				}
 			}
 		}
-				
-				
-//				String line2=tf.nextLine();
-//				SamLine sl1=new SamLine(line);
-//				SamLine sl2=(line2==null ? null : new SamLine(line2));
-//				if(sl2==null){
-//					
-//				}else{
-//					if(sl1.mapped()){
-//						if(sl2.mapped()){
-//							if(sl1.strand()==sl2.strand()){
-//								chimeric.println(line);
-//								chimeric.println(line2);
-//							}else if(sl1.strand()==Gene.PLUS){
-//								plus.println(line);
-//								plus.println(line2);
-//							}else{
-//								minus.println(line);
-//								minus.println(line2);
-//							}
-//						}else{
-//							
-//						}
-//					}else{
-//						
-//					}
-//				}
-//			}
-//		}
 		
 		if(plus!=null){plus.poisonAndWait();}
 		if(minus!=null){minus.poisonAndWait();}

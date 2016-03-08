@@ -23,7 +23,7 @@ public final class SelectReads {
 		assert(!args[0].equalsIgnoreCase(args[1])) : "File names must be different.";
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		int minlen=1;

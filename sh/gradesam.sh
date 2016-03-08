@@ -41,7 +41,7 @@ function gradesam() {
 	#module load pigz
 	local CMD="java $EA -Xmx200m -cp $CP align2.GradeSamFile $@"
 #	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 gradesam "$@"

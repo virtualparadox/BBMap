@@ -46,10 +46,10 @@ public class ByteFile2 extends ByteFile {
 		t.start();
 		long lines=0;
 		long bytes=0;
-		for(long i=0; i<first; i++){tf.readLine();}
+		for(long i=0; i<first; i++){tf.nextLine();}
 		if(reprint){
 			for(long i=first; i<last; i++){
-				byte[] s=tf.readLine();
+				byte[] s=tf.nextLine();
 				if(s==null){break;}
 
 				lines++;
@@ -62,7 +62,7 @@ public class ByteFile2 extends ByteFile {
 			System.err.println("Bytes: "+bytes);
 		}else{
 			for(long i=first; i<last; i++){
-				byte[] s=tf.readLine();
+				byte[] s=tf.nextLine();
 				if(s==null){break;}
 				lines++;
 				bytes+=s.length;
@@ -126,18 +126,14 @@ public class ByteFile2 extends ByteFile {
 		return errorState;
 	}
 	
+	@Override
 	public byte[] nextLine(){
-//		throw new RuntimeException("Please implement "+getClass()+".nextLine()");
-		return readLine();
-	}
-	
-	public final byte[] readLine(){
 //		if(verbose){System.err.println("Reading line.");}
 //		byte[] r=null;
 		if(currentList==null || currentLoc>=currentList.length || currentList[currentLoc]==null){
 			boolean b=getBuffer();
 			if(!b){
-				if(verbose2){System.err.println("readLine()->getBuffer() returned false.");}
+				if(verbose2){System.err.println("nextLine()->getBuffer() returned false.");}
 				return null;
 			}
 		}

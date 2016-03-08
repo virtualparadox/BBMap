@@ -2,19 +2,21 @@
 #matrixtocolumns in1=<infile> in2=<infile> out=<outfile>
 
 usage(){
-	echo "Written by Brian Bushnell"
-	echo "Last modified November 23, 2014"
-	echo ""
-	echo "Description:  Turns identity matrices into 2-column format for plotting."
-	echo ""
-	echo "Usage:	matrixtocolumns.sh in1=<matrix1> in2=<matrix2> out=<file>"
-	echo ""
-	echo "Java Parameters:"
-	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
-	echo ""
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
-	echo ""
+echo "
+Written by Brian Bushnell
+Last modified January 21, 2015
+
+Description:  Transforms two matched identity matrices into 2-column format,
+              one row per entry, one column per matrix.
+
+Usage:  matrixtocolumns.sh in1=<matrix1> in2=<matrix2> out=<file>
+
+Java Parameters:
+-Xmx            This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
+                -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
@@ -48,7 +50,7 @@ matrixtocolumns() {
 	#module load pigz
 	local CMD="java $EA $z -cp $CP driver.CorrelateIdentity $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 matrixtocolumns "$@"

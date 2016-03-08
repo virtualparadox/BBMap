@@ -29,9 +29,7 @@ public final class BBIndex5 extends AbstractIndex {
 		
 		for(int i=0; i<args.length; i++){
 			String s=args[i].toLowerCase();
-			if(s.equals("basespace")){COLORSPACE=false;}
-			else if(s.equals("colorspace") || s.equals("cs")){COLORSPACE=true;}
-			else if(s.contains("=")){
+			if(s.contains("=")){
 				String[] split=s.split("=");
 				String a=split[0];
 				String b=split[1];
@@ -55,7 +53,7 @@ public final class BBIndex5 extends AbstractIndex {
 		
 		
 		System.err.println("Writing build "+Data.GENOME_BUILD+" "+
-				(COLORSPACE ? "COLOR" : "BASE")+"SPACE index, keylen="+k+", chrom bits="+NUM_CHROM_BITS);
+				"BASESPACE index, keylen="+k+", chrom bits="+NUM_CHROM_BITS);
 		
 		
 		int first=(NUM_CHROM_BITS==0 ? 1 : 0);
@@ -63,7 +61,7 @@ public final class BBIndex5 extends AbstractIndex {
 		
 		Data.sysout.println("Loading index for chunk "+first+"-"+MAXCHROM+", build "+Data.GENOME_BUILD);
 		index=IndexMaker5.makeIndex(Data.GENOME_BUILD, first, MAXCHROM, 
-				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, true, false, index);
+				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, true, false, index);
 
 		
 		System.err.println("Finished all chroms, may still be writing.");
@@ -95,12 +93,12 @@ public final class BBIndex5 extends AbstractIndex {
 		assert(minChrom<=maxChrom);
 		Data.sysout.println("Loading index for chunk "+minChrom+"-"+maxChrom+", build "+Data.GENOME_BUILD);
 		index=IndexMaker5.makeIndex(Data.GENOME_BUILD, minChrom, maxChrom, 
-				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, writeToDisk, diskInvalid, index);
+				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, writeToDisk, diskInvalid, index);
 
 	}
 	
 	/** Calculate statistics of index, such as list lengths, and find clumpy keys */
-	public static final synchronized void analyzeIndex(int minChrom, int maxChrom, boolean cs, float fractionToExclude, int k){
+	public static final synchronized void analyzeIndex(int minChrom, int maxChrom, float fractionToExclude, int k){
 
 		assert(lengthHistogram==null);
 		assert(COUNTS==null);
@@ -111,8 +109,8 @@ public final class BBIndex5 extends AbstractIndex {
 		maxChrom=maxChrom(maxChrom);
 		
 		for(int key=0; key<KEYSPACE; key++){
-			int rkey=KeyRing.reverseComplementKey(key, k, cs);
-			assert(key==KeyRing.reverseComplementKey(rkey, k, cs));
+			int rkey=KeyRing.reverseComplementKey(key, k);
+			assert(key==KeyRing.reverseComplementKey(rkey, k));
 			
 			if(key<=rkey){
 				
@@ -174,7 +172,7 @@ public final class BBIndex5 extends AbstractIndex {
 		
 		lengthHistogram=Tools.makeLengthHistogram3(COUNTS, 1000, verbose2);
 		
-		if(verbose2){System.err.println("lengthHistogram: "+Arrays.toString(lengthHistogram));}
+		//if(verbose2){System.err.println("lengthHistogram: "+Arrays.toString(lengthHistogram));}
 		
 		if(REMOVE_FREQUENT_GENOME_FRACTION){
 
@@ -196,7 +194,7 @@ public final class BBIndex5 extends AbstractIndex {
 	
 	/** Returns the filename for the block holding this chrom */
 	public static final String fname(int chrom, int k){
-		return IndexMaker5.fname(minChrom(chrom), maxChrom(chrom), k, NUM_CHROM_BITS, COLORSPACE);
+		return IndexMaker5.fname(minChrom(chrom), maxChrom(chrom), k, NUM_CHROM_BITS);
 	}
 	
 	/** Ensure key offsets are strictly ascending. */
@@ -396,7 +394,7 @@ public final class BBIndex5 extends AbstractIndex {
 	public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual,  byte[] baseScoresP, int[] keyScoresP, int[] offsetsP, boolean obeyLimits, long id){
 		
 		assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
-		final int[] keysOriginal=KeyRing.makeKeys(basesP, offsetsP, KEYLEN, COLORSPACE);
+		final int[] keysOriginal=KeyRing.makeKeys(basesP, offsetsP, KEYLEN);
 		int[] keysP=Arrays.copyOf(keysOriginal, keysOriginal.length);
 
 		initialKeys+=offsetsP.length;
@@ -501,7 +499,7 @@ public final class BBIndex5 extends AbstractIndex {
 		//assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
 		//Reverse the offsets for minus-strand mapping, since they are generated based on quality
 		int[] offsetsM=KeyRing.reverseOffsets(offsetsP, KEYLEN, basesP.length);
-		final int[] keysM=(COLORSPACE ? KeyRing.makeKeys(basesM, offsetsM, KEYLEN, COLORSPACE) : KeyRing.reverseComplementKeys(keysP, KEYLEN, COLORSPACE));
+		final int[] keysM=KeyRing.reverseComplementKeys(keysP, KEYLEN);
 		
 //		assert(checkOffsets(offsetsP)) : Arrays.toString(offsetsP);
 //		assert(checkOffsets(offsetsM)) : Arrays.toString(offsetsM);
@@ -1886,7 +1884,7 @@ public final class BBIndex5 extends AbstractIndex {
 		if(useQuality){
 			//These lines apparently MUST be used if quality is used later on for slow align.
 			if(USE_AFFINE_SCORE){return msa.maxQuality(baseScores);}
-			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5)+Tools.sum(baseScores);}
+			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5)+Tools.sumInt(baseScores);}
 		}else{
 			if(USE_AFFINE_SCORE){return msa.maxQuality(readlen);}
 			if(USE_EXTENDED_SCORE){return readlen*(BASE_HIT_SCORE+BASE_HIT_SCORE/5);}

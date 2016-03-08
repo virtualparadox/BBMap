@@ -2,12 +2,18 @@ package kmer;
 
 import java.util.ArrayList;
 
+import align2.Tools;
+
+import dna.CoverageArray;
+import fileIO.ByteStreamWriter;
+import fileIO.TextStreamWriter;
+
 /**
  * @author Brian Bushnell
  * @date Oct 22, 2013
  *
  */
-public class KmerLink {
+public class KmerLink extends AbstractKmerTable {
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
@@ -19,18 +25,25 @@ public class KmerLink {
 	
 	public KmerLink(long pivot_, int value_){
 		pivot=pivot_;
-		count=value_;
+		value=value_;
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Public Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	@Override
+	public final int incrementAndReturnNumCreated(long kmer) {
+		int x=increment(kmer);
+		return x==1 ? 1 : 0;
+	}
+	
+	@Override
 	public int increment(long kmer){
-		if(pivot<0){pivot=kmer; return (count=1);} //Allows initializing empty nodes to -1
+		if(pivot<0){pivot=kmer; return (value=1);} //Allows initializing empty nodes to -1
 		if(kmer==pivot){
-			if(count<Integer.MAX_VALUE){count++;}
-			return count;
+			if(value<Integer.MAX_VALUE){value++;}
+			return value;
 		}
 		if(next==null){next=new KmerLink(kmer, 1); return 1;}
 		return next.increment(kmer);
@@ -41,19 +54,19 @@ public class KmerLink {
 	/*--------------------------------------------------------------*/
 	
 	/** Returns number of nodes added */
-	int set(long kmer, int value){
-		if(pivot<0){pivot=kmer; count=value; return 1;} //Allows initializing empty nodes to -1
-		if(kmer==pivot){count=value; return 0;}
-		if(next==null){next=new KmerLink(kmer, value); return 1;}
-		return next.set(kmer, value);
+	public int set(long kmer, int value_){
+		if(pivot<0){pivot=kmer; value=value_; return 1;} //Allows initializing empty nodes to -1
+		if(kmer==pivot){value=value_; return 0;}
+		if(next==null){next=new KmerLink(kmer, value_); return 1;}
+		return next.set(kmer, value_);
 	}
 	
 	/** Returns number of nodes added */
-	int setIfNotPresent(long kmer, int value){
-		if(pivot<0){pivot=kmer; count=value; return 1;} //Allows initializing empty nodes to -1
+	public int setIfNotPresent(long kmer, int value_){
+		if(pivot<0){pivot=kmer; value=value_; return 1;} //Allows initializing empty nodes to -1
 		if(kmer==pivot){return 0;}
-		if(next==null){next=new KmerLink(kmer, value); return 1;}
-		return next.setIfNotPresent(kmer, value);
+		if(next==null){next=new KmerLink(kmer, value_); return 1;}
+		return next.setIfNotPresent(kmer, value_);
 	}
 	
 	KmerLink get(long kmer){
@@ -68,12 +81,7 @@ public class KmerLink {
 		return next.insert(n);
 	}
 	
-	int getCount(long kmer){
-		KmerLink node=get(kmer);
-		return node==null ? 0 : node.count;
-	}
-	
-	boolean contains(long kmer){
+	public boolean contains(long kmer){
 		KmerLink node=get(kmer);
 		return node!=null;
 	}
@@ -88,13 +96,143 @@ public class KmerLink {
 		if(next!=null){next.traverseInfix(list);}
 	}
 	
-	boolean canRebalance() {
-		return false;
-	}
+	/*--------------------------------------------------------------*/
+	/*----------------   Resizing and Rebalancing   ----------------*/
+	/*--------------------------------------------------------------*/
 	
+	@Override
 	boolean canResize() {
 		return false;
 	}
+	
+	@Override
+	public boolean canRebalance() {
+		return true;
+	}
+	
+	@Deprecated
+	@Override
+	public int arrayLength() {
+		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Deprecated
+	@Override
+	void resize() {
+		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Deprecated
+	@Override
+	public void rebalance() {
+		throw new RuntimeException("Please call rebalance(ArrayList<KmerNode>) instead, with an empty list.");
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Ownership           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final void initializeOwnership(){
+		//do nothing
+	}
+	
+	@Override
+	public final int setOwner(final long kmer, final int newOwner){
+		KmerLink n=get(kmer);
+		assert(n!=null);
+		if(n.owner<=newOwner){
+			synchronized(n){
+				if(n.owner<newOwner){
+					n.owner=newOwner;
+				}
+			}
+		}
+		return n.owner;
+	}
+	
+	@Override
+	public final boolean clearOwner(final long kmer, final int owner){
+		KmerLink n=get(kmer);
+		assert(n!=null);
+		synchronized(n){
+			if(n.owner==owner){
+				n.owner=-1;
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	@Override
+	public final int getOwner(final long kmer){
+		KmerLink n=get(kmer);
+		assert(n!=null);
+		return n.owner;
+	}
+	
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public int set(long kmer, int[] vals) {
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	@Override
+	public final int getValue(long kmer){
+		KmerLink n=get(kmer);
+		return n==null ? -1 : n.value;
+	}
+	
+	@Override
+	public final int[] getValues(long kmer, int[] singleton){
+		KmerLink n=get(kmer);
+		if(n==null){return null;}
+		singleton[0]=n.value;
+		return singleton;
+	}
+	
+	@Override
+	public final long size() {
+		if(value<1){return 0;}
+		long size=1;
+		if(next!=null){size+=next.size();}
+		return size;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Info Dumping         ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public final boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+		if(value<1){return true;}
+		if(value>=mincount){bsw.printlnKmer(pivot, value, k);}
+		if(next!=null){next.dumpKmersAsBytes(bsw, k, mincount);}
+		return true;
+	}
+	
+	@Override
+	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount) {
+		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount));
+		return true;
+	}
+	
+	private final StringBuilder dumpKmersAsText(StringBuilder sb, int k, int mincount){
+		if(value<1){return sb;}
+		if(sb==null){sb=new StringBuilder(32);}
+		if(value>=mincount){sb.append(AbstractKmerTable.toText(pivot, value, k)).append('\n');}
+		if(next!=null){next.dumpKmersAsText(sb, k, mincount);}
+		return sb;
+	}
+	
+	@Override
+	public final void fillHistogram(CoverageArray ca, int max){
+		if(value<1){return;}
+		ca.increment(Tools.min(value, max));
+		if(next!=null){next.fillHistogram(ca, max);}
+	}
+	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Private Methods        ----------------*/
@@ -117,7 +255,7 @@ public class KmerLink {
 	/*--------------------------------------------------------------*/
 	
 	long pivot;
-	int count;
+	int value;
+	int owner=-1;
 	KmerLink next;
-	
 }

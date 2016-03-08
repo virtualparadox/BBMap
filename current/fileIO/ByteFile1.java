@@ -43,10 +43,10 @@ public class ByteFile1 extends ByteFile {
 		t.start();
 		long lines=0;
 		long bytes=0;
-		for(long i=0; i<first; i++){tf.readLine();}
+		for(long i=0; i<first; i++){tf.nextLine();}
 		if(reprint){
 			for(long i=first; i<last; i++){
-				byte[] s=tf.readLine();
+				byte[] s=tf.nextLine();
 				if(s==null){break;}
 
 				lines++;
@@ -59,7 +59,7 @@ public class ByteFile1 extends ByteFile {
 			System.err.println("Bytes: "+bytes);
 		}else{
 			for(long i=first; i<last; i++){
-				byte[] s=tf.readLine();
+				byte[] s=tf.nextLine();
 				if(s==null){break;}
 				lines++;
 				bytes+=s.length;
@@ -105,7 +105,6 @@ public class ByteFile1 extends ByteFile {
 		if(!open){return errorState;}
 		open=false;
 		assert(is!=null);
-		
 		errorState|=ReadWrite.finishReading(is, name(), allowSubprocess());
 		
 		is=null;
@@ -114,12 +113,8 @@ public class ByteFile1 extends ByteFile {
 		return errorState;
 	}
 	
+	@Override
 	public byte[] nextLine(){
-//		throw new RuntimeException("Please implement "+getClass()+".nextLine()");
-		return readLine();
-	}
-	
-	public final byte[] readLine(){
 		if(verbose){System.err.println("Reading line "+this.getClass().getName()+" for "+name()+"; open="+open+"; errorState="+errorState);}
 		
 		if(!open || is==null){
@@ -127,7 +122,7 @@ public class ByteFile1 extends ByteFile {
 			return null;
 		}
 
-//		System.out.println("\nCalled readLine() for line "+lineNum);
+//		System.out.println("\nCalled nextLine() for line "+lineNum);
 //		System.out.println("A: bstart="+bstart+", bstop="+bstop);
 		
 		if(bstart<bstop && lasteol==slashr && buffer[bstart]==slashn){bstart++;}
@@ -154,7 +149,7 @@ public class ByteFile1 extends ByteFile {
 		lineNum++;
 		if(bstart==nlpos){//Empty line.
 			bstart=nlpos+1;
-			return null;
+			return blankLine;
 		}
 		byte[] line=Arrays.copyOfRange(buffer, bstart, nlpos);
 		assert(line.length>0) : bstart+", "+nlpos;
@@ -227,6 +222,7 @@ public class ByteFile1 extends ByteFile {
 	
 	private boolean open=false;
 	private byte[] buffer=new byte[16384];
+	private static final byte[] blankLine=new byte[0];
 	private int bstart=0, bstop=0;
 	public InputStream is;
 	public long lineNum=-1;

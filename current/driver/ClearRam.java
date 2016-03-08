@@ -40,7 +40,7 @@ public class ClearRam {
 	
 	public static void writeJunk(int megs){
 		try {
-			long[] old=(long[]) ReadWrite.readObject("JUNK"+megs+".long");
+			long[] old=(long[]) ReadWrite.readObject("JUNK"+megs+".long", false);
 			for(int i=1; i<old.length; i++){
 				assert(old[i]==old[i-1]+1);
 			}

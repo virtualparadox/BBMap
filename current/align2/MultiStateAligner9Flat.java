@@ -18,15 +18,7 @@ public final class MultiStateAligner9Flat extends MSA{
 		
 		byte[] original=ref;
 		
-		boolean colorspace=false;
-		
-		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
-			colorspace=true;
-			read=AminoAcid.toColorspace(read);
-			ref=AminoAcid.toColorspace(ref);
-		}
-		
-		MultiStateAligner9Flat msa=new MultiStateAligner9Flat(read.length, ref.length, colorspace);
+		MultiStateAligner9Flat msa=new MultiStateAligner9Flat(read.length, ref.length);
 		
 		System.out.println("Initial: ");
 		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
@@ -43,7 +35,6 @@ public final class MultiStateAligner9Flat extends MSA{
 		int[] score=null;
 		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
-		if(colorspace){System.out.println(new String(original));}
 		System.out.println(new String(ref));
 		System.out.println(new String(read));
 		System.out.println(new String(out));
@@ -51,8 +42,8 @@ public final class MultiStateAligner9Flat extends MSA{
 	}
 	
 	
-	public MultiStateAligner9Flat(int maxRows_, int maxColumns_, boolean colorspace_){
-		super(maxRows_, maxColumns_, colorspace_);
+	public MultiStateAligner9Flat(int maxRows_, int maxColumns_){
+		super(maxRows_, maxColumns_);
 		
 		{
 			int[][][] packed0=null;
@@ -1138,9 +1129,9 @@ public final class MultiStateAligner9Flat extends MSA{
 				if(c==r){
 					out[outPos]='m';
 				}else{
-					if(!AminoAcid.isFullyDefined(c, colorspace)){
+					if(!AminoAcid.isFullyDefined(c)){
 						out[outPos]='N';
-					}else if(!AminoAcid.isFullyDefined(r, colorspace)){
+					}else if(!AminoAcid.isFullyDefined(r)){
 //						out[outPos]='X';
 						out[outPos]='N';
 					}else{
@@ -2196,7 +2187,7 @@ public final class MultiStateAligner9Flat extends MSA{
 
 	@Override
 	public final int maxQuality(byte[] baseScores){
-		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sum(baseScores);
+		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sumInt(baseScores);
 	}
 
 	@Override
@@ -2387,7 +2378,7 @@ public final class MultiStateAligner9Flat extends MSA{
 	public static final int POINTS_MATCH2=100;
 	public static final int POINTS_COMPATIBLE=50;
 	public static final int POINTS_SUB=-87;
-	public static final int POINTS_SUBR=-89; //increased penalty if prior match streak was at most 1 (I have no idea why this improves things)
+	public static final int POINTS_SUBR=-89; //increased penalty if prior match streak was at most 1
 	public static final int POINTS_SUB2=-75;
 	public static final int POINTS_SUB3=-50;
 	public static final int POINTS_MATCHSUB=-10;

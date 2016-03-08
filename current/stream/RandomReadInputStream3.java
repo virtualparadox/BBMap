@@ -15,12 +15,11 @@ import align2.Tools;
  */
 public class RandomReadInputStream3 extends ReadInputStream {
 	
-	public RandomReadInputStream3(long number_, boolean paired_, boolean colorspace_){
+	public RandomReadInputStream3(long number_, boolean paired_){
 		Data.setGenome(Data.GENOME_BUILD);
 		number=number_;
 		paired=paired_;
 		maxChrom=Data.numChroms;
-		colorspace=colorspace_;
 		minQual=6;
 		midQual=18;
 		maxQual=30;
@@ -31,7 +30,7 @@ public class RandomReadInputStream3 extends ReadInputStream {
 			int maxSnps_, int maxInss_, int maxDels_, int maxSubs_,
 			float snpRate_, float insRate_, float delRate_, float subRate_,
 			int maxInsertionLen_, int maxDeletionLen_,  int maxSubLen_,
-			int minChrom_, int maxChrom_, boolean colorspace_, boolean paired_,
+			int minChrom_, int maxChrom_, boolean paired_,
 			int minQual_, int midQual_, int maxQual_){
 		Data.setGenome(Data.GENOME_BUILD);
 		number=number_;
@@ -61,7 +60,6 @@ public class RandomReadInputStream3 extends ReadInputStream {
 		delRate=delRate_;
 		subRate=subRate_;
 		
-		colorspace=colorspace_;
 		paired=paired_;
 		
 		minQual=(byte) minQual_;
@@ -123,7 +121,7 @@ public class RandomReadInputStream3 extends ReadInputStream {
 				snpRate, insRate, delRate, subRate, NRate,
 				minInsertionLen, minDeletionLen, minSubLen, minNLen,
 				maxInsertionLen, maxDeletionLen, maxSubLen, maxNLen,
-				minChrom, maxChrom, colorspace,
+				minChrom, maxChrom,
 				minQual, midQual, maxQual);
 		
 		generated+=reads.size();
@@ -185,7 +183,6 @@ public class RandomReadInputStream3 extends ReadInputStream {
 	public float subRate=0.10f;
 	public float NRate=0.10f;
 	
-	public final boolean colorspace;
 	public final boolean paired;
 
 	public final byte minQual;

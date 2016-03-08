@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 
-import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays2;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.SummaryFile;
 
@@ -19,7 +19,20 @@ import fileIO.SummaryFile;
  *
  */
 public class RefToIndex {
-
+	
+	public static final void clear(){
+		chromlist=null;
+	}
+	
+	public static String summaryLoc(int build){
+		String s=IndexMaker4.fname(1, 1, 13, 1, build);
+		String dir=new File(s).getParent();
+		dir=dir.replace('\\', '/');
+		dir=dir.replace("ref/index/", "ref/genome/");
+		String sf=dir+"/summary.txt";
+		return sf;
+	}
+	
 	public static void makeIndex(String reference, int build, PrintStream sysout, int keylen){
 		assert(reference!=null);
 		{
@@ -28,10 +41,15 @@ public class RefToIndex {
 				if(!reference.startsWith("stdin")){
 					throw new RuntimeException("Cannot read file "+f.getAbsolutePath());
 				}
+			}else{
+				FileFormat ff=FileFormat.testInput(reference, FileFormat.FA, null, false, true, true);
+				if(!ff.fasta()){
+					throw new RuntimeException("Reference file is not in fasta format: "+reference+"\n"+ff);
+				}
 			}
 		}
 
-		String s=IndexMaker4.fname(1, 1, keylen, 1, false);
+		String s=IndexMaker4.fname(1, 1, keylen, 1);
 		String dir=new File(s).getParent();
 		dir=dir.replace('\\', '/');
 		final String base=dir.substring(0, dir.length()-7);
@@ -117,9 +135,9 @@ public class RefToIndex {
 			stopPad=stopPad>-1 ? stopPad : FastaToChromArrays2.END_PADDING;
 			
 			String[] ftcaArgs=new String[] {reference, ""+build, "writeinthread=false", "genscaffoldinfo="+genScaffoldInfo, "retain", "waitforwriting=false",
-					"gzip="+(Data.CHROMGZ), "chromc="+Data.CHROMC, "maxlen="+maxChromLen,
+					"gz="+(Data.CHROMGZ), "maxlen="+maxChromLen,
 					"writechroms="+(!NODISK), "minscaf="+minScaf, "midpad="+midPad, "startpad="+startPad, "stoppad="+stopPad, "nodisk="+NODISK};
-
+			
 			chromlist=FastaToChromArrays2.main2(ftcaArgs);
 
 			ReadWrite.ZIPLEVEL=oldzl;

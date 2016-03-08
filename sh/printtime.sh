@@ -2,13 +2,16 @@
 #printtime in=<infile> out=<outfile>
 
 function usage(){
-	echo "Prints time elapsed since last called on the same file."
-	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
-	echo ""
-	echo "Usage:	printtime.sh <filename>"
-	echo ""
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+echo "
+Written by Brian Bushnell
+Last modified January 21, 2015
+
+Description:  Prints time elapsed since last called on the same file.
+
+Usage:  printtime.sh <filename>
+
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
@@ -25,7 +28,7 @@ function printtime() {
 	#module load oracle-jdk/1.7_64bit
 	local CMD="java $EA -Xmx8m -cp $CP align2.PrintTime $@"
 	echo $CMD >&2
-	$CMD
+	eval $CMD
 }
 
 printtime "$@"

@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.Read;
 
@@ -47,6 +47,8 @@ public class MergeFastaContigs {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("in") && split.length>0){
@@ -77,8 +79,8 @@ public class MergeFastaContigs {
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("padfront") || a.equals("padstart")){
 				PAD_START=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
+			}else{
+				throw new RuntimeException("Unknown argument "+arg);
 			}
 		}
 		
@@ -336,17 +338,15 @@ public class MergeFastaContigs {
 		StringBuilder temp=new StringBuilder(MIN_CONTIG_TO_ADD);
 		
 		FASTQ.TEST_INTERLEAVED=false;
-		FASTQ.PARSE_CUSTOM=false;
 		FASTQ.DETECT_QUALITY=false;
 		long maxReads=-1;
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, null);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, null);
 //			if(verbose){System.err.println("Started cris");}
-			Thread th=new Thread(cris);
-			th.start();
+			cris.start(); //4567
 		}
 		
 
@@ -414,14 +414,14 @@ public class MergeFastaContigs {
 
 			}
 			//System.err.println("returning list");
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			//System.err.println("fetching list");
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 
 		
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 		
 		assert(temp.length()==0) : temp.length();
 		printAsLines(npad2, (int)(loc%lineBreak), cout);

@@ -13,7 +13,7 @@ public class FastaReadInputStream2 extends ReadInputStream {
 	
 	public static void main(String[] args){
 		
-		FastaReadInputStream2 fris=new FastaReadInputStream2(args[0], false, true);
+		FastaReadInputStream2 fris=new FastaReadInputStream2(args[0], true);
 		
 		Read r=fris.next();
 		int i=0;
@@ -25,9 +25,7 @@ public class FastaReadInputStream2 extends ReadInputStream {
 		
 	}
 	
-	public FastaReadInputStream2(String fname, boolean colorspace_, boolean allowSubprocess_){
-//		assert(false) : "In progress";
-		colorspace=colorspace_;
+	public FastaReadInputStream2(String fname, boolean allowSubprocess_){
 		
 		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, allowSubprocess_, false);
 		
@@ -42,7 +40,7 @@ public class FastaReadInputStream2 extends ReadInputStream {
 
 	@Override
 	public void start() {
-//		if(cris!=null){new Thread(cris).start();}
+//		if(cris!=null){cris.start();}
 	}
 	
 	
@@ -256,7 +254,7 @@ public class FastaReadInputStream2 extends ReadInputStream {
 		assert(bases[0]!=carrot) : new String(bases)+"\n"+numericID+"\n"+headerA[0];
 		String hd=(currentSection>0 ? headerA[0].substring(1)+"_"+currentSection : new String(headerA[0].substring(1)));
 //		assert(currentSection==0);
-		Read r=new Read(bases, (byte)0, (byte)0, 0, 0, hd, quals, colorspace, numericID);
+		Read r=new Read(bases, (byte)0, (byte)0, 0, 0, hd, quals, numericID);
 		return r;
 	}
 	
@@ -297,7 +295,6 @@ public class FastaReadInputStream2 extends ReadInputStream {
 	public long consumed=0;
 	private long nextReadID=0;
 	
-	public final boolean colorspace;
 	private final String[] headerA=new String[1];
 	
 	public static boolean SPLIT_READS=true;

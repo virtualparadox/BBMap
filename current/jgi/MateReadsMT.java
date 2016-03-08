@@ -4,17 +4,17 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.BitSet;
 import java.util.List;
 
-import kmer.KCountArray;
-import kmer.KmerCount7MT;
+import bloom.KCountArray;
+import bloom.KmerCount7MT;
+import bloom.KmerCountAbstract;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.ReadStreamWriter;
 
@@ -74,15 +74,9 @@ public class MateReadsMT {
 			}
 		}
 		
-		FASTQ.PARSE_CUSTOM=false;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS-1;
+		Parser parser=new Parser();
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads()-1;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		
-		boolean trimRight_=false;
-		boolean trimLeft_=false;
-		boolean setPigz=false;
-		byte trimq_=trimq;
-		int minReadLength_=0;
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
@@ -92,7 +86,17 @@ public class MateReadsMT {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQualityAdjust(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
+			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
@@ -130,8 +134,10 @@ public class MateReadsMT {
 				MIN_QUALITY=(byte)Integer.parseInt(b);
 			}else if(a.startsWith("minqo")){
 				MIN_QUALITY_FOR_OVERLAP=(byte)Integer.parseInt(b);
+			}else if(a.equals("maxq")){
+				Read.MAX_MERGE_QUALITY=(byte)Integer.parseInt(b);
 			}else if(a.startsWith("minprob")){
-				KmerCount7MT.minProb=Float.parseFloat(b);
+				KmerCountAbstract.minProb=Float.parseFloat(b);
 			}else if(a.startsWith("hashes") || a.startsWith("multihash")){
 				hashes=Integer.parseInt(b);
 				assert(hashes>0 && hashes<25);
@@ -196,26 +202,10 @@ public class MateReadsMT {
 				OUTPUT_FAILED=Tools.parseBoolean(b);
 			}else if(a.equals("mix")){
 				MIX_BAD_AND_GOOD=Tools.parseBoolean(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				System.err.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				System.err.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					System.err.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("join")){
 				join_G=Tools.parseBoolean(b);
-			}else if(a.equals("errorcorrect") || a.equals("correcterrors") || a.equals("ecc")){
-				ecc=Tools.parseBoolean(b);
-			}else if(a.equals("ecctossbad")){
-				ecctossbad=Tools.parseBoolean(b);
 			}else if(a.equals("usemapping")){
 				USE_MAPPING=Tools.parseBoolean(b);
 			}else if(a.equals("useoverlap") || a.equals("usebases") || a.equals("matebyoverlap") || a.equals("matebybases")){
@@ -230,9 +220,6 @@ public class MateReadsMT {
 				FILL_MIDDLE_FINAL=Tools.parseBoolean(b);
 			}else if(a.equals("fillmiddle")){
 				FILL_MIDDLE_INTERMEDIATE=FILL_MIDDLE_FINAL=Tools.parseBoolean(b);
-			}else if(a.equals("parsecustom")){
-				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
-				System.err.println("Setting FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -243,93 +230,27 @@ public class MateReadsMT {
 				}else{
 					TRIM_ON_OVERLAP_FAILURE=(Tools.parseBoolean(b) ? 1 : 0);
 				}
-			}else if(a.equals("untrim")){
-				untrim=Tools.parseBoolean(b);
-			}else if(a.equals("trim") || a.equals("qtrim")){
-				if(b==null){trimRight_=trimLeft_=true;}
-				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){trimLeft_=true;trimRight_=false;}
-				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){trimLeft_=false;trimRight_=true;}
-				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){trimLeft_=trimRight_=true;}
-				else{trimRight_=trimLeft_=Tools.parseBoolean(b);}
-			}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
-				if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
-					TrimRead.optimalMode=true;
-					TrimRead.optimalBias=Float.parseFloat(b);
-					assert(TrimRead.optimalBias>=0 && TrimRead.optimalBias<1);
-				}else{
-					TrimRead.optimalMode=Tools.parseBoolean(b);
-				}
-			}else if(a.equals("trimright") || a.equals("qtrimright")){
-				trimRight_=Tools.parseBoolean(b);
-			}else if(a.equals("trimleft") || a.equals("qtrimleft")){
-				trimLeft_=Tools.parseBoolean(b);
-			}else if(a.equals("trimq") || a.equals("trimquality")){
-				trimq_=Byte.parseByte(b);
-			}else if(a.equals("q102matrix") || a.equals("q102m")){
-				CalcTrueQuality.q102matrix=b;
-			}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
-				CalcTrueQuality.qbpmatrix=b;
-			}else if(a.equals("adjustquality") || a.equals("adjq")){
-				TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
-				minReadLength_=Integer.parseInt(b);
 			}else if(a.equals("mi") || a.equals("minins") || a.equals("mininsert")){
 				minInsert=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
 		
-		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
+		{//Process parser fields
+			Parser.processQuality();
+			
+			qtrimLeft=parser.qtrimLeft;
+			qtrimRight=parser.qtrimRight;
+			trimq=parser.trimq;
+			qtrim=((qtrimLeft||qtrimRight)&&trimq>=0);
+			minReadLength=parser.minReadLength;
+			untrim=parser.untrim;
+		}
 		
 		if(in2_primary==null && in1_primary!=null && in1_primary.contains("#") && !new File(in1_primary).exists()){
 			in2_primary=in1_primary.replaceFirst("#", "2");
 			in1_primary=in1_primary.replaceFirst("#", "1");
-		}
-		
-		if(!setPigz && gap_G==null){
-			ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		}
-		
-		trimRight=trimRight_;
-		trimLeft=trimLeft_;
-		trimq=trimq_;
-		minReadLength=minReadLength_;
-		qtrim=trimLeft_||trimRight_;
-		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
 		if(in2_primary!=null){
@@ -359,7 +280,7 @@ public class MateReadsMT {
 		ttotal.start();
 //		assert(!FASTQ.PARSE_CUSTOM);
 		
-		final int hwthr=Shared.THREADS;
+		final int hwthr=Shared.threads();
 		if(THREADS<1){THREADS=hwthr;}
 		System.err.println("Detected "+Runtime.getRuntime().availableProcessors()+" hardware threads; using "+THREADS+" for main process.");
 		long memory=(Runtime.getRuntime().maxMemory());
@@ -416,21 +337,9 @@ public class MateReadsMT {
 		
 		FastaReadInputStream.SPLIT_READS=false;
 		
-		
-		if(ecc){
-			System.err.println("\nDoing error correction.");
-			String x=tempfile.replaceFirst("#", "_ecc_#");
-			ErrorCorrectMT.main(new String[] {in1, in2, "cbits="+/*cbits*/2, "auto", "reads="+tableReads_G, "tablereads="+tableReads_G, 
-					"passes=1", "hashes="+hashes, "k="+/*k*/29, "overwrite="+overwrite, "out="+x, "forceinterleaved="+FASTQ.FORCE_INTERLEAVED, 
-					"testinterleaved=false", "dontoutputbadpairs="+ecctossbad, "dontoutputbadreads="+ecctossbad, "threads="+THREADS, "parsecustom="+FASTQ.PARSE_CUSTOM});
-			in1=x.replaceFirst("#", "1");
-			in2=x.replaceFirst("#", "2");
-			System.err.println("Finished error correction.\n");
-		}
-		
 		final int phases=(gap_G==null ? 1 : gap_G.length);
 		
-		KmerCount7MT.PREJOIN=false;
+		KmerCountAbstract.PREJOIN=false;
 		
 		String a1=in1, a2=in2;
 		
@@ -447,7 +356,7 @@ public class MateReadsMT {
 			System.err.println("90th percentile:     \t"+Tools.percentile(histTotal, .9));
 			System.err.println("50th percentile:     \t"+Tools.percentile(histTotal, .5));
 			System.err.println("10th percentile:     \t"+Tools.percentile(histTotal, .1));
-			KmerCount7MT.PREJOIN=true;
+			KmerCountAbstract.PREJOIN=true;
 		}
 		ReadWrite.ZIPLEVEL=oldzip;
 		if(!FILL_MIDDLE_FINAL){middleTable=null;}
@@ -555,9 +464,9 @@ public class MateReadsMT {
 		long cells=totalcells/(gap==null || gap.length==0 ? 1 : gap.length);
 		if(k<32 && cells>1L<<(2*k)){cells=1L<<(2*k);}
 		
-		RTextOutputStream3 rosgood=null;
-		RTextOutputStream3 rosbad=null;
-		RTextOutputStream3 rosinsert=null;
+		ConcurrentReadOutputStream rosgood=null;
+		ConcurrentReadOutputStream rosbad=null;
+		ConcurrentReadOutputStream rosinsert=null;
 		
 		if(outgood!=null){
 			final String out1, out2;
@@ -580,7 +489,7 @@ public class MateReadsMT {
 			assert(!ff1.samOrBam()) : "Sam files need reference info for the header.";
 			
 			final int buff=Tools.max(16, 2*THREADS);
-			rosgood=new RTextOutputStream3(ff1, ff2, null, null, buff, null, false);
+			rosgood=ConcurrentReadOutputStream.getStream(ff1, ff2, null, null, buff, null, false);
 			rosgood.start();
 		}
 		
@@ -604,7 +513,7 @@ public class MateReadsMT {
 			assert(!ff1.samOrBam()) : "Sam files need reference info for the header.";
 			
 			final int buff=Tools.max(16, 2*THREADS);
-			rosbad=new RTextOutputStream3(ff1, ff2, null, null, buff, null, false);
+			rosbad=ConcurrentReadOutputStream.getStream(ff1, ff2, null, null, buff, null, false);
 			rosbad.start();
 		}
 		
@@ -617,7 +526,7 @@ public class MateReadsMT {
 			
 			ReadStreamWriter.HEADER=header();
 			final FileFormat ff=FileFormat.testOutput(out1, FileFormat.ATTACHMENT, ".info", true, overwrite, append, true);
-			rosinsert=new RTextOutputStream3(ff, null, null, null, buff, null, false);
+			rosinsert=ConcurrentReadOutputStream.getStream(ff, null, null, null, buff, null, false);
 			rosinsert.start();
 		}
 		
@@ -644,18 +553,16 @@ public class MateReadsMT {
 			System.err.println("Hash time:  "+thash);
 		}
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(in2, FileFormat.FASTQ, null, true, true);
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ff1, ff2);
 			if(verbose){System.err.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
+			cris.start(); //4567
 		}
 		boolean paired=cris.paired();
-		assert(paired);
+//		assert(paired);//Fails on empty files.
 		if(verbose){System.err.println("Paired: "+paired);}
 		
 		talign.start();
@@ -743,7 +650,7 @@ public class MateReadsMT {
 		if(rvector==null){rvector=new int[6];}
 		final int width=kca.gap+k1+k2;
 		
-		int maxInsert=kca.gap+a.bases.length+b.bases.length-MIN_OVERLAPPING_KMERS+1;
+		int maxInsert=kca.gap+a.length()+b.length()-MIN_OVERLAPPING_KMERS+1;
 		int minInsert=width+MIN_OVERLAPPING_KMERS-1;
 		
 		if(maxInsert<minInsert){
@@ -764,14 +671,14 @@ public class MateReadsMT {
 		int bestMismatches=DEFAULT_MISMATCHLIMIT;
 		int bestMatches=0;
 		
-		final int pivot=k1+kca.gap+b.bases.length+(k1-k2);
+		final int pivot=k1+kca.gap+b.length()+(k1-k2);
 		boolean ambig=false;
 		
 		for(int insert=minInsert; insert<=maxInsert; insert++){
 			int score=scoreIP(half1, half2, insert, pivot, kca, rvector, bestBad);
 			if(score>0){
 				
-				final int overlap=Tools.min(insert, a.bases.length+b.bases.length-insert);
+				final int overlap=Tools.min(insert, a.length()+b.length()-insert);
 				int matches=0;
 				int mismatches=0;
 				boolean ok=true;
@@ -847,13 +754,13 @@ public class MateReadsMT {
 			int gap=kca[i].gap;
 			minGap=Tools.min(minGap, gap);
 			maxGap=Tools.max(maxGap, gap);
-			pivot[i]=k1+gap+b.bases.length+(k1-k2);
+			pivot[i]=k1+gap+b.length()+(k1-k2);
 			minInsert[i]=minGap+k1+k2+MIN_OVERLAPPING_KMERS-1;
-			maxInsert[i]=maxGap+a.bases.length+b.bases.length-MIN_OVERLAPPING_KMERS+1;
+			maxInsert[i]=maxGap+a.length()+b.length()-MIN_OVERLAPPING_KMERS+1;
 		}
 		
 
-		int overallMaxInsert=maxGap+a.bases.length+b.bases.length-MIN_OVERLAPPING_KMERS+1;
+		int overallMaxInsert=maxGap+a.length()+b.length()-MIN_OVERLAPPING_KMERS+1;
 		int overallMinInsert=minGap+k1+k2+MIN_OVERLAPPING_KMERS-1;
 		
 		if(overallMaxInsert<overallMinInsert){
@@ -911,7 +818,7 @@ public class MateReadsMT {
 			}
 			if(score>0/* && votes>=MIN_VOTES*/){
 				
-				final int overlap=Tools.min(insert, a.bases.length+b.bases.length-insert);
+				final int overlap=Tools.min(insert, a.length()+b.length()-insert);
 				int matches=0;
 				int mismatches=0;
 				boolean ok=true;
@@ -1030,7 +937,7 @@ public class MateReadsMT {
 			
 			for(int i=istart, j=jstart, badlim=bestBad+margin; i<overlap && i<bbases.length && j<abases.length && bad<badlim; i++, j++){
 				assert(j>=0 && j<=abases.length && i>=0 && i<=bbases.length) : "\njstart="+jstart+", j="+j+", istart="+istart+", i="+i+" \n"+
-						"overlap="+overlap+", a.length="+a.bases.length+", b.length="+b.bases.length+", bad="+bad+", badlim="+badlim+", good="+good+", tested="+tested;
+						"overlap="+overlap+", a.length="+a.length()+", b.length="+b.length()+", bad="+bad+", badlim="+badlim+", good="+good+", tested="+tested;
 				byte ca=abases[j], cb=bbases[i];
 				if(ca=='N' || cb=='N' || (aqual!=null && aqual[j]<MIN_QUALITY_FOR_OVERLAP) || (bqual!=null && bqual[i]<MIN_QUALITY_FOR_OVERLAP)){
 					//do nothing
@@ -1113,19 +1020,19 @@ public class MateReadsMT {
 	
 	
 	public static int countMismatches(Read a, Read b, int insert, int maxMismatches){
-		final int lengthSum=a.bases.length+b.bases.length;
+		final int lengthSum=a.length()+b.length();
 		if(insert>=lengthSum){return 0;}
 		final int overlap=Tools.min(insert, lengthSum-insert);
 		
 		int mismatches=0;
 		
 		
-		int start1=(insert>a.bases.length ? a.bases.length-overlap : 0);
-		int start2=(insert>=b.bases.length ? 0 : b.bases.length-overlap);
+		int start1=(insert>a.length() ? a.length()-overlap : 0);
+		int start2=(insert>=b.length() ? 0 : b.length()-overlap);
 //		System.err.println(insert+", "+overlap+", "+start1+", "+start2);
 		
 		while(start1<0 || start2<0){start1++; start2++;}
-		for(int i=start1, j=start2; i<a.bases.length && j<b.bases.length; i++, j++){
+		for(int i=start1, j=start2; i<a.length() && j<b.length(); i++, j++){
 			final byte ca=a.bases[i], cb=b.bases[j];
 			if(ca!=cb){
 				final byte qa=a.quality[i], qb=b.quality[j];
@@ -1231,7 +1138,7 @@ public class MateReadsMT {
 	}
 	
 	public static long[] hash(Read r, int k, long mask, int offset){
-		if(r==null || r.bases==null || r.bases.length<k){return null;}
+		if(r==null || r.bases==null || r.length()<k){return null;}
 		final byte[] bases=r.bases;
 		final byte[] quals=r.quality;
 		final long[] half=new long[bases.length-k+1];
@@ -1264,7 +1171,7 @@ public class MateReadsMT {
 	private static class MateThread extends Thread{
 		
 		
-		public MateThread(ConcurrentReadStreamInterface cris_, RTextOutputStream3 rosgood_, RTextOutputStream3 rosbad_, RTextOutputStream3 rosinsert_,
+		public MateThread(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream rosgood_, ConcurrentReadOutputStream rosbad_, ConcurrentReadOutputStream rosinsert_,
 				int k_, KCountArray[] kca_, boolean joinReads_, boolean joinperfectonly_, KCountArray middleTable_) {
 			cris=cris_;
 			rosgood=rosgood_;
@@ -1318,25 +1225,25 @@ public class MateReadsMT {
 					if(qtrim){
 						if(untrim){
 							if(r1!=null){
-								tr1=TrimRead.trim(r1, trimLeft, trimRight, trimq, 1);
+								tr1=TrimRead.trim(r1, qtrimLeft, qtrimRight, trimq, 1);
 								int x=(tr1==null ? 0 : tr1.leftTrimmed+tr1.rightTrimmed);
 								basesTrimmedT+=x;
 								readsTrimmedT+=(x>0 ? 1 : 0);
 							}
 							if(r2!=null){
-								tr2=TrimRead.trim(r2, trimLeft, trimRight, trimq, 1);
+								tr2=TrimRead.trim(r2, qtrimLeft, qtrimRight, trimq, 1);
 								int x=(tr2==null ? 0 : tr2.leftTrimmed+tr2.rightTrimmed);
 								basesTrimmedT+=x;
 								readsTrimmedT+=(x>0 ? 1 : 0);
 							}
 						}else{
 							if(r1!=null){
-								int x=TrimRead.trimFast(r1, trimLeft, trimRight, trimq, 1);
+								int x=TrimRead.trimFast(r1, qtrimLeft, qtrimRight, trimq, 1);
 								basesTrimmedT+=x;
 								readsTrimmedT+=(x>0 ? 1 : 0);
 							}
 							if(r2!=null){
-								int x=TrimRead.trimFast(r2, trimLeft, trimRight, trimq, 1);
+								int x=TrimRead.trimFast(r2, qtrimLeft, qtrimRight, trimq, 1);
 								basesTrimmedT+=x;
 								readsTrimmedT+=(x>0 ? 1 : 0);
 							}
@@ -1345,7 +1252,7 @@ public class MateReadsMT {
 
 					if(minReadLength>0 && !remove){
 						int rlen=(r1==null ? 0 : r1.length());
-						int rlen2=(r2==null ? 0 : r2.length());
+						int rlen2=(r1.mateLength());
 						if(rlen<minReadLength && rlen2<minReadLength){
 							basesTrimmedT+=(rlen+rlen2);
 							remove=true;
@@ -1382,10 +1289,10 @@ public class MateReadsMT {
 							bestScore=100;
 							bestGood=30;
 							bestBad=0;
-							bestInsert=r1.bases.length;
-							assert(r1.bases.length==r1.insert()) : r1.bases.length+" != "+r1.insert()+"; actual = "+trueSize;
+							bestInsert=r1.length();
+							assert(r1.length()==r1.insert()) : r1.length()+" != "+r1.insert()+"; actual = "+trueSize;
 							//						if(bestInsert!=trueSize){
-							//							System.err.println("Bad insert size for pre-joined read "+r.numericID+": len="+r.bases.length+", insert="+r.insert()+", actual="+trueSize);
+							//							System.err.println("Bad insert size for pre-joined read "+r.numericID+": len="+r.length()+", insert="+r.insert()+", actual="+trueSize);
 							//						}
 							bestVotes=1;
 							ambig=false;
@@ -1412,17 +1319,17 @@ public class MateReadsMT {
 								bBad=rvector[2];
 								bAmbig=(rvector[4]==1);
 								bestVotes=rvector[5];
-								final int len1=r1.bases.length, len2=r2.bases.length;
+								final int len1=r1.length(), len2=r2.length();
 								for(int trims=0, q=trimq; trims<TRIM_ON_OVERLAP_FAILURE && !qtrim && bInsert<0 /*&& !bAmbig*/; trims++, q+=8){
 //									System.err.println(trims+", "+q);
 									Serializable old1=r1.obj;
 									Serializable old2=r2.obj;
-									tr1=TrimRead.trim(r1, false, true, q, 1+len1*4/10); //r1.bases.length);
-									tr2=TrimRead.trim(r2, true, false, q, 1+len2*4/10); //r2.bases.length);
+									tr1=TrimRead.trim(r1, false, true, q, 1+len1*4/10); //r1.length());
+									tr2=TrimRead.trim(r2, true, false, q, 1+len2*4/10); //r2.length());
 									r1.obj=old1;
 									r2.obj=old2;
 									if(tr1!=null || tr2!=null){
-//										System.err.println(r1.bases.length+", "+r2.bases.length);
+//										System.err.println(r1.length()+", "+r2.length());
 										int x=mateByOverlap(r1, r2, rvector, MIN_OVERLAPPING_BASES_0-1, MIN_OVERLAPPING_BASES);
 										if(x>-1){
 //											System.err.println(trims);
@@ -1510,15 +1417,16 @@ public class MateReadsMT {
 									Read x=r1;
 									if(joinReads && r2!=null){
 										x=r1.joinRead(bestInsert);
-										if(middleTable!=null && x.containsNocalls()){
-											BitSet bs=ErrorCorrectMT.detectNBulk(x);
-											ErrorCorrectMT.correctErrorsBothSides(x, middleTable, MIDDLE_TABLE_K, MIN_HITS_FOR_GOOD, MAX_HITS_FOR_BAD, bs, 9999999);
-										}
+										//Disabled because ErrorCorrectMT was retired.
+//										if(middleTable!=null && x.containsNocalls()){
+//											BitSet bs=ErrorCorrectMT.detectNBulk(x);
+//											ErrorCorrectMT.correctErrorsBothSides(x, middleTable, MIDDLE_TABLE_K, MIN_HITS_FOR_GOOD, MAX_HITS_FOR_BAD, bs, 9999999);
+//										}
 									}
 									listg.add(x);
 								}
 							}
-
+							
 							if(rosinsert!=null){
 								StringBuilder sb=new StringBuilder(40);
 								sb.append(r1.id==null ? r1.numericID+"" : r1.id).append('\t');
@@ -1566,13 +1474,13 @@ public class MateReadsMT {
 				if(rosinsert!=null){rosinsert.add(listi, ln.id);}
 
 				//			System.err.println("returning list");
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln.id, ln.list.isEmpty());
 				//			System.err.println("fetching list");
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 				//			System.err.println("reads: "+(reads==null ? "null" : reads.size()));
 			}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 		}
 
 		int[] hist=new int[1000];
@@ -1592,10 +1500,10 @@ public class MateReadsMT {
 		long basesTrimmedT=0;
 		long readsTrimmedT=0;
 		
-		private final ConcurrentReadStreamInterface cris;
-		private final RTextOutputStream3 rosgood;
-		private final RTextOutputStream3 rosbad;
-		private final RTextOutputStream3 rosinsert;
+		private final ConcurrentReadInputStream cris;
+		private final ConcurrentReadOutputStream rosgood;
+		private final ConcurrentReadOutputStream rosbad;
+		private final ConcurrentReadOutputStream rosinsert;
 		private final int k;
 		private final KCountArray[] kca;
 		private final boolean joinReads;
@@ -1624,19 +1532,14 @@ public class MateReadsMT {
 	private String tempfile="mateReadsTemp#.txt.gz";
 	private boolean join_G=true;
 	private int maxtables=0;
-	private boolean ecc=false;
-	private boolean ecctossbad=false;
 	private boolean auto=true;
-	
-	private byte qin=-1;
-	private byte qout=-1;
 	
 	private List<String> extra_G=null;
 	
 	static boolean errorState=false;
 	
-	static boolean trimRight=false;
-	static boolean trimLeft=false;
+	static boolean qtrimRight=false;
+	static boolean qtrimLeft=false;
 	static boolean untrim=false;
 	static byte trimq=6;
 	static int minReadLength=0;

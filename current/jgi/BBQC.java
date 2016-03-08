@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.TimeZone;
 
-import stream.Read;
+import stream.FASTQ;
 
 import dna.Data;
 import dna.Parser;
@@ -74,7 +74,13 @@ public class BBQC {
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
-				//do nothing
+				if(a.equals("pigz")){
+					pigz=b;
+				}else if(a.equals("unpigz")){
+					unpigz=b;
+				}else if(a.equals("zl") || a.equals("ziplevel")){
+					zl=b;
+				}
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
@@ -147,10 +153,8 @@ public class BBQC {
 				rnaFlag=Tools.parseBoolean(b);
 			}else if(a.equals("phix")){
 				phixFlag=Tools.parseBoolean(b);
-//			}else if(a.equals("tbo")){
-//				tboFlag=Tools.parseBoolean(b);
-//			}else if(a.equals("tpe")){
-//				tpeFlag=Tools.parseBoolean(b);
+			}else if(a.equals("pjet")){
+				pjetFlag=Tools.parseBoolean(b);
 			}else if(a.equals("ktrim")){
 				ktrim=b;
 			}else if(a.equals("mink")){
@@ -166,16 +170,30 @@ public class BBQC {
 				map_k=Integer.parseInt(b);
 			}else if(a.equals("normalizek") || a.equals("normk") || a.equals("ecck")){
 				normalize_k=Integer.parseInt(b);
+			}else if(a.equals("filterhdist")){
+				hdist_filter=Integer.parseInt(b);
+			}else if(a.equals("trimhdist")){
+				hdist_trim=Integer.parseInt(b);
+			}else if(a.equals("trimhdist2")){
+				hdist2_trim=Integer.parseInt(b);
 			}else if(a.equals("maq")){
 				maq=Byte.parseByte(b);
+			}else if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
+				forceTrimModulo=Integer.parseInt(b);
 			}else if(a.equals("trimq")){
 				trimq=Byte.parseByte(b);
+			}else if(a.equals("human") || a.equals("removehuman")){
+				removehuman=Tools.parseBoolean(b);
 			}else if(a.equals("normalize") || a.equals("norm")){
 				normalize=Tools.parseBoolean(b);
 			}else if(a.equals("ecc")){
 				ecc=Tools.parseBoolean(b);
-			}else if(a.equals("aec")){
-				aec=Tools.parseBoolean(b);
+			}else if(a.equals("aec") || a.equals("aecc")){
+				aecc=Tools.parseBoolean(b);
+				if(aecc){ecc=true;}
+			}else if(a.equals("cecc")){
+				cecc=Tools.parseBoolean(b);
+				if(cecc){ecc=true;}
 			}else if(a.equals("markerrorsonly") || a.equals("meo")){
 				meo=Tools.parseBoolean(b);
 			}else if(a.equals("tam")){
@@ -212,6 +230,10 @@ public class BBQC {
 				fast=Tools.parseBoolean(b);
 			}else if(a.equals("local")){
 				local=Tools.parseBoolean(b);
+			}else if(a.equals("mappath") || a.equals("indexpath")){
+				indexPath=b;
+			}else if(a.equals("mapref")){
+				mapRef=b;
 			}else if(a.equals("qtrim")){
 				if(b==null){qtrim="rl";}
 				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrim="l";}
@@ -231,13 +253,11 @@ public class BBQC {
 				}
 			}else if(a.equals("maxns")){
 				maxNs=Integer.parseInt(b);
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					in1=b.replace("#", "1");
-					in2=b.replace("#", "2");
+					in1=arg.replace("#", "1");
+					in2=arg.replace("#", "2");
 				}
 			}else{
 				//Uncaptured arguments are passed to BBDuk
@@ -247,6 +267,8 @@ public class BBQC {
 		
 		if(passes_>0){passes=passes_;}
 		else if(!normalize){passes=1;}
+		
+		if(hdist2_trim<0){hdist2_trim=hdist_trim;}
 		
 		//Set final field 'symbols'
 		symbols=(symbols_==null ? abbreviation() : symbols_);
@@ -331,6 +353,8 @@ public class BBQC {
 			if(qfout1!=null){sb.append("filtered_qual="+qfout1).append('\n');}
 			if(out2!=null){sb.append("filtered_fastq_2="+out2).append('\n');}
 			if(qfout2!=null){sb.append("filtered_qual_2="+qfout2).append('\n');}
+			if(ihistName!=null){sb.append("ihist="+ihistName).append('\n');}
+			if(scaffoldStatsName!=null){sb.append("scafstats="+scaffoldStatsName).append('\n');}
 			
 			if(sb.length()>0){
 				ReadWrite.writeString(sb, fileListName, false);
@@ -344,24 +368,46 @@ public class BBQC {
 		int oldZL=ReadWrite.ZIPLEVEL;
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.ALLOW_ZIPLEVEL_CHANGE=false;
+
+		final String in1s=stripDirs(in1), in2s=stripDirs(in2), qfin1s=stripDirs(qfin1), qfin2s=stripDirs(qfin2);
+		final String out1s=stripDirs(out1), out2s=stripDirs(out2), qfout1s=stripDirs(qfout1), qfout2s=stripDirs(qfout2);
 		
-		ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, trimPrefix);
-		filter(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, trimPrefix, filterPrefix, true);
-		delete(trimPrefix,  out1, out2, qfout1, qfout2);
-		if(normalize || ecc){
-			dehumanize(out1, out2, out1, out2, qfout1, qfout2, filterPrefix, humanPrefix, true, true);
-			delete(filterPrefix,  out1, out2, qfout1, qfout2);
-			Data.unloadAll();
-			ReadWrite.ZIPLEVEL=oldZL;
-			ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
-			normalize(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, humanPrefix, true);
-			delete(humanPrefix, out1, out2, qfout1, qfout2);
+		ktrim(in1, in2, out1s, out2s, qfin1, qfin2, qfout1s, qfout2s, trimPrefix);
+		
+		if(in2!=null && out2==null){
+			FASTQ.FORCE_INTERLEAVED=true;
+			FASTQ.TEST_INTERLEAVED=false;
+		}
+		
+		
+		if(removehuman){
+			filter(out1s, out2s, out1s, out2s, qfout1s, qfout2s, qfout1s, qfout2s, trimPrefix, filterPrefix, true, true, false);
+			delete(trimPrefix,  out1s, out2s, qfout1s, qfout2s);
+			if(normalize || ecc){
+				dehumanize(out1s, out2s, out1s, out2s, qfout1s, qfout2s, filterPrefix, humanPrefix, true, true, false);
+				delete(filterPrefix, out1s, out2s, qfout1s, qfout2s);
+				Data.unloadAll();
+				ReadWrite.ZIPLEVEL=oldZL;
+				ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
+				normalize(out1s, out2s, out1, out2, qfout1s, qfout2s, qfout1, qfout2, humanPrefix, "", true, true, true);
+				delete(humanPrefix, out1s, out2s, qfout1s, qfout2s);
+			}else{
+				ReadWrite.ZIPLEVEL=oldZL;
+				ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
+				dehumanize(out1s, out2s, out1, out2, qfout1s, qfout2s, filterPrefix, "", true, true, true);
+				delete(filterPrefix, out1s, out2s, qfout1s, qfout2s);
+				Data.unloadAll();
+			}
 		}else{
-			ReadWrite.ZIPLEVEL=oldZL;
-			ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
-			dehumanize(out1, out2, out1, out2, qfout1, qfout2, filterPrefix, "", true, false);
-			delete(filterPrefix,  out1, out2, qfout1, qfout2);
-			Data.unloadAll();
+			if(normalize || ecc){
+				filter(out1s, out2s, out1s, out2s, qfout1s, qfout2s, qfout1s, qfout2s, trimPrefix, filterPrefix, true, true, false);
+				delete(trimPrefix, out1s, out2s, qfout1s, qfout2s);
+				normalize(out1s, out2s, out1, out2, qfout1s, qfout2s, qfout1, qfout2, filterPrefix, "", true, true, true);
+				delete(filterPrefix, out1s, out2s, qfout1s, qfout2s);
+			}else{
+				filter(out1s, out2s, out1, out2, qfout1s, qfout2s, qfout1, qfout2, trimPrefix, "", true, true, true);
+				delete(trimPrefix, out1s, out2s, qfout1s, qfout2s);
+			}
 		}
 		
 		//Write combined stats file (number of reads/bases present/removed in each stage) 
@@ -422,6 +468,15 @@ public class BBQC {
 			}
 			argList.add("k="+trim_k);
 			argList.add("hdist="+hdist_trim);
+			if(hdist2_trim>=0){
+				argList.add("hdist2="+hdist2_trim);
+			}
+			if(forceTrimModulo>0){
+				argList.add("ftm="+forceTrimModulo);
+			}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -490,8 +545,8 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, 
-			String outPrefix, boolean prependIndir){
+	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,  
+			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("filter start", true);
 		System.err.println("\nArtifact Filter/Quality Trim Phase Start");
@@ -510,6 +565,9 @@ public class BBQC {
 				argList.add("trimq="+trimq);
 				argList.add("qtrim="+qtrim);
 			}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -517,13 +575,13 @@ public class BBQC {
 			//Set read I/O files
 			if(in1!=null){argList.add("in1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in1);}
 			if(in2!=null){argList.add("in2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in2);}
-			if(out1!=null){argList.add("out1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out1);}
-			if(out2!=null){argList.add("out2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out2);}
+			if(out1!=null){argList.add("out1="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out1);}
+			if(out2!=null){argList.add("out2="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out2);}
 			if(qfin1!=null){argList.add("qfin1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin1);}
 			if(qfin2!=null){argList.add("qfin2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin2);}
-			if(qfout1!=null){argList.add("qfout1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout1);}
-			if(qfout2!=null){argList.add("qfout2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout2);}
-
+			if(qfout1!=null){argList.add("qfout1="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+qfout1);}
+			if(qfout2!=null){argList.add("qfout2="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+qfout2);}
+			
 //			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName);} //Old style for 2 log files
 			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
 			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName);}
@@ -533,8 +591,9 @@ public class BBQC {
 		{//Add BBDuk references
 			filterrefs.add(mainArtifactFile);
 			filterrefs.add(rnaFlag ? artifactFileRna : artifactFileDna);
-			if(phixFlag){filterrefs.add(phixRef);}
 			
+			if(phixFlag){filterrefs.add(phixRef);}
+			if(pjetFlag){filterrefs.add(pjetRef);}
 			
 
 			StringBuilder refstring=new StringBuilder();
@@ -582,8 +641,8 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String inPrefix, 
-			String outPrefix, boolean prependIndir, boolean prependOutdir){
+	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, 
+			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("dehumanize start", true);
 		System.err.println("\nHuman Removal Phase Start");
@@ -608,9 +667,17 @@ public class BBQC {
 			argList.add("sam=1.4");
 			argList.add("usemodulo");
 			argList.add("printunmappedcount");
-			argList.add("usejni");
 			argList.add("ow="+overwrite);
-			argList.add("path="+humanPath);
+			
+			if(mapRef==null){
+				argList.add("path="+indexPath);
+			}else{
+				argList.add("ref="+mapRef);
+				argList.add("nodisk");
+			}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -618,8 +685,8 @@ public class BBQC {
 			//Set read I/O files
 			if(in1!=null){argList.add("in1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in1);}
 			if(in2!=null){argList.add("in2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in2);}
-			if(out1!=null){argList.add("outu1="+(prependOutdir ? (tmpDir==null ? outDir : tmpDir) : "")+outPrefix+out1);}
-			if(out2!=null){argList.add("outu2="+(prependOutdir ? (tmpDir==null ? outDir : tmpDir) : "")+outPrefix+out2);}
+			if(out1!=null){argList.add("outu1="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out1);}
+			if(out2!=null){argList.add("outu2="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out2);}
 			if(qfin1!=null){argList.add("qfin1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin1);}
 			if(qfin2!=null){argList.add("qfin2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin2);}
 			
@@ -656,7 +723,8 @@ public class BBQC {
 	 * @param qfout2 Secondary output qual file
 	 * @param inPrefix Append this prefix to input filenames
 	 */
-	private void normalize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, boolean prependIndir){
+	private void normalize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2,  
+			String inPrefix, String outPrefix, boolean prependIndir, boolean prependOutdir, boolean lastPhase){
 		
 		log("normalization start", true);
 		System.err.println("\nNormalization/Error Correction Phase Start");
@@ -672,7 +740,8 @@ public class BBQC {
 			//if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 
 			argList.add("ecc="+ecc);
-			argList.add("aec="+aec);
+			if(aecc){argList.add("aec="+aecc);}
+			if(cecc){argList.add("cecc="+cecc);}
 			argList.add("meo="+meo);
 			argList.add("tam="+tam);
 			argList.add("mue="+mue);
@@ -694,16 +763,22 @@ public class BBQC {
 			}else{
 				argList.add("keepall");
 			}
+			if(pigz!=null){argList.add("pigz="+pigz);}
+			if(unpigz!=null){argList.add("unpigz="+unpigz);}
+			if(zl!=null){argList.add("zl="+zl);}
 			
 			//Set read I/O files
 			if(in1!=null){argList.add("in1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in1);}
 			if(in2!=null){argList.add("in2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+in2);}
-			if(out1!=null){argList.add("out="+outDir+out1);}
+//			if(out1!=null){argList.add("out="+outDir+out1);}
+			if(out1!=null){argList.add("out1="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out1);}
+			if(out2!=null){argList.add("out2="+(prependOutdir ? (tmpDir==null || lastPhase ? outDir : tmpDir) : "")+outPrefix+out2);}
 //			if(out2!=null){argList.add("out2="+outDir+out2);}
 			if(qfin1!=null){argList.add("qfin1="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin1);}
 			if(qfin2!=null){argList.add("qfin2="+(prependIndir ? (tmpDir==null ? outDir : tmpDir) : "")+inPrefix+qfin2);}
 //			if(qfout1!=null){argList.add("qfout1="+outDir+qfout1);}
-//			if(qfout2!=null){argList.add("qfout2="+outDir+qfout2);}
+//			if(qfout2!=null){argList.add("qfout2="+outDir+qfout2);}\
+			
 			
 			if(kmerHistName!=null){argList.add("hist="+kmerHistName);}
 		}
@@ -822,13 +897,28 @@ public class BBQC {
 		return sdf.format(new Date());
 	}
 	
+	/**
+	 * Strips the directories, leaving only a filename
+	 * @param fname
+	 * @return
+	 */
+	public static String stripDirs(String fname){
+		if(fname==null){return null;}
+		if(fname.indexOf('\\')>=0){fname=fname.replace('\\', '/');}
+		final int index=fname.lastIndexOf('/');
+		if(index>=0){fname=fname.substring(index+1);}
+		return fname;
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------      BBNorm Parameters       ----------------*/
 	/*--------------------------------------------------------------*/
 
-	private boolean normalize=true;
-	private boolean ecc=true;
-	private boolean aec=false;
+	private boolean removehuman=true;
+	private boolean normalize=false;
+	private boolean ecc=false;
+	private boolean aecc=false;
+	private boolean cecc=false;
 	private boolean meo=false;
 	private boolean tam=false;
 	private boolean trimAfterFiltering=true;
@@ -853,6 +943,8 @@ public class BBQC {
 	private boolean rnaFlag=false;
 	/** True if phix should be filtered out */
 	private boolean phixFlag=true;
+	/** True if pjet should be filtered out */
+	private boolean pjetFlag=true;
 	
 	/** Unused */
 	private boolean tboFlag=false;
@@ -867,6 +959,8 @@ public class BBQC {
 	private byte trimq=12;
 	/** Throw away reads below this average quality before trimming.  Default: 8 */
 	private byte maq=8;
+	/** Trim reads to be equal to 0 modulo this value.  Mainly for 151, 251, and 301bp runs. */
+	private int forceTrimModulo=5;
 	/** Quality-trimming mode */
 	private String qtrim="rl";
 	/** Kmer-trimming mode */
@@ -887,8 +981,16 @@ public class BBQC {
 	private int hdist_filter=1;
 	/** Use this Hamming distance when kmer trimming */
 	private int hdist_trim=1;
+	/** Use this Hamming distance when kmer trimming with short kmers */
+	private int hdist2_trim=-1;
 	
-
+	/** Captures the command line "pigz" flag */
+	private String pigz;
+	/** Captures the command line "unpigz" flag */
+	private String unpigz;
+	/** Captures the command line "zl" flag */
+	private String zl;
+	
 	private float minratio=0.84f;
 	private int maxindel=6;
 	private int kfilter=0;
@@ -949,6 +1051,8 @@ public class BBQC {
 	private String scaffoldStatsName="scaffoldStats.txt";
 	private String kmerHistName="khist.txt";
 	
+	private String ihistName=null;
+	
 	/** ktrim phase rqc stats file */
 	private String rqcStatsName_kt;
 	/** ktrim phase stats file */
@@ -964,10 +1068,13 @@ public class BBQC {
 	private String artifactFileRna = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/RNA_spikeins.artifacts.2012.10.NoPolyA.fa";
 	private String artifactFileDna = "/global/dna/shared/rqc/ref_databases/qaqc/databases/illumina.artifacts/DNA_spikeins.artifacts.2012.10.fa";
 	private String phixRef = "/global/dna/shared/rqc/ref_databases/qaqc/databases/phix174_ill.ref.fa";
+	private String pjetRef = "/global/dna/shared/rqc/ref_databases/qaqc/databases/pJET1.2.fasta";
 
 	private String allArtifactsLatest = "/global/projectb/sandbox/rqc/qcdb/illumina.artifacts/Illumina.artifacts.fa";
 	private String fragAdapters = "/global/projectb/sandbox/gaag/bbtools/data/adapters.fa";
-	private String humanPath = "/global/projectb/sandbox/gaag/bbtools/hg19/";
+	private String rnaAdapter = "/global/projectb/sandbox/gaag/bbtools/data/truseq_rna.fa.gz";
+	private String indexPath = "/global/projectb/sandbox/gaag/bbtools/hg19/";
+	private String mapRef = null;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/

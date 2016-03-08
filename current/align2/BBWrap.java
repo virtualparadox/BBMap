@@ -27,6 +27,7 @@ public class BBWrap {
 		sysout.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 //			printOptions();
 			System.exit(0);

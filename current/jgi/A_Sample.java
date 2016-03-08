@@ -5,18 +5,15 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
-import fileIO.ByteFile1;
-import fileIO.ByteFile2;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
 
@@ -53,12 +50,12 @@ public class A_Sample {
 	 */
 	public A_Sample(String[] args){
 		
+		args=Parser.parseConfig(args);
 		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
 		}
 		
-		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
@@ -66,9 +63,9 @@ public class A_Sample {
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		Parser parser=new Parser();
@@ -86,23 +83,8 @@ public class A_Sample {
 				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
-				ByteFile1.verbose=verbose;
-				ByteFile2.verbose=verbose;
-				stream.FastaReadInputStream.verbose=verbose;
-				ConcurrentGenericReadInputStream.verbose=verbose;
-//				align2.FastaReadInputStream2.verbose=verbose;
-				stream.FastqReadInputStream.verbose=verbose;
-				ReadWrite.verbose=verbose;
-			}else if(a.equals("addslash")){
-				addslash=Tools.parseBoolean(b);
-			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
-				parser.in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					parser.in1=b.replace("#", "1");
-					parser.in2=b.replace("#", "2");
-				}
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
+			}else if(a.equals("parse_flag_goes_here")){
+				//Set a variable here
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -110,7 +92,8 @@ public class A_Sample {
 			}
 		}
 		
-		{//Download parser fields
+		{//Process parser fields
+			Parser.processQuality();
 			
 			maxReads=parser.maxReads;
 			
@@ -152,7 +135,7 @@ public class A_Sample {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -161,9 +144,6 @@ public class A_Sample {
 				printOptions();
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
-//			if(!parser.setOut){
-//				out1="stdout";
-//			}
 		}
 		
 		if(!setInterleaved){
@@ -188,50 +168,42 @@ public class A_Sample {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		{
-			byte qin=Parser.qin, qout=Parser.qout;
-			if(qin!=-1 && qout!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qin!=-1){
-				FASTQ.ASCII_OFFSET=qin;
-				FASTQ.DETECT_QUALITY=false;
-			}else if(qout!=-1){
-				FASTQ.ASCII_OFFSET_OUT=qout;
-				FASTQ.DETECT_QUALITY_OUT=false;
-			}
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 	}
-
+	
+	public boolean parseArgument(String arg, String a, String b){
+		if(a.equals("reads") || a.equals("maxreads")){
+			maxReads=Tools.parseKMG(b);
+			return true;
+		}else if(a.equals("some_argument")){
+			maxReads=Tools.parseKMG(b);
+			return true;
+		}
+		return false;
+	}
+	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Outer Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	
+
+	/** Create read streams and process all data */
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
-		final Thread cristhread;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, qfin1, qfin2);
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, qfin1, qfin2);
+			cris.start();
 			if(verbose){outstream.println("Started cris");}
-			cristhread=new Thread(cris);
-			cristhread.start();
 		}
 		boolean paired=cris.paired();
-//		if(verbose){
-			outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
-//		}
+		if(!ffin1.samOrBam()){outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));}
 
-		final RTextOutputStream3 ros;
+		final ConcurrentReadOutputStream ros;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -242,69 +214,20 @@ public class A_Sample {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
 			ros.start();
 		}else{ros=null;}
 		
-		long readsProcessed=0;
-		long basesProcessed=0;
+		readsProcessed=0;
+		basesProcessed=0;
 		
-		{
-			
-			ListNum<Read> ln=cris.nextList();
-			ArrayList<Read> reads=(ln!=null ? ln.list : null);
-			
-//			outstream.println("Fetched "+reads);
-			
-			if(reads!=null && !reads.isEmpty()){
-				Read r=reads.get(0);
-				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
-			}
-
-			while(reads!=null && reads.size()>0){
-				
-				for(int idx=0; idx<reads.size(); idx++){
-					final Read r1=reads.get(idx);
-					final Read r2=r1.mate;
-					
-					final int initialLength1=r1.length();
-					final int initialLength2=(r2==null ? 0 : r2.length());
-					
-					{
-						readsProcessed++;
-						basesProcessed+=initialLength1;
-						if(reverseCompliment){r1.reverseComplement();}
-					}
-					if(r2!=null){
-						readsProcessed++;
-						basesProcessed+=initialLength2;
-						if(reverseCompliment || reverseComplimentMate){r2.reverseComplement();}
-					}
-					if(addslash){
-						if(r1.id==null){r1.id=" "+r1.numericID;}
-						if(!r1.id.contains(" /1")){r1.id+=" /1";}
-						if(r2!=null){
-							if(r2.id==null){r2.id=" "+r2.numericID;}
-							if(!r2.id.contains(" /2")){r2.id+=" /2";}
-						}
-					}
-				}
-				
-				final ArrayList<Read> listOut=reads;
-				
-				if(ros!=null){ros.add(listOut, ln.id);}
-
-				cris.returnList(ln, ln.list.isEmpty());
-				ln=cris.nextList();
-				reads=(ln!=null ? ln.list : null);
-			}
-			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
-			}
-		}
+		//Process the read stream
+		processInner(cris, ros);
 		
-		errorState|=ReadStats.writeAll(paired);
+		ReadWrite.closeStreams(cris, ros);
+		if(verbose){outstream.println("Finished.");}
 		
+		errorState|=ReadStats.writeAll();
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 		t.stop();
@@ -327,26 +250,77 @@ public class A_Sample {
 		}
 	}
 	
+	/** Iterate through the reads */
+	void processInner(final ConcurrentReadInputStream cris, final ConcurrentReadOutputStream ros){
+		
+		readsProcessed=0;
+		basesProcessed=0;
+		
+		{
+			
+			ListNum<Read> ln=cris.nextList();
+			ArrayList<Read> reads=(ln!=null ? ln.list : null);
+			
+			if(reads!=null && !reads.isEmpty()){
+				Read r=reads.get(0);
+				assert((ffin1==null || ffin1.samOrBam()) || (r.mate!=null)==cris.paired());
+			}
+
+			while(reads!=null && reads.size()>0){
+				if(verbose){outstream.println("Fetched "+reads.size()+" reads.");}
+				
+				for(int idx=0; idx<reads.size(); idx++){
+					final Read r1=reads.get(idx);
+					final Read r2=r1.mate;
+					
+					final int initialLength1=r1.length();
+					final int initialLength2=(r1.mateLength());
+					
+					{
+						readsProcessed++;
+						basesProcessed+=initialLength1;
+					}
+					if(r2!=null){
+						readsProcessed++;
+						basesProcessed+=initialLength2;
+					}
+					
+					boolean keep=processReadPair(r1, r2);
+					if(!keep){reads.set(idx, null);}
+					
+				}
+				
+				if(ros!=null){ros.add(reads, ln.id);}
+
+				cris.returnList(ln.id, ln.list.isEmpty());
+				if(verbose){outstream.println("Returned a list.");}
+				ln=cris.nextList();
+				reads=(ln!=null ? ln.list : null);
+			}
+			if(ln!=null){
+				cris.returnList(ln.id, ln.list==null || ln.list.isEmpty());
+			}
+		}
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private void printOptions(){
-		assert(false) : "printOptions: TODO";
-//		outstream.println("Syntax:\n");
-//		outstream.println("java -ea -Xmx512m -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2>");
-//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-//		outstream.println("Other parameters and their defaults:\n");
-//		outstream.println("overwrite=false  \tOverwrites files that already exist");
-//		outstream.println("ziplevel=4       \tSet compression level, 1 (low) to 9 (max)");
-//		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-//		outstream.println("fastawrap=80     \tLength of lines in fasta output");
-//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-//		outstream.println("outsingle=<file> \t(outs) Write singleton reads here, when conditionally discarding reads from pairs.");
+	/**
+	 * Process a single read pair.
+	 * @param r1 Read 1
+	 * @param r2 Read 2 (may be null)
+	 * @return True if the reads should be kept, false if they should be discarded.
+	 */
+	boolean processReadPair(final Read r1, final Read r2){
+		throw new RuntimeException("TODO");
 	}
 	
-	
+	/** This is called if the program runs with no parameters */
+	private void printOptions(){
+		throw new RuntimeException("TODO");
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
@@ -368,12 +342,10 @@ public class A_Sample {
 	private String extout=null;
 	
 	/*--------------------------------------------------------------*/
-
-	private boolean reverseComplimentMate=false;
-	private boolean reverseCompliment=false;
-	/** Add /1 and /2 to paired reads */
-	private boolean addslash=false;
-
+	
+	protected long readsProcessed=0;
+	protected long basesProcessed=0;
+	
 	private long maxReads=-1;
 	
 	/*--------------------------------------------------------------*/

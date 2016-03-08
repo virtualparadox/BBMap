@@ -2,6 +2,12 @@ package dna;
 import java.io.Serializable;
 import java.util.ArrayList;
 
+import stream.Read;
+import stream.SamLine;
+
+import align2.IntList;
+import align2.Tools;
+
 import fileIO.ReadWrite;
 
 
@@ -26,7 +32,7 @@ public abstract class CoverageArray implements Serializable {
 		fname=ReadWrite.findFileExtension(fname);
 //		System.err.println("Found "+fname);
 		
-		return ReadWrite.read(CoverageArray.class, fname);
+		return ReadWrite.read(CoverageArray.class, fname, true);
 
 //		if(fname.endsWith(".ca2") || fname.contains(".ca2.")){return ReadWrite.read(CoverageArray2.class, fname);}
 //		else if(fname.endsWith(".ca") || fname.contains(".ca.")){return ReadWrite.read(CoverageArray1.class, fname);}
@@ -48,6 +54,12 @@ public abstract class CoverageArray implements Serializable {
 
 	public abstract void incrementRange(int min, int max, int amt);
 	
+	public void incrementRanges(IntList ranges, int amt){
+		for(int i=0; i<ranges.size; i+=2){
+			int a=ranges.get(i), b=ranges.get(i+1);
+			incrementRange(a, b-1, 1);
+		}
+	}
 	
 	public abstract void set(int loc, int val);
 	

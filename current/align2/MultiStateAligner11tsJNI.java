@@ -2,10 +2,7 @@ package align2;
 import java.util.Arrays;
 import stream.SiteScore;
 import dna.AminoAcid;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 
 /** 
  * Modification of MultiStateAligner9ts to replace fixed affine steps with an array */
@@ -48,15 +45,8 @@ public final class MultiStateAligner11tsJNI extends MSA{
 		byte[] read=args[0].getBytes();
 		byte[] ref=args[1].getBytes();
 		byte[] original=ref;
-		boolean colorspace=false;
 		
-		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
-			colorspace=true;
-			read=AminoAcid.toColorspace(read);
-			ref=AminoAcid.toColorspace(ref);
-		}
-		
-		MultiStateAligner11tsJNI msa=new MultiStateAligner11tsJNI(read.length, ref.length, colorspace);
+		MultiStateAligner11tsJNI msa=new MultiStateAligner11tsJNI(read.length, ref.length);
 		System.out.println("Initial: ");
 		//printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
@@ -72,15 +62,14 @@ public final class MultiStateAligner11tsJNI extends MSA{
 		int[] score=null;
 		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
-		if(colorspace){System.out.println(new String(original));}
 		System.out.println(new String(ref));
 		System.out.println(new String(read));
 		System.out.println(new String(out));
 		System.out.println("Score: "+Arrays.toString(score));
 	}
 	
-	public MultiStateAligner11tsJNI(int maxRows_, int maxColumns_, boolean colorspace_){
-		super(maxRows_, maxColumns_, colorspace_);
+	public MultiStateAligner11tsJNI(int maxRows_, int maxColumns_){
+		super(maxRows_, maxColumns_);
 		{
 			int[] packed0=null;
 			byte[] grefbuffer0=null;
@@ -416,9 +405,9 @@ public final class MultiStateAligner11tsJNI extends MSA{
 				if(c==r){
 					out[outPos]='m';
 				}else{
-					if(!AminoAcid.isFullyDefined(c, colorspace)){
+					if(!AminoAcid.isFullyDefined(c)){
 						out[outPos]='N';
-					}else if(!AminoAcid.isFullyDefined(r, colorspace)){
+					}else if(!AminoAcid.isFullyDefined(r)){
 						out[outPos]='N';
 					}else{
 						out[outPos]='S';
@@ -1335,7 +1324,7 @@ public final class MultiStateAligner11tsJNI extends MSA{
 
 	@Override
 	public final int maxQuality(byte[] baseScores){
-		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sum(baseScores);
+		return POINTS_MATCH+(baseScores.length-1)*(POINTS_MATCH2)+Tools.sumInt(baseScores);
 	}
 
 	@Override
@@ -1513,27 +1502,27 @@ public final class MultiStateAligner11tsJNI extends MSA{
 	private static final byte MODE_INS=2;
 	private static final byte MODE_SUB=3;
 	
-	public static final int POINTS_NOREF=0; //default -110
+	public static final int POINTS_NOREF=0;
 	public static final int POINTS_NOCALL=0;
-	public static final int POINTS_MATCH=70; //default 50
+	public static final int POINTS_MATCH=70;
 	public static final int POINTS_MATCH2=100; //Note:  Changing to 90 substantially reduces false positives
 	public static final int POINTS_COMPATIBLE=50;
-	public static final int POINTS_SUB=-127; //default -133
-	public static final int POINTS_SUBR=-147; //increased penalty if prior match streak was at most 1 (I have no idea why this improves things)
-	public static final int POINTS_SUB2=-51; //default -47
+	public static final int POINTS_SUB=-127;
+	public static final int POINTS_SUBR=-147; //increased penalty if prior match streak was at most 1
+	public static final int POINTS_SUB2=-51;
 	public static final int POINTS_SUB3=-25;
 	public static final int POINTS_MATCHSUB=-10;
-	public static final int POINTS_INS=-395; //default -251
-	public static final int POINTS_INS2=-39; //default -61
-	public static final int POINTS_INS3=-23; //default -20
-	public static final int POINTS_INS4=-8; //default -20
-	public static final int POINTS_DEL=-472; //default -239
-	public static final int POINTS_DEL2=-33; //default -30
-	public static final int POINTS_DEL3=-9; //default -7
-	public static final int POINTS_DEL4=-1; //default -1
-	public static final int POINTS_DEL5=-1; //default -1
-	public static final int POINTS_DEL_REF_N=-10; //default -10
-	public static final int POINTS_GAP=0-GAPCOST; //default -10
+	public static final int POINTS_INS=-395;
+	public static final int POINTS_INS2=-39;
+	public static final int POINTS_INS3=-23;
+	public static final int POINTS_INS4=-8;
+	public static final int POINTS_DEL=-472;
+	public static final int POINTS_DEL2=-33;
+	public static final int POINTS_DEL3=-9;
+	public static final int POINTS_DEL4=-1;
+	public static final int POINTS_DEL5=-1;
+	public static final int POINTS_DEL_REF_N=-10;
+	public static final int POINTS_GAP=0-GAPCOST;
 
 	public static final int TIMESLIP=4;
 	public static final int MASK5=TIMESLIP-1;

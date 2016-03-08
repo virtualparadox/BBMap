@@ -27,79 +27,44 @@ public abstract class MSA {
 			return MultiStateAligner9PacBio.minIdToMinRatio(minid);
 		}else if("MultiStateAligner9Flat".equalsIgnoreCase(classname)){
 			return MultiStateAligner9Flat.minIdToMinRatio(minid);
+		}else if("MultiStateAligner9XFlat".equalsIgnoreCase(classname)){
+			return MultiStateAligner9XFlat.minIdToMinRatio(minid);
 		}else{
 			assert(false) : "Unhandled MSA type: "+classname;
 			return MultiStateAligner11ts.minIdToMinRatio(minid);
 		}
 	}
 	
-	public static final MSA makeMSA(int maxRows_, int maxColumns_, boolean colorspace_, String classname){
+	public static final MSA makeMSA(int maxRows_, int maxColumns_, String classname){
+		flatMode=false;
 		if("MultiStateAligner9ts".equalsIgnoreCase(classname)){
-			return new MultiStateAligner9ts(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner9ts(maxRows_, maxColumns_);
 		}else if("MultiStateAligner10ts".equalsIgnoreCase(classname)){
-			return new MultiStateAligner10ts(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner10ts(maxRows_, maxColumns_);
 		}else if("MultiStateAligner11ts".equalsIgnoreCase(classname)){
 			if(Shared.USE_JNI){
-				return new MultiStateAligner11tsJNI(maxRows_, maxColumns_, colorspace_);
+				return new MultiStateAligner11tsJNI(maxRows_, maxColumns_);
 			}else{
-				return new MultiStateAligner11ts(maxRows_, maxColumns_, colorspace_);
+				return new MultiStateAligner11ts(maxRows_, maxColumns_);
 			}
 		}else if("MultiStateAligner11tsJNI".equalsIgnoreCase(classname)){
-			return new MultiStateAligner11tsJNI(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner11tsJNI(maxRows_, maxColumns_);
 		}else if("MultiStateAligner9PacBio".equalsIgnoreCase(classname)){
-			return new MultiStateAligner9PacBio(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner9PacBio(maxRows_, maxColumns_);
 		}else if("MultiStateAligner9Flat".equalsIgnoreCase(classname)){
-			return new MultiStateAligner9Flat(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner9Flat(maxRows_, maxColumns_);
+		}else if("MultiStateAligner9XFlat".equalsIgnoreCase(classname)){
+			flatMode=true;
+			return new MultiStateAligner9XFlat(maxRows_, maxColumns_);
 		}else{
 			assert(false) : "Unhandled MSA type: "+classname;
-			return new MultiStateAligner11ts(maxRows_, maxColumns_, colorspace_);
+			return new MultiStateAligner11ts(maxRows_, maxColumns_);
 		}
 	}
 	
-	public MSA(int maxRows_, int maxColumns_, boolean colorspace_){
+	public MSA(int maxRows_, int maxColumns_){
 		maxRows=maxRows_;
 		maxColumns=maxColumns_;
-		colorspace=colorspace_;
-		
-		
-//		packed=new int[3][maxRows+1][maxColumns+1];
-//		grefbuffer=new byte[maxColumns+2];
-//
-//		vertLimit=new int[maxRows+1];
-//		horizLimit=new int[maxColumns+1];
-//		Arrays.fill(vertLimit, BADoff);
-//		Arrays.fill(horizLimit, BADoff);
-//		
-////		for(int i=0; i<maxColumns+1; i++){
-////			scores[0][i]=0-i;
-////		}
-//		
-//		for(int matrix=0; matrix<packed.length; matrix++){
-//			for(int i=1; i<=maxRows; i++){
-//				for(int j=0; j<packed[matrix][i].length; j++){
-//					packed[matrix][i][j]|=BADoff;
-//				}
-////				packed[matrix][i][0]|=MODE_INS;
-//			}
-////			for(int i=0; i<maxRows+1; i++){
-////				scores[matrix][i][0]=(i*POINTSoff_NOREF);
-////			}
-//			for(int i=0; i<=maxRows; i++){
-//				
-//				int prevScore=(i<2 ? 0 : packed[matrix][i-1][0]);
-//				int score=(i<2 ? (i*POINTSoff_INS) : 
-//					(i<LIMIT_FOR_COST_3 ? prevScore+POINTSoff_INS2 : 
-//						(i<LIMIT_FOR_COST_4 ? prevScore+POINTSoff_INS3 : prevScore+POINTSoff_INS4)));
-//				
-//				packed[matrix][i][0]=score;
-//			}
-////			for(int i=1; i<maxColumns+1; i++){
-////				prevState[matrix][0][i]=MODE_DEL;
-////			}
-////			for(int i=0; i<=maxColumns; i++){
-////				packed[matrix][0][i]|=MODE_MS;
-////			}
-//		}
 	}
 	
 	/** return new int[] {rows, maxC, maxS, max}; 
@@ -203,47 +168,6 @@ public abstract class MSA {
 		return fillAndScoreQ(read, Data.getChromosome(chrom).array, start-thresh, stop+thresh, baseScores);
 	}
 	
-//	public final int scoreNoIndels(byte[] read, SiteScore ss){
-//		
-//		ChromosomeArray cha=Data.getChromosome(ss.chrom);
-//		final int refStart=ss.start;
-//		
-//		int score=0;
-//		int mode=MODE_START;
-//		int timeInMode=0;
-//		if(refStart<0 || refStart+read.length>cha.maxIndex+1){return -99999;} //TODO: Partial match
-//		
-//		for(int i=0; i<read.length; i++){
-//			byte c=read[i];
-//			byte r=cha.get(refStart+i);
-//			
-//			if(c==r){
-//				if(mode==MODE_MS){
-//					timeInMode++;
-//					score+=POINTSoff_MATCH2;
-//				}else{
-//					timeInMode=0;
-//					score+=POINTSoff_MATCH;
-//				}
-//				mode=MODE_MS;
-//			}else if(c<0 || c=='N'){
-//				score+=POINTSoff_NOCALL;
-//			}else if(r<0 || r=='N'){
-//				score+=POINTSoff_NOREF;
-//			}else{
-//				if(mode==MODE_SUB){timeInMode++;}
-//				else{timeInMode=0;}
-//				
-//				if(timeInMode==0){score+=POINTSoff_SUB;}
-//				else if(timeInMode<LIMIT_FOR_COST_3){score+=POINTSoff_SUB2;}
-//				else{score+=POINTSoff_SUB3;}
-//			}
-//		}
-//		
-//		return score;
-//	}
-	
-
 	public final int scoreNoIndels(byte[] read, SiteScore ss){
 		ChromosomeArray cha=Data.getChromosome(ss.chrom);
 		return scoreNoIndels(read, cha.array, ss.start);
@@ -817,46 +741,7 @@ public abstract class MSA {
 	
 	public abstract int calcDelScore(int len, boolean approximateGaps);
 	
-//	private static int calcDelScoreOffset(int len){
-//		if(len<=0){return 0;}
-//		int score=POINTSoff_DEL;
-//		
-//		if(len>LIMIT_FOR_COST_5){
-//			score+=((len-LIMIT_FOR_COST_5+MASK5)/TIMESLIP)*POINTSoff_DEL5;
-//			len=LIMIT_FOR_COST_5;
-//		}
-//		if(len>LIMIT_FOR_COST_4){
-//			score+=(len-LIMIT_FOR_COST_4)*POINTSoff_DEL4;
-//			len=LIMIT_FOR_COST_4;
-//		}
-//		if(len>LIMIT_FOR_COST_3){
-//			score+=(len-LIMIT_FOR_COST_3)*POINTSoff_DEL3;
-//			len=LIMIT_FOR_COST_3;
-//		}
-//		if(len>1){
-//			score+=(len-1)*POINTSoff_DEL2;
-//		}
-//		return score;
-//	}
-	
 	public abstract int calcInsScore(int len);
-	
-//	private static int calcInsScoreOffset(int len){
-//		if(len<=0){return 0;}
-//		int score=POINTSoff_INS;
-//		if(len>LIMIT_FOR_COST_4){
-//			score+=(len-LIMIT_FOR_COST_4)*POINTSoff_INS4;
-//			len=LIMIT_FOR_COST_4;
-//		}
-//		if(len>LIMIT_FOR_COST_3){
-//			score+=(len-LIMIT_FOR_COST_3)*POINTSoff_INS3;
-//			len=LIMIT_FOR_COST_3;
-//		}
-//		if(len>1){
-//			score+=(len-1)*POINTSoff_INS2;
-//		}
-//		return score;
-//	}
 	
 	static final int GAPBUFFER=Shared.GAPBUFFER;
 	static final int GAPBUFFER2=Shared.GAPBUFFER2;
@@ -962,8 +847,6 @@ public abstract class MSA {
 	
 	public final int maxRows;
 	public final int maxColumns;
-	
-	public final boolean colorspace;
 
 	public long iterationsLimited=0;
 	public long iterationsUnlimited=0;
@@ -973,6 +856,7 @@ public abstract class MSA {
 
 	public static int bandwidth=0;
 	public static float bandwidthRatio=0;
+	public static boolean flatMode=false;
 	
 	public static final int MIN_SCORE_ADJUST=120;
 

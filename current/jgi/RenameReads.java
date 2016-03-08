@@ -10,10 +10,10 @@ import dna.Parser;
 import dna.Timer;
 
 import stream.ConcurrentGenericReadInputStream;
-import stream.ConcurrentReadStreamInterface;
+import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
+import stream.ConcurrentReadOutputStream;
 import stream.Read;
 
 import fileIO.ByteFile;
@@ -49,7 +49,7 @@ public class RenameReads {
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
 		outstream.println("interleaved=auto \tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=80     \tLength of lines in fasta output");
+		outstream.println("fastawrap=70     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
@@ -63,14 +63,13 @@ public class RenameReads {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
-		boolean setInterleaved=false; //Whether it was explicitly set.
-
+		Parser parser=new Parser();
 		FastaReadInputStream.SPLIT_READS=false;
 		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
+		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
@@ -82,7 +81,15 @@ public class RenameReads {
 
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
@@ -102,12 +109,6 @@ public class RenameReads {
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 			}else if(a.equals("prefix") || a.equals("p")){
@@ -131,84 +132,22 @@ public class RenameReads {
 				extin=b;
 			}else if(a.equals("extout")){
 				extout=b;
-			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
-				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("lctn") || a.equals("lowercaseton")){
-				Read.LOWER_CASE_TO_N=Tools.parseBoolean(b);
-			}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
-				boolean x=Tools.parseBoolean(b);
-				Read.NULLIFY_BROKEN_QUALITY=x;
-				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-				setInterleaved=true;
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				setInterleaved=true;
 			}else if(a.equals("renamebyinsert")){
 				renameByInsert=Tools.parseBoolean(b);
-			}else if(a.equals("renamebymapping")){
-				renameByMapping=Tools.parseBoolean(b);
 			}else if(a.equals("renamebytrim")){
 				renameByTrim=Tools.parseBoolean(b);
 			}else if(a.equals("addprefix")){
 				addPrefix=Tools.parseBoolean(b);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-					setInterleaved=true;
-				}
+			}else if(a.equals("prefixonly")){
+				prefixOnly=Tools.parseBoolean(b);
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
-				int x=Integer.parseInt(b);
-				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
+				stream.FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
-					in1=b.replace("#", "1");
-					in2=b.replace("#", "2");
-				}
 			}else if(out1==null && i==1 && !arg.contains("=")){
 				out1=arg;
 			}else{
@@ -216,10 +155,18 @@ public class RenameReads {
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+			
+			renameByMapping=FASTQ.TAG_CUSTOM;
 		}
 		
-		if(prefix==null){prefix="";}
-		else if(!prefix.endsWith("_")){prefix=prefix+"_";}
+		{//Process parser fields
+			Parser.processQuality();
+		}
+		
+		if(prefix==null || prefix.length()<1){prefix="";}
+		else if(!prefix.endsWith("_") && !prefixOnly){
+			prefix=prefix+"_";
+		}
 
 		if(renameByInsert){
 			prefix="insert=";
@@ -248,7 +195,7 @@ public class RenameReads {
 			printOptions();
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
-		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
+		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.threads()>2){
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
@@ -261,7 +208,7 @@ public class RenameReads {
 //			out1="stdout";
 		}
 		
-		if(!setInterleaved){
+		if(!parser.setInterleaved){
 			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
@@ -282,39 +229,29 @@ public class RenameReads {
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
-		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
-		}
-		
 		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
 		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
+		
+		if(renameByMapping){
+			assert(ffout1==null || ffout1.fastq()) : "Currently renameByMapping requires fastq output.";
+		}
 	}
 	
 	void process(Timer t){
 		
-		final ConcurrentReadStreamInterface cris;
+		final ConcurrentReadInputStream cris;
 		{
-			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, qfin1, qfin2);
-			Thread th=new Thread(cris);
-			th.start();
+			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, ffin2, qfin1, qfin2);
+			cris.start(); //4567
 		}
 		
 //		TextStreamWriter tsw=new TextStreamWriter(args[2], false, false, true);
 //		tsw.start();
 		
-		RTextOutputStream3 ros=null;
+		ConcurrentReadOutputStream ros=null;
 		if(out1!=null){
 			final int buff=4;
 			
@@ -325,7 +262,7 @@ public class RenameReads {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
-			ros=new RTextOutputStream3(ffout1, ffout2, qfout1, qfout2, buff, null, false);
+			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, false);
 			ros.start();
 		}
 		
@@ -337,27 +274,9 @@ public class RenameReads {
 
 			for(Read r1 : reads){
 				final Read r2=r1.mate;
-//				assert(false) : (r2!=null)+", "+(renameByInsert)+", "+(renameByTrim);
-				if(r2!=null && (renameByInsert || renameByTrim)){
-					
-					r1.setMapped(true);
-					r2.setMapped(true);
-					x=Read.insertSizeMapped(r1, r2, false);
-					if(verbose){System.err.println("True Insert: "+x);}
-					if(renameByTrim){
-						r1.id=r1.numericID+"_"+r1.length()+"_"+Tools.min(x, r1.length())+" /1";
-						r2.id=r2.numericID+"_"+r2.length()+"_"+Tools.min(x, r2.length())+" /2";
-					}else{
-						r1.id=prefix+x;
-						if(r2!=null){
-							r1.id=r1.id+" /1";
-							r2.id=prefix+x+" /2";
-						}
-					}
-					
-				}
+				
 				if(renameByMapping){
-					assert(false) : "TODO";
+					//Should be handled automatically, if output is fastq.
 				}else if(r2!=null && (renameByInsert || renameByTrim)){
 					
 					r1.setMapped(true);
@@ -375,6 +294,12 @@ public class RenameReads {
 						}
 					}
 					
+				}else if(prefixOnly){
+					r1.id=prefix;
+					if(r1.mate!=null){
+						r2.id=prefix;
+					}
+					x++;
 				}else if(addPrefix){
 					r1.id=prefix+r1.id;
 					if(r1.mate!=null){
@@ -391,11 +316,11 @@ public class RenameReads {
 				}
 			}
 			if(ros!=null){ros.add(reads, ln.id);}
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
 //		tsw.poisonAndWait();
@@ -437,8 +362,6 @@ public class RenameReads {
 	public boolean renameByInsert=false;
 	public boolean renameByTrim=false;
 	public boolean addPrefix=false;
-	
-	private byte qin=-1;
-	private byte qout=-1;
+	public boolean prefixOnly=false;
 	
 }

@@ -108,8 +108,8 @@ public class ReadComparatorMapping implements Comparator<Read> {
 	}
 	
 	public int compare3(Read a, Read b){
-		if(a.bases.length!=b.bases.length){
-			return b.bases.length-a.bases.length; //Preferentially puts longer reads first
+		if(a.length()!=b.length()){
+			return b.length()-a.length(); //Preferentially puts longer reads first
 		}
 		if(a.perfect() != b.perfect()){return a.perfect() ? -1 : 1;}
 		int x;

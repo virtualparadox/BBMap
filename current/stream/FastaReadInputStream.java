@@ -56,9 +56,8 @@ public class FastaReadInputStream extends ReadInputStream {
 
 		/* Start an input stream */
 		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, false, true);
-		ConcurrentReadStreamInterface cris=ConcurrentGenericReadInputStream.getReadInputStream(-1L, false, false, ff, null);
-		Thread cristhread=new Thread(cris);
-		cristhread.start();
+		ConcurrentReadInputStream cris=ConcurrentReadInputStream.getReadInputStream(-1L, false, ff, null);
+		cris.start(); //4567
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
@@ -67,24 +66,25 @@ public class FastaReadInputStream extends ReadInputStream {
 			list.addAll(reads);
 			
 			/* Dispose of the old list and fetch a new one */
-			cris.returnList(ln, ln.list.isEmpty());
+			cris.returnList(ln.id, ln.list.isEmpty());
 			ln=cris.nextList();
 			reads=(ln!=null ? ln.list : null);
 		}
 		/* Cleanup */
-		cris.returnList(ln, ln.list.isEmpty());
+		cris.returnList(ln.id, ln.list.isEmpty());
 //		errorState|=ReadWrite.closeStream(cris);
 		
 		return list;
 	}
 	
-	public FastaReadInputStream(String fname, boolean colorspace_, boolean interleaved_, boolean allowSubprocess_, long maxdata){
-		this(FileFormat.testInput(fname, FileFormat.FASTA, FileFormat.FASTA, 0, allowSubprocess_, false, false), colorspace_, interleaved_, maxdata);
+	public FastaReadInputStream(String fname, boolean interleaved_, boolean amino_, boolean allowSubprocess_, long maxdata){
+		this(FileFormat.testInput(fname, FileFormat.FASTA, FileFormat.FASTA, 0, allowSubprocess_, false, false), interleaved_, amino_, maxdata);
 	}
 	
-	public FastaReadInputStream(FileFormat ff, boolean colorspace_, boolean interleaved_, long maxdata){
+	public FastaReadInputStream(FileFormat ff, boolean interleaved_, boolean amino_, long maxdata){
 		name=ff.name();
-		colorspace=colorspace_;
+		amino=amino_;
+		flag=(amino ? Read.AAMASK : 0);
 		
 		if(!fileIO.FileFormat.hasFastaExtension(name) && !name.startsWith("stdin")){
 			System.err.println("Warning: Did not find expected fasta file extension for filename "+name);
@@ -167,16 +167,15 @@ public class FastaReadInputStream extends ReadInputStream {
 	public final boolean close(){
 		if(!open){return false;}
 		open=false;
-//		assert(!name.equals("ec_reads_8m_snps.fa.gz"));
 		assert(ins!=null);
 		
 		try {
 			if(ins!=System.in){
-				ins.close();
+				errorState|=ReadWrite.finishReading(ins, name, allowSubprocess);
 			}
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		} catch (Exception e) {
+			System.err.println("Some error occured: "+e);
+			errorState=true;
 		}
 		
 		ins=null;
@@ -202,7 +201,13 @@ public class FastaReadInputStream extends ReadInputStream {
 		nextReadIndex=0;
 		currentList=new ArrayList<Read>(BUF_LEN);
 		
-		if(header==null){header=nextHeader();}
+		if(header==null){
+			header=nextHeader();
+			if(header==null){
+				currentList=null;
+				return false;
+			}
+		}
 		long len=0;
 		for(int i=0; i<BUF_LEN && len<MAX_DATA; i++){
 			Read r=generateRead(0);
@@ -251,7 +256,7 @@ public class FastaReadInputStream extends ReadInputStream {
 		byte[] quals=null;
 		if(FAKE_QUALITY){
 			quals=new byte[bases.length];
-			Arrays.fill(quals, (byte)(FAKE_QUALITY_LEVEL));
+			Arrays.fill(quals, (byte)(Shared.FAKE_QUAL));
 		}
 //		String hd=((currentSection==1 && !hitmax) ? header : header+"_"+currentSection);
 		String hd=((!FORCE_SECTION_NAME && currentSection==1 && bases.length<=maxLen) ? header : header+"_"+currentSection);
@@ -270,7 +275,8 @@ public class FastaReadInputStream extends ReadInputStream {
 						byte trueStrand=Byte.parseByte(answer[2]);
 						int trueLoc=Integer.parseInt(answer[3]);
 						int trueStop=Integer.parseInt(answer[4]);
-						r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, hd, quals, colorspace, nextReadID);
+//						r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, hd, quals, nextReadID);
+						r=new Read(bases, trueChrom, trueLoc, trueStop, hd, quals, nextReadID, (flag|trueStrand));
 						r.setSynthetic(true);
 					} catch (NumberFormatException e) {
 						FASTQ.PARSE_CUSTOM=false;
@@ -285,9 +291,12 @@ public class FastaReadInputStream extends ReadInputStream {
 				System.err.println("Turned off PARSE_CUSTOM because header="+header+", index="+header.indexOf('_'));
 			}
 		}
-		if(r==null){r=new Read(bases, (byte)0, (byte)0, 0, 0, hd, quals, colorspace, nextReadID);}
+		if(r==null){
+//			r=new Read(bases, (byte)0, (byte)0, 0, 0, hd, quals, nextReadID);
+			r=new Read(bases, -1, -1, -1, hd, quals, nextReadID, flag);
+		}
 		r.setPairnum(pairnum);
-		if(verbose){System.err.println("Made read:\t"+(r.bases.length>1000 ? r.id : r.toString()));}
+		if(verbose){System.err.println("Made read:\t"+(r.length()>1000 ? r.id : r.toString()));}
 		return r;
 	}
 	
@@ -299,8 +308,8 @@ public class FastaReadInputStream extends ReadInputStream {
 		assert(bstart>=bstop || buffer[x]=='>') : bstart+", "+bstop+", '"+(char)buffer[x]+"'";
 		while(x<bstop && buffer[x]>slashr){x++;}
 		if(verbose){System.err.println("A: x="+x);}
-		if(x<bstop && (buffer[x]==0x1 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
-			while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1 || buffer[x]==tab)){
+		if(x<bstop && (buffer[x]<0x2 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
+			while(x<bstop && (buffer[x]>slashr || buffer[x]<0x2 || buffer[x]==tab)){
 				if(buffer[x]==0x1){buffer[x]=carrot;}
 				x++;
 			}
@@ -318,8 +327,8 @@ public class FastaReadInputStream extends ReadInputStream {
 				(buffer[x]=='@' ? "If this is a fastq file, please rename it with a '.fastq' extension.\n" : "")+
 					bstart+", "+bstop+", "+(int)buffer[x]+", "+(char)buffer[x]; //Note: This assertion will fire if a fasta file starts with a newline.
 			while(x<bstop && buffer[x]>slashr){x++;}
-			if(x<bstop && (buffer[x]==0x1 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
-				while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1 || buffer[x]==tab)){
+			if(x<bstop && (buffer[x]<0x2 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
+				while(x<bstop && (buffer[x]>slashr || buffer[x]<0x2 || buffer[x]==tab)){
 					if(buffer[x]==0x1){buffer[x]=carrot;}
 					x++;
 				}
@@ -351,7 +360,7 @@ public class FastaReadInputStream extends ReadInputStream {
 		assert(open) : "Attempting to read from a closed file.  Current header: "+header;
 		if(bstart>=bstop){
 			int bytes=fillBuffer();
-			if(bytes<1){return null;}
+			if(bytes<1 || !open){return null;}
 		}
 		int x=bstart;
 		int bases=0;
@@ -377,7 +386,7 @@ public class FastaReadInputStream extends ReadInputStream {
 		}
 		
 		if(bases<minLen){
-			assert(open);
+			assert(open) : "Attempting to read from a closed file.  Current header: "+header;
 			bstart=x;
 			if(verbose){System.err.println("Fetched "+bases+" bases; returning null.  bstart="+bstart+", bstop="+bstop/*+"\n"+new String(buffer)*/);}
 			return null;
@@ -416,6 +425,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	/** Fills buffer.  Ensures that result will extend to the next caret or EOF.  Returns number of bytes filled. */
 	private final int fillBuffer(){
 		assert(open);
+		if(!open){return 0;}
 		if(verbose){System.err.println("fillBuffer() : bstart="+bstart+", bstop="+bstop);}
 		if(bstart<bstop){ //Shift end bytes to beginning
 			if(bstart>0){
@@ -466,7 +476,7 @@ public class FastaReadInputStream extends ReadInputStream {
 			assert(nextReadID==0);
 			assert(bstart==0);
 			while(bstop>bstart && buffer[bstart]==';'){
-				while(bstop>bstart && (buffer[bstart]>slashr || buffer[bstart]==0x1 || buffer[bstart]==tab)){bstart++;}
+				while(bstop>bstart && (buffer[bstart]>slashr || buffer[bstart]<0x2 || buffer[bstart]==tab)){bstart++;}
 				while(bstop>bstart && buffer[bstart]<=slashr){bstart++;}
 			}
 			if(bstart>=bstop){ //Overflowed buffer with comments; recur
@@ -532,7 +542,8 @@ public class FastaReadInputStream extends ReadInputStream {
 
 	public final boolean allowSubprocess;
 	public final boolean interleaved;
-	public final boolean colorspace;
+	public final boolean amino;
+	public final int flag;
 	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
 	private final long MAX_DATA;
 	private final int maxLen, minLen;
@@ -544,9 +555,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	public static boolean SPLIT_READS=false;
 	public static int TARGET_READ_LEN=500;
 	public static int MIN_READ_LEN=1;//40;
-	public static int DEFAULT_WRAP=80;
 	public static boolean FAKE_QUALITY=false;
-	public static byte FAKE_QUALITY_LEVEL=30;
 	public static boolean FORCE_SECTION_NAME=false;
 	
 }
