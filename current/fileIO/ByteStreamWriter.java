@@ -10,8 +10,11 @@ import kmer.AbstractKmerTable;
 
 import stream.ByteBuilder;
 import stream.Read;
+import ukmer.AbstractKmerTableU;
 
+import dna.AminoAcid;
 import dna.Data;
+import dna.Timer;
 
 
 
@@ -25,6 +28,27 @@ public class ByteStreamWriter extends Thread {
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
+	
+	public static void main(String[] args){
+		Timer t=new Timer();
+		final int alen=1000;
+		byte[] array=new byte[alen];
+		for(int i=0; i<array.length; i++){
+			array[i]=AminoAcid.numberToBase[i%4];
+		}
+		array[array.length-1]='\n';
+		long iters=Long.parseLong(args[1]);
+		String fname=args[0];
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, true, false, true);
+		bsw.start();
+		for(long i=0; i<iters; i++){
+			bsw.print(array);
+		}
+		bsw.poisonAndWait();
+		t.stop();
+		System.err.println("MB/s: \t"+String.format("%.2f", ((alen*iters)/(t.elapsed/1000.0))));
+		System.err.println("Time: \t"+t);
+	}
 	
 	public ByteStreamWriter(String fname_, boolean overwrite_, boolean append_, boolean allowSubprocess_){
 		this(fname_, overwrite_, append_, allowSubprocess_, 0);
@@ -56,7 +80,7 @@ public class ByteStreamWriter extends Thread {
 		if(!BAM || !Data.SAMTOOLS() || !Data.SH()){
 			outstream=ReadWrite.getOutputStream(fname, append, true, allowSubprocess);
 		}else{
-			outstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true);
+			outstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true, true);
 		}
 		
 		queue=new ArrayBlockingQueue<ByteBuilder>(5);
@@ -344,6 +368,16 @@ public class ByteStreamWriter extends Thread {
 		flushBuffer(false);
 	}
 	
+	public void printKmer(long[] array, int count, int k){
+		AbstractKmerTableU.toBytes(array, count, k, buffer);
+		flushBuffer(false);
+	}
+	
+	public void printKmer(long[] array, int[] values, int k){
+		AbstractKmerTableU.toBytes(array, values, k, buffer);
+		flushBuffer(false);
+	}
+	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------           Println            ----------------*/
@@ -368,6 +402,8 @@ public class ByteStreamWriter extends Thread {
 	}
 	public void printlnKmer(long kmer, int count, int k){printKmer(kmer, count, k); print('\n');}
 	public void printlnKmer(long kmer, int[] values, int k){printKmer(kmer, values, k); print('\n');}
+	public void printlnKmer(long[] array, int count, int k){printKmer(array, count, k); print('\n');}
+	public void printlnKmer(long[] array, int[] values, int k){printKmer(array, values, k); print('\n');}
 	public void println(Read r){print(r); print('\n');}
 
 	

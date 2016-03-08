@@ -6,8 +6,6 @@ import java.util.Arrays;
 import stream.ByteBuilder;
 
 import align2.Tools;
-import dna.CoverageArray;
-import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
 /**
@@ -158,12 +156,13 @@ public abstract class KmerNode extends AbstractKmerTable {
 	public KmerNode left(){return left;}
 	public KmerNode right(){return right;}
 	public long pivot(){return pivot;}
+	public int owner(){return owner;}
 	
 	public int count(){return value();}
 	protected abstract int value();
 	protected abstract int[] values(int[] singleton);
 	/** Returns new value */
-	protected abstract int set(int value_);
+	public abstract int set(int value_);
 	protected abstract int set(int[] values_);
 	
 	@Override
@@ -268,6 +267,11 @@ public abstract class KmerNode extends AbstractKmerTable {
 		return n;
 	}
 	
+	@Override
+	public long regenerate(){
+		throw new RuntimeException("Not supported.");
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------         Info Dumping         ----------------*/
 	/*--------------------------------------------------------------*/
@@ -283,10 +287,10 @@ public abstract class KmerNode extends AbstractKmerTable {
 	protected abstract ByteBuilder dumpKmersAsText(ByteBuilder bb, int k, int mincount);
 	
 	@Override
-	public final void fillHistogram(CoverageArray ca, int max){
+	public final void fillHistogram(long[] ca, int max){
 		final int value=value();
 		if(value<1){return;}
-		ca.increment(Tools.min(value, max));
+		ca[Tools.min(value, max)]++;
 		if(left!=null){left.fillHistogram(ca, max);}
 		if(right!=null){right.fillHistogram(ca, max);}
 	}
@@ -300,8 +304,13 @@ public abstract class KmerNode extends AbstractKmerTable {
 	
 	@Override
 	public final void initializeOwnership(){
-		//do nothing
+		owner=-1;
+		if(left!=null){left.initializeOwnership();}
+		if(right!=null){right.initializeOwnership();}
 	}
+	
+	@Override
+	public final void clearOwnership(){initializeOwnership();}
 	
 	@Override
 	public final int setOwner(final long kmer, final int newOwner){

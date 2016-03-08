@@ -17,7 +17,6 @@ public class ChromToFasta {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 		
 		if(args[0].contains("=") && (args[0].startsWith("build") || args[0].startsWith("genome"))){
 			int build=Integer.parseInt(args[0].split("=")[1]);

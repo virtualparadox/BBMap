@@ -34,7 +34,6 @@ public class MergeReadHeaders {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		MergeReadHeaders mgr=new MergeReadHeaders(args);
 		mgr.process(t);
 	}
@@ -49,13 +48,11 @@ public class MergeReadHeaders {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Parser parser=new Parser();
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -76,8 +73,6 @@ public class MergeReadHeaders {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("passes")){
 				assert(false) : "'passes' is disabled.";
 //				passes=Integer.parseInt(b);
@@ -93,7 +88,7 @@ public class MergeReadHeaders {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Tools.max(Integer.parseInt(b), 1));
+				Shared.setThreads(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("header")){

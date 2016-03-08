@@ -28,13 +28,13 @@ public class BBWrap {
 		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 //			printOptions();
 			System.exit(0);
 		}
+		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
 		Timer t=new Timer();
-		t.start();
 		
 		Read.TO_UPPER_CASE=true;
 		

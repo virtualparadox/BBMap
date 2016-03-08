@@ -11,10 +11,9 @@ Description:  Deduplicates mapped reads based on pair mapping coordinates.
 Usage:   dedupebymapping.sh in=<file> out=<file>
 
 Input may be stdin or a sam/bam file, compressed or uncompressed.
-Output may be stdout or a file.
 
-Optional parameters (and their defaults)
 
+Parameters:
 in=<file>           The 'in=' flag is needed if the input file is not the 
                     first parameter.  'in=stdin' will pipe from standard in.
 out=<file>          The 'out=' flag is needed if the output file is not the 
@@ -38,7 +37,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx3g"
@@ -64,10 +73,12 @@ calcXmx () {
 calcXmx "$@"
 
 dedupebymapping() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z $z2 -cp $CP jgi.DedupeByMapping $@"
 	echo $CMD >&2
 	eval $CMD

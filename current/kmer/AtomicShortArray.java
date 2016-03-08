@@ -13,6 +13,7 @@ public class AtomicShortArray {
 		assert(length_>=0);
 		length=length_;
 		intArray=new AtomicIntegerArray((length+1)/2);
+		assert(false) : "TODO";
 	}
 	
 //	public short set(int position, short value){

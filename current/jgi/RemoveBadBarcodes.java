@@ -22,7 +22,6 @@ public class RemoveBadBarcodes extends BBTool_ST {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		RemoveBadBarcodes bbt=new RemoveBadBarcodes(args);
 		bbt.process(t);
 	}

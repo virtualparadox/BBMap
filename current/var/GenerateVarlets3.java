@@ -185,7 +185,6 @@ public class GenerateVarlets3 {
 	public void process(){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		if(sitesfile==null){
 			sitemap=null;

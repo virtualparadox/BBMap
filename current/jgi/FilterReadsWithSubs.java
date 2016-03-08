@@ -28,7 +28,6 @@ public class FilterReadsWithSubs extends BBTool_ST {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FilterReadsWithSubs bbt=new FilterReadsWithSubs(args);
 		bbt.process(t);
 	}
@@ -45,10 +44,10 @@ public class FilterReadsWithSubs extends BBTool_ST {
 			maxq=(int)Tools.parseKMG(b);
 			return true;
 		}else if(a.equals("keepperfect")){
-			keepPerfect=Boolean.parseBoolean(b);
+			keepPerfect=Tools.parseBoolean(b);
 			return true;
 		}else if(a.equals("countindels")){
-			countIndels=Boolean.parseBoolean(b);
+			countIndels=Tools.parseBoolean(b);
 			return true;
 		}
 		

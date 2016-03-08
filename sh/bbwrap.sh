@@ -23,13 +23,23 @@ mapper=bbmap      Select mapper.  May be BBMap, BBMapPacBio,
                   or BBMapPacBioSkimmer.
 append=f          Append to files rather than overwriting them.  
                   If append is enabled, and there is exactly one output file,
-		  all output will be written to that file.
+                  all output will be written to that file.
 
-***** All BBMap parameters can be used; run bbmap.sh for more details. *****
+***** All BBMap parameters can be used; see bbmap.sh for more details. *****
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -56,11 +66,13 @@ calcXmx () {
 calcXmx "$@"
 
 bbwrap() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBWrap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
 	eval $CMD

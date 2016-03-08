@@ -36,7 +36,6 @@ public class BBSplitter {
 			Shared.BBMAP_CLASS="BBSplitter";
 		}
 		Timer t=new Timer();
-		t.start();
 		String[] margs=processArgs(args);
 		ReadWrite.waitForWritingToFinish();
 		t.stop();
@@ -71,7 +70,6 @@ public class BBSplitter {
 		ReadWrite.ZIPLEVEL=2;
 		
 		Timer t=new Timer();
-		t.start();
 		
 		
 		int ziplevel=-1;
@@ -1118,6 +1116,13 @@ public class BBSplitter {
 		}
 		tsw.poison();
 		tsw.waitForFinish();
+		
+		try {
+			File f=new File(outname);
+			f.setExecutable(true, false);
+		} catch (Exception e) {
+//			e.printStackTrace();
+		}
 	}
 	
 	public static class SetCount implements Comparable<SetCount>{
@@ -1210,7 +1215,7 @@ public class BBSplitter {
 	public static boolean verbose=false;
 	public static boolean forceRebuild=false;
 	private static final ArrayList<Read> blank=new ArrayList<Read>(0);
-
+	
 	public static final int MAP_NORMAL=1;
 	public static final int MAP_ACC=2;
 	public static final int MAP_PACBIO=3;

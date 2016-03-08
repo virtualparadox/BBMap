@@ -17,7 +17,7 @@ public final class IntList{
 	
 	public final void set(int loc, int value){
 		if(loc>=array.length){
-			resize((loc+1)*2);
+			resize(loc*2L+1);
 		}
 		array[loc]=value;
 		size=max(size, loc+1);
@@ -25,7 +25,7 @@ public final class IntList{
 	
 	public final void increment(int loc, int value){
 		if(loc>=array.length){
-			resize((loc+1)*2);
+			resize(loc*2L+1);
 		}
 		array[loc]+=value;
 		size=max(size, loc+1);
@@ -37,15 +37,24 @@ public final class IntList{
 	
 	public final void add(int x){
 		if(size>=array.length){
-			resize(max(size*2, 1));
+			resize(size*2L+1);
 		}
 		array[size]=x;
 		size++;
 	}
 	
-	public final void resize(int size2){
-		assert(size2>size);
-		array=Arrays.copyOf(array, size2);
+	public boolean contains(int x) {
+		for(int i=0; i<size; i++){
+			if(array[i]==x){return true;}
+		}
+		return false;
+	}
+	
+	private final void resize(final long size2){
+		assert(size2>size) : size+", "+size2;
+		final int size3=(int)Tools.min(Integer.MAX_VALUE, size2);
+		assert(size2>size) : "Overflow: "+size+", "+size2+" -> "+size3;
+		array=Arrays.copyOf(array, size3);
 	}
 	
 	public final void shrink(){
@@ -113,6 +122,10 @@ public final class IntList{
 	
 	public void sort() {
 		if(size>1){Arrays.sort(array, 0, size);}
+	}
+	
+	public void reverse() {
+		Tools.reverseInPlace(array, 0, size);
 	}
 	
 	/** Assumes this is sorted.

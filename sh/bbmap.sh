@@ -5,12 +5,12 @@ usage(){
 echo "
 BBMap v35.x
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified June 3, 2015
+Last modified December 15, 2015
 
-Description:  Fast and accurate short-read aligner for DNA and RNA.
+Description:  Fast and accurate splice-aware read aligner.
 
-To index:   bbmap.sh ref=<reference fasta>
-To map:     bbmap.sh in=<reads> out=<output sam>
+To index:     bbmap.sh ref=<reference fasta>
+To map:       bbmap.sh in=<reads> out=<output sam>
 To map without writing an index:
     bbmap.sh ref=<reference fasta> in=<reads> out=<output sam> nodisk
 
@@ -29,6 +29,8 @@ build=1                 If multiple references are indexed in the same directory
                         each needs a unique numeric ID (unless using 'nodisk').
 k=13                    Kmer length, range 8-15.  Longer is faster but uses 
                         more memory.  Shorter is more sensitive.
+                        If indexing and mapping are done in two steps, K should
+                        be specified each time.
 path=<.>                Specify the location to write the index, if you don't 
                         want it in the current working directory.
 usemodulo=f             Throw away ~80% of kmers based on remainder modulo a 
@@ -48,7 +50,8 @@ interleaved=auto        True forces paired/interleaved input; false forces
                         status will be autodetected from read names.
 fastareadlen=500        Break up FASTA reads longer than this.  Max is 500 for
                         BBMap and 6000 for BBMapPacBio.  Only works for FASTA
-                        input (use 'maxlen' for FASTQ input).
+                        input (use 'maxlen' for FASTQ input).  The default for
+                        bbmap.sh is 500, and for mapPacBio.sh is 6000.
 unpigz=f                Spawn a pigz (parallel gzip) process for faster 
                         decompression than using Java.  
                         Requires pigz to be installed.
@@ -78,8 +81,6 @@ minid=0.76              Approximate minimum alignment identity to look for.
                         Higher is faster and less sensitive.
 minhits=1               Minimum number of seed hits required for candidate sites.
                         Higher is faster.
-k=13                    Kmer length of index.  Lower is slower, more sensitive,
-                        and uses slightly less RAM.  Range is 7 to 15.
 local=f                 Set to true to use local, rather than global, alignments.
                         This will soft-clip ugly ends of poor alignments.
 perfectmode=f           Allow only perfect mappings when set to true (very fast).
@@ -102,10 +103,17 @@ killbadpairs=f          (kbp) If a read pair is mapped with an inappropriate
                         mapping quality is marked unmapped.
 pairedonly=f            (po) Treat unpaired reads as unmapped.  Thus they will 
                         be sent to 'outu' but not 'outm'.
-rcomp=f                 Reverse complement reads prior to mapping.
-rcompmate=f             Reverse complement only read2.
+rcomp=f                 Reverse complement both reads prior to mapping (for LMP
+                        outward-facing libraries).
+rcompmate=f             Reverse complement read2 prior to mapping.
 pairlen=32000           Set max allowed distance between paired reads.  
                         (insert size)=(pairlen)+(read1 length)+(read2 length)
+rescuedist=1200         Don't try to rescue paired reads if avg. insert size
+                        greater than this.  Lower is faster.
+rescuemismatches=32     Maximum mismatches allowed in a rescued read.  Lower
+                        is faster.
+averagepairdist=100     (apd) Initial average distance between paired reads.
+                        Varies dynamically; does not need to be specified.
 bandwidthratio=0        (bwr) If above zero, restrict alignment band to this 
                         fraction of read length.  Faster but less accurate.
 usejni=f                (jni) Do alignments faster, in C code.  Requires 
@@ -169,6 +177,9 @@ machineout=f            Set to true to output statistics in machine-friendly
 printunmappedcount=f    Print the total number of unmapped reads and bases.
                         If input is paired, the number will be of pairs
                         for which both reads are unmapped.
+showprogress=0          If positive, print a '.' every X reads.
+showprogress2=0         If positive, print the number of seconds since the
+                        last progress update (instead of a '.').
 
 Post-Filtering Parameters:
 
@@ -199,16 +210,21 @@ rgid=                   Set readgroup ID.  All other readgroup fields
 mdtag=f                 Write MD tags.
 nhtag=f                 Write NH tags.
 xmtag=f                 Write XM tags (may only work correctly with ambig=all).
+amtag=f                 Write AM tags.
+nmtag=f                 Write NM tags.
 xstag=f                 Set to 'xs=fs', 'xs=ss', or 'xs=us' to write XS tags 
                         for RNAseq using firststrand, secondstrand, or 
                         unstranded libraries.  Needed by Cufflinks.  
                         JGI mainly uses 'firststrand'.
 stoptag=f               Write a tag indicating read stop location, prefixed by YS:i:
+lengthtag=f             Write a tag indicating (query,ref) alignment lengths, 
+                        prefixed by YL:Z:
 idtag=f                 Write a tag indicating percent identity, prefixed by YI:f:
 inserttag=f             Write a tag indicating insert size, prefixed by X8:Z:
 scoretag=f              Write a tag indicating BBMap's raw score, prefixed by YR:i:
 timetag=f               Write a tag indicating this read's mapping time, prefixed by X0:i:
-boundstag=f             Write a tag indicating whether either read in the pair goes off the end of the reference, prefixed by XB:Z:
+boundstag=f             Write a tag indicating whether either read in the pair
+                        goes off the end of the reference, prefixed by XB:Z:
 notags=f                Turn off all optional tags.
 
 Histogram and statistics output parameters:
@@ -233,6 +249,7 @@ gchist=<file>           Read GC content histogram.
 gcbins=100              Number gchist bins.  Set to 'auto' to use read length.
 idhist=<file>           Histogram of read count versus percent identity.
 idbins=100              Number idhist bins.  Set to 'auto' to use read length.
+statsfile=stderr        Mapping statistics are printed here.
 
 Coverage output parameters (these may reduce speed and use more RAM):
 
@@ -242,7 +259,7 @@ covhist=<file>          Histogram of # occurrences of each depth level.
 basecov=<file>          Coverage per base location.
 bincov=<file>           Print binned coverage per location (one line per X bases).
 covbinsize=1000         Set the binsize for binned coverage output.
-nzo=f                   Only print scaffolds with nonzero coverage.
+nzo=t                   Only print scaffolds with nonzero coverage.
 twocolumn=f             Change to true to print only ID and Avg_fold instead of 
                         all 6 columns to the 'out=' file.
 32bit=f                 Set to true if you need per-base coverage over 64k.
@@ -251,6 +268,8 @@ startcov=f              Only track start positions of reads.
 secondarycov=t          Include coverage of secondary alignments.
 physcov=f               Calculate physical coverage for paired reads.
                         This includes the unsequenced bases.
+delcoverage=t           (delcov) Count bases covered by deletions as covered.
+                        True is faster than false.
 
 Java Parameters:
 -Xmx                    This will be passed to Java to set memory usage, 
@@ -268,7 +287,17 @@ any problems, or post at: http://seqanswers.com/forums/showthread.php?t=41057
 "   
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -296,11 +325,13 @@ calcXmx "$@"
 
 
 bbmap() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
 	eval $CMD

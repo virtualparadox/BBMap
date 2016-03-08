@@ -599,7 +599,7 @@ public final class BBIndex5 extends AbstractIndex {
 			cycle++;
 		}
 
-		assert(Read.CHECKSITES(result, basesP, basesM, id)); //TODO: Comment out once checked
+		assert(Read.CHECKSITES(result, basesP, basesM, id, false)); //TODO: Comment out once checked
 		
 		return result;
 	}

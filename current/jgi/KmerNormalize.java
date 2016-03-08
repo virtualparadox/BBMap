@@ -22,6 +22,7 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
+import ukmer.Kmer;
 
 import align2.ListNum;
 import align2.ReadErrorComparator;
@@ -41,6 +42,7 @@ import fileIO.TextStreamWriter;
 
 
 /**
+ * AKA BBNorm.
  * Normalize depth by downsampling reads with high coverage.
  * Uses atomic arrays for bloom filter and an atomic histogram.
  * Succeeds KmerDownsampleAH.
@@ -118,7 +120,7 @@ public class KmerNormalize {
 		String rhistFileOut=null;
 		String peakFileOut=null;
 		int threads=-1;
-		ReadWrite.ZIPLEVEL=2;
+		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		int minq=KmerCountAbstract.minQuality;
 		KmerCountAbstract.CANONICAL=true;
@@ -184,8 +186,6 @@ public class KmerNormalize {
 				//do nothing
 			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("keepall")){
 				KEEP_ALL=Tools.parseBoolean(b);
 			}else if(a.equals("k") || a.equals("kmer")){
@@ -213,6 +213,9 @@ public class KmerNormalize {
 			}else if(a.equals("precells") || a.equals("prefiltercells")){
 				precells=Tools.parseKMG(b);
 				prefilter=prefilter || precells!=0;
+			}else if(a.equals("prefiltersize") || a.equals("prefilterfraction")){
+				prefilterFraction=Double.parseDouble(b);
+				prefilter=prefilterFraction>0;
 			}else if(a.equals("minq") || a.equals("minqual")){
 				minq=Byte.parseByte(b);
 			}else if(a.equals("zerobin")){
@@ -405,10 +408,10 @@ public class KmerNormalize {
 			}else if(a.equals("discardbadonlyf") || a.equals("dbof") || a.equals("discardbadonly2") || a.equals("dbo2")){
 				discardBadOnlyF=Tools.parseBoolean(b);
 			}else if(a.equals("requirebothbad") || a.equals("rbb")){
-				rbb=Tools.parseBoolean(b);
+				rbb=Tools.parseBoolean(b);//Already caught by parser
 			}else if(a.equals("saverarereads") || a.equals("srr")){
 				SAVE_RARE_READS=Tools.parseBoolean(b);
-			}else if(a.equals("eccByOverlap") || a.equals("overlap")){
+			}else if(a.equals("eccbyoverlap") || a.equals("ecco") || a.equals("overlap")){
 				if("auto".equalsIgnoreCase(b)){eccByOverlapAuto=true;}
 				else{
 					eccByOverlap=Tools.parseBoolean(b);
@@ -445,6 +448,8 @@ public class KmerNormalize {
 				minPeak=Integer.parseInt(b);
 			}else if(a.equals("maxpeak")){
 				maxPeak=Integer.parseInt(b);
+			}else if(a.equals("ploidy")){
+				ploidy=Integer.parseInt(b);
 			}else if(a.equals("maxpeakcount") || a.equals("maxpc") || a.equals("maxpeaks")){
 				maxPeakCount=Integer.parseInt(b);
 			}else if(a.equals("usetmpdir")){
@@ -467,9 +472,8 @@ public class KmerNormalize {
 						extra=Arrays.asList(b.split(","));
 					}
 				}
-			}else if(i>2 || (!args[i].equals(in1) && !args[i].equals(in2))){
-//				assert(false) : "\n"+i+"\n"+args[i]+"\n"+reads1;
-				throw new RuntimeException("Unknown parameter "+args[i]);
+			}else{
+				throw new RuntimeException("Unknown parameter "+arg);
 			}
 		}
 		
@@ -480,6 +484,7 @@ public class KmerNormalize {
 			TRIM_RIGHT=parser.qtrimRight;
 			TRIM_QUALITY=parser.trimq;
 			MIN_LENGTH=parser.minReadLength;
+			rbb=parser.requireBothBad;
 		}
 		
 		assert(passes<2 || (outLow1==null && outMid1==null && outHigh1==null && outUnc1==null)) : 
@@ -557,7 +562,6 @@ public class KmerNormalize {
 		long bases=0;
 		qhist_total=new long[128];
 		Timer t=new Timer();
-		t.start();
 
 		if(passes>1){
 			String lastTemp1=null;
@@ -900,7 +904,7 @@ public class KmerNormalize {
 		if(prefilter){
 			if(precells<1){
 				long totalbits=cells*cbits;
-				long prebits=(long)(totalbits*0.35);
+				long prebits=(long)(totalbits*prefilterFraction);
 				precells=prebits/pcbits;
 				cells=(totalbits-prebits+cbits-1)/cbits; //Steal memory from cell allocation
 			}
@@ -972,7 +976,7 @@ public class KmerNormalize {
 		KCountArray prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, pcbits, 0, precells, prehashes, minq, true, eccByOverlap, tablereads, 1, buildStepsize, 1, 1, null);
+			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, pcbits, 0, precells, prehashes, minq, true, eccByOverlap, tablereads, 1, buildStepsize, 1, 1, null, 0);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 			double uf=prefilterArray.usedFraction();
 			if(uf>0.6){
@@ -982,7 +986,7 @@ public class KmerNormalize {
 						"or increase the values of the minprob flag to reduce spurious kmers.");
 			}
 		}
-		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, 0, cells, hashes, minq, true, eccByOverlap, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray);
+		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, 0, cells, hashes, minq, true, eccByOverlap, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue));
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));
@@ -1648,7 +1652,7 @@ public class KmerNormalize {
 
 				long cells=(FILTERBYTES*8)/bits;
 				int kbits=2*k;
-				kcaup=KCountArray.makeNew(1L<<kbits, cells, bits, 0, 3, null); 
+				kcaup=KCountArray.makeNew(1L<<kbits, cells, bits, 0, 3, null, 0); 
 			}
 
 			ProcessThread[] pta=new ProcessThread[THREADS];
@@ -1804,7 +1808,10 @@ public class KmerNormalize {
 					array[i]=y;
 				}
 				
-				CallPeaks.printPeaks(array, peakFile, overwrite, minHeight, minVolume, minWidth, minPeak, maxPeak, maxPeakCount);
+				ArrayList<String> args=new ArrayList<String>();
+				args.add("smoothradius=1");
+				args.add("smoothprogressive=t");
+				CallPeaks.printPeaks(array, peakFile, overwrite, minHeight, minVolume, minWidth, minPeak, maxPeak, maxPeakCount, k, ploidy, args);
 			}
 			
 			ByteStreamWriter bsw=null;
@@ -2056,7 +2063,7 @@ public class KmerNormalize {
 	}
 	
 	private static void fixSpikes(int[] cov, long[] kmers, KCountArray kca, final int k){
-		assert(k<32);
+		assert(k<32) : "this function not tested with k>31";
 		if(cov.length<3){return;}
 		if(cov[1]-cov[0]>1){
 			cov[0]=kca.readPrecise(kmers[0], k, true);
@@ -2104,12 +2111,13 @@ public class KmerNormalize {
 
 
 	private static int correctErrors(Read r, int[] cov, long[] kmers, KCountArray kca, final int k,
-			final int low, final int high, final int mult, int maxToCorrect, int maxQual, boolean kmersAlreadyValid, boolean coverageAlreadyValid, long[] qhist, final boolean markOnly){
-		assert(k<32);
+			final int low, final int high, final int mult, int maxToCorrect, int maxQual, boolean kmersAlreadyValid, boolean coverageAlreadyValid, long[] qhist, 
+			final boolean markOnly, Kmer longkmer){
+		assert(k<32) : "this function not tested with k>31";
 		assert(maxToCorrect>0) : "Don't do error correction with a maximum of 0 errors; it's a waste of time.";
 		if(maxToCorrect<1){return 0;}
 		
-		if(!kmersAlreadyValid){kmers=r.toKmers(k, 0, kmers, false);}
+		if(!kmersAlreadyValid){kmers=r.toKmers(k, 0, kmers, false, longkmer);}
 		if(kmers==null || kmers.length<3){return -99;}
 		
 		if(!coverageAlreadyValid){cov=generateCoverage(kca, k, cov, kmers, true);}
@@ -2125,7 +2133,7 @@ public class KmerNormalize {
 		int cfl=0, cfr=0;
 		
 		if(CORRECT_FROM_LEFT){
-			cfl=correctErrorsFromLeft(r, cov, kmers, kca, k, low, high, mult, maxToCorrect, maxQual, suffix, qhist, markOnly);
+			cfl=correctErrorsFromLeft(r, cov, kmers, kca, k, low, high, mult, maxToCorrect, maxQual, suffix, qhist, markOnly, longkmer);
 			if(cfl<0){
 				//Failed correction.
 				r.bases=copy;
@@ -2142,7 +2150,7 @@ public class KmerNormalize {
 					}
 				}
 			}
-			cfr=correctErrorsFromRight(r, cov, kmers, kca, k, low, high, mult, maxToCorrect, maxQual, suffix, qhist, markOnly);
+			cfr=correctErrorsFromRight(r, cov, kmers, kca, k, low, high, mult, maxToCorrect, maxQual, suffix, qhist, markOnly, longkmer);
 			if(cfr<0){
 				//Failed correction.
 				r.bases=copy;
@@ -2154,12 +2162,12 @@ public class KmerNormalize {
 	}
 
 	private static int markErrors(Read r, int[] cov, long[] kmers, KCountArray kca, final int k,
-			final int low, final int high, final int mult, int maxToCorrect, boolean kmersAlreadyValid, boolean coverageAlreadyValid, long[] qhist){
-		assert(k<32);
+			final int low, final int high, final int mult, int maxToCorrect, boolean kmersAlreadyValid, boolean coverageAlreadyValid, long[] qhist, Kmer longkmer){
+		assert(k<32) : "this function not tested with k>31";
 		assert(maxToCorrect>0) : "Don't do error correction with a maximum of 0 errors; it's a waste of time.";
 		if(maxToCorrect<1){return 0;}
 		
-		if(!kmersAlreadyValid){kmers=r.toKmers(k, 0, kmers, false);}
+		if(!kmersAlreadyValid){kmers=r.toKmers(k, 0, kmers, false, longkmer);}
 		if(kmers==null || kmers.length<3){return 0;}
 		
 		if(!coverageAlreadyValid){cov=generateCoverage(kca, k, cov, kmers, true);}
@@ -2207,7 +2215,7 @@ public class KmerNormalize {
 	}
 	
 	/** Returns number of discontinuities detected.  This is not the same as the number of errors,
-	 * but the presence of discontiniuities indicates the presence of errors.
+	 * but the presence of discontinuities indicates the presence of errors.
 	 * @param cov
 	 * @param low
 	 * @param high
@@ -2238,13 +2246,14 @@ public class KmerNormalize {
 	}
 	
 	
-	private static void regenerateKmersAndCoverage(final Read r, final long[] kmers, final int[] cov, final KCountArray kca, final int k, boolean makeCanonical){
+	private static void regenerateKmersAndCoverage(final Read r, final long[] kmers, final int[] cov, final KCountArray kca, final int k, boolean makeCanonical,
+			Kmer longkmer){
 		assert(r!=null && kmers!=null && cov!=null && kca!=null && kca.gap==0);
 		final byte[] bases=r.bases;
 		if(bases==null || bases.length<k+kca.gap){return;}
 		
 		if(k>31){
-			r.toKmers(k, 0, kmers, false);
+			r.toKmers(k, 0, kmers, false, longkmer);
 			generateCoverage(kca, k, cov, kmers, true);
 			return;
 		}
@@ -2284,7 +2293,8 @@ public class KmerNormalize {
 	
 	
 	private static int correctErrorsFromLeft(final Read r, final int[] cov, final long[] kmers, final KCountArray kca, final int k, 
-			final int low, final int high, final int mult, final int maxToCorrect, int maxQual, final byte[] suffix, final long[] qhist, boolean markOnly){
+			final int low, final int high, final int mult, final int maxToCorrect, int maxQual, final byte[] suffix, final long[] qhist, boolean markOnly,
+			Kmer longkmer){
 		
 		int found=0;
 		int corrected=0;
@@ -2313,7 +2323,7 @@ public class KmerNormalize {
 						corrected++;
 						//					r.toKmers(k, 0, kmers, false);
 						//					generateCoverage(kca, k, cov, kmers, true);
-						regenerateKmersAndCoverage(r, kmers, cov, kca, k, false);
+						regenerateKmersAndCoverage(r, kmers, cov, kca, k, false, longkmer);
 					}else{
 						uncorrected++;
 						break;
@@ -2330,7 +2340,8 @@ public class KmerNormalize {
 	
 	
 	private static int correctErrorsFromRight(final Read r, final int[] cov, final long[] kmers, final KCountArray kca, final int k, 
-			final int low, final int high, final int mult, final int maxToCorrect, int maxQual, final byte[] suffix, final long[] qhist, final boolean markOnly){
+			final int low, final int high, final int mult, final int maxToCorrect, int maxQual, final byte[] suffix, final long[] qhist, final boolean markOnly,
+			Kmer longkmer){
 		
 		int found=0;
 		int corrected=0;
@@ -2359,7 +2370,7 @@ public class KmerNormalize {
 						corrected++;
 						//					r.toKmers(k, 0, kmers, false);
 						//					generateCoverage(kca, k, cov, kmers, true);
-						regenerateKmersAndCoverage(r, kmers, cov, kca, k, false);
+						regenerateKmersAndCoverage(r, kmers, cov, kca, k, false, longkmer);
 					}else{
 						uncorrected++;
 						break;
@@ -2795,6 +2806,8 @@ public class KmerNormalize {
 		
 		void normalizeInThread() {
 			
+			Kmer longkmer=(k<32 ? null : new Kmer(k));
+			
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
@@ -2836,38 +2849,10 @@ public class KmerNormalize {
 						basecount+=r1.length();
 						if(r1.length()>=k){
 							if(verbose){outstream.println();}
-							kmers1=r1.toKmers(k, kca.gap, kmers1, false);
+							kmers1=r1.toKmers(k, kca.gap, kmers1, true, longkmer);
 							cov1=generateCoverage(kca, k, cov1, kmers1, k<32);
-							
-							if(CORRECT_ERRORS_THIS_PASS){
-								if(MARK_ERRORS_ONLY){
-									ec1=markErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist);
-									errorsMarked+=ec1;
-									if(ec1>0){marked1=true;}
-								}else{
-									ec1=correctErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, MAX_QUAL_TO_CORRECT, true, true, qhist, MARK_ERRORS_ONLY);
-									if(ec1>=0){
-										errorsCorrected+=ec1;
-									}else{
-										uncorrectable1=true;
-										if(MAX_ERRORS_TO_CORRECT>0){regenerateKmersAndCoverage(r1, kmers1, cov1, kca, k, false);}
-										if(MARK_UNCORRECTABLE_ERRORS){
-											ec1=markErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist);
-											errorsMarked+=ec1;
-											if(ec1>0){marked1=true;}
-										}else{
-											errorsDetected-=ec1;
-										}
-									}
-								}
-								if(TRIM_AFTER_MARKING){
-									if(marked1 || TRIM_EVEN_IF_NO_ERRORS_DETECTED){
-										basesTrimmed+=TrimRead.trimFast(r1, TRIM_LEFT_THIS_PASS, TRIM_RIGHT_THIS_PASS, TRIM_QUALITY, 1);
-									}
-								}
-							}
-							sortCoverageAndIncrementHistogram(cov1);
-							int[] cov=cov1;
+							int[] cov=cov1.clone();
+							sortCoverageAndIncrementHistogram(cov);
 							
 							if(cov!=null){
 								final int covlast=cov.length-1;
@@ -2912,38 +2897,10 @@ public class KmerNormalize {
 						basecount+=r2.length();
 						if(r2.length()>=k){
 							if(verbose){outstream.println();}
-							kmers2=r2.toKmers(k, kca.gap, kmers2, false);
+							kmers2=r2.toKmers(k, kca.gap, kmers2, true, longkmer);
 							cov2=generateCoverage(kca, k, cov2, kmers2, k<32);
-							
-							if(CORRECT_ERRORS_THIS_PASS){
-								if(MARK_ERRORS_ONLY){
-									ec2=markErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist);
-									errorsMarked+=ec2;
-									if(ec2>0){marked2=true;}
-								}else{
-									ec2=correctErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, MAX_QUAL_TO_CORRECT, true, true, qhist, MARK_ERRORS_ONLY);
-									if(ec2>=0){
-										errorsCorrected+=ec2;
-									}else{
-										uncorrectable2=true;
-										if(MAX_ERRORS_TO_CORRECT>0){regenerateKmersAndCoverage(r2, kmers2, cov2, kca, k, false);}
-										if(MARK_UNCORRECTABLE_ERRORS){
-											ec2=markErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist);
-											errorsMarked+=ec2;
-											if(ec2>0){marked2=true;}
-										}else{
-											errorsDetected-=ec2;
-										}
-									}
-								}
-								if(TRIM_AFTER_MARKING){
-									if(marked2 || TRIM_EVEN_IF_NO_ERRORS_DETECTED){
-										basesTrimmed+=TrimRead.trimFast(r2, TRIM_LEFT_THIS_PASS, TRIM_RIGHT_THIS_PASS, TRIM_QUALITY, 1);
-									}
-								}
-							}
-							sortCoverageAndIncrementHistogram(cov2);
-							int[] cov=cov2;
+							int[] cov=cov2.clone();
+							sortCoverageAndIncrementHistogram(cov);
 							
 							if(cov!=null){
 								final int covlast=cov.length-1;
@@ -3072,6 +3029,64 @@ public class KmerNormalize {
 						readsTossed+=readcount;
 						basesTossed+=basecount;
 					}else{
+						if(CORRECT_ERRORS_THIS_PASS){
+							if(r1!=null && r1.length()>=k){
+								if(MARK_ERRORS_ONLY){
+									ec1=markErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist, longkmer);
+									errorsMarked+=ec1;
+									if(ec1>0){marked1=true;}
+								}else{
+									ec1=correctErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, MAX_QUAL_TO_CORRECT, true, true, qhist, MARK_ERRORS_ONLY, longkmer);
+									if(ec1>=0){
+										errorsCorrected+=ec1;
+									}else{
+										uncorrectable1=true;
+										if(MAX_ERRORS_TO_CORRECT>0){regenerateKmersAndCoverage(r1, kmers1, cov1, kca, k, false, longkmer);}
+										if(MARK_UNCORRECTABLE_ERRORS){
+											ec1=markErrors(r1, cov1, kmers1, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist, longkmer);
+											errorsMarked+=ec1;
+											if(ec1>0){marked1=true;}
+										}else{
+											errorsDetected-=ec1;
+										}
+									}
+								}
+								if(TRIM_AFTER_MARKING){
+									if(marked1 || TRIM_EVEN_IF_NO_ERRORS_DETECTED){
+										basesTrimmed+=TrimRead.trimFast(r1, TRIM_LEFT_THIS_PASS, TRIM_RIGHT_THIS_PASS, TRIM_QUALITY, 1);
+									}
+								}
+							}
+
+							if(r2!=null && r2.length()>=k){
+								if(MARK_ERRORS_ONLY){
+									ec2=markErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist, longkmer);
+									errorsMarked+=ec2;
+									if(ec2>0){marked2=true;}
+								}else{
+									ec2=correctErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, MAX_QUAL_TO_CORRECT, true, true, qhist, MARK_ERRORS_ONLY, longkmer);
+									if(ec2>=0){
+										errorsCorrected+=ec2;
+									}else{
+										uncorrectable2=true;
+										if(MAX_ERRORS_TO_CORRECT>0){regenerateKmersAndCoverage(r2, kmers2, cov2, kca, k, false, longkmer);}
+										if(MARK_UNCORRECTABLE_ERRORS){
+											ec2=markErrors(r2, cov2, kmers2, kca, k, EC_LTHRESH, EC_HTHRESH, ERROR_CORRECT_RATIO, MAX_ERRORS_TO_CORRECT, true, true, qhist, longkmer);
+											errorsMarked+=ec2;
+											if(ec2>0){marked2=true;}
+										}else{
+											errorsDetected-=ec2;
+										}
+									}
+								}
+								if(TRIM_AFTER_MARKING){
+									if(marked2 || TRIM_EVEN_IF_NO_ERRORS_DETECTED){
+										basesTrimmed+=TrimRead.trimFast(r2, TRIM_LEFT_THIS_PASS, TRIM_RIGHT_THIS_PASS, TRIM_QUALITY, 1);
+									}
+								}
+							}
+						}
+
 						if(keepList!=null){keepList.add(r1);}
 						readsKept+=readcount;
 						basesKept+=basecount;
@@ -3155,6 +3170,8 @@ public class KmerNormalize {
 		
 		void normalizeInThreadByCountup() {
 			
+			Kmer longkmer=(k<32 ? null : new Kmer(k));
+			
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 
@@ -3181,7 +3198,7 @@ public class KmerNormalize {
 						basecount+=r.length();
 						if(r.length()>=k){
 							if(verbose){outstream.println();}
-							kmers1=r.toKmers(k, kca.gap, kmers1, true);
+							kmers1=r.toKmers(k, kca.gap, kmers1, true, longkmer);
 							k1valid=true;
 						}
 					}
@@ -3190,7 +3207,7 @@ public class KmerNormalize {
 						basecount+=r2.length();
 						if(r2.length()>=k){
 							if(verbose){outstream.println();}
-							kmers2=r2.toKmers(k, kca.gap, kmers2, true);
+							kmers2=r2.toKmers(k, kca.gap, kmers2, true, longkmer);
 							k2valid=true;
 						}
 					}
@@ -3325,11 +3342,11 @@ public class KmerNormalize {
 		}
 		
 		private final int[] getSortedCoverageAndIncrementHistogram(Read r, int[] cov, long[] kmers, 
-				boolean kmersAlreadyValid, boolean kmersAlreadyCanonical, boolean coverageAlreadyValid){
+				boolean kmersAlreadyValid, boolean kmersAlreadyCanonical, boolean coverageAlreadyValid, Kmer longkmer){
 			assert(r!=null && r.bases!=null && r.length()>=k) : r;
 			
 			if(!coverageAlreadyValid){
-				if(!kmersAlreadyValid){kmers=r.toKmers(k, kca.gap, kmers, false);}
+				if(!kmersAlreadyValid){kmers=r.toKmers(k, kca.gap, kmers, false, longkmer);}
 				cov=generateCoverage(kca, k, cov, kmers, (!kmersAlreadyCanonical && k<32));
 			}
 			
@@ -3442,7 +3459,8 @@ public class KmerNormalize {
 	private static int minWidth=2;
 	private static int minPeak=2;
 	private static int maxPeak=Integer.MAX_VALUE;
-	private static int maxPeakCount=8;
+	private static int maxPeakCount=10;
+	private static int ploidy=-1;
 
 	public static int THREAD_HIST_LEN=1<<12;
 	public static int HIST_LEN=1<<20;
@@ -3467,19 +3485,19 @@ public class KmerNormalize {
 	private static boolean eccByOverlapAuto=false;
 	
 	/** High-depth reads will be downsampled to this level in the current pass */
-	private static int TARGET_DEPTH=40;
+	private static int TARGET_DEPTH=100;
 	/** Error-containing reads will be downsampled to at least this level in the current pass */
-	private static int TARGET_DEPTH_BAD_LOW=40;
+	private static int TARGET_DEPTH_BAD_LOW=100;
 	/** Error-containing reads will be downsampled to at most this level in the current pass */
-	private static int TARGET_DEPTH_BAD_HIGH=40;
+	private static int TARGET_DEPTH_BAD_HIGH=100;
 	/** High-depth reads will be downsampled to this level in the final pass */
-	private static int TARGET_DEPTH_F=40;
+	private static int TARGET_DEPTH_F=100;
 	/** High-depth reads will be downsampled to this level in the first pass */
 	private static int TARGET_DEPTH_1=-1;
 	/** Reads under this depth will not be downsampled */
 	private static int MAX_DEPTH=-1;
 	/** Reads under this depth will be discarded, and kmers under this depth will be ignored */
-	private static int MIN_DEPTH=6;
+	private static int MIN_DEPTH=5;
 	/** Reads without this many kmers of at least min depth will be discarded */
 	private static int MIN_KMERS_OVER_MIN_DEPTH=15;
 	/** Position in sorted kmer depths array to use as proxy for overall read depth */
@@ -3551,7 +3569,8 @@ public class KmerNormalize {
 	private static boolean CORRECT_FROM_LEFT=true;
 	private static boolean CORRECT_FROM_RIGHT=true;
 	
-
+	private static double prefilterFraction=0.35;
+	
 	private static int LOW_BIN_DEPTH=10;
 	private static int HIGH_BIN_DEPTH=80;
 	

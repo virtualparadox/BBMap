@@ -44,7 +44,6 @@ public class DecontaminateByNormalization {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		DecontaminateByNormalization dbn=new DecontaminateByNormalization(args);
 		dbn.process(t);
 	}
@@ -52,7 +51,7 @@ public class DecontaminateByNormalization {
 	public DecontaminateByNormalization(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -62,13 +61,13 @@ public class DecontaminateByNormalization {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 //		Shared.READ_BUFFER_NUM_BUFFERS=Shared.READ_BUFFER_NUM_BUFFERS;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		CoveragePileup.USE_WINDOW=true;
 
 		final ArrayList<String> readNameFiles=new ArrayList<String>();
@@ -96,8 +95,6 @@ public class DecontaminateByNormalization {
 				//do nothing
 			}else if(parser.parseMapping(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -175,12 +172,12 @@ public class DecontaminateByNormalization {
 				for(String name : split2){
 					readNames.add(name);
 				}
-			}else if(a.equals("refnamefile")){
+			}else if(a.equals("refnamefile") || a.equals("refnamelist")){
 				String[] split2=b.split(",");
 				for(String name : split2){
 					refNameFiles.add(name);
 				}
-			}else if(a.equals("readnamefile")){
+			}else if(a.equals("readnamefile") || a.equals("readnamelist")){
 				String[] split2=b.split(",");
 				for(String name : split2){
 					readNameFiles.add(name);

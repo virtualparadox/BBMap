@@ -21,7 +21,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx120m"
@@ -40,8 +50,10 @@ calcXmx () {
 calcXmx "$@"
 
 countgc() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+	fi
 	local CMD="java $EA $z -cp $CP jgi.CountGC $@"
 	echo $CMD >&2
 	eval $CMD

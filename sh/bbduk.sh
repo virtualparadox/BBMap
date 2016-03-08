@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 27, 2015
+Last modified December 10, 2015
 
 Description:  Compares reads to the kmers in a reference dataset, optionally 
 allowing an edit distance. Splits the reads into two outputs - those that 
@@ -14,14 +14,11 @@ parts of the reads rather than binning the reads.
 Usage:  bbduk.sh in=<input file> out=<output file> ref=<contaminant files>
 
 Input may be stdin or a fasta or fastq file, compressed or uncompressed.
-Output may be stdout or a file.
 If you pipe via stdin/stdout, please include the file type; e.g. for gzipped 
 fasta input, set in=stdin.fa.gz
 
-Optional parameters (and their defaults)
 
 Input parameters:
-
 in=<file>           Main input. in=stdin.fq will pipe from stdin.
 in2=<file>          Input for 2nd read of pairs in a different file.
 ref=<file,file>     Comma-delimited list of reference files.
@@ -33,9 +30,9 @@ reads=-1            If positive, quit after processing X reads or pairs.
 copyundefined=f     (cu) Process non-AGCT IUPAC reference bases by making all
                     possible unambiguous copies.  Intended for short motifs
                     or adapter barcodes, as time/memory use is exponential.
+samplerate=1        Set lower to only process a fraction of input reads.
 
 Output parameters:
-
 out=<file>          (outnonmatch) Write reads here that do not contain 
                     kmers matching the database.  'out=stdout.fq' will pipe 
                     to standard out.
@@ -51,7 +48,7 @@ stats=<file>        Write statistics about which contamininants were detected.
 refstats=<file>     Write statistics on a per-reference-file basis.
 rpkm=<file>         Write RPKM for each reference sequence (for RNA-seq).
 dump=<file>         Dump kmer tables to a file, in fasta format.
-duk=<file>          Write statistics in duk's format.
+duk=<file>          Write statistics in duk's format. *DEPRECATED*
 nzo=t               Only write statistics about ref sequences with nonzero hits.
 overwrite=t         (ow) Grant permission to overwrite files.
 showspeed=t         (ss) 'f' suppresses display of processing speed.
@@ -64,9 +61,12 @@ rename=f            Rename reads to indicate which sequences they matched.
 refnames=f          Use names of reference files rather than scaffold IDs.
 trd=f               Truncate read and ref names at the first whitespace.
 ordered=f           Set to true to output reads in same order as input.
+maxbasesout=-1      If positive, quit after writing approximately this many
+                    bases to out (outu/outnonmatch).
+maxbasesoutm=-1     If positive, quit after writing approximately this many
+                    bases to outm (outmatch).
 
 Histogram output parameters:
-
 bhist=<file>        Base composition histogram by position.
 qhist=<file>        Quality histogram by position.
 qchist=<file>       Count of bases with each quality value.
@@ -77,7 +77,6 @@ gchist=<file>       Read GC content histogram.
 gcbins=100          Number gchist bins.  Set to 'auto' to use read length.
 
 Histograms for sam files only (requires sam format 1.4 or higher):
-
 ehist=<file>        Errors-per-read histogram.
 qahist=<file>       Quality accuracy histogram of error rates versus quality 
                     score.
@@ -87,15 +86,20 @@ idhist=<file>       Histogram of read count versus percent identity.
 idbins=100          Number idhist bins.  Set to 'auto' to use read length.
 
 Processing parameters:
-
 k=27                Kmer length used for finding contaminants.  Contaminants 
                     shorter than k will not be found.  k must be at least 1.
 rcomp=t             Look for reverse-complements of kmers in addition to 
                     forward kmers.
 maskmiddle=t        (mm) Treat the middle base of a kmer as a wildcard, to 
                     increase sensitivity in the presence of errors.
-maxbadkmers=0       (mbk) Reads with more than this many contaminant kmers 
-                    will be discarded.
+minkmerhits=1       (mkh) Reads need at least this many matching kmers 
+                    to be considered as matching the reference.
+minkmerfraction=0.0 (mkf) A reads needs at least this fraction of its total
+                    kmers to hit a ref, in order to be considered a match.
+                    If this and minkmerhits are set, the greater is used.
+mincovfraction=0.0  (mcf) A reads needs at least this fraction of its total
+                    bases to be covered by ref kmers to be considered a match.
+                    If specified, mcf overrides mkh and mkf.
 hammingdistance=0   (hdist) Maximum Hamming distance for ref kmers (subs only).
                     Memory use is proportional to (3*K)^hdist.
 qhdist=0            Hamming distance for query kmers; impacts speed, not memory.
@@ -114,13 +118,14 @@ findbestmatch=f     (fbm) If multiple matches, associate read with sequence
                     sharing most kmers.  Reduces speed.
 skipr1=f            Don't do kmer-based operations on read 1.
 skipr2=f            Don't do kmer-based operations on read 2.
-ecc=f               For overlapping paired reads only.  Performs error-
+ecco=f              For overlapping paired reads only.  Performs error-
                     correction with BBMerge prior to kmer operations.
-recalibrate=f       (recal) Recalibrate quality scores.  Must first generate
-                    matrices with CalcTrueQuality.
+recalibrate=f       (recal) Recalibrate quality scores.  Requires calibration
+                    matrices generated by CalcTrueQuality.
+sam=<file,file>     If recalibration is desired, and matrices have not already
+                    been generated, BBDuk will create them from the sam file.
 
 Speed and Memory parameters:
-
 threads=auto        (t) Set number of threads to use; default is number of 
                     logical processors.
 prealloc=f          Preallocate memory in table.  Allows faster table loading 
@@ -152,6 +157,7 @@ kmask=f             Replace bases matching ref kmers with another symbol.
                     Allows any non-whitespace character other than t or f,
                     and processes short kmers on both ends.  'kmask=lc' will
                     convert masked bases to lowercase.
+maskfullycovered=f  (mfc) Only mask bases that are fully covered by kmers.
 mink=0              Look for shorter kmers at read tips down to this length, 
                     when k-trimming or masking.  0 means disabled.  Enabling
                     this will disable maskmiddle.
@@ -166,6 +172,8 @@ qtrim=f             Trim read ends to remove bases with quality below trimq.
 trimq=6             Regions with average quality BELOW this will be trimmed.
 minlength=10        (ml) Reads shorter than this after trimming will be 
                     discarded.  Pairs will be discarded if both are shorter.
+mlf=0               (minlengthfraction) Reads shorter than this fraction of 
+                    original length after trimming will be discarded.
 maxlength=          Reads longer than this after trimming will be discarded.
                     Pairs will be discarded only if both are longer.
 minavgquality=0     (maq) Reads with average quality (after trimming) below 
@@ -178,14 +186,16 @@ barcodefilter=f     Remove reads with unexpected barcodes if barcodes is set,
 barcodes=           Comma-delimited list of barcodes or files of barcodes.
 maxns=-1            If non-negative, reads with more Ns than this 
                     (after trimming) will be discarded.
-otm=f               (outputtrimmedtomatch) Output reads trimmed to shorter 
+mcb=0               (minconsecutivebases) Discard reads without at least 
+                    this many consecutive called bases.
+ottm=f              (outputtrimmedtomatch) Output reads trimmed to shorter 
                     than minlength to outm rather than discarding.
 tp=0                (trimpad) Trim this much extra around matching kmers.
 tbo=f               (trimbyoverlap) Trim adapters based on where paired 
                     reads overlap.
 strictoverlap=t     Adjust sensitivity for trimbyoverlap mode.
 minoverlap=14       Require this many bases of overlap for detection.
-mininsert=50        Require insert size of at least this for overlap.
+mininsert=40        Require insert size of at least this for overlap.
                     Should be reduced to 16 for small RNA sequencing.
 tpe=f               (trimpairsevenly) When kmer right-trimming, trim both 
                     reads to the minimum length of either.
@@ -200,14 +210,20 @@ restrictleft=0      If positive, only look for kmer matches in the
                     leftmost X bases.
 restrictright=0     If positive, only look for kmer matches in the 
                     rightmost X bases.
+mingc=0             Discard reads with GC content below this.
+maxgc=1             Discard reads with GC content above this.
 
 Entropy/Complexity parameters:
-
 entropy=-1          Set between 0 and 1 to filter reads with entropy below
                     that value.  Higher is more stringent.
 entropywindow=50    Calculate entropy using a sliding window of this length.
 entropyk=5          Calculate entropy using kmers of this length.
 minbasefrequency=0  Discard reads with a minimum base frequency below this.
+
+Cardinality estimation:
+cardinality=f           (loglog) Count unique kmers using the LogLog algorithm.
+loglogk=31              Use this kmer length for counting.
+loglogbuckets=1999      Use this many buckets for counting.
 
 Java Parameters:
 
@@ -221,7 +237,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "	
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -248,11 +274,13 @@ calcXmx () {
 calcXmx "$@"
 
 bbduk() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBDukF $@"
 	echo $CMD >&2
 	eval $CMD

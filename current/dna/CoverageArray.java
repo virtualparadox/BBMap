@@ -2,11 +2,7 @@ package dna;
 import java.io.Serializable;
 import java.util.ArrayList;
 
-import stream.Read;
-import stream.SamLine;
-
 import align2.IntList;
-import align2.Tools;
 
 import fileIO.ReadWrite;
 
@@ -20,7 +16,6 @@ public abstract class CoverageArray implements Serializable {
 	
 	
 	public static final CoverageArray read(String fname){
-		CoverageArray ca=null;
 		
 		if(!fname.contains(".ca")){
 			throw new RuntimeException();
@@ -122,11 +117,12 @@ public abstract class CoverageArray implements Serializable {
 		System.out.print(sb);
 	}
 	
+	public abstract String toString();
 	
-	private static final long min(long x, long y){return x<y ? x : y;}
-	private static final long max(long x, long y){return x>y ? x : y;}
-	private static final int min(int x, int y){return x<y ? x : y;}
-	private static final int max(int x, int y){return x>y ? x : y;}
+	static final long min(long x, long y){return x<y ? x : y;}
+	static final long max(long x, long y){return x>y ? x : y;}
+	static final int min(int x, int y){return x<y ? x : y;}
+	static final int max(int x, int y){return x>y ? x : y;}
 	
 	public int chromosome;
 	

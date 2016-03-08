@@ -51,9 +51,6 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 
 		if(producer.preferLists()){
 			readLists();
-			//System.err.println("Done reading lists.");
-		}else if(producer.preferArrays()){
-			readBlocks();
 		}else{
 			readSingles();
 		}
@@ -195,57 +192,6 @@ public class ConcurrentLegacyReadInputStream extends ConcurrentReadInputStream {
 			//System.err.println("Adding list to full depot.");
 			depot.full.add(list);
 			//System.err.println("Added.");
-			list=null;
-		}
-
-	}
-	
-	private final void readBlocks(){
-		
-		Read[] buffer=null;
-		ArrayList<Read> list=null;
-		int next=0;
-		while(buffer!=null || (!shutdown && producer.hasMore() && generated<maxReads)){
-			while(list==null){
-				try {
-					list=depot.empty.take();
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-					if(shutdown){break;}
-				}
-			}
-			if(shutdown || list==null){break;}
-
-			long bases=0;
-			while(list.size()<depot.bufferSize && generated<maxReads && bases<MAX_DATA){
-				if(buffer==null || next>=buffer.length){
-					buffer=producer.nextBlock();
-					next=0;
-				}
-				if(buffer==null){break;}
-				while(next<buffer.length && list.size()<depot.bufferSize && generated<maxReads && bases<MAX_DATA){
-					Read r=buffer[next];
-					readsIn++;
-					basesIn+=r.length();
-					if(r.mate!=null){
-						readsIn++;
-						basesIn+=r.mateLength();
-					}
-					if(randy==null || randy.nextFloat()<samplerate){
-						list.add(r);
-						bases+=r.length();
-						bases+=(r.mate==null || r.mate.bases==null ? 0 : r.mateLength());
-					}
-					generated++;
-					next++;
-				}
-				if(next>=buffer.length){
-					buffer=null;
-					next=0;
-				}
-			}
-			depot.full.add(list);
 			list=null;
 		}
 

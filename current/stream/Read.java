@@ -5,10 +5,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 
+import ukmer.Kmer;
+
+import jgi.Dedupe;
+
 import align2.GapTools;
 import align2.QualityTools;
 import align2.Shared;
 import align2.Tools;
+import align2.TrimRead;
 
 import dna.AminoAcid;
 import dna.ChromosomeArray;
@@ -37,16 +42,20 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	}
 	
 	public Read(byte[] bases_, byte[] quals_, long id_){
-		this(bases_, -1, (byte)0, 0, 0, Long.toString(id_), quals_, id_);
+		this(bases_, quals_, id_, Long.toString(id_));
+	}
+	
+	public Read(byte[] bases_, byte[] quals_, long id_, String name_){
+		this(bases_, -1, (byte)0, 0, 0, name_, quals_, id_);
 	}
 	
 	public Read(byte[] s_, int chrom_, byte strand_, int start_, int stop_, long id_, byte[] quality_){
 		this(s_, chrom_, strand_, start_, stop_, Long.toString(id_), quality_, id_);
 	}
 	
-	public Read(byte[][] fasta_, byte[][] qual_, long numericID_){
-		this(fasta_[1], 0, (byte)0, 0, 0, new String(fasta_[0]), qual_[1], numericID_);
-	}
+//	public Read(byte[][] fasta_, byte[][] qual_, long numericID_){
+//		this(fasta_[1], 0, (byte)0, 0, 0, new String(fasta_[0]), qual_[1], numericID_);
+//	}
 	
 	public Read(byte[] s_, int chrom_, byte strand_, int start_, int stop_, String id_, byte[] quality_, long numericID_){
 		this(s_, chrom_, start_, stop_, id_, quality_, numericID_, strand_);
@@ -72,12 +81,13 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public boolean validate(final boolean processAssertions){
 		assert(!validated());
 		
-		{
-			boolean x=(quality==null || quality.length<1 || quality[0]<=80 || !FASTQ.DETECT_QUALITY);
+		if(false){//This causes problems with error-corrected PacBio reads.
+			boolean x=(quality==null || quality.length<1 || quality[0]<=80 || !FASTQ.DETECT_QUALITY || FASTQ.IGNORE_BAD_QUALITY);
 			if(!x){
-				assert(!processAssertions) : 
-					"Quality value ("+quality[0]+") appears too high.\n"+Arrays.toString(quality)+
-					"\n"+Arrays.toString(bases)+"\n"+numericID+"\n"+id+"\n"+FASTQ.ASCII_OFFSET;
+				if(processAssertions){
+					KillSwitch.kill("Quality value ("+quality[0]+") appears too high.\n"+Arrays.toString(quality)+
+							"\n"+Arrays.toString(bases)+"\n"+numericID+"\n"+id+"\n"+FASTQ.ASCII_OFFSET);
+				}
 				return false;
 			}
 		}
@@ -101,7 +111,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 			return false;
 		}
 		
-		if(true || bases!=null && (FLAG_JUNK || FIX_JUNK)){
+		if(bases!=null && (true || (FLAG_JUNK || FIX_JUNK || U_TO_T))){
 			if(aa){
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
@@ -547,8 +557,9 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		int len=(id==null ? Tools.stringLength(numericID) : id.length())+(bases==null ? 0 : bases.length+bases.length/wrap)+5;
 		StringBuilder sb=new StringBuilder(len);
 		sb.append('>');
-		if(id==null){sb.append(numericID);}
-		else{sb.append(id);}
+		if(id==null || FASTQ.TAG_CUSTOM){
+			sb.append(FASTQ.TAG_CUSTOM ? FASTQ.customID(this) : ""+numericID);
+		}else{sb.append(id);}
 		sb.append('\n');
 		if(bases!=null){
 			final char[] buffer=Shared.getTLCB(Tools.min(wrap, bases.length));
@@ -990,6 +1001,133 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		return r;
 	}
 
+	/** Inflates gaps between contigs in a scaffold. */
+	public void inflateGaps(int minGapIn, int minGapOut) {
+		assert(minGapIn>0);
+		if(!containsNocalls()){return;}
+		final ByteBuilder bbb=new ByteBuilder();
+		final ByteBuilder bbq=(quality==null ? null : new ByteBuilder());
+		
+		int gap=0;
+		for(int i=0; i<bases.length; i++){
+			byte b=bases[i];
+			byte q=(quality==null ? 0 : quality[i]);
+			if(b=='N'){
+				gap++;
+			}else{
+				while(gap>=minGapIn && gap<minGapOut){
+					gap++;
+					bbb.append('N');
+					if(bbq!=null){bbq.append(0);}
+				}
+				gap=0;
+			}
+			bbb.append(b);
+			if(bbq!=null){bbq.append(q);}
+		}
+		
+		while(gap>=minGapIn && gap<minGapOut){//Handle trailing bases
+			gap++;
+			bbb.append('N');
+			if(bbq!=null){bbq.append(0);}
+		}
+		
+		assert(bbb.length()>=bases.length);
+		if(bbb.length()>bases.length){
+			bases=bbb.toBytes();
+			if(bbq!=null){quality=bbq.toBytes();}
+		}
+	}
+	
+	public ArrayList<Read> breakAtGaps(final boolean agp, final int minContig){
+		ArrayList<Read> list=new ArrayList<Read>();
+		byte prev='N';
+		int lastN=-1, lastBase=-1;
+		int contignum=1;
+		long feature=1;
+		StringBuilder sb=(agp ? new StringBuilder() : null);
+		assert(obj==null);
+		for(int i=0; i<bases.length; i++){
+			final byte b=bases[i];
+			if(b=='N'){
+				if(prev!='N'){
+					final int start=lastN+1, stop=i;
+					byte[] b2=Arrays.copyOfRange(bases, start, stop);
+					byte[] q2=(quality==null ? null : Arrays.copyOfRange(quality, start, stop));
+					Read r=new Read(b2, q2, numericID, id+"_c"+contignum);
+					if(r.length()>=minContig){list.add(r);}
+					contignum++;
+					
+					if(sb!=null){
+						sb.append(id).append('\t');
+						sb.append(start+1).append('\t');
+						sb.append(stop).append('\t');
+						sb.append(feature).append('\t');
+						feature++;
+						sb.append('W').append('\t');
+						sb.append(r.id).append('\t');
+						sb.append(1).append('\t');
+						sb.append(r.length()).append('\t');
+						sb.append("+").append('\n');
+					}
+				}
+				lastN=i;
+			}else{
+				if(sb!=null && prev=='N' && lastBase>=0){
+					sb.append(id).append('\t');
+					sb.append(lastBase+2).append('\t');
+					sb.append(i).append('\t');
+					sb.append(feature).append('\t');
+					feature++;
+					sb.append('N').append('\t');
+					sb.append((i-lastBase-1)).append('\t');
+					sb.append("scaffold").append('\t');
+					sb.append("yes").append('\t');
+					sb.append("paired-ends").append('\n');
+				}
+				lastBase=i;
+			}
+			prev=b;
+		}
+		if(prev!='N'){
+			final int start=lastN+1, stop=bases.length;
+			byte[] b2=Arrays.copyOfRange(bases, start, stop);
+			byte[] q2=(quality==null ? null : Arrays.copyOfRange(quality, start, stop));
+			Read r=new Read(b2, q2, numericID, id+"_c"+contignum);
+			if(r.length()>=minContig){list.add(r);}
+			contignum++;
+			
+			if(sb!=null){
+				sb.append(id).append('\t');
+				sb.append(start+1).append('\t');
+				sb.append(stop).append('\t');
+				sb.append(feature).append('\t');
+				feature++;
+				sb.append('W').append('\t');
+				sb.append(r.id).append('\t');
+				sb.append(1).append('\t');
+				sb.append(r.length()).append('\t');
+				sb.append("+").append('\n');
+			}
+		}else{
+			if(sb!=null && prev=='N' && lastBase>=0){
+				sb.append(id).append('\t');
+				sb.append(lastBase+2).append('\t');
+				sb.append(bases.length).append('\t');
+				sb.append(feature).append('\t');
+				feature++;
+				sb.append('N').append('\t');
+				sb.append((bases.length-lastBase-1)).append('\t');
+				sb.append("scaffold").append('\t');
+				sb.append("yes").append('\t');
+				sb.append("paired-ends").append('\n');
+			}
+			lastBase=bases.length;
+		}
+		if(sb!=null){obj=sb.toString();}
+		return list;
+	}
+
 //	/** Reverses the read.  Mainly for testing. 
 //	 * Seems to be unused. */
 //	@Deprecated
@@ -1018,7 +1156,12 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public SiteScore toSite(){
 		assert(start<=stop) : this.toText(false);
 		SiteScore ss=new SiteScore(chrom, strand(), start, stop, 0, 0, rescued(), perfect());
-		ss.slowScore=mapScore;
+		if(paired()){
+			ss.setSlowPairedScore(mapScore-1, mapScore);
+		}else{
+			ss.setSlowPairedScore(mapScore, 0);
+		}
+		ss.setScore(mapScore);
 		ss.gaps=gaps;
 		ss.match=match;
 		originalSite=ss;
@@ -1206,6 +1349,22 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		}
 		return x;
 	}
+
+	/**
+	 * @param k
+	 * @return
+	 */
+	public int numValidKmers(int k) {
+		if(bases==null){return 0;}
+		int len=0, counted=0;
+		for(int i=0; i<bases.length; i++){
+			byte b=bases[i];
+			long x=AminoAcid.baseToNumber[b];
+			if(x<0){len=0;}else{len++;}
+			if(len>=k){counted++;}
+		}
+		return counted;
+	}
 	
 
 	
@@ -1367,7 +1526,9 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 						//I assume this is clipped because it went off the end of a scaffold, and thus is irrelevant to identity
 					}else if(mode!='0'){
 						assert(mode=='S' || mode=='D' || mode=='I' || mode=='X' || mode=='Y') : (char)mode;
-						bad+=current;
+						if(mode!='D' || current<SamLine.INTRON_LIMIT){
+							bad+=current;
+						}
 //						System.out.println("B: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
 					}
 					mode=c;
@@ -1386,7 +1547,9 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 				//I assume this is clipped because it went off the end of a scaffold, and thus is irrelevant to identity
 			}else if(mode!='0'){
 				assert(mode=='S' || mode=='I' || mode=='X' || mode=='Y') : (char)mode;
-				bad+=current;
+				if(mode!='D' || current<SamLine.INTRON_LIMIT){
+					bad+=current;
+				}
 //				System.out.println("B: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
 			}
 		}
@@ -1431,11 +1594,13 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 						good+=current;
 //						System.out.println("G: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
 					}else if(mode=='D'){
-						int x;
-						x=(int)Math.ceil(Math.sqrt(current));
-						//x=(int)Math.ceil(Tools.log2(current));
-						//May need special handling....
-						bad+=(Tools.min(x, current));
+						if(current<SamLine.INTRON_LIMIT){
+							int x;
+							x=(int)Math.ceil(Math.sqrt(current));
+							//x=(int)Math.ceil(Tools.log2(current));
+							//May need special handling....
+							bad+=(Tools.min(x, current));
+						}
 						
 //						System.out.println("D: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad+", x="+x);
 					}else if(mode=='R' || mode=='N'){
@@ -1464,7 +1629,9 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 				//I assume this is clipped because it went off the end of a scaffold, and thus is irrelevant to identity
 			}else if(mode!='0'){
 				assert(mode=='S' || mode=='I' || mode=='X' || mode=='Y') : (char)mode;
-				bad+=current;
+				if(mode!='D' || current<SamLine.INTRON_LIMIT){
+					bad+=current;
+				}
 //				System.out.println("B: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
 			}
 		}
@@ -1492,16 +1659,19 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		char d=id.charAt(space+4);
 		
 		if(a=='/'){
-			assert(b=='1' || b=='2' || b=='3' || b=='4') : id;
-			assert(c==':') : id;
+			if(b<'1' || b>'4' || c!=':'){
+				KillSwitch.kill("Strangely formatted read.  Please disable chastityfilter.  id:"+id);
+			}
 			return d=='Y';
 		}else{
 			assert(a=='1' || a=='2' || a=='3' || a=='4') : id;
 			assert(b==':') : id;
 			assert(d==':');
+			if(a<'1' || a>'4' || b!=':' || d!=':'){
+				KillSwitch.kill("Strangely formatted read.  Please disable chastityfilter.  id:"+id);
+			}
 			return c=='Y';
 		}
-//		return (id.contains(" 1:Y:") || id.contains(" 2:Y:"));
 	}
 	
 	public boolean failsBarcode(HashSet<String> set, boolean failIfNoBarcode){
@@ -1775,6 +1945,14 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		return n;
 	}
 	
+	public boolean containsNonACGTN(){
+		if(bases==null){return false;}
+		for(byte b : bases){
+			if(AminoAcid.baseToNumberACGTN[b]<0){return true;}
+		}
+		return false;
+	}
+	
 	public boolean containsUndefined(){
 		if(bases==null){return false;}
 		for(byte b : bases){
@@ -1790,6 +1968,19 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 			if(AminoAcid.baseToNumber[b]<0){n++;}
 		}
 		return n;
+	}
+	
+	public boolean hasMinConsecutiveBases(final int min){
+		if(bases==null){return min<=0;}
+		int len=0;
+		for(byte b : bases){
+			if(AminoAcid.baseToNumber[b]<0){len=0;}
+			else{
+				len++;
+				if(len>=min){return true;}
+			}
+		}
+		return false;
 	}
 	
 	
@@ -1827,6 +2018,13 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		boolean b=(match[0]=='X' || match[match.length-1]=='Y');
 		assert(!valid() || b==containsXY());
 		return b;
+	}
+	
+	public boolean containsXYC(){
+		if(match==null || match.length<1){return false;}
+		boolean b=(match[0]=='X' || match[match.length-1]=='Y');
+		assert(!valid() || b==containsXY());
+		return b || match[0]=='C' || match[match.length-1]=='C';
 	}
 	
 	/** Replaces 'B' in match string with 'S', 'm', or 'N' */
@@ -2013,6 +2211,23 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		return new int[] {m, s, d, i, n, splice};
 	}
 	
+	public static boolean isShortMatchString(byte[] match){
+		byte last=' ';
+		int streak=0;
+		for(int i=0; i<match.length; i++){
+			byte b=match[i];
+			if(Character.isDigit(b)){return true;}
+			if(b==last){
+				streak++;
+				if(streak>3){return true;}
+			}else{
+				streak=0;
+				last=b;
+			}
+		}
+		return false;
+	}
+	
 	public static byte[] toShortMatchString(byte[] match){
 		if(match==null){return null;}
 		assert(match.length>0);
@@ -2157,6 +2372,13 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public int mateLength(){return mate==null ? 0 : mate.length();}
 	public int mateCount(){return mate==null ? 0 : 1;}
 	public boolean mateMapped(){return mate==null ? false : mate.mapped();}
+	
+	public boolean untrim(){
+		if(obj==null || obj.getClass()!=TrimRead.class){return false;}
+		((TrimRead)obj).untrim();
+		obj=null;
+		return true;
+	}
 	
 	public int trailingLowerCase(){
 		for(int i=bases.length-1; i>=0;){
@@ -2334,7 +2556,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		if(bases==null){return 0;}
 		int changed=0;
 		for(int i=0; i<bases.length; i++){
-			if(AminoAcid.baseToNumberACGTN[bases[i]]<0){
+			if(b<0 || AminoAcid.baseToNumberACGTN[bases[i]]<0){
 				changed++;
 				bases[i]=b;
 				if(quality!=null){quality[i]=0;}
@@ -2664,153 +2886,232 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	}
 	
 	/** Generate and return an array of canonical kmers for this read */
-	public long[] toKmers(final int k, final int gap, long[] kmers, boolean makeCanonical) {
+	public long[] toKmers(final int k, final int gap, long[] kmers, boolean makeCanonical, Kmer longkmer) {
 		if(gap>0){throw new RuntimeException("Gapped reads: TODO");}
-		if(k>31){return toLongKmers(k, gap, kmers, makeCanonical);}
+		if(k>31){return toLongKmers(k, kmers, makeCanonical, longkmer);}
 		if(bases==null || bases.length<k+gap){return null;}
 		
-		final int kbits=2*k;
-		final long mask=~((-1L)<<(kbits));
-		
-		int len=0;
-		long kmer=0;
 		final int arraylen=bases.length-k+1;
 		if(kmers==null || kmers.length!=arraylen){kmers=new long[arraylen];}
 		Arrays.fill(kmers, -1);
 		
+		final int shift=2*k;
+		final int shift2=shift-2;
+		final long mask=~((-1L)<<shift);
+		long kmer=0, rkmer=0;
+		int len=0;
+		
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
-			int x=AminoAcid.baseToNumber[b];
-			if(x<0){
-				len=0;
-				kmer=0;
-			}else{
-				kmer=((kmer<<2)|x)&mask;
-				len++;
-
-				if(len>=k){
-					kmers[i-k+1]=kmer;
-				}
+			long x=Dedupe.baseToNumber[b];
+			long x2=Dedupe.baseToComplementNumber[b];
+			kmer=((kmer<<2)|x)&mask;
+			rkmer=(rkmer>>>2)|(x2<<shift2);
+			if(AminoAcid.isFullyDefined(b)){len++;}else{len=0;}
+			if(len>=k){
+				kmers[i-k+1]=makeCanonical ? Tools.max(kmer, rkmer) : kmer;
 			}
 		}
-		
-//		System.out.println(new String(bases));
-//		System.out.println(Arrays.toString(kmers));
-		
-		if(makeCanonical){
-			this.reverseComplement();
-			len=0;
-			kmer=0;
-			for(int i=0, j=bases.length-1; i<bases.length; i++, j--){
-				byte b=bases[i];
-				int x=AminoAcid.baseToNumber[b];
-				if(x<0){
-					len=0;
-					kmer=0;
-				}else{
-					kmer=((kmer<<2)|x)&mask;
-					len++;
-
-					if(len>=k){
-						assert(kmer==AminoAcid.reverseComplementBinaryFast(kmers[j], k));
-						kmers[j]=Tools.max(kmers[j], kmer);
-					}
-				}
-			}
-			this.reverseComplement();
-			
-//			System.out.println(Arrays.toString(kmers));
-		}
-		
-		
 		return kmers;
 	}
+	
+//	/** Generate and return an array of canonical kmers for this read */
+//	public long[] toKmers(final int k, final int gap, long[] kmers, boolean makeCanonical, Kmer longkmer) {
+//		if(gap>0){throw new RuntimeException("Gapped reads: TODO");}
+//		if(k>31){return toLongKmers(k, kmers, makeCanonical, longkmer);}
+//		if(bases==null || bases.length<k+gap){return null;}
+//		
+//		final int kbits=2*k;
+//		final long mask=~((-1L)<<(kbits));
+//		
+//		int len=0;
+//		long kmer=0;
+//		final int arraylen=bases.length-k+1;
+//		if(kmers==null || kmers.length!=arraylen){kmers=new long[arraylen];}
+//		Arrays.fill(kmers, -1);
+//		
+//		for(int i=0; i<bases.length; i++){
+//			byte b=bases[i];
+//			int x=AminoAcid.baseToNumber[b];
+//			if(x<0){
+//				len=0;
+//				kmer=0;
+//			}else{
+//				kmer=((kmer<<2)|x)&mask;
+//				len++;
+//
+//				if(len>=k){
+//					kmers[i-k+1]=kmer;
+//				}
+//			}
+//		}
+//		
+////		System.out.println(new String(bases));
+////		System.out.println(Arrays.toString(kmers));
+//		
+//		if(makeCanonical){
+//			this.reverseComplement();
+//			len=0;
+//			kmer=0;
+//			for(int i=0, j=bases.length-1; i<bases.length; i++, j--){
+//				byte b=bases[i];
+//				int x=AminoAcid.baseToNumber[b];
+//				if(x<0){
+//					len=0;
+//					kmer=0;
+//				}else{
+//					kmer=((kmer<<2)|x)&mask;
+//					len++;
+//
+//					if(len>=k){
+//						assert(kmer==AminoAcid.reverseComplementBinaryFast(kmers[j], k));
+//						kmers[j]=Tools.max(kmers[j], kmer);
+//					}
+//				}
+//			}
+//			this.reverseComplement();
+//			
+////			System.out.println(Arrays.toString(kmers));
+//		}
+//		
+//		
+//		return kmers;
+//	}
 	
 	/** Generate and return an array of canonical kmers for this read */
-	public long[] toLongKmers(final int k, final int gap, long[] kmers, boolean makeCanonical) {
-		if(gap>0){throw new RuntimeException("Gapped reads: TODO");}
+	public long[] toLongKmers(final int k, long[] kmers, boolean makeCanonical, Kmer kmer) {
 		assert(k>31) : k;
-		if(bases==null || bases.length<k+gap){return null;}
+		assert(makeCanonical);
+		if(bases==null || bases.length<k){return null;}
+		kmer.clear();
 		
-		final int kbits=2*k;
-		final long mask=Long.MAX_VALUE;
-		
-		int len=0;
-		long kmer=0;
 		final int arraylen=bases.length-k+1;
 		if(kmers==null || kmers.length!=arraylen){kmers=new long[arraylen];}
 		Arrays.fill(kmers, -1);
 		
-		
-		final int tailshift=k%32;
-		final int tailshiftbits=tailshift*2;
-		
 		for(int i=0; i<bases.length; i++){
 			byte b=bases[i];
-			int x=AminoAcid.baseToNumber[b];
-			if(x<0){
-				len=0;
-				kmer=0;
-			}else{
-				kmer=Long.rotateLeft(kmer, 2);
-				kmer=kmer^x;
-				len++;
-
-				if(len>=k){
-					long x2=AminoAcid.baseToNumber[bases[i-k]];
-					kmer=kmer^(x2<<tailshiftbits);
-					kmers[i-k+1]=kmer;
-				}
+			kmer.addRight(b);
+			if(!AminoAcid.isFullyDefined(b)){kmer.clear();}
+			if(kmer.len>=k){
+				kmers[i-k+1]=kmer.xor();
 			}
-		}
-		if(makeCanonical){
-			this.reverseComplement();
-			len=0;
-			kmer=0;
-			for(int i=0, j=bases.length-1; i<bases.length; i++, j--){
-				byte b=bases[i];
-				int x=AminoAcid.baseToNumber[b];
-				if(x<0){
-					len=0;
-					kmer=0;
-				}else{
-					kmer=Long.rotateLeft(kmer, 2);
-					kmer=kmer^x;
-					len++;
-
-					if(len>=k){
-						long x2=AminoAcid.baseToNumber[bases[i-k]];
-						kmer=kmer^(x2<<tailshiftbits);
-						kmers[j]=mask&(Tools.max(kmers[j], kmer));
-					}
-				}
-			}
-			this.reverseComplement();
-		}else{
-			assert(false) : "Long kmers should be made canonical here because they cannot be canonicized later.";
 		}
 		
 		return kmers;
 	}
 	
+//	/** Generate and return an array of canonical kmers for this read */
+//	public long[] toLongKmers(final int k, long[] kmers, boolean makeCanonical, Kmer longkmer) {
+//		assert(k>31) : k;
+//		if(bases==null || bases.length<k){return null;}
+//		
+//		final int kbits=2*k;
+//		final long mask=Long.MAX_VALUE;
+//		
+//		int len=0;
+//		long kmer=0;
+//		final int arraylen=bases.length-k+1;
+//		if(kmers==null || kmers.length!=arraylen){kmers=new long[arraylen];}
+//		Arrays.fill(kmers, -1);
+//		
+//		
+//		final int tailshift=k%32;
+//		final int tailshiftbits=tailshift*2;
+//		
+//		for(int i=0; i<bases.length; i++){
+//			byte b=bases[i];
+//			int x=AminoAcid.baseToNumber[b];
+//			if(x<0){
+//				len=0;
+//				kmer=0;
+//			}else{
+//				kmer=Long.rotateLeft(kmer, 2);
+//				kmer=kmer^x;
+//				len++;
+//
+//				if(len>=k){
+//					long x2=AminoAcid.baseToNumber[bases[i-k]];
+//					kmer=kmer^(x2<<tailshiftbits);
+//					kmers[i-k+1]=kmer;
+//				}
+//			}
+//		}
+//		if(makeCanonical){
+//			this.reverseComplement();
+//			len=0;
+//			kmer=0;
+//			for(int i=0, j=bases.length-1; i<bases.length; i++, j--){
+//				byte b=bases[i];
+//				int x=AminoAcid.baseToNumber[b];
+//				if(x<0){
+//					len=0;
+//					kmer=0;
+//				}else{
+//					kmer=Long.rotateLeft(kmer, 2);
+//					kmer=kmer^x;
+//					len++;
+//
+//					if(len>=k){
+//						long x2=AminoAcid.baseToNumber[bases[i-k]];
+//						kmer=kmer^(x2<<tailshiftbits);
+//						kmers[j]=mask&(Tools.max(kmers[j], kmer));
+//					}
+//				}
+//			}
+//			this.reverseComplement();
+//		}else{
+//			assert(false) : "Long kmers should be made canonical here because they cannot be canonicized later.";
+//		}
+//		
+//		return kmers;
+//	}
+	
 	public static final boolean CHECKSITES(Read r, byte[] basesM){
-		return CHECKSITES(r.sites, r.bases, basesM, r.numericID);
+		return CHECKSITES(r.sites, r.bases, basesM, r.numericID, true);
+	}
+	
+	public static final boolean CHECKSITES(Read r, byte[] basesM, boolean verifySorted){
+		return CHECKSITES(r.sites, r.bases, basesM, r.numericID, verifySorted);
 	}
 	
 	public static final boolean CHECKSITES(ArrayList<SiteScore> list, byte[] basesP, byte[] basesM, long id){
-		if(list==null || list.isEmpty()){return true;}
+		return CHECKSITES(list, basesP, basesM, id, true);
+	}
+	
+	public static final boolean CHECKSITES(ArrayList<SiteScore> list, byte[] basesP, byte[] basesM, long id, boolean verifySorted){
+		return true; //Temporarily disabled
+//		if(list==null || list.isEmpty()){return true;}
+//		SiteScore prev=null;
+//		for(int i=0; i<list.size(); i++){
+//			SiteScore ss=list.get(i);
+//			if(ss.strand==Gene.MINUS && basesM==null && basesP!=null){basesM=AminoAcid.reverseComplementBases(basesP);}
+//			byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
+//			if(verbose){System.err.println("Checking site "+i+": "+ss);}
+//			boolean b=CHECKSITE(ss, bases, id);
+//			assert(b) : id+"\n"+new String(basesP)+"\n"+ss+"\n";
+//			if(verbose){System.err.println("Checked site "+i+" = "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect);}
+//			if(!b){
+////				System.err.println("Error at SiteScore "+i+": ss.p="+ss.perfect+", ss.sp="+ss.semiperfect);
+//				return false;
+//			}
+//			if(verifySorted && prev!=null && ss.score>prev.score){
+//				if(verbose){System.err.println("verifySorted failed.");}
+//				return false;
+//			}
+//			prev=ss;
+//		}
+//		return true;
+	}
+	
+	/** Makes sure 'bases' is for correct strand. */
+	public static final boolean CHECKORDER(ArrayList<SiteScore> list){
+		if(list==null || list.size()<2){return true;}
+		SiteScore prev=list.get(0);
 		for(int i=0; i<list.size(); i++){
 			SiteScore ss=list.get(i);
-			if(ss.strand==Gene.MINUS && basesM==null && basesP!=null){basesM=AminoAcid.reverseComplementBases(basesP);}
-			byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
-//			System.err.println("Checking site "+i);
-			boolean b=CHECKSITE(ss, bases, id);
-			assert(b) : id+"\n"+new String(basesP)+"\n"+ss+"\n";
-//			System.err.println("Checked site "+i+" = "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect);
-			if(!b){
-//				System.err.println("Error at SiteScore "+i+": ss.p="+ss.perfect+", ss.sp="+ss.semiperfect);
-				return false;
-			}
+			if(ss.score>prev.score){return false;}
+			prev=ss;
 		}
 		return true;
 	}
@@ -2822,37 +3123,48 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	
 	/** Make sure 'bases' is for correct strand! */
 	public static final boolean CHECKSITE(SiteScore ss, byte[] bases, long id){
-		if(ss==null){return true;}
-//		System.err.println("Checking site "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect+", bases="+new String(bases));
-		if(ss.perfect){assert(ss.semiperfect) : ss+"\n"+new String(bases);}
-		if(ss.gaps!=null){
-			if(ss.gaps[0]!=ss.start || ss.gaps[ss.gaps.length-1]!=ss.stop){return false;}
-//			assert(ss.gaps[0]==ss.start && ss.gaps[ss.gaps.length-1]==ss.stop);
-		}
-		if(bases!=null){
-			
-			final boolean p=ss.perfect;
-			final boolean sp=ss.semiperfect;
-			final boolean p1=ss.isPerfect(bases);
-			final boolean sp1=(p1 ? true : ss.isSemiPerfect(bases));
-			final boolean xy=ss.matchContainsXY();
-
-			assert(p==p1 || (xy && p1)) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
-				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
-			assert(sp==sp1 || (xy && sp1)) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
-				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
-			
-//			ss.setPerfect(bases, false);
-			
-			assert(p==ss.perfect) : 
-				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
-				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
-			assert(sp==ss.semiperfect) : 
-				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
-				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
-			if(ss.perfect){assert(ss.semiperfect);}
-		}
-		return true;
+		return true; //Temporarily disabled
+//		if(ss==null){return true;}
+////		System.err.println("Checking site "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect+", bases="+new String(bases));
+//		if(ss.perfect){assert(ss.semiperfect) : ss+"\n"+new String(bases);}
+//		if(ss.gaps!=null){
+//			if(ss.gaps[0]!=ss.start || ss.gaps[ss.gaps.length-1]!=ss.stop){return false;}
+////			assert(ss.gaps[0]==ss.start && ss.gaps[ss.gaps.length-1]==ss.stop);
+//		}
+//		
+//		if(!(ss.pairedScore<1 || (ss.slowScore<=0 && ss.pairedScore>ss.quickScore ) || ss.pairedScore>ss.slowScore)){
+//			System.err.println("Site paired score violation: "+ss.quickScore+", "+ss.slowScore+", "+ss.pairedScore);
+//			return false;
+//		}
+//		
+//		final boolean xy=ss.matchContainsXY();
+//		if(bases!=null){
+//			
+//			final boolean p0=ss.perfect;
+//			final boolean sp0=ss.semiperfect;
+//			final boolean p1=ss.isPerfect(bases);
+//			final boolean sp1=(p1 ? true : ss.isSemiPerfect(bases));
+//
+//			assert(p0==p1 || (xy && p1)) : p0+"->"+p1+", "+sp0+"->"+sp1+", "+ss.isSemiPerfect(bases)+
+//				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
+//			assert(sp0==sp1 || (xy && sp1)) : p0+"->"+p1+", "+sp0+"->"+sp1+", "+ss.isSemiPerfect(bases)+
+//				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
+//			
+////			ss.setPerfect(bases, false);
+//			
+//			assert(p0==ss.perfect) : 
+//				p0+"->"+ss.perfect+", "+sp0+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
+//				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
+//			assert(sp0==ss.semiperfect) : 
+//				p0+"->"+ss.perfect+", "+sp0+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
+//				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
+//			if(ss.perfect){assert(ss.semiperfect);}
+//		}
+//		if(ss.match!=null && ss.matchLength()!=ss.mappedLength()){
+//			if(verbose){System.err.println("Returning false because matchLength!=mappedLength:\n"+ss.matchLength()+", "+ss.mappedLength()+"\n"+ss);}
+//			return false;
+//		}
+//		return true;
 	}
 	
 	public void setPerfect(boolean b){
@@ -2922,7 +3234,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	
 	public void setInsert(int x){
 		if(x<1){x=-1;}
-		assert(x==-1 || x>9 || bases.length<20);
+//		assert(x==-1 || x>9 || length()<20) : x+", "+length(); //Invalid assertion for synthetic reads.
 		insert=x;
 		setInsertValid(x>0);
 		if(mate!=null){
@@ -3078,4 +3390,6 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public static boolean NULLIFY_BROKEN_QUALITY=false;
 	public static boolean FLAT_IDENTITY=true;
 	public static boolean VALIDATE_IN_CONSTRUCTOR=true;
+	
+	public static boolean verbose=false;
 }

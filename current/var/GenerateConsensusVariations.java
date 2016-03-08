@@ -22,7 +22,6 @@ public class GenerateConsensusVariations {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 
 		String inVarsPattern=args[0];
 		String inCovPattern=args[1];

@@ -31,7 +31,6 @@ public class SplitOffPerfectContigs {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 		
 //		ChromosomeArray c=new ChromosomeArray(1, (byte)1, "ANNNAAAANAAANNA");
 //		System.out.println(c.toContigRanges(3));

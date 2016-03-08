@@ -10,6 +10,7 @@ Description:  Removes reads with improper barcodes.
 
 Usage:  removebadbarcodes.sh in=<file> out=<file>
 
+
 Parameters:
 in=<file>           Input reads; required parameter.
 out=<file>          Destination for good reads; optional.
@@ -25,7 +26,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -47,9 +58,11 @@ calcXmx "$@"
 
 
 removebadbarcodes() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z $z2 -cp $CP jgi.RemoveBadBarcodes $@"
 	echo $CMD >&2
 	eval $CMD

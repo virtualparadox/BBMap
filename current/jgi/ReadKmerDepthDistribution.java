@@ -123,8 +123,6 @@ public class ReadKmerDepthDistribution {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.equals("in") || a.equals("in1")){
@@ -176,7 +174,6 @@ public class ReadKmerDepthDistribution {
 				tablereads=Tools.parseKMG(b);
 			}else if(a.equals("out") || a.equals("outk") || a.equals("outkeep") || a.equals("outgood")){
 				outKeep=b;
-//				outstream.println("k:"+b);
 			}else if(a.startsWith("hist")){
 				histFile=b;
 			}else if(a.startsWith("verbose")){
@@ -218,9 +215,8 @@ public class ReadKmerDepthDistribution {
 						extra=Arrays.asList(b.split(","));
 					}
 				}
-			}else if(i>2 || (!args[i].equals(reads1) && !args[i].equals(reads2))){
-//				assert(false) : "\n"+i+"\n"+args[i]+"\n"+reads1;
-				throw new RuntimeException("Unknown parameter "+args[i]);
+			}else{
+				throw new RuntimeException("Unknown parameter "+arg);
 			}
 		}
 		
@@ -362,7 +358,7 @@ public class ReadKmerDepthDistribution {
 		KCountArray prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(reads1, reads2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null);
+			prefilterArray=KmerCount7MTA.makeKca(reads1, reads2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null, 0);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 			double uf=prefilterArray.usedFraction();
 			if(uf>0.6){
@@ -372,7 +368,7 @@ public class ReadKmerDepthDistribution {
 						"or increase the values of the minprob flag to reduce spurious kmers.");
 			}
 		}
-		kca=KmerCount7MTA.makeKca(reads1, reads2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray);
+		kca=KmerCount7MTA.makeKca(reads1, reads2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue));
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));

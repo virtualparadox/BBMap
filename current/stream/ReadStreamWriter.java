@@ -34,10 +34,12 @@ public abstract class ReadStreamWriter extends Thread {
 		OUTPUT_SAM=ff.samOrBam();
 		OUTPUT_BAM=ff.bam();
 		OUTPUT_ATTACHMENT=ff.attachment();
+		OUTPUT_HEADER=ff.header();
 		SITES_ONLY=ff.sites();
 		OUTPUT_STANDARD_OUT=ff.stdio();
 		FASTA_WRAP=Shared.FASTA_WRAP;
-		assert(((OUTPUT_SAM ? 1 : 0)+(OUTPUT_FASTQ ? 1 : 0)+(OUTPUT_FASTA ? 1 : 0)+(OUTPUT_ATTACHMENT ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) : 
+		assert(((OUTPUT_SAM ? 1 : 0)+(OUTPUT_FASTQ ? 1 : 0)+(OUTPUT_FASTA ? 1 : 0)+(OUTPUT_ATTACHMENT ? 1 : 0)+
+				(OUTPUT_HEADER ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) : 
 			OUTPUT_SAM+", "+SITES_ONLY+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT;
 		
 		fname=ff.name();
@@ -67,7 +69,7 @@ public abstract class ReadStreamWriter extends Thread {
 				myOutstream=ReadWrite.getOutputStream(ff, buffered);
 			}else{
 				if(!allowSubprocess){System.err.println("Warning! Spawning a samtools process when allowSubprocess="+allowSubprocess);}
-				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, ff.append(), true);
+				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, ff.append(), true, true);
 			}
 			
 			
@@ -339,6 +341,7 @@ public abstract class ReadStreamWriter extends Thread {
 	public final boolean OUTPUT_BAM;
 	public final boolean OUTPUT_FASTQ;
 	public final boolean OUTPUT_FASTA;
+	public final boolean OUTPUT_HEADER;
 	public final boolean OUTPUT_ATTACHMENT;
 	public final boolean OUTPUT_STANDARD_OUT;
 	public final boolean SITES_ONLY;

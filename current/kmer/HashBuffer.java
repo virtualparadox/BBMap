@@ -1,8 +1,6 @@
 package kmer;
 
-import java.util.concurrent.atomic.AtomicIntegerArray;
-
-import dna.CoverageArray;
+import stream.ByteBuilder;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
@@ -17,13 +15,15 @@ public class HashBuffer extends AbstractKmerTable {
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public HashBuffer(AbstractKmerTable[] tables_, int buflen_){
+	public HashBuffer(AbstractKmerTable[] tables_, int buflen_, int k_, boolean initValues){
 		tables=tables_;
 		buflen=buflen_;
-		assert(buflen<Short.MAX_VALUE);
+		halflen=(int)Math.ceil(buflen*0.5);
 		ways=tables.length;
-		sizes=new short[ways];
-		buffers=new long[ways][buflen];
+		buffers=new KmerBuffer[ways];
+		for(int i=0; i<ways; i++){
+			buffers[i]=new KmerBuffer(buflen, k_, initValues);
+		}
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -33,11 +33,10 @@ public class HashBuffer extends AbstractKmerTable {
 	@Override
 	public int incrementAndReturnNumCreated(long kmer) {
 		final int way=(int)(kmer%ways);
-		long[] buffer=buffers[way];
-		buffer[sizes[way]]=kmer;
-		sizes[way]++;
-		if(sizes[way]>=buflen){
-			return incrementBuffer(way);
+		KmerBuffer buffer=buffers[way];
+		final int size=buffer.add(kmer);
+		if(size>=halflen && (size>=buflen || (size&SIZEMASK)==0)){
+			return dumpBuffer(way, size>=buflen);
 		}
 		return 0;
 	}
@@ -45,7 +44,7 @@ public class HashBuffer extends AbstractKmerTable {
 	@Override
 	public final long flush(){
 		long added=0;
-		for(int i=0; i<ways; i++){added+=incrementBuffer(i);}
+		for(int i=0; i<ways; i++){added+=dumpBuffer(i, true);}
 		return added;
 	}
 	
@@ -94,6 +93,11 @@ public class HashBuffer extends AbstractKmerTable {
 	}
 	
 	@Override
+	public final void clearOwnership(){
+		for(AbstractKmerTable t : tables){t.clearOwnership();}
+	}
+	
+	@Override
 	public final int setOwner(final long kmer, final int newOwner){
 		final int way=(int)(kmer%ways);
 		return tables[way].setOwner(kmer, newOwner);
@@ -125,19 +129,44 @@ public class HashBuffer extends AbstractKmerTable {
 	/*----------------       Private Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private int incrementBuffer(final int way){
-		final int size=sizes[way];
-		if(size<1){return 0;}
-		sizes[way]=0;
-		final long[] buffer=buffers[way];
+	private int dumpBuffer(final int way, boolean force){
+		final KmerBuffer buffer=buffers[way];
+		final AbstractKmerTable table=tables[way];
+		final int lim=buffer.size();
+		if(lim<0){return 0;}
+		if(force){table.lock();}
+		else if(!table.tryLock()){return 0;}
+		final int x=dumpBuffer_inner(way);
+		table.unlock();
+		return x;
+	}
+	
+	private int dumpBuffer_inner(final int way){
+		if(verbose){System.err.println("Dumping buffer for way "+way+" of "+ways);}
+		final KmerBuffer buffer=buffers[way];
+		final int lim=buffer.size();
+		if(lim<1){return 0;}
+		final long[] kmers=buffer.kmers.array;
+		final int[] values=(buffer.values==null ? null : buffer.values.array);
+		if(lim<1){return 0;}
 		int added=0;
 		final AbstractKmerTable table=tables[way];
-		synchronized(table){
-			for(int i=0; i<size; i++){
-				final long kmer=buffer[i];
-				added+=table.incrementAndReturnNumCreated(kmer);
+//		synchronized(table){
+			if(values==null){
+//				Arrays.sort(kmers, 0, lim); //Makes it slower
+				for(int i=0; i<lim; i++){
+					final long kmer=kmers[i];
+					added+=table.incrementAndReturnNumCreated(kmer);
+				}
+			}else{
+				for(int i=0; i<lim; i++){
+					final long kmer=kmers[i];
+					final int value=values[i];
+					added+=table.setIfNotPresent(kmer, value);
+				}
 			}
-		}
+//		}
+		buffer.clear();
 		return added;
 	}
 	
@@ -175,6 +204,14 @@ public class HashBuffer extends AbstractKmerTable {
 		throw new RuntimeException("Unimplemented.");
 	}
 	
+	public long regenerate(){
+		long sum=0;
+		for(AbstractKmerTable table : tables){
+			sum+=table.regenerate();
+		}
+		return sum;
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------         Info Dumping         ----------------*/
 	/*--------------------------------------------------------------*/
@@ -182,7 +219,7 @@ public class HashBuffer extends AbstractKmerTable {
 	@Override
 	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
 		for(AbstractKmerTable table : tables){
-			dumpKmersAsText(tsw, k, mincount);
+			table.dumpKmersAsText(tsw, k, mincount);
 		}
 		return true;
 	}
@@ -190,15 +227,21 @@ public class HashBuffer extends AbstractKmerTable {
 	@Override
 	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
 		for(AbstractKmerTable table : tables){
-			dumpKmersAsBytes(bsw, k, mincount);
+			table.dumpKmersAsBytes(bsw, k, mincount);
 		}
 		return true;
 	}
 	
 	@Override
-	public void fillHistogram(CoverageArray ca, int max){
+	@Deprecated
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Override
+	public void fillHistogram(long[] ca, int max){
 		for(AbstractKmerTable table : tables){
-			fillHistogram(ca, max);
+			table.fillHistogram(ca, max);
 		}
 	}
 	
@@ -217,8 +260,10 @@ public class HashBuffer extends AbstractKmerTable {
 	
 	private final AbstractKmerTable[] tables;
 	private final int buflen;
-	private final int ways;	
-	private final short[] sizes;
-	private final long[][] buffers;
+	private final int halflen;
+	private final int ways;
+	private final KmerBuffer[] buffers;
+	
+	private final static int SIZEMASK=15;
 
 }

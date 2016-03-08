@@ -662,6 +662,20 @@ public class SamLine implements Serializable {
 		return sb.toString();
 	}
 	
+	/**
+	 * @param cigar2
+	 * @return
+	 */
+	public static String toCigar13(String cigar14) {
+		if(cigar14==null){return null;}
+		byte[] temp=cigar14.getBytes();
+		for(int i=0; i<temp.length; i++){
+			if(temp[i]=='X' || temp[i]=='='){temp[i]='M';}
+		}
+		return new String(temp);
+	}
+	
+	
 	public static String toCigar14(byte[] match, int readStart, int readStop, int reflen, byte[] bases){
 		if(match==null || readStart==readStop){return null;}
 		StringBuilder sb=new StringBuilder(8);
@@ -786,7 +800,7 @@ public class SamLine implements Serializable {
 			}else{
 				if(c=='M' || c=='=' || c=='X' || c=='I'){
 					len+=current;
-				}if(c=='D' || c=='N'){
+				}else if(c=='D' || c=='N'){
 					//do nothing
 				}else if (c=='H'){ 
 					if(includeHardClip){len+=current;}
@@ -1088,6 +1102,11 @@ public class SamLine implements Serializable {
 		return "YS:i:"+(pos+((cigar==null || perfect) ? seqLength : calcCigarLength(cigar, true, false))-1);
 	}
 	
+	public static String makeLengthTag(int pos, int seqLength, String cigar, boolean perfect){
+		if(cigar==null || perfect){return "YL:Z:"+seqLength+","+seqLength;}
+		return "YL:Z:"+(seqLength-countLeadingClip(cigar, true, false))+","+calcCigarLength(cigar, false, false);
+	}
+	
 	public static String makeIdentityTag(byte[] match, boolean perfect){
 		if(perfect){return "YI:f:100";}
 		float f=Read.identity(match);
@@ -1138,6 +1157,7 @@ public class SamLine implements Serializable {
 		int dels=0;
 		boolean prevSub=false;
 		for(int mpos=0, rpos=refstart, cpos=0; mpos<match.length; mpos++){
+			assert(cpos>=0 && cpos<call.length) : "\n"+new String(match)+"\n"+new String(call)+"\n"+mpos+", "+cpos+", "+dels+", "+INTRON_LIMIT;
 			final byte c=call[cpos];
 			final byte m=match[mpos];
 			
@@ -1155,7 +1175,7 @@ public class SamLine implements Serializable {
 			
 			if(m=='C' || rpos<scafloc || rpos>=scafstop){ //Do nothing for clipped bases
 				rpos++;
-				cpos++;
+				if(m!='D'){cpos++;}
 			}else if(m=='m' || m=='s'){
 				count++;
 				rpos++;
@@ -1200,6 +1220,7 @@ public class SamLine implements Serializable {
 				dels++;
 			}
 			prevM=m;
+			
 		}
 //		if(count>0){
 			md.append(count);
@@ -1208,6 +1229,39 @@ public class SamLine implements Serializable {
 		return md.toString();
 	}
 	
+	public static int calcLeftClip(String cig, String id){
+		if(cig==null){return 0;}
+		int len=0;
+		for(int i=0; i<cig.length(); i++){
+			char c=cig.charAt(i);
+			if(Character.isDigit(c)){
+				len=len*10+(c-'0');
+			}else{
+				assert(c!='S' || i<cig.length()-1);//ban entirely soft-clipped reads
+				return (c=='S') ? len : 0;
+			}
+		}
+		return 0;
+	}
+	
+	public static int calcRightClip(String cig, String id){
+		if(cig==null || cig.length()<1 || cig.charAt(cig.length()-1)!='S'){return 0;}
+		int pos=cig.length()-2;
+		for(; pos>=0 && Character.isDigit(cig.charAt(pos)); pos--){}
+		
+		assert(pos>0) : cig+", id="+id+", pos="+pos;//ban entirely soft-clipped reads
+		
+		int len=0;
+		for(int i=pos+1; i<cig.length(); i++){
+			char c=cig.charAt(i);
+			if(Character.isDigit(c)){
+				len=len*10+(c-'0');
+			}else{
+				return (c=='S') ? len : 0;
+			}
+		}
+		return len;
+	}
 	
 	public ArrayList<String> makeOptionalTags(Read r, Read r2, boolean perfect, int scafloc, int scaflen, boolean inbounds, boolean inbounds2){
 		if(NO_TAGS){return null;}
@@ -1219,39 +1273,66 @@ public class SamLine implements Serializable {
 		if(mapped){
 			if(!r.secondary() && r.ambiguous()){optionalTags.add("XT:A:R");} //Not sure what do do for secondary alignments
 
-			int nm=r.length();
-			int dels=0;
-			if(perfect){nm=0;}
-			else if(r.match!=null){
+//			int nm=r.length();
+//			int dels=0;
+			
+			int nm=0;
+			
+//			//Only works for cigar strings in format 1.4+
+//			if(perfect){nm=0;}else if(cigar!=null){
+//				int len=0;
+//				for(int i=0; i<cigar.length(); i++){
+//					char c=cigar.charAt(i);
+//					if(Character.isDigit(c)){
+//						len=len*10+(c-'0');
+//					}else{
+//						if(c=='X' || c=='I' || c=='D' || c=='M'){
+//							nm+=len;
+//						}
+//						len=0;
+//					}
+//				}
+////				System.err.println("\nRead "+r.id+": nm="+nm+"\n"+cigar+"\n"+new String(r.match));
+//				System.err.println("\nRead "+r.id+": nm="+nm);
+//			}
+			
+			if(perfect){nm=0;}else if(r.match!=null){
+				nm=0;
+				int leftclip=calcLeftClip(cigar, r.id), rightclip=calcRightClip(cigar, r.id);
+				final int from=leftclip, to=r.length()-rightclip;
 				int delsCurrent=0;
-				for(byte b : r.match){
-					if(b=='m' || b=='C'){nm--;}
-					if(b=='D'){delsCurrent++;}
-					else{
-						if(delsCurrent<=INTRON_LIMIT){dels+=delsCurrent;}
-						delsCurrent=0;
+				for(int i=0, cpos=0; i<r.match.length; i++){
+					final byte b=r.match[i];
+					
+//					System.err.println("i="+i+", cpos="+cpos+", from="+from+", ")
+					
+					if(cpos>=from && cpos<to){
+						if(b=='I' || b=='S' || b=='N' || b=='X' || b=='Y'){nm++;}
+
+						if(b=='D'){delsCurrent++;}
+						else{
+							if(delsCurrent<=INTRON_LIMIT){nm+=delsCurrent;}
+							delsCurrent=0;
+						}
 					}
+					if(b!='D'){cpos++;}
 				}
-				if(delsCurrent<=INTRON_LIMIT){dels+=delsCurrent;}
+				if(delsCurrent<=INTRON_LIMIT){nm+=delsCurrent;}
 				//				assert(false) : nm+",  "+dels+", "+delsCurrent+", "+r.length()+", "+r.match.length;
-			}
 
-			//Samtools puts nm tag in wrong place for deletions.  This "if" block is not really necessary except for exact text match to samtools.
-			if(false && dels>0){
-				if(MAKE_SM_TAG){optionalTags.add("SM:i:"+mapq);}
-				//				optional.add("AM:i:"+Data.min(mapq, r2==null ? mapq : (r2.mapped() ? Data.max(1, -20+(int)((r2.mapScore*60f/(100*r2.mapLength)))) : 0)));
-				optionalTags.add("AM:i:"+Data.min(mapq, r2==null ? mapq : (r2.mapped() ? Data.max(1, r2.mapScore/r2.length()) : 0)));
-				if(r.match!=null){optionalTags.add("NM:i:"+(nm+dels));}
-			}else{
+//				assert(false) : "rlen="+r.length()+", nm="+nm+", dels="+delsCurrent+", intron="+INTRON_LIMIT+", inbound1="+inbounds+", ib2="+inbounds2+"\n"+new String(r.match);
+				
+//				System.err.println("\nRead "+r.id+": left="+leftclip+", right="+rightclip+", nm="+nm+"\n"+cigar+"\n"+new String(r.match));
+				
+			}
+			
+			if(MAKE_NM_TAG){
 				if(perfect){optionalTags.add("NM:i:0");}
-				else if(r.match!=null){optionalTags.add("NM:i:"+(nm+dels));}
-				if(MAKE_SM_TAG){optionalTags.add("SM:i:"+mapq);}
-				//				optional.add("AM:i:"+Data.min(mapq, r2==null ? mapq : (r2.mapped() ? Data.max(1, -20+(int)((r2.mapScore*60f/(100*r2.mapLength)))) : 0)));
-				optionalTags.add("AM:i:"+Data.min(mapq, r2==null ? mapq : (r2.mapped() ? Data.max(1, r2.mapScore/r2.length()) : 0)));
+				else if(r.match!=null){optionalTags.add("NM:i:"+(nm));}
 			}
-
-
-
+			if(MAKE_SM_TAG){optionalTags.add("SM:i:"+mapq);}
+			if(MAKE_AM_TAG){optionalTags.add("AM:i:"+Data.min(mapq, r2==null ? mapq : (r2.mapped() ? Data.max(1, r2.mapScore/r2.length()) : 0)));}
+			
 			if(MAKE_TOPHAT_TAGS){
 				optionalTags.add("AS:i:0");
 				if(cigar==null || cigar.indexOf('N')<0){
@@ -1309,6 +1390,8 @@ public class SamLine implements Serializable {
 			}
 
 			if(MAKE_STOP_TAG && (perfect || (r.match!=null && r.bases!=null))){optionalTags.add(makeStopTag(pos, r.length(), cigar, perfect));}
+			
+			if(MAKE_LENGTH_TAG && (perfect || (r.match!=null && r.bases!=null))){optionalTags.add(makeLengthTag(pos, r.length(), cigar, perfect));}
 
 			if(MAKE_IDENTITY_TAG && (perfect || r.match!=null)){optionalTags.add(makeIdentityTag(r.match, perfect));}
 
@@ -1487,7 +1570,7 @@ public class SamLine implements Serializable {
 		byte strand_=strand();
 		int start_=start(true, includeHardClip);
 		int stop_=stop(start_, true, includeHardClip);
-		assert(start_<=stop_) : start_+", "+stop_;
+		assert(start_<=stop_) : start_+", "+stop_+"\n"+this+"\n";
 		
 		if(Data.GENOME_BUILD>=0 && rname!=null && (rname.length!=1 || rname[0]!='*')){
 			ScafLoc sc=Data.getScafLoc(rname);
@@ -2095,6 +2178,8 @@ public class SamLine implements Serializable {
 	public static boolean NO_TAGS=false;
 
 //	public static boolean MAKE_RG_TAG=false;
+	public static boolean MAKE_AM_TAG=true;
+	public static boolean MAKE_NM_TAG=true;
 	public static boolean MAKE_SM_TAG=false;
 	public static boolean MAKE_XM_TAG=false;
 	public static boolean MAKE_XS_TAG=false;
@@ -2105,6 +2190,7 @@ public class SamLine implements Serializable {
 	public static boolean MAKE_IDENTITY_TAG=false;
 	public static boolean MAKE_SCORE_TAG=false;
 	public static boolean MAKE_STOP_TAG=false;
+	public static boolean MAKE_LENGTH_TAG=false;
 	public static boolean MAKE_CUSTOM_TAGS=false;
 	public static boolean MAKE_INSERT_TAG=false;
 	public static boolean MAKE_CORRECTNESS_TAG=false;

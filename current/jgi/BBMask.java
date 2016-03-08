@@ -46,7 +46,6 @@ public class BBMask{
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		BBMask masker=new BBMask(args);
 		masker.process(t);
 	}
@@ -61,10 +60,9 @@ public class BBMask{
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
-		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.capBuffers(4);
+		
+		
+		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=16;
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
@@ -90,8 +88,6 @@ public class BBMask{
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -104,7 +100,7 @@ public class BBMask{
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Integer.parseInt(b));
+				Shared.setThreads(b);
 			}else if(a.equals("sampad") || a.equals("sampadding") || a.equals("sp")){
 				samPad=Integer.parseInt(b);
 			}else if(a.equals("entropymode")){
@@ -152,7 +148,7 @@ public class BBMask{
 				mincov=Integer.parseInt(b);
 			}else if(a.equals("maxcov")){
 				maxcov=Integer.parseInt(b);
-			}else if(a.equals("delcov")){
+			}else if(a.equals("delcov") || a.equals("delcoverage")){
 				includeDeletionCoverage=Tools.parseBoolean(b);
 			}else if(a.equals("window") || a.equals("w")){
 				window=Integer.parseInt(b);

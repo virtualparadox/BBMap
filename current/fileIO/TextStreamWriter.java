@@ -55,7 +55,7 @@ public class TextStreamWriter extends Thread {
 			myOutstream=ReadWrite.getOutputStream(fname, append, true, allowSubprocess);
 			if(verbose){System.err.println("Created output stream for "+fname+", "+append+", "+true+", "+allowSubprocess);}
 		}else{
-			myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true);
+			myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append, true, true);
 		}
 		myWriter=new PrintWriter(myOutstream);
 		if(verbose){System.err.println("Created PrintWriter for "+myOutstream);}
@@ -253,6 +253,9 @@ public class TextStreamWriter extends Thread {
 	/*----------------           Println            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public void println(){
+		print("\n");
+	}
 	
 	public void println(CharSequence cs){
 		print(cs);

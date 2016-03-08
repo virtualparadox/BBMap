@@ -46,25 +46,7 @@ public final class SplitPairsAndSingles {
 	}
 	
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx100m -cp <path> jgi.SplitPairsAndSingles in=<input file> out=<pair output file> outs=<singleton output file> minlen=20");
-		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-		outstream.println("out=<file>         \tThe 'out=' flag is needed if the output file is not the second parameter.  'out=stdout' will pipe to standard out.");
-		outstream.println("out2=<file>        \tUse this to write 2nd read of pairs to a different file.");
-		outstream.println("outsingle=<file>   \t(outs) Write singleton reads here.");
-		outstream.println("");
-		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.");
-		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-		outstream.println("trimq=6            \tTrim quality threshold.");
-		outstream.println("minlen=2           \t(ml) Reads shorter than this after trimming will be discarded.");
-		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fixinterleaving=f  \t(fint) Fixes corrupted interleaved files by examining paired read names.");
-		outstream.println("repair=f           \t(rp) Fixes arbitrarily corrupted paired reads by examining read names.  High memory.");
+		System.err.println("Please consult the shellscript for usage information.");
 		
 	}
 	
@@ -75,8 +57,8 @@ public final class SplitPairsAndSingles {
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		FastaReadInputStream.SPLIT_READS=false;
+		
+		
 		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		
 		Parser parser=new Parser();
@@ -244,7 +226,6 @@ public final class SplitPairsAndSingles {
 	public void process(){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		process2();
 		
@@ -279,7 +260,7 @@ public final class SplitPairsAndSingles {
 		}
 		
 		if(errorState){
-			throw new RuntimeException("BBDuk terminated in an error state; the output may be corrupt.");
+			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
 	

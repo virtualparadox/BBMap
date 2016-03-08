@@ -91,7 +91,7 @@ public final class BBIndex extends AbstractIndex {
 	public static final synchronized void loadIndex(int minChrom, int maxChrom, int k, boolean writeToDisk, boolean diskInvalid){
 		if(minChrom<1){minChrom=1;}
 		if(maxChrom>Data.numChroms){maxChrom=Data.numChroms;}
-		assert(minChrom<=maxChrom);
+		assert(minChrom<=maxChrom) : minChrom+", "+maxChrom;
 		Data.sysout.println("Loading index for chunk "+minChrom+"-"+maxChrom+", build "+Data.GENOME_BUILD);
 		index=IndexMaker4.makeIndex(Data.GENOME_BUILD, minChrom, maxChrom, 
 				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, writeToDisk, diskInvalid, index);
@@ -624,7 +624,7 @@ public final class BBIndex extends AbstractIndex {
 			cycle++;
 		}
 
-//		assert(Read.CHECKSITES(result, basesP, basesM, id)); //TODO: Comment out once checked
+//		assert(Read.CHECKSITES(result, basesP, basesM, id, false)); //TODO: Comment out once checked
 		
 		return result;
 	}

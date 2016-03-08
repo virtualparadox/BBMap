@@ -42,7 +42,6 @@ public class CalcUniqueness {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		CalcUniqueness rr=new CalcUniqueness(args);
 		rr.process(t);
 	}
@@ -50,7 +49,7 @@ public class CalcUniqueness {
 	public CalcUniqueness(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -59,13 +58,13 @@ public class CalcUniqueness {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		int k_=20;
 		
 		Parser parser=new Parser();
@@ -78,8 +77,6 @@ public class CalcUniqueness {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("printlastbin") || a.equals("plb")){
 				printLastBin=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -102,8 +99,6 @@ public class CalcUniqueness {
 				interval=Integer.parseInt(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
 			}else{
 //				System.err.println("Unknown parameter "+args[i]);
 //				assert(false) : "Unknown parameter "+args[i];

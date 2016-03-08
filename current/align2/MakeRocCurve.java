@@ -19,7 +19,6 @@ public class MakeRocCurve {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		String in=null;
 		long reads=-1;
 		

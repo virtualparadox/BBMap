@@ -32,7 +32,6 @@ public class MergeFastaContigs {
 		System.out.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName()+" "+Arrays.toString(args)));
 		
 		Timer t=new Timer();
-		t.start();
 		String infile=null;
 		String outfile=null;
 		String outindex=null;
@@ -49,8 +48,6 @@ public class MergeFastaContigs {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("in") && split.length>0){
 				infile=b;
 			}else if(a.equals("out") && split.length>0){

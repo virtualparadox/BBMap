@@ -44,7 +44,6 @@ public abstract class BBTool_ST {
 		/*
 		//Example:
 		Timer t=new Timer();
-		t.start();
 		BBTool_ST bbt=new BBTool_ST(args);
 		bbt.process(t);
 		*/
@@ -58,7 +57,7 @@ public abstract class BBTool_ST {
 	public BBTool_ST(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -67,13 +66,13 @@ public abstract class BBTool_ST {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 		
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		setDefaults();
 		
@@ -86,9 +85,7 @@ public abstract class BBTool_ST {
 			if(b==null || b.equalsIgnoreCase("null")){b=null;}
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 			
-			if(a.equals("null")){
-				// do nothing
-			}else if(parseArgument(arg, a, b)){
+			if(parseArgument(arg, a, b)){
 				// do nothing
 			}else if(parser.parse(arg, a, b)){
 				//do nothing
@@ -196,9 +193,7 @@ public abstract class BBTool_ST {
 			if(b==null || b.equalsIgnoreCase("null")){b=null;}
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(a.equals("null")){
-				// do nothing
-			}else if(parseArgument(arg, a, b)){
+			if(parseArgument(arg, a, b)){
 				// do nothing
 			}
 		}

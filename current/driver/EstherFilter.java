@@ -34,8 +34,6 @@ public class EstherFilter {
 		}
 		String command="blastall -p blastn -i "+query+" -d "+ref+" -e 0.00001 -m 8";
 		
-		FastaReadInputStream.SPLIT_READS=false;
-		
 		ReadWrite.FORCE_KILL=true;
 
 //		InputStream is=ReadWrite.getInputStreamFromProcess("stdin", command, false);

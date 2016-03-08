@@ -31,7 +31,6 @@ public class FindPrimers {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FindPrimers as=new FindPrimers(args);
 		as.process(t);
 	}
@@ -39,7 +38,7 @@ public class FindPrimers {
 	public FindPrimers(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -165,7 +164,8 @@ public class FindPrimers {
 							int[] score=msa.score(query, r.bases, a, b, max[0], max[1], max[2], false);
 							ss=new SiteScore(1, (byte)0, score[1], score[2], 1, score[0]);
 							if(ssf==null || ss.quickScore>ssf.quickScore){
-								score1=ss.score=ss.slowScore=ss.quickScore;
+								ss.setSlowScore(ss.quickScore);
+								score1=ss.score=ss.quickScore;
 								ss.match=msa.traceback(query, r.bases, a, b, score[3], score[4], score[5], false);
 								ss.hits=qnum;
 								ssf=ss;
@@ -181,7 +181,8 @@ public class FindPrimers {
 							int[] score=msa.score(rquery, r.bases, a, b, max[0], max[1], max[2], false);
 							ss=new SiteScore(1, (byte)1, score[1], score[2], 1, score[0]);
 							if(ssr==null || ss.quickScore>ssr.quickScore){
-								score2=ss.score=ss.slowScore=ss.quickScore;
+								ss.setSlowScore(ss.quickScore);
+								score1=ss.score=ss.quickScore;
 								ss.match=msa.traceback(rquery, r.bases, a, b, score[3], score[4], score[5], false);
 								ss.hits=qnum;
 								ssr=ss;

@@ -130,13 +130,13 @@ public final class Tools {
 	 * @param names
 	 * @return
 	 */
-	public static final int addNames(String s, Collection<String> names){
+	public static final int addNames(String s, Collection<String> names, boolean allowSubprocess){
 		int added=0;
 		if(new File(s).exists()){
 
 			int[] vector=FileFormat.testFormat(s, false, false);
 			final int type=vector[0];
-			ByteFile bf=ByteFile.makeByteFile(s, false, false);
+			ByteFile bf=ByteFile.makeByteFile(s, false, allowSubprocess);
 			
 			if(type==FileFormat.FASTQ){
 				int num=0;
@@ -419,6 +419,46 @@ public final class Tools {
 		return f.canRead();
 	}
 	
+	/** Returns index of first matching location */
+	public static final int contains(final byte[] big, final byte[] small, final int maxMismatches){
+		int x=containsForward(big, small, maxMismatches);
+		return x>=0 ? x : containsReverse(big, small, maxMismatches);
+	}
+	
+	/** Returns index of first matching location */
+	public static final int containsForward(final byte[] big, final byte[] small, final int maxMismatches){
+		final int ilimit=big.length-small.length;
+//		System.err.println("Entering: ilimit="+ilimit+", maxMismatches="+maxMismatches+", small.length="+small.length);
+		for(int i=0; i<=ilimit; i++){
+			int mismatches=0;
+			for(int j=0; j<small.length && mismatches<=maxMismatches; j++){
+				final byte b=big[i+j];
+				final byte s=small[j];
+				if(b!=s){mismatches++;}
+			}
+			if(mismatches<=maxMismatches){
+//				System.err.println("Returning "+i+", mismatches="+mismatches);
+				return i;
+			}
+		}
+		return -1;
+	}
+	
+	/** Returns index of first matching location */
+	public static final int containsReverse(final byte[] big, final byte[] small, final int maxMismatches){
+		final int ilimit=big.length-small.length;
+		for(int i=0; i<=ilimit; i++){
+			int mismatches=0;
+			for(int j=0, k=small.length-1; j<small.length && mismatches<=maxMismatches; j++, k--){
+				final byte b=big[i+j];
+				final byte s=AminoAcid.baseToComplementExtended[small[k]];
+				if(b!=s){mismatches++;}
+			}
+			if(mismatches<=maxMismatches){return i;}
+		}
+		return -1;
+	}
+	
 	/** Removes null elements by shrinking the list.  May change list order. */
 	public static final <X> int condense(ArrayList<X> list){
 		if(list==null || list.size()==0){return 0;}
@@ -613,11 +653,12 @@ public final class Tools {
 								"\n"+SiteScore.header()+"\n"+a.toText()+"\n"+b.toText()+"\n";
 				}
 				
-				a.score=max(a.score, b.score);
-				a.slowScore=max(a.slowScore, b.slowScore);
-				a.pairedScore=max(a.pairedScore, b.pairedScore);
+				a.setSlowScore(max(a.slowScore, b.slowScore));
+//				a.setPairedScore(a.pairedScore<=0 && b.pairedScore<=0 ? 0 : max(a.slowScore+1, a.pairedScore, b.pairedScore));
+				a.setPairedScore((a.pairedScore<=a.slowScore && b.pairedScore<=a.slowScore) ? 0 : max(0, a.pairedScore, b.pairedScore));
+				a.setScore(max(a.score, b.score));
 				a.perfect=(a.perfect || b.perfect);
-				if(a.pairedScore>0 && a.pairedScore<=a.score){a.pairedScore=a.score+1;}
+				a.semiperfect=(a.semiperfect || b.semiperfect);
 				
 				removed++;
 				list.set(i, null);
@@ -634,11 +675,11 @@ public final class Tools {
 					better=a;
 				}
 				
-				a.score=max(a.score, b.score);
-				a.slowScore=max(a.slowScore, b.slowScore);
-				a.pairedScore=max(a.pairedScore, b.pairedScore);
-				a.perfect=(a.perfect || b.perfect);
-				if(a.pairedScore>0 && a.pairedScore<=a.score){a.pairedScore=a.score+1;}
+				a.setSlowScore(max(a.slowScore, b.slowScore));
+				a.setPairedScore((a.pairedScore<=a.slowScore && b.pairedScore<=a.slowScore) ? 0 : max(0, a.pairedScore, b.pairedScore));
+				a.setScore(max(a.score, b.score));
+				a.perfect=(a.perfect || b.perfect);//TODO: This is not correct.  And perfect sites should not have gaps anyway.
+				a.semiperfect=(a.semiperfect || b.semiperfect);
 				a.gaps=better.gaps;
 				
 				removed++;
@@ -680,7 +721,7 @@ public final class Tools {
 							SiteScore better=null;
 							if(a.perfect!=b.perfect){
 								better=a.perfect ? a : b;
-							}if(a.semiperfect!=b.semiperfect){
+							}else if(a.semiperfect!=b.semiperfect){
 								better=a.semiperfect ? a : b;
 							}else if(a.score!=b.score){
 								better=(a.score>b.score ? a : b);
@@ -721,11 +762,10 @@ public final class Tools {
 							}else if(subsumeInexact || (a.start==b.start && (subsumeIfOnlyStartMatches || a.stop==b.stop))){
 								assert(!a.semiperfect && !a.perfect && !b.semiperfect && !b.perfect);
 								a.setLimits(min(a.start, b.start), max(a.stop, b.stop));
-								a.score=max(a.score, b.score);
-								a.slowScore=max(a.slowScore, b.slowScore);
-								a.pairedScore=max(a.pairedScore, b.pairedScore);
+								a.setSlowScore(max(a.slowScore, b.slowScore));
+								a.setPairedScore(a.pairedScore<=0 && b.pairedScore<=0 ? 0 : max(a.slowScore+1, a.pairedScore, b.pairedScore));
 								a.quickScore=max(a.quickScore, b.quickScore);
-								if(a.pairedScore>0 && a.pairedScore<=a.score){a.pairedScore=a.score+1;}
+								a.setScore(max(a.score, b.score, a.pairedScore));
 								a.gaps=better.gaps;//Warning!  Merging gaps would be better; this could cause out-of-bounds.
 								//TODO: Test for a subsumption length limit.
 								list.set(j, null);
@@ -840,13 +880,13 @@ public final class Tools {
 		
 		for(int i=list.size()-1; i>=0; i--){
 			SiteScore ss=list.get(i);
-			assert(ss.score==ss.slowScore);
+			assert(ss.score==ss.slowScore) : ss.quickScore+", "+ss.slowScore+", "+ss.pairedScore+", "+ss.score+"\n"+ss;
 			assert(i==0 || ss.slowScore<=list.get(i-1).slowScore) : "List is not sorted by singleton score!";
 			if(ss.pairedScore>0){
 				assert(ss.pairedScore>ss.quickScore || ss.pairedScore>ss.slowScore) : ss;
 				if(ss.slowScore<swScoreThreshPaired){list.remove(i);}
 			}else{
-				assert(ss.pairedScore==0) : ss.toText();
+				assert(ss.pairedScore<=0) : ss.toText();
 				if(ss.slowScore<swScoreThresh){list.remove(i);}
 			}
 		}
@@ -889,9 +929,9 @@ public final class Tools {
 //		for(int i=list.size()-1; i>=0; i--){
 		for(int i=list.size()-1; i>1; i--){
 			SiteScore ss=list.get(i);
-			assert(ss.score==ss.slowScore);
+			assert(ss.score==ss.slowScore || (ss.score<=0 && ss.slowScore<=0)) : ss;
 			assert(i==0 || ss.slowScore<=list.get(i-1).slowScore) : "List is not sorted by singleton score!";
-			assert(ss.pairedScore==0) : ss.toText();
+			assert(ss.pairedScore<=0) : ss.toText();
 			if(ss.slowScore<thresh){list.remove(i);}
 		}
 		
@@ -930,7 +970,7 @@ public final class Tools {
 				if(ss.slowScore<thresh){list.remove(i);}
 			}else{
 				int thresh=(i>=expectedSites ? swScoreThresh2 : swScoreThresh);
-				assert(ss.pairedScore==0) : ss.toText();
+//				assert(ss.pairedScore==0) : ss.toText(); //Disable in case of negative values
 				if(ss.slowScore<thresh){list.remove(i);}
 			}
 		}
@@ -967,7 +1007,7 @@ public final class Tools {
 			SiteScore ss=list.get(i);
 			assert(ss.score==ss.slowScore);
 			assert(i==0 || ss.slowScore<=list.get(i-1).slowScore) : "List is not sorted by singleton score!";
-			assert(ss.pairedScore==0) : ss.toText();
+			assert(ss.pairedScore<=0) : ss.toText(); //This was "==0" but that makes the assertion fire for negative values. 
 			int thresh=(i>=expectedSites ? swScoreThresh2 : swScoreThresh);
 			if(ss.slowScore<thresh){list.remove(i);}
 		}
@@ -1106,6 +1146,19 @@ public final class Tools {
 		}
 		return true;
 	}
+	
+	/**
+	 * @param array
+	 * @param s
+	 * @return True if the array starts with the String.
+	 */
+	public static boolean startsWith(byte[] array, String s) {
+		if(array==null || s==null || array.length<s.length()){return false;}
+		for(int i=0; i<s.length(); i++){
+			if(array[i]!=s.charAt(i)){return false;}
+		}
+		return true;
+	}
 
 	public static int compare(byte[] a, byte[] b){
 		if(a==b){return 0;}
@@ -1155,6 +1208,18 @@ public final class Tools {
 		return x;
 	}
 	
+	public static double mean(int[] array){
+		return sum(array)/(double)array.length;
+	}
+	
+	public static double harmonicMean(int[] array){
+		double sum=0;
+		for(int x : array){
+			if(x>0){sum+=1.0/x;}
+		}
+		return array.length/sum;
+	}
+	
 	public static int cardinality(int[] array){
 		int x=0;
 		for(int y : array){if(y!=0){x++;}}
@@ -1170,6 +1235,12 @@ public final class Tools {
 	public static long sum(long[] array){
 		long x=0;
 		for(long y : array){x+=y;}
+		return x;
+	}
+	
+	public static long sum(long[] array, int from, int to){
+		long x=0;
+		for(int i=from; i<=to; i++){x+=array[i];}
 		return x;
 	}
 	
@@ -1260,6 +1331,16 @@ public final class Tools {
 	public static void reverseInPlace(final int[] array){
 		if(array==null){return;}
 		final int max=array.length/2, last=array.length-1;
+		for(int i=0; i<max; i++){
+			int temp=array[i];
+			array[i]=array[last-i];
+			array[last-i]=temp;
+		}
+	}
+	
+	public static void reverseInPlace(final int[] array, final int from, final int to){
+		if(array==null){return;}
+		final int max=to/2, last=to-1;
 		for(int i=0; i<max; i++){
 			int temp=array[i];
 			array[i]=array[last-i];
@@ -1516,7 +1597,7 @@ public final class Tools {
 		
 		if(!dot){return Long.parseLong(b)*mult;}
 		
-		return ((long)Double.parseDouble(b))*mult;
+		return (long)(Double.parseDouble(b)*mult);
 	}
 	
 	public static boolean isNumber(String s){
@@ -1665,7 +1746,7 @@ public final class Tools {
 //			System.out.println("Min value:        \t"+lengths[0]);
 //			System.out.println("Med value:        \t"+lengths[lengths.length/2]);
 //			System.out.println("Max value:        \t"+lengths[lengths.length-1]);
-			System.out.println("Total:            \t"+total);
+			System.err.println("Total:            \t"+total);
 		}
 		
 		int[] hist=new int[buckets+1];
@@ -2234,4 +2315,5 @@ public final class Tools {
 		specialChars[252]='n';
 		specialChars[253]='2';
 	}
+	
 }

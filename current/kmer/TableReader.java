@@ -29,13 +29,12 @@ public class TableReader {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			assert(false) : "TODO";
 			System.exit(0);
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		
 		AbstractKmerTable[] tables=TableLoaderLockFree.makeTables(AbstractKmerTable.ARRAY1D, 128000, true);
 		

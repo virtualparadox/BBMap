@@ -25,7 +25,6 @@ public class DedupeByMapping extends BBTool_ST{
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		DedupeByMapping bbt=new DedupeByMapping(args);
 		bbt.process(t);
 	}

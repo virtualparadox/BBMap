@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 27, 2015
+Last modified December 15, 2015
 
 Description:  Performs high-speed alignment-free sequence quantification,
 by counting the number of long kmers that match between a read and
@@ -12,15 +12,12 @@ a set of reference sequences.  Designed for RNA-seq with alternative splicing.
 
 Usage:  seal.sh in=<input file> ref=<file,file,file...> rpkm=<file>
 
-Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed.
-Output may be stdout or a file.
+Input may be fasta or fastq, compressed or uncompressed.
 If you pipe via stdin/stdout, please include the file type; e.g. for gzipped 
 fasta input, set in=stdin.fa.gz
 
-Optional parameters (and their defaults)
 
 Input parameters:
-
 in=<file>           Main input. in=stdin.fq will pipe from stdin.
 in2=<file>          Input for 2nd read of pairs in a different file.
 ref=<file,file>     Comma-delimited list of reference files or directories.
@@ -34,7 +31,6 @@ copyundefined=f     (cu) Process non-AGCT IUPAC reference bases by making all
                     or adapter barcodes, as time/memory use is exponential.
 
 Output parameters:
-
 out=<file>          (outmatch) Write reads here that contain kmers matching
                     the reference. 'out=stdout.fq' will pipe to standard out.
 out2=<file>         (outmatch2) Use this to write 2nd read of pairs to a 
@@ -69,7 +65,6 @@ kpt=t               (keepPairsTogether) Paired reads will always be assigned
                     to the same ref sequence.
 
 Processing parameters:
-
 k=31                Kmer length used for finding contaminants.  Contaminants 
                     shorter than k will not be found.  k must be at least 1.
 rcomp=t             Look for reverse-complements of kmers in addition to 
@@ -90,7 +85,7 @@ forbidn=f           (fn) Forbids matching of read kmers containing N.
                     or edist>0, to increase sensitivity.
 match=all           Determines when to quit looking for kmer matches.  Values:
                          all:    Attempt to match all kmers in each read.
-                         first:  Quit aftet the first matching kmer.
+                         first:  Quit after the first matching kmer.
                          unique: Quit after the first uniquely matching kmer.
 ambiguous=random    (ambig) Set behavior on ambiguously-mapped reads (with an
                     equal number of kmer matches to multiple sequences).
@@ -102,18 +97,22 @@ clearzone=0         (cz) Threshhold for ambiguity.  If the best match shares X
                     kmers with the read, the read will be considered
                     also ambiguously mapped to any sequence sharing at least
                     [X minus clearzone] kmers.
-ecc=f               For overlapping paired reads only.  Performs error-
+ecco=f              For overlapping paired reads only.  Performs error-
                     correction with BBMerge prior to kmer operations.
 
+Containment parameters:
+processcontainedref=f  Require a reference sequence to be fully contained by
+                    an input sequence
+storerefbases=f     Store reference bases so that ref containments can be
+                    validated.  If this is set to false and processcontainedref
+                    is true, then it will only require that the read share the
+                    same number of bases as are present in the ref sequence.
 
 Taxonomy parameters (only use when doing taxonomy):
-
 tax=<file>          Output destination for taxonomy information.
-taxnames=<file>     Location of names.dmp from NCBI.
-taxnodes=<file>     Location of nodes.dmp from NCBI.
-taxtree=<file>      A serialized TaxTree (instead of names and nodes).
-gi=<file>           Location of gi_taxid_nucl.dmp.  Not needed if reference 
-                    sequence names start with ncbi id.
+taxtree=<file>      (tree) A serialized TaxTree (tree.taxtree.gz).
+gi=<file>           A serialized GiTable (gitable.int1d.gz). Only needed if 
+                    reference sequence names start with 'gi|'.
 mincount=1          Only display taxa with at least this many hits.
 maxnodes=-1         If positive, display at most this many top hits.
 minlevel=subspecies Do not display nodes below this taxonomic level.
@@ -121,24 +120,7 @@ maxlevel=life       Do not display nodes above this taxonomic level.
 Valid levels are subspecies, species, genus, family, order, class,
 phylum, kingdom, domain, life
 
-
-threads=auto        (t) Set number of threads to use; default is number of 
-                    logical processors.
-prealloc=f          Preallocate memory in table.  Allows faster table loading 
-                    and more efficient memory usage, for a large reference.
-monitor=f           Kill this process if CPU usage drops to zero for a long
-                    time.  monitor=600,0.01 would kill after 600 seconds 
-                    under 1% usage.
-rskip=1             Skip reference kmers to reduce memory usage.
-                    1 means use all, 2 means use every other kmer, etc.
-qskip=1             Skip query kmers to increase speed.  1 means use all.
-speed=0             Ignore this fraction of kmer space (0-15 out of 16) in both
-                    reads and reference.  Increases speed and reduces memory.
-Note: Do not use more than one of 'speed', 'qskip', and 'rskip'.
-
-
 Speed and Memory parameters:
-
 threads=auto        (t) Set number of threads to use; default is number of 
                     logical processors.
 prealloc=f          Preallocate memory in table.  Allows faster table loading 
@@ -154,7 +136,6 @@ speed=0             Ignore this fraction of kmer space (0-15 out of 16) in both
 Note: Do not use more than one of 'speed', 'qskip', and 'rskip'.
 
 Trimming/Masking parameters:
-
 qtrim=f             Trim read ends to remove bases with quality below trimq.
                     Performed AFTER looking for kmers.  Values: 
                          t (trim both ends), 
@@ -183,9 +164,7 @@ restrictleft=0      If positive, only look for kmer matches in the
 restrictright=0     If positive, only look for kmer matches in the 
                     rightmost X bases.
 
-
 Java Parameters:
-
 -Xmx                This will be passed to Java to set memory usage, overriding 
                     the program's automatic memory detection. -Xmx20g will specify 
                     20 gigs of RAM, and -Xmx200m will specify 200 megs.  
@@ -195,7 +174,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "	
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx1g"
@@ -221,11 +210,13 @@ calcXmx () {
 calcXmx "$@"
 
 seal() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z $z2 -cp $CP jgi.Seal $@"
 	echo $CMD >&2
 	eval $CMD

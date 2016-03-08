@@ -34,7 +34,6 @@ public class ReclusterByKmer {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		ReclusterByKmer rbk=new ReclusterByKmer(args);
 		rbk.process(t);
 	}
@@ -49,14 +48,11 @@ public class ReclusterByKmer {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
-		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		int k1_=12;
 		int k2_=3;
 		Parser parser=new Parser();
@@ -84,8 +80,6 @@ public class ReclusterByKmer {
 				//do nothing
 			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -99,8 +93,6 @@ public class ReclusterByKmer {
 				Data.setGenome(Integer.parseInt(b));
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-			}else if(out1==null && i==1 && !arg.contains("=")){
-				out1=arg;
 			}else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];

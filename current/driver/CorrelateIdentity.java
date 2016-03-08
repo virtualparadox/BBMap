@@ -32,7 +32,7 @@ public class CorrelateIdentity {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -48,8 +48,7 @@ public class CorrelateIdentity {
 	 * Display usage information.
 	 */
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("TODO");
+		outstream.println("Please consult the shellscript for usage information.");
 	}
 	
 	

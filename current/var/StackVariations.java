@@ -20,7 +20,6 @@ public class StackVariations {
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String inPattern=args[0];
 		String outPattern=args[1];

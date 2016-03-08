@@ -176,7 +176,7 @@ public class Cluster{
 		}else if(scoreMode2==SCORE_MODE_MULT){
 			float f=ClusterTools.innerProduct(kmers, kmerProbArray2);
 			assert(false);
-		}if(scoreMode2==SCORE_MODE_DIF){
+		}else if(scoreMode2==SCORE_MODE_DIF){
 			float f=ClusterTools.absDif(probs, kmerProbArray2);
 			assert(false);
 		}else if(scoreMode2==SCORE_MODE_RMS){

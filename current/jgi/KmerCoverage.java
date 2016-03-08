@@ -115,8 +115,6 @@ public class KmerCoverage {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.equals("in") || a.equals("in1")){
@@ -189,10 +187,10 @@ public class KmerCoverage {
 				DONT_SAMPLE_OUTPUT=Tools.parseBoolean(b);
 			}else if(a.startsWith("kmersample")){
 				kmersamplerate=Integer.parseInt(b);
-				KmerCountAbstract.kmersamplerate=kmersamplerate;
+//				KmerCountAbstract.kmersamplerate=kmersamplerate;
 			}else if(a.startsWith("sample") || a.startsWith("readsample")){
 				readsamplerate=Integer.parseInt(b);
-				KmerCountAbstract.readsamplerate=readsamplerate;
+//				KmerCountAbstract.readsamplerate=readsamplerate;
 			}else if(a.startsWith("canonical")){
 				CANONICAL=KmerCountAbstract.CANONICAL=Tools.parseBoolean(b);
 			}else if(a.startsWith("fixspikes")){
@@ -210,9 +208,8 @@ public class KmerCoverage {
 						extra=Arrays.asList(b.split(","));
 					}
 				}
-			}else if(i>2 || (!args[i].equals(in1) && !args[i].equals(in2))){
-//				assert(false) : "\n"+i+"\n"+args[i]+"\n"+reads1;
-				throw new RuntimeException("Unknown parameter "+args[i]);
+			}else{
+				throw new RuntimeException("Unknown parameter "+arg);
 			}
 		}
 		
@@ -344,10 +341,11 @@ public class KmerCoverage {
 		KCountArray prefilterArray=null;
 		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null);
+			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, gap, precells, prehashes, minq, true, false, tablereads, 1, buildStepsize, 1, 1, null, 0);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 		}
-		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, prefilterArray);
+		kca=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, gap, cells, hashes, minq, true, false, tablereads, buildpasses, buildStepsize, 2, 2, 
+				prefilterArray, (prefilterArray==null ? 0 : prefilterArray.maxValue));
 		ht.stop();
 		
 		outstream.println("Made hash table:  \t"+kca.toShortString(hashes));

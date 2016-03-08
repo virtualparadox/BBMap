@@ -4,12 +4,12 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 6, 2015
+Last modified December 11, 2015
 
 Description:  Calculates the observed quality scores from a sam file.
 Generates matrices for use in recalibrating quality scores.
 
-Usage:     calctruequality.sh in=<file,file,...file> path=<directory>
+Usage:        calctruequality.sh in=<file,file,...file> path=<directory>
 
 
 Parameters (and their defaults)
@@ -21,11 +21,14 @@ reads=-1            Stop after processing this many reads (if positive).
 Output parameters:
 overwrite=t         (ow) Set to true to allow overwriting of existing files.
 path=.              Directory to write quality matrices (within /ref subdir).
+write=t             Write matrices.
+showstats=t         Print a summary.
 
 Other parameters:
+t=auto
 pigz=f              Use pigz to compress.  If argument is a number, that will set the number of pigz threads.
 unpigz=t            Use pigz to decompress.
-recpasses=1         Generate matrices for 1-pass recalibration only.  Max is 2.
+passes=2            Generate matrices for 1-pass recalibration only.  Max is 2.
 recalqmax=42        Adjust max quality scores tracked.
 loadq102=           For each recalibration matrix, enable or disable that matrix with t/f.
                     You can specify pass1 or pass2 like this: loadq102_p1=f loadq102_p2=t.
@@ -38,7 +41,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx1g"
@@ -61,10 +74,12 @@ calcXmx () {
 calcXmx "$@"
 
 calctruequality() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z -cp $CP jgi.CalcTrueQuality $@"
 	echo $CMD >&2
 	eval $CMD

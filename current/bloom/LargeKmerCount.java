@@ -21,7 +21,6 @@ public class LargeKmerCount {
 public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String fname1=args[0];
 		String fname2=(args.length>4 || args[1].contains(".") ? args[1] : null);

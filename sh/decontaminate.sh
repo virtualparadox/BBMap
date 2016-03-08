@@ -4,15 +4,20 @@
 usage(){
 echo "
 Written by Brian Bushnell.
-Last modified May 26, 2015
+Last modified September 29, 2015
 
 Description:  Decontaminates multiplexed assemblies via normalization and mapping.
 
 Usage:  decontaminate.sh reads=<file,file> ref=<file,file> out=<directory>
+or
+decontaminate.sh readnamefile=<file> refnamefile=<file> out=<directory>
 
 Input Parameters:
-reads=<file,file>   Input reads; required parameter.
-ref=<file,file>     Input assemblies; required parameter.
+reads=<file,file>   Input reads, one file per library.
+ref=<file,file>     Input assemblies, one file per library.
+readnamefile=<file> List of input reads, one line per library.
+refnamefile=<file>  List of input assemblies, one line per library.
+
 interleaved=auto    True forces paired/interleaved input; false forces single-ended mapping.
                     If not specified, interleaved status will be autodetected from read names.
 unpigz=t            Spawn a pigz (parallel gzip) process for faster decompression.  Requires pigz to be installed.
@@ -65,7 +70,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -93,9 +108,11 @@ calcXmx "$@"
 
 
 decontaminate() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.DecontaminateByNormalization $@"
 	echo $CMD >&2
 	eval $CMD

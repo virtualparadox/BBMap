@@ -12,11 +12,13 @@ import stream.ConcurrentLegacyReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.ConcurrentReadOutputStream;
+import stream.KillSwitch;
 import stream.RandomReadInputStream3;
 import stream.Read;
 import stream.ReadStreamWriter;
 import stream.SamLine;
 import stream.SequentialReadInputStream;
+import stream.SiteScore;
 
 import dna.ChromosomeArray;
 import dna.Data;
@@ -24,6 +26,7 @@ import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
+import fileIO.TextStreamWriter;
 
 /**
  * Abstract superclass created from BBMap variants.
@@ -56,10 +59,12 @@ public abstract class AbstractMapper {
 	}
 	
 	final void abort(AbstractMapThread[] mtts, String message){
+//		System.err.println("Attempting to abort.");
 		closeStreams(cris, rosA, rosM, rosU, rosB);
-		if(mtts!=null){int x=shutDownThreads(mtts, true);}
-		if(message==null){throw new RuntimeException();}
-		throw new RuntimeException(message);
+		KillSwitch.kill(message==null ? "" : message);
+//		if(mtts!=null){int x=shutDownThreads(mtts, true);}
+//		if(message==null){throw new RuntimeException();}
+//		throw new RuntimeException(message);
 	}
 	
 	/** In megabytes */
@@ -69,12 +74,13 @@ public abstract class AbstractMapper {
 		long tmemory=rt.totalMemory()/1000000;
 		long fmemory=rt.freeMemory()/1000000;
 		long umemory=tmemory-fmemory;
-		long amemory=mmemory-umemory-40;
+		long amemory=mmemory-umemory;
 //		System.err.println("mmemory="+mmemory+", tmemory="+tmemory+", fmemory="+fmemory+", umemory="+umemory+", amemory="+amemory);
-		int maxThreads=(int)(amemory/threadMem);
+//		int maxThreads=Tools.max(1, (int)((amemory-70)/threadMem));
+		int maxThreads=(int)((amemory-100)/threadMem);
 		if(Shared.threads()>maxThreads){
 			System.err.println("\nMax Memory = "+mmemory+" MB\nAvailable Memory = "+amemory+" MB");
-			if(maxThreads<1){abort(null, "\n\nNot enough memory.  Please run on a node with at least "+((long)((umemory+40+threadMem)*1.15))+" MB.\n");}
+			if(maxThreads<1){abort(null, "\n\nNot enough memory.  Please run on a node with at least "+((long)((umemory+100+threadMem)*1.15))+" MB.\n");}
 			System.err.println("Reducing threads from "+Shared.threads()+" to "+maxThreads+" due to low system memory.");
 			Shared.setThreads(maxThreads);
 		}
@@ -104,16 +110,15 @@ public abstract class AbstractMapper {
 		
 		
 		sysout.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
-		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
+		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
 		Timer t=new Timer();
-		t.start();
 		
 		Read.TO_UPPER_CASE=true;
 
@@ -216,6 +221,8 @@ public abstract class AbstractMapper {
 				bamscript=b;
 			}else if(a.equals("local")){
 				LOCAL_ALIGN=Tools.parseBoolean(b);
+			}else if(a.equals("averagepairdist") || a.equals("apd")){
+				AbstractMapThread.INITIAL_AVERAGE_PAIR_DIST=(int)Tools.parseKMG(b);
 			}else if(a.equals("skipreads")){
 				AbstractMapThread.SKIP_INITIAL=Tools.parseKMG(b);
 			}else if(a.equals("readlen") || a.equals("length") || a.equals("len")){
@@ -369,6 +376,8 @@ public abstract class AbstractMapper {
 				sysout.println("Set RCOMP to "+rcompMate);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
+				Read.verbose=verbose;
+				SiteScore.verbose=verbose;
 				TranslateColorspaceRead.verbose=verbose;
 				AbstractIndex.verbose2=verbose;
 			}else if(a.equals("verbosestats")){
@@ -416,6 +425,7 @@ public abstract class AbstractMapper {
 				sequentialStrandAlt=Tools.parseBoolean(b);
 			}else if(a.equals("k") || a.equals("keylen")){
 				keylen=Integer.parseInt(b);
+				assert(keylen>0 && keylen<16) : "k must lie between 1 and 15, inclusive.";
 			}else if(a.equals("genscaffoldinfo")){
 				RefToIndex.genScaffoldInfo=Tools.parseBoolean(b);
 			}else if(a.equals("loadscaffolds")){
@@ -466,6 +476,10 @@ public abstract class AbstractMapper {
 				SLOW_RESCUE_PADDING=SLOW_ALIGN_PADDING;
 			}else if(a.equals("rescue")){
 				RESCUE=Tools.parseBoolean(b);
+			}else if(a.equals("rescuemismatches")){
+				AbstractMapThread.MAX_RESCUE_MISMATCHES=Integer.parseInt(b);
+			}else if(a.equals("rescuedist")){
+				AbstractMapThread.MAX_RESCUE_DIST=(int)Tools.parseKMG(b);
 			}else if(a.equals("tipsearch")){
 				if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){TIP_SEARCH_DIST=0;}
 				else{TIP_SEARCH_DIST=Tools.max(0, Integer.parseInt(b));}
@@ -489,14 +503,16 @@ public abstract class AbstractMapper {
 				forceanalyze=Tools.parseBoolean(b);
 			}else if(a.equals("machineoutput") || a.equals("machineout")){
 				MACHINE_OUTPUT=Tools.parseBoolean(b);
-			}else if(a.equals("showprogress")){
+			}else if(a.equals("showprogress") || a.equals("showprogress2")){
 				if(b!=null && Character.isDigit(b.charAt(0))){
-					long x=Tools.max(1, Long.parseLong(b));
+					long x=Tools.parseKMG(b);
 					ConcurrentReadInputStream.PROGRESS_INCR=x;
 					ConcurrentReadInputStream.SHOW_PROGRESS=(x>0);
 				}else{
+					ConcurrentReadInputStream.PROGRESS_INCR=ConcurrentReadInputStream.PROGRESS_INCR<1 ? 1000000 : ConcurrentReadInputStream.PROGRESS_INCR;
 					ConcurrentReadInputStream.SHOW_PROGRESS=Tools.parseBoolean(b);
 				}
+				if(a.equals("showprogress2")){ConcurrentReadInputStream.SHOW_PROGRESS2=ConcurrentReadInputStream.SHOW_PROGRESS;}
 			}else if(a.equals("scafstats") || a.equals("scaffoldstats")){
 				if(b==null && arg.indexOf('=')<0){b="stdout";}
 				if(b==null || b.equalsIgnoreCase("false") || b.equalsIgnoreCase("f") || b.equalsIgnoreCase("none") || b.equalsIgnoreCase("null")){
@@ -592,6 +608,8 @@ public abstract class AbstractMapper {
 				}
 			}else if(a.equals("covwindowavg")){
 				CoveragePileup.LOW_COV_DEPTH=Double.parseDouble(b);
+			}else if(a.equals("delcov") || a.equals("includedels") || a.equals("includedeletions") || a.equals("delcoverage")){
+				CoveragePileup.INCLUDE_DELETIONS=Tools.parseBoolean(b);
 			}else if(a.equals("rebuild")){
 				forceRebuild=Tools.parseBoolean(b);
 			}else if(a.equals("printunmappedcount")){
@@ -603,6 +621,8 @@ public abstract class AbstractMapper {
 				if(x){AbstractMapThread.CLEAR_ATTACHMENT=false;}
 			}else if(a.equals("correctthresh")){
 				CORRECT_THRESH=Integer.parseInt(b);
+			}else if(a.equals("statsfile")){
+				statsOutputFile=b;
 			}else{
 				throw new RuntimeException("Unknown parameter: "+arg);
 			}
@@ -654,11 +674,6 @@ public abstract class AbstractMapper {
 			}
 		}
 		
-		gzip=ReadWrite.USE_GZIP;
-		gunzip=ReadWrite.USE_GUNZIP;
-		pigz=ReadWrite.USE_PIGZ;
-		unpigz=ReadWrite.USE_UNPIGZ;
-		
 		ChromosomeArray.CHANGE_UNDEFINED_TO_N_ON_READ=(!INDEX_LOADED);
 		
 		if(BBSplitter.AMBIGUOUS2_MODE==BBSplitter.AMBIGUOUS2_SPLIT && splitterOutputs!=null){
@@ -681,6 +696,30 @@ public abstract class AbstractMapper {
 		if(in2!=null){
 			if(FASTQ.FORCE_INTERLEAVED){sysout.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+		}
+
+		if(outFile!=null && outFile2==null && outFile.contains("#") && !outFile.contains(".sam") && !outFile.contains(".bam") && outFile.contains(".")){
+			int pound=outFile.lastIndexOf('#');
+			String a=outFile.substring(0, pound);
+			String b=outFile.substring(pound+1);
+			outFile=a+1+b;
+			outFile2=a+2+b;
+		}
+
+		if(outFileM!=null && outFileM2==null && outFileM.contains("#") && !outFileM.contains(".sam") && !outFileM.contains(".bam") && outFileM.contains(".")){
+			int pound=outFileM.lastIndexOf('#');
+			String a=outFileM.substring(0, pound);
+			String b=outFileM.substring(pound+1);
+			outFileM=a+1+b;
+			outFileM2=a+2+b;
+		}
+
+		if(outFileU!=null && outFileU2==null && outFileU.contains("#") && !outFileU.contains(".sam") && !outFileU.contains(".bam") && outFileU.contains(".")){
+			int pound=outFileU.lastIndexOf('#');
+			String a=outFileU.substring(0, pound);
+			String b=outFileU.substring(pound+1);
+			outFileU=a+1+b;
+			outFileU2=a+2+b;
 		}
 		
 		if(OUTPUT_READS && !Tools.testOutputFiles(overwrite, append, false, outFile, outFile2)){
@@ -754,11 +793,6 @@ public abstract class AbstractMapper {
 	
 
 	boolean openStreams(Timer t, String[] args){
-
-		ReadWrite.USE_GZIP=gzip;
-		ReadWrite.USE_PIGZ=pigz;
-		ReadWrite.USE_GUNZIP=gunzip;
-		ReadWrite.USE_UNPIGZ=unpigz;
 		
 		cris=getReadInputStream(in1, in2, qfin1, qfin2);
 		final boolean paired=cris.paired();
@@ -892,9 +926,10 @@ public abstract class AbstractMapper {
 		}
 		
 		if(broken>0){
-			System.err.println("\n\n**************************************************************************\n\n" +
+			System.err.println("\n\n**************************************************************************\n" +
 					"Warning!  "+broken+" mapping thread"+(broken==1 ? "" : "s")+" did not terminate normally.\n" +
-					"Please check the error log; the output may be corrupt or incomplete.\n\n" +
+					"Check the error log; the output may be corrupt or incomplete.\n" +
+					"Please submit the full stderr output as a bug report, not just this message.\n" +
 					"**************************************************************************\n\n");
 		}
 		return broken;
@@ -955,11 +990,14 @@ public abstract class AbstractMapper {
 	
 	
 	static void printOutput(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER, final CoveragePileup pile,
-			boolean nzoStats, boolean sortStats){
+			boolean nzoStats, boolean sortStats, String dest){
 		if(MACHINE_OUTPUT){
-			printOutput_Machine(mtts, t, keylen, paired, SKIMMER, pile, nzoStats, sortStats);
+			printOutput_Machine(mtts, t, keylen, paired, SKIMMER, pile, nzoStats, sortStats, dest);
 			return;
 		}
+		if(dest==null){dest="stderr.txt";}
+		TextStreamWriter tswStats=new TextStreamWriter(dest, overwrite, append, false);
+		tswStats.start();
 		
 		long readsUsed1=0;
 		long readsUsed2=0;
@@ -1316,6 +1354,7 @@ public abstract class AbstractMapper {
 		double invSites100=100d/siteSum1;
 		
 		final double matedPercent=(numMated*invTrials100);
+		ReadStats.matedPercent=matedPercent;
 		final double badPairsPercent=(badPairs*invTrials100);
 		final double matedPercentBases=(numMatedBases*invBases100);
 		final double badPairsPercentBases=(badPairBases*invBases100);
@@ -1419,38 +1458,38 @@ public abstract class AbstractMapper {
 		
 		if(SYNTHETIC && verbose_stats==-1){verbose_stats=Tools.max(verbose_stats,9);}
 		
-		sysout.println("Reads Used:           \t"+(readsUsed1+readsUsed2)+"\t("+(basesUsed)+" bases)");
-		sysout.println();
+		tswStats.println("Reads Used:           \t"+(readsUsed1+readsUsed2)+"\t("+(basesUsed)+" bases)");
+		tswStats.println();
 		
 		if(useRandomReads){
-			sysout.println("Read Length:          \t"+synthReadlen);
-			sysout.println("SNP rate:             \t"+baseSnpRate+"\t(max = "+maxSnps+")");
-			sysout.println("INS rate:             \t"+baseInsRate+"\t(max = "+maxInss+", maxLen = "+maxInsLen+")");
-			sysout.println("DEL rate:             \t"+baseDelRate+"\t(max = "+maxDels+", maxLen = "+maxDelLen+")");
-			sysout.println("SUB rate:             \t"+baseSubRate+"\t(max = "+maxSubs+", maxLen = "+maxSubLen+")");
-			sysout.println("minQuality:           \t"+minQuality);
-			sysout.println("midQuality:           \t"+midQuality);
-			sysout.println("maxQuality:           \t"+maxQuality);
-			sysout.println("prefect fraction:     \t"+PERFECT_READ_RATIO);
-			sysout.println();
+			tswStats.println("Read Length:          \t"+synthReadlen);
+			tswStats.println("SNP rate:             \t"+baseSnpRate+"\t(max = "+maxSnps+")");
+			tswStats.println("INS rate:             \t"+baseInsRate+"\t(max = "+maxInss+", maxLen = "+maxInsLen+")");
+			tswStats.println("DEL rate:             \t"+baseDelRate+"\t(max = "+maxDels+", maxLen = "+maxDelLen+")");
+			tswStats.println("SUB rate:             \t"+baseSubRate+"\t(max = "+maxSubs+", maxLen = "+maxSubLen+")");
+			tswStats.println("minQuality:           \t"+minQuality);
+			tswStats.println("midQuality:           \t"+midQuality);
+			tswStats.println("maxQuality:           \t"+maxQuality);
+			tswStats.println("prefect fraction:     \t"+PERFECT_READ_RATIO);
+			tswStats.println();
 		}
 
-		sysout.println("Mapping:          \t"+t);
-		sysout.println(String.format("Reads/sec:       \t%.2f", readsPerSecond));
-		sysout.println(String.format("kBases/sec:      \t%.2f", kiloBasesPerSecond));
+		tswStats.println("Mapping:          \t"+t);
+		tswStats.println(String.format("Reads/sec:       \t%.2f", readsPerSecond));
+		tswStats.println(String.format("kBases/sec:      \t%.2f", kiloBasesPerSecond));
 		double milf=msaIterationsLimited*invTrials;
 		double milu=msaIterationsUnlimited*invTrials;
-		if(verbose_stats>=1){sysout.println("MSA iterations:   \t"+String.format("%.2fL + %.2fU = %.2f", milf,milu,milf+milu));}
+		if(verbose_stats>=1){tswStats.println("MSA iterations:   \t"+String.format("%.2fL + %.2fU = %.2f", milf,milu,milf+milu));}
 		
 		if(paired){
-			sysout.println("\n\nPairing data:   \tpct reads\tnum reads \tpct bases\t   num bases");
-			sysout.println();
+			tswStats.println("\n\nPairing data:   \tpct reads\tnum reads \tpct bases\t   num bases");
+			tswStats.println();
 			if(paired){
-				sysout.println("mated pairs:     \t"+padPercent(matedPercent,4)+"% \t"+pad(numMated,9)+" \t"+padPercent(matedPercentBases,4)+"% \t"+pad(numMatedBases,12));
-				sysout.println("bad pairs:       \t"+padPercent(badPairsPercent,4)+"% \t"+pad(badPairs,9)+" \t"+padPercent(badPairsPercentBases,4)+"% \t"+pad(badPairBases,12));
+				tswStats.println("mated pairs:     \t"+padPercent(matedPercent,4)+"% \t"+pad(numMated,9)+" \t"+padPercent(matedPercentBases,4)+"% \t"+pad(numMatedBases,12));
+				tswStats.println("bad pairs:       \t"+padPercent(badPairsPercent,4)+"% \t"+pad(badPairs,9)+" \t"+padPercent(badPairsPercentBases,4)+"% \t"+pad(badPairBases,12));
 			}
 
-			sysout.println("insert size avg: \t  "+padPercent(insertSizeAvg,2));
+			tswStats.println("insert size avg: \t  "+padPercent(insertSizeAvg,2));
 			if(ReadStats.COLLECT_INSERT_STATS){
 				if(ReadStats.merged==null){ReadStats.mergeAll();}
 				long[] array=ReadStats.merged.insertHist.array;
@@ -1459,15 +1498,15 @@ public abstract class AbstractMapper {
 				double q3=Tools.percentile(array, 0.75);
 				double stdev=Tools.standardDeviationHistogram(array);
 				//TODO: Quartiles
-				sysout.println("insert 25th %:   \t  "+padPercent(q1,2));
-				sysout.println("insert median:   \t  "+padPercent(median,2));
-				sysout.println("insert 75th %:   \t  "+padPercent(q3,2));
-				sysout.println("insert std dev:  \t  "+padPercent(stdev,2));
-				sysout.println("insert mode:     \t  "+Tools.calcMode(array));
+				tswStats.println("insert 25th %:   \t  "+padPercent(q1,2));
+				tswStats.println("insert median:   \t  "+padPercent(median,2));
+				tswStats.println("insert 75th %:   \t  "+padPercent(q3,2));
+				tswStats.println("insert std dev:  \t  "+padPercent(stdev,2));
+				tswStats.println("insert mode:     \t  "+Tools.calcMode(array));
 			}
 			if(verbose_stats>=1){
-				sysout.println(String.format("avg inner length:\t  %.2f", innerLengthAvg));
-				sysout.println(String.format("avg insert size: \t  %.2f", outerLengthAvg));
+				tswStats.println(String.format("avg inner length:\t  %.2f", innerLengthAvg));
+				tswStats.println(String.format("avg insert size: \t  %.2f", outerLengthAvg));
 			}
 		}
 		
@@ -1476,82 +1515,82 @@ public abstract class AbstractMapper {
 			double invBasesUsed100=100.0/basesUsed;
 			double x=bothUnmapped*invReadsUsed100;
 			double y=bothUnmappedBases*invBasesUsed100;
-			if(!paired){sysout.println();}
-			sysout.println("unmapped:        \t"+padPercent(x,4)+"% \t"+pad(bothUnmapped,9)+" \t"+padPercent(y,4)+"% \t"+pad(bothUnmappedBases,12));
+			if(!paired){tswStats.println();}
+			tswStats.println("unmapped:        \t"+padPercent(x,4)+"% \t"+pad(bothUnmapped,9)+" \t"+padPercent(y,4)+"% \t"+pad(bothUnmappedBases,12));
 		}
 		
-		sysout.println();
-		sysout.println("\nRead 1 data:      \tpct reads\tnum reads \tpct bases\t   num bases");
+		tswStats.println();
+		tswStats.println("\nRead 1 data:      \tpct reads\tnum reads \tpct bases\t   num bases");
 		if(verbose_stats>=1){
-			if(avgInitialKeys>0){sysout.println(String.format("Avg Initial Keys:      \t"+(avgInitialKeys<100?" ":"")+"%.3f", 
+			if(avgInitialKeys>0){tswStats.println(String.format("Avg Initial Keys:      \t"+(avgInitialKeys<100?" ":"")+"%.3f", 
 					avgInitialKeys));}
-			if(avgUsedKeys>0){sysout.println(String.format("Avg Used Keys:         \t"+(avgUsedKeys<100?" ":"")+"%.3f", 
+			if(avgUsedKeys>0){tswStats.println(String.format("Avg Used Keys:         \t"+(avgUsedKeys<100?" ":"")+"%.3f", 
 					avgUsedKeys));}
-			if(avgCallsToScore>0){sysout.println(String.format("Avg Calls to Score: \t"+(avgCallsToScore<100?" ":"")+"%.3f",
+			if(avgCallsToScore>0){tswStats.println(String.format("Avg Calls to Score: \t"+(avgCallsToScore<100?" ":"")+"%.3f",
 					avgCallsToScore));}
-			if(avgCallsToExtendScore>0){sysout.println(String.format("Avg Calls to Extend:\t"+(avgCallsToExtendScore<100?" ":"")+"%.3f", 
+			if(avgCallsToExtendScore>0){tswStats.println(String.format("Avg Calls to Extend:\t"+(avgCallsToExtendScore<100?" ":"")+"%.3f", 
 					avgCallsToExtendScore));}
-			sysout.println();
+			tswStats.println();
 
-			sysout.println(String.format("Avg Initial Sites:  \t"+(avgInitialSites<10?" ":"")+"%.3f", avgInitialSites));
-			if(TRIM_LIST){sysout.println(String.format("Avg Post-Trim:      \t"+(avgPostTrimSites<10?" ":"")+"%.3f", avgPostTrimSites));}
-			if(paired){sysout.println(String.format("Avg Post-Rescue:    \t"+(avgPostRescueSites<10?" ":"")+"%.3f", avgPostRescueSites));}
-			sysout.println(String.format("Avg Final Sites:    \t"+(avgSites<10?" ":"")+"%.3f", avgSites));
-			sysout.println(String.format("Avg Top Sites:      \t"+(avgTopSites<10?" ":"")+"%.3f", avgTopSites));
+			tswStats.println(String.format("Avg Initial Sites:  \t"+(avgInitialSites<10?" ":"")+"%.3f", avgInitialSites));
+			if(TRIM_LIST){tswStats.println(String.format("Avg Post-Trim:      \t"+(avgPostTrimSites<10?" ":"")+"%.3f", avgPostTrimSites));}
+			if(paired){tswStats.println(String.format("Avg Post-Rescue:    \t"+(avgPostRescueSites<10?" ":"")+"%.3f", avgPostRescueSites));}
+			tswStats.println(String.format("Avg Final Sites:    \t"+(avgSites<10?" ":"")+"%.3f", avgSites));
+			tswStats.println(String.format("Avg Top Sites:      \t"+(avgTopSites<10?" ":"")+"%.3f", avgTopSites));
 			if(verbose_stats>1){
-				sysout.println(String.format("Avg Perfect Sites:  \t"+(avgPerfectSites<10?" ":"")+"%.3f    \t"+
+				tswStats.println(String.format("Avg Perfect Sites:  \t"+(avgPerfectSites<10?" ":"")+"%.3f    \t"+
 						(perfectHitCountPercent<10?" ":"")+"%.3f%%", avgPerfectSites, perfectHitCountPercent));
-				sysout.println(String.format("Avg Semiperfect Sites:\t"+(avgSemiPerfectSites<10?" ":"")+"%.3f    \t"+
+				tswStats.println(String.format("Avg Semiperfect Sites:\t"+(avgSemiPerfectSites<10?" ":"")+"%.3f    \t"+
 						(semiPerfectHitCountPercent<10?" ":"")+"%.3f%%", avgSemiPerfectSites, semiPerfectHitCountPercent));
 			}
 
 			if(SYNTHETIC){
-				sysout.println(String.format("Avg Correct Sites:  \t"+(avgNumCorrect<10?" ":"")+"%.3f", avgNumCorrect));
+				tswStats.println(String.format("Avg Correct Sites:  \t"+(avgNumCorrect<10?" ":"")+"%.3f", avgNumCorrect));
 				if(SKIMMER){	
-					sysout.println(String.format("Avg Incorrect Sites:\t"+(avgNumIncorrect<10?" ":"")+"%.3f", avgNumIncorrect));
-					sysout.println(String.format("Avg IncorrectP Sites:\t"+(avgNumIncorrectPrior<10?" ":"")+"%.3f", avgNumIncorrectPrior));
+					tswStats.println(String.format("Avg Incorrect Sites:\t"+(avgNumIncorrect<10?" ":"")+"%.3f", avgNumIncorrect));
+					tswStats.println(String.format("Avg IncorrectP Sites:\t"+(avgNumIncorrectPrior<10?" ":"")+"%.3f", avgNumIncorrectPrior));
 				}
 			}
 		}
 		
-		sysout.println();
+		tswStats.println();
 		if(REMOVE_DUPLICATE_BEST_ALIGNMENTS){
 			double x=ambiguousFound+mappedRetainedB;
 			double y=ambiguousBasesFound+mappedRetainedBasesB;
-			sysout.println("mapped:          \t"+padPercent(x,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(mappedBases,12));
-			sysout.println("unambiguous:     \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(unambiguousBases,12));
+			tswStats.println("mapped:          \t"+padPercent(x,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(mappedBases,12));
+			tswStats.println("unambiguous:     \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(unambiguousBases,12));
 		}else{			
 			double x=mappedRetainedB-ambiguousFound;
 			double y=mappedRetainedBasesB-ambiguousBasesFound;
-			sysout.println("mapped:          \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(mappedBases,12));
-			sysout.println("unambiguous:     \t"+padPercent(x,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(unambiguousBases,12));
+			tswStats.println("mapped:          \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(mappedBases,12));
+			tswStats.println("unambiguous:     \t"+padPercent(x,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(unambiguousBases,12));
 		}
-		sysout.println("ambiguous:       \t"+padPercent(ambiguousFound,4)+"% \t"+pad(duplicateBestAlignment1,9)+
+		tswStats.println("ambiguous:       \t"+padPercent(ambiguousFound,4)+"% \t"+pad(duplicateBestAlignment1,9)+
 				" \t"+padPercent(ambiguousBasesFound,4)+"% \t"+pad(duplicateBestAlignmentBases1,12));
-		sysout.println("low-Q discards:  \t"+padPercent(lowQualityReadsDiscardedPercent,4)+"% \t"+pad(lowQualityReadsDiscarded1,9)+
+		tswStats.println("low-Q discards:  \t"+padPercent(lowQualityReadsDiscardedPercent,4)+"% \t"+pad(lowQualityReadsDiscarded1,9)+
 				" \t"+padPercent(lowQualityBasesDiscardedPercent,4)+"% \t"+pad(lowQualityBasesDiscarded1,12));
 		
-		sysout.println();
-		sysout.println("perfect best site:\t"+padPercent(perfectMatchPercent,4)+"% \t"+pad(perfectMatch1,9)+
+		tswStats.println();
+		tswStats.println("perfect best site:\t"+padPercent(perfectMatchPercent,4)+"% \t"+pad(perfectMatch1,9)+
 				" \t"+padPercent(perfectMatchPercentBases,4)+"% \t"+pad(perfectMatchBases1,12));
-		sysout.println("semiperfect site:\t"+padPercent(semiperfectMatchPercent,4)+"% \t"+pad(semiperfectMatch1,9)+
+		tswStats.println("semiperfect site:\t"+padPercent(semiperfectMatchPercent,4)+"% \t"+pad(semiperfectMatch1,9)+
 				" \t"+padPercent(semiperfectMatchPercentBases,4)+"% \t"+pad(semiperfectMatchBases1,12));
 		if(paired){
-			sysout.println("rescued:         \t"+padPercent(rescuedPB+rescuedMB,4)+"% \t"+pad(rescuedP1+rescuedM1,9));
+			tswStats.println("rescued:         \t"+padPercent(rescuedPB+rescuedMB,4)+"% \t"+pad(rescuedP1+rescuedM1,9));
 		}
 		
 		if(MAKE_MATCH_STRING){
 			
-			sysout.println();
-//			sysout.println("                 \tpct reads\tnum reads \tpct bases\t   num bases");
-			sysout.println("Match Rate:      \t      NA \t       NA \t"+padPercent(matchRate,4)+"% \t"+pad(matchCountM1,12));
-			sysout.println("Error Rate:      \t"+padPercent(readErrorRate,4)+"% \t"+pad(readCountE1,9)+" \t"+padPercent(errorRate,4)+"% \t"+pad(matchErrors,12));
-			sysout.println("Sub Rate:        \t"+padPercent(readSubRate,4)+"% \t"+pad(readCountS1,9)+" \t"+padPercent(subRate,4)+"% \t"+pad(matchCountS1,12));
-			sysout.println("Del Rate:        \t"+padPercent(readDelRate,4)+"% \t"+pad(readCountD1,9)+" \t"+padPercent(delRate,4)+"% \t"+pad(matchCountD1,12));
-			sysout.println("Ins Rate:        \t"+padPercent(readInsRate,4)+"% \t"+pad(readCountI1,9)+" \t"+padPercent(insRate,4)+"% \t"+pad(matchCountI1,12));
-			sysout.println("N Rate:          \t"+padPercent(readNRate,4)+"% \t"+pad(readCountN1,9)+" \t"+padPercent(nRate,4)+"% \t"+pad(matchCountN1,12));
+			tswStats.println();
+//			tswStats.println("                 \tpct reads\tnum reads \tpct bases\t   num bases");
+			tswStats.println("Match Rate:      \t      NA \t       NA \t"+padPercent(matchRate,4)+"% \t"+pad(matchCountM1,12));
+			tswStats.println("Error Rate:      \t"+padPercent(readErrorRate,4)+"% \t"+pad(readCountE1,9)+" \t"+padPercent(errorRate,4)+"% \t"+pad(matchErrors,12));
+			tswStats.println("Sub Rate:        \t"+padPercent(readSubRate,4)+"% \t"+pad(readCountS1,9)+" \t"+padPercent(subRate,4)+"% \t"+pad(matchCountS1,12));
+			tswStats.println("Del Rate:        \t"+padPercent(readDelRate,4)+"% \t"+pad(readCountD1,9)+" \t"+padPercent(delRate,4)+"% \t"+pad(matchCountD1,12));
+			tswStats.println("Ins Rate:        \t"+padPercent(readInsRate,4)+"% \t"+pad(readCountI1,9)+" \t"+padPercent(insRate,4)+"% \t"+pad(matchCountI1,12));
+			tswStats.println("N Rate:          \t"+padPercent(readNRate,4)+"% \t"+pad(readCountN1,9)+" \t"+padPercent(nRate,4)+"% \t"+pad(matchCountN1,12));
 			if(SamLine.INTRON_LIMIT<Integer.MAX_VALUE){
-				sysout.println("Splice Rate:     \t"+padPercent(readSpliceRate,4)+"% \t"+pad(readCountSplice1,9)+" \t(splices at least "+SamLine.INTRON_LIMIT+" bp)");
+				tswStats.println("Splice Rate:     \t"+padPercent(readSpliceRate,4)+"% \t"+pad(readCountSplice1,9)+" \t(splices at least "+SamLine.INTRON_LIMIT+" bp)");
 			}
 			
 			if(DOUBLE_PRINT_ERROR_RATE){
@@ -1566,26 +1605,26 @@ public abstract class AbstractMapper {
 		}
 		
 		if(SYNTHETIC){
-			sysout.println();
-			sysout.println("true positive:   \t"+padPercent(truePositiveStrict,4)+"%\t(loose: "+padPercent(truePositiveLoose,4)+"%)");
-			sysout.println("false positive:  \t"+padPercent(falsePositiveB,4)+"%\t(loose: "+padPercent(falsePositiveLooseB,4)+"%)");
-			sysout.println("false negative:  \t"+padPercent(noHitPercent,4)+"%");
-			sysout.println("SNR:             \t"+padPercent(snrStrict,4)+" \t(loose: "+padPercent(snrLoose,4)+")");
+			tswStats.println();
+			tswStats.println("true positive:   \t"+padPercent(truePositiveStrict,4)+"%\t(loose: "+padPercent(truePositiveLoose,4)+"%)");
+			tswStats.println("false positive:  \t"+padPercent(falsePositiveB,4)+"%\t(loose: "+padPercent(falsePositiveLooseB,4)+"%)");
+			tswStats.println("false negative:  \t"+padPercent(noHitPercent,4)+"%");
+			tswStats.println("SNR:             \t"+padPercent(snrStrict,4)+" \t(loose: "+padPercent(snrLoose,4)+")");
 			if(verbose_stats>0){
-				sysout.println("correctLowHit:   \t"+padPercent(correctLowHitPercent,4)+"%");
-				sysout.println(String.format("Plus/Minus ratio:\t %1.4f", truePositivePMRatio));
+				tswStats.println("correctLowHit:   \t"+padPercent(correctLowHitPercent,4)+"%");
+				tswStats.println(String.format("Plus/Minus ratio:\t %1.4f", truePositivePMRatio));
 			}
 			
 			if(paired){
-				sysout.println("correct pairs:   \t"+padPercent(truePositivePairedB,4)+"%\t(of mated)");
-				sysout.println("correct singles: \t"+padPercent(truePositiveSoloB,4)+"%");
-				sysout.println("correct rescued: \t"+padPercent(truePositiveRescuedB,4)+"%");
+				tswStats.println("correct pairs:   \t"+padPercent(truePositivePairedB,4)+"%\t(of mated)");
+				tswStats.println("correct singles: \t"+padPercent(truePositiveSoloB,4)+"%");
+				tswStats.println("correct rescued: \t"+padPercent(truePositiveRescuedB,4)+"%");
 			}
 			
 			if(SKIMMER){
-				sysout.println("found all correct:\t"+padPercent(rateCapturedAllCorrect,4)+"%)");
-				sysout.println("all correct top:  \t"+padPercent(rateCapturedAllTop,4)+"%)");
-				sysout.println("all correct only: \t"+padPercent(rateCapturedAllOnly,4)+"%)");
+				tswStats.println("found all correct:\t"+padPercent(rateCapturedAllCorrect,4)+"%)");
+				tswStats.println("all correct top:  \t"+padPercent(rateCapturedAllTop,4)+"%)");
+				tswStats.println("all correct only: \t"+padPercent(rateCapturedAllOnly,4)+"%)");
 			}
 		}
 		
@@ -1682,78 +1721,78 @@ public abstract class AbstractMapper {
 			readSpliceRate=readCountSplice2*100d/mapped2;
 			readErrorRate=readCountE2*100d/mapped2;
 			
-			sysout.println();
-			sysout.println("\nRead 2 data:      \tpct reads\tnum reads \tpct bases\t   num bases");
+			tswStats.println();
+			tswStats.println("\nRead 2 data:      \tpct reads\tnum reads \tpct bases\t   num bases");
 			if(verbose_stats>=1){
-				if(avgInitialKeys>0){sysout.println(String.format("Avg Initial Keys:      \t"+(avgInitialKeys<100?" ":"")+"%.3f", 
+				if(avgInitialKeys>0){tswStats.println(String.format("Avg Initial Keys:      \t"+(avgInitialKeys<100?" ":"")+"%.3f", 
 						avgInitialKeys));}
-				if(avgUsedKeys>0){sysout.println(String.format("Avg Used Keys:         \t"+(avgUsedKeys<100?" ":"")+"%.3f", 
+				if(avgUsedKeys>0){tswStats.println(String.format("Avg Used Keys:         \t"+(avgUsedKeys<100?" ":"")+"%.3f", 
 						avgUsedKeys));}
-				if(avgCallsToScore>0){sysout.println(String.format("Avg Calls to Score: \t"+(avgCallsToScore<100?" ":"")+"%.3f",
+				if(avgCallsToScore>0){tswStats.println(String.format("Avg Calls to Score: \t"+(avgCallsToScore<100?" ":"")+"%.3f",
 						avgCallsToScore));}
-				if(avgCallsToExtendScore>0){sysout.println(String.format("Avg Calls to Extend:\t"+(avgCallsToExtendScore<100?" ":"")+"%.3f", 
+				if(avgCallsToExtendScore>0){tswStats.println(String.format("Avg Calls to Extend:\t"+(avgCallsToExtendScore<100?" ":"")+"%.3f", 
 						avgCallsToExtendScore));}
-				sysout.println();
+				tswStats.println();
 
-				sysout.println(String.format("Avg Initial Sites:  \t"+(avgInitialSites<10?" ":"")+"%.3f", avgInitialSites));
-				if(TRIM_LIST){sysout.println(String.format("Avg Post-Trim:      \t"+(avgPostTrimSites<10?" ":"")+"%.3f", avgPostTrimSites));}
-				if(paired){sysout.println(String.format("Avg Post-Rescue:    \t"+(avgPostRescueSites<10?" ":"")+"%.3f", avgPostRescueSites));}
-				sysout.println(String.format("Avg Final Sites:    \t"+(avgSites<10?" ":"")+"%.3f", avgSites));
-				sysout.println(String.format("Avg Top Sites:      \t"+(avgTopSites<10?" ":"")+"%.3f", avgTopSites));
+				tswStats.println(String.format("Avg Initial Sites:  \t"+(avgInitialSites<10?" ":"")+"%.3f", avgInitialSites));
+				if(TRIM_LIST){tswStats.println(String.format("Avg Post-Trim:      \t"+(avgPostTrimSites<10?" ":"")+"%.3f", avgPostTrimSites));}
+				if(paired){tswStats.println(String.format("Avg Post-Rescue:    \t"+(avgPostRescueSites<10?" ":"")+"%.3f", avgPostRescueSites));}
+				tswStats.println(String.format("Avg Final Sites:    \t"+(avgSites<10?" ":"")+"%.3f", avgSites));
+				tswStats.println(String.format("Avg Top Sites:      \t"+(avgTopSites<10?" ":"")+"%.3f", avgTopSites));
 				if(verbose_stats>1){
-					sysout.println(String.format("Avg Perfect Sites:  \t"+(avgPerfectSites<10?" ":"")+"%.3f    \t"+
+					tswStats.println(String.format("Avg Perfect Sites:  \t"+(avgPerfectSites<10?" ":"")+"%.3f    \t"+
 							(perfectHitCountPercent<10?" ":"")+"%.3f%%", avgPerfectSites, perfectHitCountPercent));
-					sysout.println(String.format("Avg Semiperfect Sites:\t"+(avgSemiPerfectSites<10?" ":"")+"%.3f    \t"+
+					tswStats.println(String.format("Avg Semiperfect Sites:\t"+(avgSemiPerfectSites<10?" ":"")+"%.3f    \t"+
 							(semiPerfectHitCountPercent<10?" ":"")+"%.3f%%", avgSemiPerfectSites, semiPerfectHitCountPercent));
 				}
 
 				if(SYNTHETIC){
-					sysout.println(String.format("Avg Correct Sites:  \t"+(avgNumCorrect<10?" ":"")+"%.3f", avgNumCorrect));
+					tswStats.println(String.format("Avg Correct Sites:  \t"+(avgNumCorrect<10?" ":"")+"%.3f", avgNumCorrect));
 					if(SKIMMER){	
-						sysout.println(String.format("Avg Incorrect Sites:\t"+(avgNumIncorrect<10?" ":"")+"%.3f", avgNumIncorrect));
-						sysout.println(String.format("Avg IncorrectP Sites:\t"+(avgNumIncorrectPrior<10?" ":"")+"%.3f", avgNumIncorrectPrior));
+						tswStats.println(String.format("Avg Incorrect Sites:\t"+(avgNumIncorrect<10?" ":"")+"%.3f", avgNumIncorrect));
+						tswStats.println(String.format("Avg IncorrectP Sites:\t"+(avgNumIncorrectPrior<10?" ":"")+"%.3f", avgNumIncorrectPrior));
 					}
 				}
 			}
 			
-			sysout.println();
+			tswStats.println();
 			if(REMOVE_DUPLICATE_BEST_ALIGNMENTS){
 				double x=ambiguousFound+mappedRetainedB;
 				double y=ambiguousBasesFound+mappedRetainedBasesB;
-				sysout.println("mapped:          \t"+padPercent(x,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(mappedBases,12));
-				sysout.println("unambiguous:     \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(unambiguousBases,12));
+				tswStats.println("mapped:          \t"+padPercent(x,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(mappedBases,12));
+				tswStats.println("unambiguous:     \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(unambiguousBases,12));
 			}else{			
 				double x=mappedRetainedB-ambiguousFound;
 				double y=mappedRetainedBasesB-ambiguousBasesFound;
-				sysout.println("mapped:          \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(mappedBases,12));
-				sysout.println("unambiguous:     \t"+padPercent(x,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(unambiguousBases,12));
+				tswStats.println("mapped:          \t"+padPercent(mappedRetainedB,4)+"% \t"+pad(mappedReads,9)+" \t"+padPercent(mappedRetainedBasesB,4)+"% \t"+pad(mappedBases,12));
+				tswStats.println("unambiguous:     \t"+padPercent(x,4)+"% \t"+pad(unambiguousReads,9)+" \t"+padPercent(y,4)+"% \t"+pad(unambiguousBases,12));
 			}
-			sysout.println("ambiguous:       \t"+padPercent(ambiguousFound,4)+"% \t"+pad(duplicateBestAlignment2,9)+
+			tswStats.println("ambiguous:       \t"+padPercent(ambiguousFound,4)+"% \t"+pad(duplicateBestAlignment2,9)+
 					" \t"+padPercent(ambiguousBasesFound,4)+"% \t"+pad(duplicateBestAlignmentBases2,12));
-			sysout.println("low-Q discards:  \t"+padPercent(lowQualityReadsDiscardedPercent,4)+"% \t"+pad(lowQualityReadsDiscarded2,9)+
+			tswStats.println("low-Q discards:  \t"+padPercent(lowQualityReadsDiscardedPercent,4)+"% \t"+pad(lowQualityReadsDiscarded2,9)+
 					" \t"+padPercent(lowQualityBasesDiscardedPercent,4)+"% \t"+pad(lowQualityBasesDiscarded2,12));
 			
-			sysout.println();
-			sysout.println("perfect best site:\t"+padPercent(perfectMatchPercent,4)+"% \t"+pad(perfectMatch2,9)+
+			tswStats.println();
+			tswStats.println("perfect best site:\t"+padPercent(perfectMatchPercent,4)+"% \t"+pad(perfectMatch2,9)+
 					" \t"+padPercent(perfectMatchPercentBases,4)+"% \t"+pad(perfectMatchBases2,12));
-			sysout.println("semiperfect site:\t"+padPercent(semiperfectMatchPercent,4)+"% \t"+pad(semiperfectMatch2,9)+
+			tswStats.println("semiperfect site:\t"+padPercent(semiperfectMatchPercent,4)+"% \t"+pad(semiperfectMatch2,9)+
 					" \t"+padPercent(semiperfectMatchPercentBases,4)+"% \t"+pad(semiperfectMatchBases2,12));
 			if(paired){
-				sysout.println("rescued:         \t"+padPercent(rescuedPB+rescuedMB,4)+"% \t"+pad(rescuedP2+rescuedM2,9));
+				tswStats.println("rescued:         \t"+padPercent(rescuedPB+rescuedMB,4)+"% \t"+pad(rescuedP2+rescuedM2,9));
 			}
 			
 			if(MAKE_MATCH_STRING){
 				
-				sysout.println();
-//				sysout.println("                 \tpct reads\tnum reads \tpct bases\t   num bases");
-				sysout.println("Match Rate:      \t      NA \t       NA \t"+padPercent(matchRate,4)+"% \t"+pad(matchCountM2,12));
-				sysout.println("Error Rate:      \t"+padPercent(readErrorRate,4)+"% \t"+pad(readCountE2,9)+" \t"+padPercent(errorRate,4)+"% \t"+pad(matchErrors,12));
-				sysout.println("Sub Rate:        \t"+padPercent(readSubRate,4)+"% \t"+pad(readCountS2,9)+" \t"+padPercent(subRate,4)+"% \t"+pad(matchCountS2,12));
-				sysout.println("Del Rate:        \t"+padPercent(readDelRate,4)+"% \t"+pad(readCountD2,9)+" \t"+padPercent(delRate,4)+"% \t"+pad(matchCountD2,12));
-				sysout.println("Ins Rate:        \t"+padPercent(readInsRate,4)+"% \t"+pad(readCountI2,9)+" \t"+padPercent(insRate,4)+"% \t"+pad(matchCountI2,12));
-				sysout.println("N Rate:          \t"+padPercent(readNRate,4)+"% \t"+pad(readCountN2,9)+" \t"+padPercent(nRate,4)+"% \t"+pad(matchCountN2,12));
+				tswStats.println();
+//				tswStats.println("                 \tpct reads\tnum reads \tpct bases\t   num bases");
+				tswStats.println("Match Rate:      \t      NA \t       NA \t"+padPercent(matchRate,4)+"% \t"+pad(matchCountM2,12));
+				tswStats.println("Error Rate:      \t"+padPercent(readErrorRate,4)+"% \t"+pad(readCountE2,9)+" \t"+padPercent(errorRate,4)+"% \t"+pad(matchErrors,12));
+				tswStats.println("Sub Rate:        \t"+padPercent(readSubRate,4)+"% \t"+pad(readCountS2,9)+" \t"+padPercent(subRate,4)+"% \t"+pad(matchCountS2,12));
+				tswStats.println("Del Rate:        \t"+padPercent(readDelRate,4)+"% \t"+pad(readCountD2,9)+" \t"+padPercent(delRate,4)+"% \t"+pad(matchCountD2,12));
+				tswStats.println("Ins Rate:        \t"+padPercent(readInsRate,4)+"% \t"+pad(readCountI2,9)+" \t"+padPercent(insRate,4)+"% \t"+pad(matchCountI2,12));
+				tswStats.println("N Rate:          \t"+padPercent(readNRate,4)+"% \t"+pad(readCountN2,9)+" \t"+padPercent(nRate,4)+"% \t"+pad(matchCountN2,12));
 				if(SamLine.INTRON_LIMIT<Integer.MAX_VALUE){
-					sysout.println("Splice Rate:     \t"+padPercent(readSpliceRate,4)+"% \t"+pad(readCountSplice2,9)+" \t(splices at least "+SamLine.INTRON_LIMIT+" bp)");
+					tswStats.println("Splice Rate:     \t"+padPercent(readSpliceRate,4)+"% \t"+pad(readCountSplice2,9)+" \t(splices at least "+SamLine.INTRON_LIMIT+" bp)");
 				}
 				
 				if(DOUBLE_PRINT_ERROR_RATE){
@@ -1768,29 +1807,30 @@ public abstract class AbstractMapper {
 			}
 			
 			if(SYNTHETIC){
-				sysout.println();
-				sysout.println("true positive:   \t"+padPercent(truePositiveStrict,4)+"%\t(loose: "+padPercent(truePositiveLoose,4)+"%)");
-				sysout.println("false positive:  \t"+padPercent(falsePositiveB,4)+"%\t(loose: "+padPercent(falsePositiveLooseB,4)+"%)");
-				sysout.println("false negative:  \t"+padPercent(noHitPercent,4)+"%");
-				sysout.println("SNR:             \t"+padPercent(snrStrict,4)+" \t(loose: "+padPercent(snrLoose,4)+")");
+				tswStats.println();
+				tswStats.println("true positive:   \t"+padPercent(truePositiveStrict,4)+"%\t(loose: "+padPercent(truePositiveLoose,4)+"%)");
+				tswStats.println("false positive:  \t"+padPercent(falsePositiveB,4)+"%\t(loose: "+padPercent(falsePositiveLooseB,4)+"%)");
+				tswStats.println("false negative:  \t"+padPercent(noHitPercent,4)+"%");
+				tswStats.println("SNR:             \t"+padPercent(snrStrict,4)+" \t(loose: "+padPercent(snrLoose,4)+")");
 				if(verbose_stats>0){
-					sysout.println("correctLowHit:   \t"+padPercent(correctLowHitPercent,4)+"%");
-					sysout.println(String.format("Plus/Minus ratio:\t %2.4f", truePositivePMRatio));
+					tswStats.println("correctLowHit:   \t"+padPercent(correctLowHitPercent,4)+"%");
+					tswStats.println(String.format("Plus/Minus ratio:\t %2.4f", truePositivePMRatio));
 				}
 				
 				if(paired){
-					sysout.println("correct pairs:   \t"+padPercent(truePositivePairedB,4)+"%\t(of mated)");
-					sysout.println("correct singles: \t"+padPercent(truePositiveSoloB,4)+"%");
-					sysout.println("correct rescued: \t"+padPercent(truePositiveRescuedB,4)+"%");
+					tswStats.println("correct pairs:   \t"+padPercent(truePositivePairedB,4)+"%\t(of mated)");
+					tswStats.println("correct singles: \t"+padPercent(truePositiveSoloB,4)+"%");
+					tswStats.println("correct rescued: \t"+padPercent(truePositiveRescuedB,4)+"%");
 				}
 				
 				if(SKIMMER){
-					sysout.println("found all correct:\t"+padPercent(rateCapturedAllCorrect,4)+"%)");
-					sysout.println("all correct top:  \t"+padPercent(rateCapturedAllTop,4)+"%)");
-					sysout.println("all correct only: \t"+padPercent(rateCapturedAllOnly,4)+"%)");
+					tswStats.println("found all correct:\t"+padPercent(rateCapturedAllCorrect,4)+"%)");
+					tswStats.println("all correct top:  \t"+padPercent(rateCapturedAllTop,4)+"%)");
+					tswStats.println("all correct only: \t"+padPercent(rateCapturedAllOnly,4)+"%)");
 				}
 			}
 		}
+		errorState|=tswStats.poisonAndWait();
 		
 		if(BBSplitter.TRACK_SCAF_STATS){
 			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
@@ -1808,7 +1848,8 @@ public abstract class AbstractMapper {
 		}
 		
 		assert(!CALC_STATISTICS || truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1==maxReads) : 
-			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed.\n"+
+			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed." +
+			"\nIf you submit a bug report, include the entire console output, not just this error message.\n"+
 			truePositiveP1+"+"+truePositiveM1+"+"+falsePositive1+"+"+noHit1+"+"+lowQualityReadsDiscarded1+" = "+
 			(truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1)+" != "+maxReads;
 		if(!SKIMMER){
@@ -1820,7 +1861,10 @@ public abstract class AbstractMapper {
 	
 	
 	static void printOutput_Machine(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER,
-			final CoveragePileup pile, boolean nzoStats, boolean sortStats){
+			final CoveragePileup pile, boolean nzoStats, boolean sortStats, String dest){
+		if(dest==null){dest="stderr.txt";}
+		TextStreamWriter tswStats=new TextStreamWriter(dest, overwrite, append, false);
+		tswStats.start();
 		
 		long readsUsed1=0;
 		long readsUsed2=0;
@@ -2143,6 +2187,7 @@ public abstract class AbstractMapper {
 		double invSites100=100d/siteSum1;
 
 		final double matedPercent=(numMated*invTrials100);
+		ReadStats.matedPercent=matedPercent;
 		final double badPairsPercent=(badPairs*invTrials100);
 		final double innerLengthAvg=(innerLengthSum*1d/numMated);
 		final double outerLengthAvg=(outerLengthSum*1d/numMated);
@@ -2228,65 +2273,65 @@ public abstract class AbstractMapper {
 		double nRate=matchCountN1*100d/matchLen;//baseLen;
 		
 		if(SYNTHETIC && verbose_stats==-1){verbose_stats=Tools.max(verbose_stats,9);}
-
-		sysout.println("Reads_Used"+DELIMITER+(readsUsed1+readsUsed2));
-		sysout.println("Bases_Used"+DELIMITER+(basesUsed));
-		sysout.println(String.format("Reads/sec"+DELIMITER+"%.2f", readsPerSecond));
-		sysout.println(String.format("kBases/sec"+DELIMITER+"%.2f", kiloBasesPerSecond));
+		
+		tswStats.println("Reads_Used"+DELIMITER+(readsUsed1+readsUsed2));
+		tswStats.println("Bases_Used"+DELIMITER+(basesUsed));
+		tswStats.println(String.format("Reads/sec"+DELIMITER+"%.2f", readsPerSecond));
+		tswStats.println(String.format("kBases/sec"+DELIMITER+"%.2f", kiloBasesPerSecond));
 		double milf=msaIterationsLimited*invTrials;
 		double milu=msaIterationsUnlimited*invTrials;
-		if(verbose_stats>=1){sysout.println("MSA_iterations"+DELIMITER+String.format("%.2fL + %.2fU = %.2f", milf,milu,milf+milu));}
+		if(verbose_stats>=1){tswStats.println("MSA_iterations"+DELIMITER+String.format("%.2fL + %.2fU = %.2f", milf,milu,milf+milu));}
 		
-//		sysout.println();
-//		sysout.println("\nRead 1 data:");
+//		tswStats.println();
+//		tswStats.println("\nRead 1 data:");
 		
-		sysout.println();
+		tswStats.println();
 		
 		if(REMOVE_DUPLICATE_BEST_ALIGNMENTS){
 			double x=ambiguousFound+mappedRetainedB;
-			sysout.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-			sysout.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
-			sysout.println("R1_Mapped_Reads"+DELIMITER+mappedReads);
-			sysout.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
+			tswStats.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
+			tswStats.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+			tswStats.println("R1_Mapped_Reads"+DELIMITER+mappedReads);
+			tswStats.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 		}else{			
 			double x=mappedRetainedB-ambiguousFound;
-			sysout.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
-			sysout.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-			sysout.println("R1_Mapped_Reads"+DELIMITER+mappedReads);
-			sysout.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
+			tswStats.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+			tswStats.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
+			tswStats.println("R1_Mapped_Reads"+DELIMITER+mappedReads);
+			tswStats.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 		}
 		
-		sysout.println();
+		tswStats.println();
 		if(paired){
-			sysout.println(String.format("Mated_Pairs"+DELIMITER+"%.4f%%", matedPercent));
-			sysout.println(String.format("Bad_Pairs"+DELIMITER+"%.3f%%", badPairsPercent));
+			tswStats.println(String.format("Mated_Pairs"+DELIMITER+"%.4f%%", matedPercent));
+			tswStats.println(String.format("Bad_Pairs"+DELIMITER+"%.3f%%", badPairsPercent));
 		}
 		if(paired){
-			sysout.println(String.format("R1_Rescued"+DELIMITER+"%.3f", rescuedPB+rescuedMB)+"%");
-			sysout.println(String.format("Avg_Insert_Size"+DELIMITER+"%.2f", insertSizeAvg));
+			tswStats.println(String.format("R1_Rescued"+DELIMITER+"%.3f", rescuedPB+rescuedMB)+"%");
+			tswStats.println(String.format("Avg_Insert_Size"+DELIMITER+"%.2f", insertSizeAvg));
 		}
-		sysout.println();
-		sysout.println(String.format("R1_Perfect_Best_Site"+DELIMITER+"%.4f", perfectMatchPercent)+"%");
-		sysout.println(String.format("R1_Semiperfect_Site"+DELIMITER+"%.4f", semiperfectMatchPercent)+"%");
-		sysout.println(String.format("R1_Ambiguous_Mapping"+DELIMITER+"%.4f", ambiguousFound)+"%");
+		tswStats.println();
+		tswStats.println(String.format("R1_Perfect_Best_Site"+DELIMITER+"%.4f", perfectMatchPercent)+"%");
+		tswStats.println(String.format("R1_Semiperfect_Site"+DELIMITER+"%.4f", semiperfectMatchPercent)+"%");
+		tswStats.println(String.format("R1_Ambiguous_Mapping"+DELIMITER+"%.4f", ambiguousFound)+"%");
 //				+(REMOVE_DUPLICATE_BEST_ALIGNMENTS ? " (Removed)" : " (Kept)"));
-		sysout.println(String.format("R1_Low_Quality_Discards"+DELIMITER+"%.4f", lowQualityReadsDiscardedPercent)+"%");
+		tswStats.println(String.format("R1_Low_Quality_Discards"+DELIMITER+"%.4f", lowQualityReadsDiscardedPercent)+"%");
 		
 		if(MAKE_MATCH_STRING){
-			sysout.println();
-			sysout.println("R1_Match_Rate"+DELIMITER+padPercentMachine(matchRate,4)+"%");
-			sysout.println("R1_Error_Rate"+DELIMITER+padPercentMachine(errorRate,4)+"%");
-			sysout.println("R1_Sub_Rate"+DELIMITER+padPercentMachine(subRate,4)+"%");
-			sysout.println("R1_Del_Rate"+DELIMITER+padPercentMachine(delRate,4)+"%");
-			sysout.println("R1_Ins_Rate"+DELIMITER+padPercentMachine(insRate,4)+"%");
-			sysout.println("R1_N_Rate"+DELIMITER+padPercentMachine(nRate,4)+"%");
+			tswStats.println();
+			tswStats.println("R1_Match_Rate"+DELIMITER+padPercentMachine(matchRate,4)+"%");
+			tswStats.println("R1_Error_Rate"+DELIMITER+padPercentMachine(errorRate,4)+"%");
+			tswStats.println("R1_Sub_Rate"+DELIMITER+padPercentMachine(subRate,4)+"%");
+			tswStats.println("R1_Del_Rate"+DELIMITER+padPercentMachine(delRate,4)+"%");
+			tswStats.println("R1_Ins_Rate"+DELIMITER+padPercentMachine(insRate,4)+"%");
+			tswStats.println("R1_N_Rate"+DELIMITER+padPercentMachine(nRate,4)+"%");
 			
-			sysout.println("R1_Match_Count"+DELIMITER+matchCountM1);
-			sysout.println("R1_Error_Count"+DELIMITER+matchErrors);
-			sysout.println("R1_Sub_Count"+DELIMITER+matchCountS1);
-			sysout.println("R1_Del_Count"+DELIMITER+matchCountD1);
-			sysout.println("R1_Ins_Count"+DELIMITER+matchCountI1);
-			sysout.println("R1_N_Count"+DELIMITER+matchCountN1);
+			tswStats.println("R1_Match_Count"+DELIMITER+matchCountM1);
+			tswStats.println("R1_Error_Count"+DELIMITER+matchErrors);
+			tswStats.println("R1_Sub_Count"+DELIMITER+matchCountS1);
+			tswStats.println("R1_Del_Count"+DELIMITER+matchCountD1);
+			tswStats.println("R1_Ins_Count"+DELIMITER+matchCountI1);
+			tswStats.println("R1_N_Count"+DELIMITER+matchCountN1);
 		}
 		
 		if(paired){
@@ -2362,57 +2407,58 @@ public abstract class AbstractMapper {
 			insRate=matchCountI2*100d/matchLen;//baseLen;
 			nRate=matchCountN2*100d/matchLen;//baseLen;
 			
-//			sysout.println("\n\nRead 2 data:");
-			sysout.println();
-//			sysout.println(String.format("perfectHit"+DELIMITER+"%.2f", perfectHitPercent)+"%");
-//			sysout.println(String.format("uniqueHit"+DELIMITER+"%.2f", uniqueHitPercent)+"%");
-//			sysout.println(String.format("correctUniqueHit"+DELIMITER+"%.2f", correctUniqueHitPercent)+"%");
-//			sysout.println(String.format("correctMultiHit"+DELIMITER+"%.2f", correctMultiHitPercent)+"%");
-//			sysout.println(String.format("correctHighHit"+DELIMITER+"%.2f", correctHighHitPercent)+"%");
-//			sysout.println(String.format("correctHit"+DELIMITER+"%.2f", correctHitPercent)+"%");
+//			tswStats.println("\n\nRead 2 data:");
+			tswStats.println();
+//			tswStats.println(String.format("perfectHit"+DELIMITER+"%.2f", perfectHitPercent)+"%");
+//			tswStats.println(String.format("uniqueHit"+DELIMITER+"%.2f", uniqueHitPercent)+"%");
+//			tswStats.println(String.format("correctUniqueHit"+DELIMITER+"%.2f", correctUniqueHitPercent)+"%");
+//			tswStats.println(String.format("correctMultiHit"+DELIMITER+"%.2f", correctMultiHitPercent)+"%");
+//			tswStats.println(String.format("correctHighHit"+DELIMITER+"%.2f", correctHighHitPercent)+"%");
+//			tswStats.println(String.format("correctHit"+DELIMITER+"%.2f", correctHitPercent)+"%");
 			
-			//sysout.println(String.format("mapped"+DELIMITER+(mappedB<10?" ":"")+"%.3f", mappedB)+"%");
+			//tswStats.println(String.format("mapped"+DELIMITER+(mappedB<10?" ":"")+"%.3f", mappedB)+"%");
 			if(REMOVE_DUPLICATE_BEST_ALIGNMENTS){
 				double x=ambiguousFound+mappedRetainedB;
-				sysout.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-				sysout.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
-				sysout.println("R2_Mapped_Reads"+DELIMITER+mappedReads);
-				sysout.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
+				tswStats.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
+				tswStats.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+				tswStats.println("R2_Mapped_Reads"+DELIMITER+mappedReads);
+				tswStats.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 			}else{			
 				double x=mappedRetainedB-ambiguousFound;
-				sysout.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
-				sysout.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-				sysout.println("R2_Mapped_Reads"+DELIMITER+mappedReads);
-				sysout.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
+				tswStats.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+				tswStats.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
+				tswStats.println("R2_Mapped_Reads"+DELIMITER+mappedReads);
+				tswStats.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 			}
-			sysout.println();
+			tswStats.println();
 			if(paired){
-				sysout.println(String.format("R2_Rescued"+DELIMITER+"%.3f", rescuedPB+rescuedMB)+"%");
+				tswStats.println(String.format("R2_Rescued"+DELIMITER+"%.3f", rescuedPB+rescuedMB)+"%");
 			}
-			sysout.println();
-			sysout.println(String.format("R2_Perfect_Best_Site"+DELIMITER+"%.4f", perfectMatchPercent)+"%");
-			sysout.println(String.format("R2_Semiperfect_Site"+DELIMITER+"%.4f", semiperfectMatchPercent)+"%");
-			sysout.println(String.format("R2_Ambiguous_Mapping"+DELIMITER+"%.4f", ambiguousFound)+"%");
+			tswStats.println();
+			tswStats.println(String.format("R2_Perfect_Best_Site"+DELIMITER+"%.4f", perfectMatchPercent)+"%");
+			tswStats.println(String.format("R2_Semiperfect_Site"+DELIMITER+"%.4f", semiperfectMatchPercent)+"%");
+			tswStats.println(String.format("R2_Ambiguous_Mapping"+DELIMITER+"%.4f", ambiguousFound)+"%");
 								//(REMOVE_DUPLICATE_BEST_ALIGNMENTS ? "(Removed)" : "(Kept)"));
-			sysout.println(String.format("R2_Low_Quality_Discards"+DELIMITER+"%.4f", lowQualityReadsDiscardedPercent)+"%");
+			tswStats.println(String.format("R2_Low_Quality_Discards"+DELIMITER+"%.4f", lowQualityReadsDiscardedPercent)+"%");
 			
 			if(MAKE_MATCH_STRING){
-				sysout.println();
-				sysout.println("R2_Match_Rate"+DELIMITER+padPercentMachine(matchRate,4)+"%");
-				sysout.println("R2_Error_Rate"+DELIMITER+padPercentMachine(errorRate,4)+"%");
-				sysout.println("R2_Sub_Rate"+DELIMITER+padPercentMachine(subRate,4)+"%");
-				sysout.println("R2_Del_Rate"+DELIMITER+padPercentMachine(delRate,4)+"%");
-				sysout.println("R2_Ins_Rate"+DELIMITER+padPercentMachine(insRate,4)+"%");
-				sysout.println("R2_N_Rate"+DELIMITER+padPercentMachine(nRate,4)+"%");
+				tswStats.println();
+				tswStats.println("R2_Match_Rate"+DELIMITER+padPercentMachine(matchRate,4)+"%");
+				tswStats.println("R2_Error_Rate"+DELIMITER+padPercentMachine(errorRate,4)+"%");
+				tswStats.println("R2_Sub_Rate"+DELIMITER+padPercentMachine(subRate,4)+"%");
+				tswStats.println("R2_Del_Rate"+DELIMITER+padPercentMachine(delRate,4)+"%");
+				tswStats.println("R2_Ins_Rate"+DELIMITER+padPercentMachine(insRate,4)+"%");
+				tswStats.println("R2_N_Rate"+DELIMITER+padPercentMachine(nRate,4)+"%");
 				
-				sysout.println("R2_Match_Count"+DELIMITER+matchCountM2);
-				sysout.println("R2_Error_Count"+DELIMITER+matchErrors);
-				sysout.println("R2_Sub_Count"+DELIMITER+matchCountS2);
-				sysout.println("R2_Del_Count"+DELIMITER+matchCountD2);
-				sysout.println("R2_Ins_Count"+DELIMITER+matchCountI2);
-				sysout.println("R2_N_Count"+DELIMITER+matchCountN2);
+				tswStats.println("R2_Match_Count"+DELIMITER+matchCountM2);
+				tswStats.println("R2_Error_Count"+DELIMITER+matchErrors);
+				tswStats.println("R2_Sub_Count"+DELIMITER+matchCountS2);
+				tswStats.println("R2_Del_Count"+DELIMITER+matchCountD2);
+				tswStats.println("R2_Ins_Count"+DELIMITER+matchCountI2);
+				tswStats.println("R2_N_Count"+DELIMITER+matchCountN2);
 			}
 		}
+		errorState|=tswStats.poisonAndWait();
 		
 		if(BBSplitter.TRACK_SCAF_STATS){
 			BBSplitter.printCounts(BBSplitter.SCAF_STATS_FILE, BBSplitter.scafCountTable, true, readsUsed1+readsUsed2, nzoStats, sortStats);
@@ -2431,7 +2477,8 @@ public abstract class AbstractMapper {
 		}
 		
 		assert(!CALC_STATISTICS || truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1==maxReads) : 
-			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed.\n"+
+			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed." +
+			"\nIf you submit a bug report, include the entire console output, not just this error message.\n"+
 			truePositiveP1+"+"+truePositiveM1+"+"+falsePositive1+"+"+noHit1+"+"+lowQualityReadsDiscarded1+" = "+
 			(truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1)+" != "+maxReads;
 		if(!SKIMMER){
@@ -2515,10 +2562,10 @@ public abstract class AbstractMapper {
 	long sampleseed=1;
 	boolean ambiguousRandom=false, ambiguousAll=false;
 	boolean forceanalyze=false;
-	private boolean gunzip=false;
-	private boolean gzip=false;
-	private boolean pigz=false;
-	private boolean unpigz=false;
+//	private boolean gunzip=false;
+//	private boolean gzip=false;
+//	private boolean pigz=false;
+//	private boolean unpigz=false;
 	boolean setxs=false, setintron=false;
 	String bamscript=null;
 	String in1=null, in2=null, qfin1=null, qfin2=null;
@@ -2659,14 +2706,14 @@ public abstract class AbstractMapper {
 	static boolean PRINT_UNMAPPED_COUNT=false;
 	
 	static String outputBaseName="readsOut_"+(System.nanoTime()&0x1FFFF);
-	static String outFile=null;//outputBaseName+"_1.txt";
-	static String outFile2=null;//outputBaseName+"_2.txt";
-	static String outFileM=null;//outputBaseName+"_mapped_1.txt";
-	static String outFileM2=null;//outputBaseName+"_mapped_2.txt";
-	static String outFileU=null;//outputBaseName+"_unmapped_1.txt";
-	static String outFileU2=null;//outputBaseName+"_unmapped_2.txt";
-	static String outFileB=null;//outputBaseName+"_blacklist_1.txt";
-	static String outFileB2=null;//outputBaseName+"_blacklist_2.txt";
+	static String outFile=null;
+	static String outFile2=null;
+	static String outFileM=null;
+	static String outFileM2=null;
+	static String outFileU=null;
+	static String outFileU2=null;
+	static String outFileB=null;
+	static String outFileB2=null;
 	static ArrayList<String> blacklist=null;
 	static ArrayList<String> splitterOutputs=null;
 
@@ -2680,6 +2727,7 @@ public abstract class AbstractMapper {
 	static boolean ERROR_ON_NO_OUTPUT=false;
 	static boolean MACHINE_OUTPUT=false;
 	static boolean USE_MODULO=false;
+	static String statsOutputFile="stderr.txt";
 	final static String DELIMITER="=";
 	
 	static PrintStream sysout=System.err;

@@ -39,13 +39,12 @@ public class TableLoaderLockFree {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			assert(false) : "TODO";
 			System.exit(0);
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		
 		AbstractKmerTable[] tables=makeTables(AbstractKmerTable.ARRAY1D, initialSizeDefault, true);
 		
@@ -161,7 +160,6 @@ public class TableLoaderLockFree {
 	 */
 	private long spawnLoadThreads(String[] ref, String[] literal){
 		Timer t=new Timer();
-		t.start();
 		if((ref==null || ref.length<1) && (literal==null || literal.length<1)){return 0;}
 		long added=0;
 		
@@ -313,7 +311,7 @@ public class TableLoaderLockFree {
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("Added "+added+" kmers; time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -672,22 +670,6 @@ public class TableLoaderLockFree {
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Print statistics about current memory use and availability */
-	private static final void printMemory(){
-		if(GC_BEFORE_PRINT_MEMORY){
-			System.gc();
-			System.gc();
-		}
-		Runtime rt=Runtime.getRuntime();
-		long mmemory=rt.maxMemory()/1000000;
-		long tmemory=rt.totalMemory()/1000000;
-		long fmemory=rt.freeMemory()/1000000;
-		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
-	}
-	
-
-	
 	/**
 	 * Transforms a kmer into a canonical value stored in the table.  Expected to be inlined.
 	 * @param kmer Forward kmer
@@ -793,8 +775,6 @@ public class TableLoaderLockFree {
 	public static boolean DISPLAY_PROGRESS=true;
 	/** Indicates end of input stream */
 	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
-	/** Do garbage collection prior to printing memory usage */
-	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	/** Make unambiguous copies of ref sequences with ambiguous bases */
 	public static boolean REPLICATE_AMBIGUOUS=false;
 	

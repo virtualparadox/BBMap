@@ -6,6 +6,8 @@ import java.util.Comparator;
 import align2.Tools;
 
 /**
+ * Represents a taxonomic identifier, such as a specific genus.
+ * Includes the name, NCBI numeric id, parent id, and taxonomic level.
  * @author Brian Bushnell
  * @date Mar 6, 2015
  *
@@ -26,6 +28,17 @@ public class TaxNode implements Serializable{
 		pid=parent_;
 		level=level_;
 		name=name_;
+	}
+
+	/**
+	 * @param split
+	 * @param i
+	 * @return
+	 */
+	public boolean matchesName(String[] split, int idx, TaxTree tree) {
+		if(idx<0){return true;}
+		if(!split[idx].equalsIgnoreCase(name)){return false;}
+		return tree.getNode(pid).matchesName(split, idx-1, tree);
 	}
 	
 	public String toString(){
@@ -68,6 +81,9 @@ public class TaxNode implements Serializable{
 		}
 		
 	}
+	
+	@Override
+	public final int hashCode(){return id;}
 
 	public final int id;
 	public final String name;

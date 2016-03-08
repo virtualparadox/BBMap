@@ -119,7 +119,6 @@ public class SplitMappedReads {
 	public void process(){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		if(cris!=null){
 			cris.start();

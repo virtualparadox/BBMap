@@ -28,7 +28,6 @@ public class A_SampleD {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		A_SampleD as=new A_SampleD(args);
 		MPIWrapper.mpiInit(args);
 		as.process(t);
@@ -38,7 +37,7 @@ public class A_SampleD {
 	public A_SampleD(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}

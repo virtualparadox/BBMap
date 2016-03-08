@@ -22,7 +22,6 @@ public class CountUniqueness {
 	
 	public void process(){
 		Timer t=new Timer();
-		t.start();
 		for(String s : in){
 			process(s);
 		}

@@ -58,6 +58,7 @@ public class Parser {
 		if(parseTrim(arg, a, b)){return true;}
 		if(parseInterleaved(arg, a, b)){return true;}
 		if(parseMapping(arg, a, b)){return true;}
+		if(parseCardinality(arg, a, b)){return true;}
 		return false;
 	}
 
@@ -69,10 +70,6 @@ public class Parser {
 			assert(samplerate<=1f && samplerate>=0f) : "samplerate="+samplerate+"; should be between 0 and 1";
 		}else if(a.equals("sampleseed")){
 			sampleseed=Long.parseLong(b);
-		}else if(a.equals("t") || a.equals("threads")){
-			if(b.equalsIgnoreCase("auto")){Shared.setThreads(-1);}
-			else{Shared.setThreads(Integer.parseInt(b));}
-			System.err.println("Set threads to "+Shared.threads());
 		}else if(a.equals("append") || a.equals("app")){
 			append=ReadStats.append=Tools.parseBoolean(b);
 		}else if(a.equals("overwrite") || a.equals("ow")){
@@ -83,8 +80,23 @@ public class Parser {
 			breakLength=Integer.parseInt(b);
 		}else if(a.equals("recalibrate") || a.equals("recalibratequality") || a.equals("recal")){
 			recalibrateQuality=Tools.parseBoolean(b);
-		}else if(a.equals("recalpairnum") || a.equals("recalibratepairnum")){
-			CalcTrueQuality.USE_PAIRNUM=Tools.parseBoolean(b);
+		}else{
+			return false;
+		}
+		return true;
+	}
+
+	public boolean parseCardinality(String arg, String a, String b){
+		if(a.equals("cardinality") || a.equals("loglog")){
+			loglog=Tools.parseBoolean(b);
+		}else if(a.equals("buckets") || a.equals("loglogbuckets")){
+			loglogbuckets=Integer.parseInt(b);
+		}else if(a.equals("loglogbits")){
+			loglogbits=Integer.parseInt(b);
+		}else if(a.equals("loglogk")){
+			loglogk=Integer.parseInt(b);
+		}else if(a.equals("loglogseed")){
+			loglogseed=Long.parseLong(b);
 		}else{
 			return false;
 		}
@@ -118,6 +130,30 @@ public class Parser {
 	}
 	
 	public boolean parseTrim(String arg, String a, String b){
+		
+		if(a.equals("qtrim1")){
+			if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){qtrim1=false;}
+			else{
+				qtrim1=true;
+				qtrim2=false;
+			}
+			a="qtrim";
+		}else if(a.equals("qtrim2")){
+			if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){qtrim2=false;}
+			else{
+				qtrim2=true;
+				qtrim1=false;
+			}
+			a="qtrim";
+		}else if(a.equals("trimq2")){
+			if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){qtrim2=false;}
+			else{
+				qtrim2=true;
+				qtrim1=false;
+			}
+			a="trimq";
+		}
+		
 		if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
 			forceTrimModulo=Integer.parseInt(b);
 		}else if(a.equals("ftl") || a.equals("forcetrimleft")){
@@ -126,7 +162,7 @@ public class Parser {
 			forceTrimRight=Integer.parseInt(b);
 		}else if(a.equals("ftr2") || a.equals("forcetrimright2")){
 			forceTrimRight2=Integer.parseInt(b);
-		}else if(a.equals("qtrim") || a.equals("trim")){
+		}else if(a.equals("qtrim")/* || a.equals("trim")*/){
 			if(b==null || b.length()==0){qtrimRight=qtrimLeft=true;}
 			else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrimLeft=true;qtrimRight=false;}
 			else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrimLeft=false;qtrimRight=true;}
@@ -141,8 +177,8 @@ public class Parser {
 					TrimRead.windowLength=Integer.parseInt(split[1]);
 				}
 			}else if(Character.isDigit(b.charAt(0))){
-				trimq=(byte)Integer.parseInt(b);
-				qtrimLeft=qtrimRight=true;
+				parseTrimq(a, b);
+				qtrimRight=true;
 			}else{qtrimRight=qtrimLeft=Tools.parseBoolean(b);}
 		}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
 			if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
@@ -152,12 +188,14 @@ public class Parser {
 			}else{
 				TrimRead.optimalMode=Tools.parseBoolean(b);
 			}
+		}else if(a.equals("trimgoodinterval")){
+			TrimRead.minGoodInterval=Integer.parseInt(b);
 		}else if(a.equals("trimright") || a.equals("qtrimright")){
 			qtrimRight=Tools.parseBoolean(b);
 		}else if(a.equals("trimleft") || a.equals("qtrimleft")){
 			qtrimLeft=Tools.parseBoolean(b);
-		}else if(a.equals("trimq") || a.equals("trimquality")){
-			trimq=Byte.parseByte(b);
+		}else if(a.equals("trimq") || a.equals("trimquality") || a.equals("trimq2")){
+			parseTrimq(a, b);
 		}else if(a.equals("trimbadsequence")){
 			trimBadSequence=Tools.parseBoolean(b);
 		}else if(a.equals("chastityfilter") || a.equals("cf")){
@@ -178,7 +216,7 @@ public class Parser {
 			}else{
 				barcodes=new HashSet<String>();
 				for(String s : b.split(",")){
-					Tools.addNames(s, barcodes);
+					Tools.addNames(s, barcodes, false);
 				}
 			}
 			if(barcodes!=null && barcodes.size()>0 && !failBadBarcodes && !removeBadBarcodes){
@@ -189,21 +227,23 @@ public class Parser {
 		}else if(a.equals("removeifeitherbad") || a.equals("rieb")){
 			requireBothBad=!Tools.parseBoolean(b);
 		}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
-			minReadLength=Integer.parseInt(b);
+			minReadLength=(int)Tools.parseKMG(b);
 		}else if(a.equals("maxlength") || a.equals("maxreadlength") || a.equals("maxreadlen") || a.equals("maxlen")){
-			maxReadLength=Integer.parseInt(b);
+			maxReadLength=(int)Tools.parseKMG(b);
 		}else if(a.equals("mingc")){
 			minGC=Float.parseFloat(b);
-			if(minGC>0){filterGC=true;}
+//			if(minGC>0){filterGC=true;}
 			assert(minGC>=0 && minGC<=1) : "mingc should be a decimal number between 0 and 1, inclusive.";
 		}else if(a.equals("maxgc")){
 			maxGC=Float.parseFloat(b);
-			if(maxGC<1){filterGC=true;}
+//			if(maxGC<1){filterGC=true;}
 			assert(minGC>=0 && minGC<=1) : "maxgc should be a decimal number between 0 and 1, inclusive.";
 		}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 			minLenFraction=Float.parseFloat(b);
 		}else if(a.equals("maxns")){
 			maxNs=Integer.parseInt(b);
+		}else if(a.equals("minconsecutivebases") || a.equals("mcb")){
+			minConsecutiveBases=Integer.parseInt(b);
 		}else if(a.equals("minavgquality") || a.equals("maq")){
 			if(b.indexOf(',')>-1){
 				String[] split=b.split(",");
@@ -229,6 +269,21 @@ public class Parser {
 			return false;
 		}
 		return true;
+	}
+	
+	private void parseTrimq(String a, String b){
+		if(b.indexOf(',')>=0){
+			String[] split=b.split(",");
+			trimq2=new byte[split.length];
+			for(int i=0; i<split.length; i++){
+				trimq2[i]=Byte.parseByte(split[i]);
+			}
+			trimq=trimq2.length<1 ? 0 : trimq2[0];
+		}else{
+			trimq=Byte.parseByte(b);
+			trimq2=null;
+		}
+//		assert(false) : Arrays.toString(trimq2);
 	}
 	
 	public boolean parseFiles(String arg, String a, String b){
@@ -338,7 +393,9 @@ public class Parser {
 	}
 	
 	public static boolean parseCommonStatic(String arg, String a, String b){
-		if(a.equals("monitor") || a.equals("killswitch")){
+		if(a.equals("null")){
+			//Do nothing
+		}else if(a.equals("monitor") || a.equals("killswitch")){
 			if(Tools.isNumber(b)){
 				String[] pair=b.split(",");
 				if(pair.length==1){
@@ -419,6 +476,11 @@ public class Parser {
 		}else if(a.equals("mincalledquality")){
 			int x=Tools.mid(0, Integer.parseInt(b), 93);
 			Read.MIN_CALLED_QUALITY=(byte)x;
+		}else if(a.equals("t") || a.equals("threads")){
+			Shared.setThreads(b);
+			System.err.println("Set threads to "+Shared.threads());
+		}else if(a.equals("recalpairnum") || a.equals("recalibratepairnum")){
+			CalcTrueQuality.USE_PAIRNUM=Tools.parseBoolean(b);
 		}
 //		else if(a.equals("aminoout")){
 //			Shared.AMINO_OUT=Tools.parseBoolean(b);
@@ -433,6 +495,7 @@ public class Parser {
 		parsedQuality=true; //For internal verification that this function was indeed called. 
 		if(a.equals("ignorebadquality") || a.equals("ibq")){
 			FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
+			if(FASTQ.IGNORE_BAD_QUALITY){Read.CHANGE_QUALITY=false;}
 		}else if(a.equals("ascii") || a.equals("asciioffset") || a.equals("quality") || a.equals("qual")){
 			byte x;
 			if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -587,7 +650,7 @@ public class Parser {
 			}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
 		}else if(a.equals("zipthreaddivisor") || a.equals("ztd")){
 			ReadWrite.ZIP_THREAD_DIVISOR=Integer.parseInt(b);
-		}else if(a.equals("usegunzip") || a.equals("gunzip")){
+		}else if(a.equals("usegunzip") || a.equals("gunzip") || a.equals("ungzip")){
 			ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
 		}else if(a.equals("useunpigz") || a.equals("unpigz")){
 			ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
@@ -596,7 +659,7 @@ public class Parser {
 		}
 		return true;
 	}
-
+	
 	public static boolean parseSam(String arg, String a, String b){
 		if(a.equals("samversion") || a.equals("samv") || a.equals("sam")){
 			assert(b!=null) : "The sam flag requires a version number, e.g. 'sam=1.4'";
@@ -609,8 +672,16 @@ public class Parser {
 			SamLine.MAKE_IDENTITY_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("xmtag") || a.equals("xm")){
 			SamLine.MAKE_XM_TAG=Tools.parseBoolean(b);
+		}else if(a.equals("smtag")){
+			SamLine.MAKE_SM_TAG=Tools.parseBoolean(b);
+		}else if(a.equals("amtag")){
+			SamLine.MAKE_AM_TAG=Tools.parseBoolean(b);
+		}else if(a.equals("nmtag")){
+			SamLine.MAKE_NM_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("stoptag")){
 			SamLine.MAKE_STOP_TAG=Tools.parseBoolean(b);
+		}else if(a.equals("lengthtag")){
+			SamLine.MAKE_LENGTH_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("boundstag")){
 			SamLine.MAKE_BOUNDS_TAG=Tools.parseBoolean(b);
 		}else if(a.equals("scoretag")){
@@ -758,12 +829,28 @@ public class Parser {
 	
 
 	/** Return true if the user seems confused */
-	public static boolean parseHelp(String[] args){
+	public static boolean parseHelp(String[] args, boolean autoExit){
 		if(args==null || args.length==0 || (args.length==1 && args[0]==null)){return true;}
 //		if(args.length>1){return false;}
 		final String s=args[args.length-1].toLowerCase();
-		return s.equals("-h") || s.equals("-help") || s.equals("--help") 
-				|| s.equals("-version") || s.equals("--version") || s.equals("?") || s.equals("-?") || (s.equals("help") && !new File(s).exists());
+		
+		if(s.equals("-version") || s.equals("--version")){
+			if(autoExit){printHelp();}
+			return true;
+		}
+		
+		if(s.equals("-h") || s.equals("-help") || s.equals("--help") 
+				|| s.equals("-version") || s.equals("--version") || s.equals("?") || s.equals("-?") || (s.equals("help") && !new File(s).exists())){
+			if(autoExit){printHelp();}
+			return true;
+		}
+		return false;
+	}
+	
+	public static void printHelp(){
+		System.err.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
+		System.err.println("For help, please run the shellscript with no parameters, or look in /docs/.");
+		System.exit(0);
 	}
 	
 	/** Set SamLine Readgroup Strings */
@@ -803,6 +890,12 @@ public class Parser {
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
+
+	public boolean loglog=false;
+	public int loglogbuckets=1999;
+	public int loglogbits=8;
+	public int loglogk=31;
+	public long loglogseed=-1;
 	
 	public boolean recalibrateQuality=false;
 	
@@ -818,18 +911,23 @@ public class Parser {
 
 	public boolean qtrimLeft=false;
 	public boolean qtrimRight=false;
-	
+
+	public boolean qtrim1=false;
+	public boolean qtrim2=false;
+
 	public byte trimq=6;
+	public byte[] trimq2=null;
 	public byte minAvgQuality=0;
 	public int minAvgQualityBases=0;
 	public int maxNs=-1;
+	public int minConsecutiveBases=0;
 	public int minReadLength=0;
 	public int maxReadLength=-1;
 	public int minTrimLength=-1;
 	public float minLenFraction=0;
 	public float minGC=0;
 	public float maxGC=1;
-	public boolean filterGC=false;
+//	public boolean filterGC=false;
 	public boolean untrim=false;
 	public boolean tossJunk=false;
 

@@ -39,8 +39,6 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || (split.length==1 && i==1)){
-				// do nothing
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else{
@@ -52,7 +50,6 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		
 		assert(FastaReadInputStream.settingsOK());
 		Timer t=new Timer();
-		t.start();
 		
 		ConcurrentReadInputStream cris=getReadInputStream(maxReads, false, true, in1, in2);
 		System.out.println("Fetched "+cris.getClass().getName());
@@ -180,28 +177,18 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 
 		ReadThread rt1=null;
 		ReadThread rt2=null;
-		if(producer1.preferLists() || producer1.preferArrays()){
-			rt1=new ReadThread(producer1, p1q);
-			rt2=(producer2==null ? null : new ReadThread(producer2, p2q));
-			rt1.start();
-			if(rt2!=null){rt2.start();}
-		}
+		rt1=new ReadThread(producer1, p1q);
+		rt2=(producer2==null ? null : new ReadThread(producer2, p2q));
+		rt1.start();
+		if(rt2!=null){rt2.start();}
 		
 		threads=(rt1==null ? new Thread[] {Thread.currentThread()} : 
 			rt2==null ? new Thread[] {Thread.currentThread(), rt1} : 
 				new Thread[] {Thread.currentThread(), rt1, rt2});
 
-		if(producer1.preferLists() || producer1.preferArrays()){
-			readLists();
-			//System.err.println("crisG:    Done reading lists.");
-		}else if(producer1.preferArrays()){
-			assert(false);
-			throw new RuntimeException();
-//			readBlocks();
-		}else{
-			readSingles();
-		}
-		
+		readLists();
+//		readSingles();
+
 		addPoison();
 		
 		//End thread
@@ -432,6 +419,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 //							assert(a.pairnum()==0);
 //							b.setPairnum(1);
 							assert(a.pairnum()==0 && b.pairnum()==1 && a.mate==b && b.mate==a && a.numericID==b.numericID) : 
+								"There is something wrong with the read pairing.\n"+
 								a.pairnum()+", "+(b.pairnum())+", "+(a.mate==b)+", "+(b.mate==a)+", "+(a.numericID)+", "+(b.numericID);
 						}
 						if(randy==null || randy.nextFloat()<samplerate){
@@ -574,7 +562,8 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 		basesIn=0;
 		readsIn=0;
 		listnum=0; //Added Oct 9, 2014
-		nextProgress=PROGRESS_INCR;	
+		nextProgress=PROGRESS_INCR;
+		lastTime=System.nanoTime();
 	}
 	
 	@Override
@@ -747,8 +736,17 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 	private void incrementGenerated(long amt){
 		generated+=amt;
 		if(SHOW_PROGRESS && generated>=nextProgress){
-			Data.sysout.print('.');
-			nextProgress+=PROGRESS_INCR;
+			if(SHOW_PROGRESS2){
+				nextProgress+=PROGRESS_INCR;
+				long x=System.nanoTime();
+				long duration=x-lastTime;
+				lastTime=x;
+				Data.sysout.println(String.format("%.1f", duration*0.000000001));
+//				Data.sysout.println((long)(0.5+duration*0.000000001)+" ");
+			}else{
+				nextProgress+=PROGRESS_INCR;
+				Data.sysout.print('.');
+			}
 		}
 //		System.err.println("crisG:    generated="+generated+"\treadsIn="+readsIn);
 	}
@@ -799,6 +797,7 @@ public class ConcurrentGenericReadInputStream extends ConcurrentReadInputStream 
 	private long generated=0;
 	private long listnum=0;
 	private long nextProgress=PROGRESS_INCR;
+	private long lastTime=System.nanoTime();
 	
 	public static boolean verbose=false;
 	

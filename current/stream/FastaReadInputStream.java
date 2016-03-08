@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 import align2.ListNum;
 import align2.Shared;
+import align2.Tools;
 
 import dna.Gene;
 import dna.Timer;
@@ -34,7 +35,6 @@ public class FastaReadInputStream extends ReadInputStream {
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		
 		FastaReadInputStream fris=new FastaReadInputStream(args[0], false, false, false, Shared.READ_BUFFER_MAX_DATA);
 		Read r=fris.next();
@@ -186,9 +186,6 @@ public class FastaReadInputStream extends ReadInputStream {
 	public boolean paired() {return interleaved;}
 	
 	@Override
-	public final boolean preferArrays() {return false;}
-	
-	@Override
 	public void start() {}
 	
 	private final boolean fillList(){
@@ -259,7 +256,7 @@ public class FastaReadInputStream extends ReadInputStream {
 			Arrays.fill(quals, (byte)(Shared.FAKE_QUAL));
 		}
 //		String hd=((currentSection==1 && !hitmax) ? header : header+"_"+currentSection);
-		String hd=((!FORCE_SECTION_NAME && currentSection==1 && bases.length<=maxLen) ? header : header+"_"+currentSection);
+		String hd=((!FORCE_SECTION_NAME && currentSection==1 && bases.length<=maxLen) ? header : header+"_part_"+currentSection);
 //		assert(false) : FORCE_SECTION_NAME+", "+(currentSection==1)+", "+(bases.length<=maxLen)+", "+bases.length+", "+maxLen;
 		assert(currentSection==1 || bases.length>0) : "id="+hd+", section="+currentSection+", len="+bases.length+"\n"+new String(bases);
 		Read r=null;
@@ -365,7 +362,19 @@ public class FastaReadInputStream extends ReadInputStream {
 		int x=bstart;
 		int bases=0;
 		
-		assert(x>=bstop || buffer[x]!='>');
+		if(!(x>=bstop || buffer[x]!='>')){
+			if(WARN_IF_NO_SEQUENCE){
+				synchronized(getClass()){
+					System.err.println("Warning: A fasta header with no sequence was encountered.");
+					WARN_IF_NO_SEQUENCE=false;
+				}
+			}
+			assert(!ABORT_IF_NO_SEQUENCE) : "\n<START>"+new String(buffer, 0, Tools.min(x+1, buffer.length))+"<STOP>\n";
+		}
+		
+//		assert(x>=bstop || buffer[x]!='>') : 
+//			"A fasta header with no sequence was encountered.  To discard such headers, please re-run with the -da flag.";
+		//"\n<START>"+new String(buffer, 0, Tools.min(x+1, buffer.length))+"<STOP>\n";
 		
 		while(x<bstop && bases<maxLen && buffer[x]!='>'){
 			while(x<bstop && bases<maxLen && buffer[x]!='>'){
@@ -557,5 +566,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	public static int MIN_READ_LEN=1;//40;
 	public static boolean FAKE_QUALITY=false;
 	public static boolean FORCE_SECTION_NAME=false;
+	public static boolean WARN_IF_NO_SEQUENCE=true;
+	public static boolean ABORT_IF_NO_SEQUENCE=false;
 	
 }

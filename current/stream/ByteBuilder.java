@@ -3,6 +3,8 @@ package stream;
 import java.io.Serializable;
 import java.util.Arrays;
 
+import ukmer.Kmer;
+
 import dna.AminoAcid;
 
 import align2.Tools;
@@ -37,6 +39,11 @@ public final class ByteBuilder implements Serializable {
 		array=new byte[s.length()+1];
 		append(s);
 	}
+	
+	public ByteBuilder(ByteBuilder bb){
+		array=bb.toBytes();
+		length=bb.length();
+	}
 
 
 	public ByteBuilder append(float x, int places){return append(String.format("%."+places+"f", x));}
@@ -57,6 +64,17 @@ public final class ByteBuilder implements Serializable {
 		if(length>=array.length){expand();}
 		array[length]=x;
 		length++;
+		return this;
+	}
+	
+	public ByteBuilder appendKmer(Kmer kmer) {
+		return appendKmer(kmer.key(), kmer.k);
+	}
+	
+	public ByteBuilder appendKmer(long[] kmer, int k) {
+		for(long subkmer : kmer){
+			appendKmer(subkmer, k);
+		}
 		return this;
 	}
 	
@@ -290,6 +308,21 @@ public final class ByteBuilder implements Serializable {
 	public char charAt(int i){
 		assert(i<length);
 		return (char)array[i];
+	}
+
+	/**
+	 * @param trimEnds
+	 * @param trimEnds2
+	 */
+	public void trimByAmount(int left, int right) {
+		assert(left>=0 && right>=0);
+		int newlen=length-left-right;
+		if(newlen==length){return;}
+		length=Tools.max(newlen, 0);
+		if(length<1){return;}
+		for(int i=0, j=left; i<newlen; i++, j++){
+			array[i]=array[j];
+		}
 	}
 	
 	@Override

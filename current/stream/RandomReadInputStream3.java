@@ -88,11 +88,6 @@ public class RandomReadInputStream3 extends ReadInputStream {
 		consumed++;
 		return r;
 	}
-
-	@Override
-	public synchronized Read[] nextBlock() {
-		throw new RuntimeException("This is not supported.");
-	}
 	
 	@Override
 	public synchronized ArrayList<Read> nextList() {
@@ -106,7 +101,6 @@ public class RandomReadInputStream3 extends ReadInputStream {
 //		assert(false) : r.size();
 		return r;
 	}
-	public final boolean preferArrays(){return false;}
 	
 	private synchronized void fillBuffer(){
 		buffer=null;
@@ -149,7 +143,7 @@ public class RandomReadInputStream3 extends ReadInputStream {
 	private ArrayList<Read> buffer=null;
 	private int next=0;
 	
-	public static final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
 
 	public long generated=0;
 	public long consumed=0;

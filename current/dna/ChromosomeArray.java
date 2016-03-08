@@ -6,6 +6,7 @@ import java.util.Arrays;
 import jgi.AssemblyStats2;
 
 import stream.ByteBuilder;
+import stream.KillSwitch;
 
 import align2.Tools;
 
@@ -93,25 +94,15 @@ public class ChromosomeArray implements Serializable {
 	}
 	
 	public ChromosomeArray(int chrom, byte strnd){
-		chromosome=chrom;
-		strand=strnd;
-		array=new byte[1<<25];
+		this(chrom, strnd, Integer.MAX_VALUE, -1);
 	}
 	
 	public ChromosomeArray(int chrom, byte strnd, int min, int max){
 		chromosome=chrom;
 		strand=strnd;
-		array=new byte[max+1];
+		array=KillSwitch.allocByte1D(Tools.max(1000, max+1));
 		minIndex=min;
 		maxIndex=max;
-	}
-	
-	public ChromosomeArray(int chrom, byte strnd, String s){
-		chromosome=chrom;
-		strand=strnd;
-		array=s.getBytes();
-		minIndex=0;
-		maxIndex=s.length()-1;
 	}
 	
 	
@@ -187,11 +178,12 @@ public class ChromosomeArray implements Serializable {
 		
 		if(CHANGE_U_TO_T && CHANGE_DEGENERATE_TO_N){
 			for(int i=0; i<slen; i++, loc++){
-				array[loc]=AminoAcid.baseToACGTN[s[i]];
+				byte b=(byte)Tools.max(0, s[i]);
+				array[loc]=AminoAcid.baseToACGTN[b];
 			}
 		}else{
 			for(int i=0; i<slen; i++, loc++){
-				char c=Character.toUpperCase((char)s[i]);
+				char c=Tools.max((char)0, Character.toUpperCase((char)s[i]));
 				if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
 				assert(Character.isLetter(c));
 				assert(c<=Byte.MAX_VALUE);
@@ -325,7 +317,7 @@ public class ChromosomeArray implements Serializable {
 	}
 	
 	public void resize(int newlen){
-		byte[] temp=new byte[newlen];
+		byte[] temp=KillSwitch.allocByte1D(newlen);
 		int lim=min(array.length, newlen);
 		assert(lim>=maxIndex) : lim+","+maxIndex;
 		for(int i=0; i<lim; i++){

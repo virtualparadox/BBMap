@@ -39,7 +39,6 @@ public class CountBarcodes {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		CountBarcodes mb=new CountBarcodes(args);
 		mb.process(t);
 	}
@@ -47,7 +46,7 @@ public class CountBarcodes {
 	public CountBarcodes(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -57,13 +56,13 @@ public class CountBarcodes {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 
 		expectedCodeMap=new HashMap<String,String>(200);
 		validCodeMap=new HashMap<String,String>(200);
@@ -79,8 +78,6 @@ public class CountBarcodes {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -90,8 +87,12 @@ public class CountBarcodes {
 //				align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("addslash")){
-				addslash=Tools.parseBoolean(b);
+			}else if(a.equals("countundefined")){
+				countUndefined=Tools.parseBoolean(b);
+			}else if(a.equals("printheader") || a.equals("header")){
+				printHeader=Tools.parseBoolean(b);
+			}else if(a.equals("printrows") || a.equals("rows") || a.equals("maxrows")){
+				maxRows=Integer.parseInt(b);
 			}else if(a.equals("expected")){
 				if(b!=null){
 					for(String code : b.split(",")){
@@ -278,7 +279,7 @@ public class CountBarcodes {
 					int colon=id.lastIndexOf(':');
 					String barcode=id.substring(colon+1);
 					
-					if(AminoAcid.isFullyDefined(barcode)){
+					if(countUndefined || AminoAcid.isFullyDefined(barcode)){
 						StringNum value=map.get(barcode);
 						if(value==null){
 							value=new StringNum(barcode, 0);
@@ -308,8 +309,12 @@ public class CountBarcodes {
 		
 		TextStreamWriter tsw=new TextStreamWriter(ffCounts);
 		tsw.start();
-		tsw.print("#code\tcount\tHamming_dist\tedit_dist\tvalid\n");
+		if(printHeader){
+			tsw.print("#code\tcount\tHamming_dist\tedit_dist\tvalid\n");
+		}
 		for(StringNum sn : list){
+			if(maxRows==0){break;}
+			maxRows--;
 			int hdist=calcHdist(sn.s, expectedCodes);
 			int edist=hdist;
 			if(hdist>1){
@@ -476,8 +481,9 @@ public class CountBarcodes {
 
 	private boolean reverseComplimentMate=false;
 	private boolean reverseCompliment=false;
-	/** Add /1 and /2 to paired reads */
-	private boolean addslash=false;
+	private boolean countUndefined=true;
+	private boolean printHeader=true;
+	private int maxRows=-1;
 
 	private long maxReads=-1;
 	

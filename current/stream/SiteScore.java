@@ -11,6 +11,7 @@ import align2.MSA;
 import align2.Shared;
 import align2.Tools;
 
+import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.Gene;
@@ -241,7 +242,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 					new String(Data.getChromosome(chrom).array, Tools.max(0, start), (Tools.min(Data.chromLengths[chrom], stop)-start));
 			perfect=false;
 			semiperfect=false;
-			assert(Read.CHECKSITE(this, bases, 0)) : new String(bases); //123
+			assert(Read.CHECKSITE(this, bases, 0)) : new String(bases)+"\n"+this+"\n"; //123
 			return perfect;
 		}
 		byte[] ref=Data.getChromosome(chrom).array;
@@ -328,9 +329,8 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		int pairedScore=Integer.parseInt(line[9]);
 		int score=Integer.parseInt(line[10]);
 		ss=new SiteScore(chrom, strand, start, stop, hits, quickScore, rescued, perfect);
-		ss.score=score;
-		ss.slowScore=swscore;
-		ss.pairedScore=pairedScore;
+		ss.setScore(score);
+		ss.setSlowPairedScore(swscore, pairedScore);
 		ss.semiperfect=semiperfect;
 		
 		if(line.length>11){
@@ -433,35 +433,275 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		return (a=='X' ||a=='Y' || b=='X' || b=='Y');
 	}
 	
+	public boolean matchContainsC(){
+		if(match==null || match.length<1){return false;}
+		final byte a=match[0], b=match[match.length-1];
+		return (a=='C' || b=='C');
+	}
+	
 	public boolean isCorrect(int chrom_, byte strand_, int start_, int stop_, int thresh){
 		if(chrom_!=chrom || strand_!=strand){return false;}
 		if(thresh<=0){return start_==start && stop_==stop;}
 		return Tools.absdif(start_, start)<=thresh || Tools.absdif(stop_, stop)<=thresh;
 	}
 	
+	public int leftPaddingNeeded(int tiplen, int maxIndel){
+		if(match==null || match.length<1){return 0;}
+		
+		int neutral=0, insertion=0, deletion=0, xy=0;
+		{
+			int mloc=0;
+			for(; mloc<match.length; mloc++){
+				byte c=match[mloc];
+				if(c=='I'){insertion++;}
+				else if(c=='X' || c=='Y'){xy++;}
+				else if(c=='D'){return insertion+xy;}
+				else{
+					neutral++;
+					if(mloc>=tiplen){break;}
+				}
+			}
+		}
+		
+		if(insertion>maxIndel || xy>0 || match[0]=='I'){return insertion+xy;}
+		return 0;
+	}
+	
+	public int rightPaddingNeeded(int tiplen, int maxIndel){
+		if(match==null || match.length<1){return 0;}
+		final int lastIndex=match.length-1;
+		
+		int neutral=0, insertion=0, deletion=0, xy=0;
+		{
+			int mloc=lastIndex;
+			for(int min=lastIndex-tiplen; mloc>=0; mloc--){
+				byte c=match[mloc];
+				if(c=='I'){insertion++;}
+				else if(c=='X' || c=='Y'){xy++;}
+				else if(c=='D'){return insertion+xy;}
+				else{
+					neutral++;
+					if(mloc>=tiplen){break;}
+				}
+			}
+		}
+		
+		if(insertion>maxIndel || xy>0 || match[lastIndex]=='I'){return insertion+xy;}
+		return 0;
+	}
+	
+	public boolean clipTipIndels(byte[] bases, byte[] basesM, int tiplen, int maxIndel, MSA msa){
+		return this.plus() ? clipTipIndels(bases, tiplen, maxIndel, msa) : clipTipIndels(basesM, tiplen, maxIndel, msa);
+	}
+	
+	public boolean clipTipIndels(byte[] bases, int tiplen, int maxIndel, MSA msa){
+		if(match==null || match.length<maxIndel){return false;}
+		if(verbose){
+			System.err.println("Calling clipTipIndels:\n"+new String(match));
+			System.err.println("slowScore="+slowScore+", pairedScore="+pairedScore);
+		}
+		assert(lengthsAgree());
+		boolean left=clipLeftTipIndel(bases, tiplen, maxIndel);
+		assert(lengthsAgree());
+		boolean right=clipRightTipIndel(bases, tiplen, maxIndel);
+		assert(lengthsAgree());
+
+		if(verbose){System.err.println("left="+left+", right="+right+", match="+new String(match));}
+		if(left || right){
+			unclip(bases);
+			assert(lengthsAgree());
+			int oldScore=slowScore;
+			if(verbose){System.err.println("oldScore="+oldScore+", slowScore="+slowScore+", pairedScore="+pairedScore+", newPairedScore="+(pairedScore+(slowScore-oldScore)));}
+			setSlowScore(msa.score(match));
+			setScore(score+(slowScore-oldScore));
+			this.setPerfect(bases);
+		}
+		if(verbose){System.err.println("After clipTipIndels:\n"+new String(match));}
+		return left | right;
+	}
+	
+	public boolean clipLeftTipIndel(byte[] bases, int tiplen, int maxIndel){
+		if(match==null || match.length<maxIndel){return false;}
+		if(match[0]=='C' || match[0]=='Y' || match[0]=='X'){return false;}
+		
+		int neutral=0, insertion=0, deletion=0;
+		{
+			int mloc=0;
+			for(; mloc<match.length; mloc++){
+				byte c=match[mloc];
+				if(c=='I'){insertion++;}
+				else if(c=='D'){deletion++;}
+				else{
+					neutral++;
+					if(mloc>=tiplen){break;}
+				}
+			}
+			while(mloc>=0 && match[mloc]=='m'){mloc--; neutral--;}
+		}
+		if(insertion<=maxIndel && deletion<=4*maxIndel){return false;}
+		assert(mappedLength()==matchLength() || matchContainsXY()) : 
+			"start="+start+", stop="+stop+", maplen="+mappedLength()+", matchlen="+matchLength()+"\n"+new String(match)+"\n"+new String(bases)+"\n\n"+this;
+		
+		int sum=neutral+insertion+deletion;
+		if(deletion>0){
+			byte[] temp=new byte[match.length-deletion];
+			int i=0, j=0;
+			for(; i<sum; i++){
+				byte c=match[i];
+				if(c=='D'){
+					//Do nothing
+				}else{
+					temp[j]=match[i];
+					j++;
+				}
+			}
+			for(; i<match.length; i++, j++){
+				temp[j]=match[i];
+			}
+			assert(i==match.length && j==temp.length) : i+", "+j+", "+match.length+", "+temp.length+"\n"+new String(match)+"\n"+new String(bases)+"\n"+this+"\n";
+			match=temp; //Be sure to percolate this to the read!
+		}
+		
+		sum=neutral+insertion;
+		for(int i=0; i<sum; i++){
+			match[i]='C';
+		}
+		
+		final int dif=(insertion-deletion);
+		incrementStart(-dif);
+		assert(mappedLength()==matchLength() || matchContainsXY());
+		
+		return true;
+	}
+	
+	public boolean clipRightTipIndel(final byte[] bases, final int tiplen, final int maxIndel){
+		if(match==null || match.length<maxIndel){return false;}
+		final int lastIndex=match.length-1;
+		if(match[lastIndex]=='C' || match[lastIndex]=='Y' || match[lastIndex]=='X'){return false;}
+		
+		if(verbose){System.err.println("mappedLength="+mappedLength()+", matchLength()="+matchLength());}
+		
+		int neutral=0, insertion=0, deletion=0;
+		{
+			int mloc=lastIndex;
+			for(int min=lastIndex-tiplen; mloc>=0; mloc--){
+				byte c=match[mloc];
+				if(c=='I'){insertion++;}
+				else if(c=='D'){deletion++;}
+				else{
+					neutral++;
+					if(mloc<=min){break;}
+				}
+			}
+			while(mloc<match.length && match[mloc]=='m'){mloc++; neutral--;}
+		}
+		if(insertion<=maxIndel && deletion<=4*maxIndel){return false;}
+		assert(mappedLength()==matchLength() || matchContainsXY()) : mappedLength()+", "+matchLength()+"\n"+new String(match)+"\n"+new String(bases);
+		
+		int sum=neutral+insertion+deletion;
+		final int limit=match.length-sum;
+		if(deletion>0){
+			byte[] temp=new byte[match.length-deletion];
+			int i=0, j=0;
+			for(; i<limit; i++, j++){
+				temp[j]=match[i];
+			}
+			for(; i<match.length; i++){
+				byte c=match[i];
+				if(c=='D'){
+					//Do nothing
+				}else{
+					temp[j]=match[i];
+					j++;
+				}
+			}
+			assert(i==match.length && j==temp.length) : i+", "+j+", "+match.length+", "+temp.length+
+				"\n"+new String(match)+"\n"+new String(temp)+"\n"+new String(bases)+"\n"+this+"\n";
+			match=temp; //Be sure to percolate this to the read!
+		}
+		
+		sum=neutral+insertion;
+		for(int i=limit; i<match.length; i++){
+			match[i]='C';
+		}
+
+
+		if(verbose){System.err.println("Final: "+new String(match));}
+		final int dif=(insertion-deletion);
+		if(verbose){System.err.println("mappedLength="+mappedLength()+", matchLength()="+matchLength()+", dif="+dif);}
+		incrementStop(dif);
+		assert(mappedLength()==matchLength() || matchContainsXY()) : mappedLength()+", "+matchLength()+", "+neutral+", "+insertion+", "+deletion+", "+dif;
+		
+		return true;
+	}
+	
+	public boolean unclip(final byte[] bases){
+		if(match==null || match.length<1){return false;}
+		if(verbose){System.err.println("Calling unclip on "+new String(match));}
+		{
+			byte first=match[0], last=match[match.length-1];
+//			if(first=='X' || last=='Y'){return false;}
+			if(first!='C' && last!='C'){
+				if(verbose){System.err.println("No unclipping needed.");}
+				return false;
+			}
+		}
+		assert(lengthsAgree()) : new String(bases)+"\n"+this;
+		final ChromosomeArray ca=Data.getChromosome(chrom);
+		for(int rloc=start, cloc=0, mloc=0; mloc<match.length; mloc++){
+			final byte m=match[mloc];
+			
+			if(m=='C'){
+				final byte c=bases[cloc];
+				final byte r=ca.get(rloc);
+				if(!AminoAcid.isFullyDefined(c) || !AminoAcid.isFullyDefined(r)){
+					match[mloc]='N';
+				}else{
+					match[mloc]=(byte)(c==r ? 'm' : 'S');
+				}
+				rloc++;
+				cloc++;
+			}else if(m=='m' || m=='N' || m=='S'){
+				rloc++;
+				cloc++;
+			}else if(m=='X' || m=='Y'){
+				rloc++;
+				cloc++;
+			}else if(m=='I'){
+				cloc++;
+			}else if(m=='D'){
+				rloc++;
+			}else{
+				throw new RuntimeException("Unsupported symbol: ASCII "+(int)m);
+			}
+		}
+		if(verbose){System.err.println("After unclip: "+new String(match));}
+		assert(lengthsAgree()) : new String(bases)+"\n"+this;
+		return true;
+	}
+	
 	/** TODO: Test
 	 * Attempt to extend match/N symbols where there are X and Y symbols
 	 * */
 	public boolean fixXY(byte[] bases, boolean nullifyOnFailure, MSA msa){
+		if(verbose && match!=null){System.err.println("Calling fixXY:\n"+new String(match));}
 		if(!matchContainsXY()){return true;}
+		if(verbose){System.err.println("lengthsAgree: "+this.lengthsAgree());}
 		
 		boolean disable=false;
 		if(disable){
 			if(nullifyOnFailure){
 				match=null;
 			}
-//			else if(clipOnFailure){
-//				for(int i=0; i<match.length; i++){
-//					if(match[i]=='X' || match[i]=='Y'){match[i]='C';}
-//				}
-//			}
 			return false;
 		}
 		
 //		if(match==null || match.length<1){return false;} //Already covered
 		final ChromosomeArray ca=Data.getChromosome(chrom);
-		final int tip=3;
+//		final int tip=3;
 		boolean success=true;
+		final float maxSubRate=0.4f;
+		final int maxSubs=5;
 		
 		{//Process left side
 			if(verbose){System.err.println("Processing left side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
@@ -472,6 +712,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 				mloc--;//Location of last X or Y on left side
 				final int numX=mloc+1;
 				int rloc=start+mloc, cloc=mloc;
+				int subs=0, firstSub=-1;
 				while(mloc>=0){
 					byte m=match[mloc];
 					byte c=bases[cloc];
@@ -479,18 +720,36 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 					assert(m=='X' || m=='Y') : (char)m+", "+mloc+", "+(char)c+", "+(char)r+"\n"+new String(bases)+"\n"+this.toString();
 					if(r=='N' || c=='N'){match[mloc]='N';}
 					else if(c==r){match[mloc]='m';}
-					else if(mloc<=tip){match[mloc]='S';}
+//					else if(mloc<=tip){match[mloc]='S';}
 					else{
-						success=false;
-						break;
+						match[mloc]='S';
+						subs++;
+						if(subs==1){firstSub=mloc;}
 					}
+//					else{
+//						if(verbose){System.err.println("A: Set success to false.");}
+//						success=false;
+//						break;
+//					}
 					mloc--;
 					rloc--;
 					cloc--;
 				}
 				if(success && mappedLength()!=matchLength()){incrementStart(-numX);}
+				if(subs>maxSubs && subs>numX*maxSubRate){
+					if(verbose){System.err.println("Failed to correct alignment; clipping left side of read.");}
+					for(int i=0; i<=firstSub; i++){
+						match[i]='C';
+					}
+					if(!lengthsAgree()){
+						assert(false);
+						incrementStart(firstSub+1);
+						assert(lengthsAgree());
+					}
+				}
 			}
 			if(verbose){System.err.println("Finished left side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
+			if(verbose){System.err.println("lengthsAgree: "+this.lengthsAgree());}
 		}
 		
 		if(success){//Process right side
@@ -498,14 +757,20 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			int mloc=match.length-1;
 			while(mloc>=0 && (match[mloc]=='X' || match[mloc]=='Y')){mloc--;}
 			int dif=match.length-1-mloc;
-			if(mloc<0){success=false;}
+			if(mloc<0){
+				if(verbose){System.err.println("B: Set success to false.");}
+				success=false;
+			}
 			else if(dif>0){
 				mloc++;//Location of first X or Y on right side
 				final int numX=match.length-mloc;
 				int rloc=stop-dif+1, cloc=bases.length-dif;
-				if(cloc<0){success=false;}
-				else{
-					final int tip2=match.length-tip;
+				int subs=0, firstSub=-1;
+				if(cloc<0){
+					if(verbose){System.err.println("C: Set success to false.");}
+					success=false;
+				}else{
+//					final int tip2=match.length-tip;
 					while(mloc<match.length){
 						byte m=match[mloc];
 						byte c=bases[cloc];
@@ -513,29 +778,67 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 						assert(m=='X' || m=='Y') : (char)m+", "+mloc+", "+(char)c+", "+(char)r+"\n"+new String(bases)+"\n"+this.toString();
 						if(r=='N' || c=='N'){match[mloc]='N';}
 						else if(c==r){match[mloc]='m';}
-						else if(mloc>=tip2){match[mloc]='S';}
+//						else if(mloc>=tip2){match[mloc]='S';}
 						else{
-							success=false;
-							break;
+							match[mloc]='S';
+							subs++;
+							if(subs==1){firstSub=mloc;}
 						}
+//						else{
+//							if(verbose){System.err.println("D: Set success to false.");}
+//							success=false;
+//							break;
+//						}
 						mloc++;
 						rloc++;
 						cloc++;
 					}
 				}
-				if(success && mappedLength()!=matchLength()){incrementStop(numX);}
+				if(success){
+					if(verbose){System.err.println("A: Start="+start+", stop="+stop+", numX="+numX+", lengthsAgree()="+lengthsAgree());}
+					if(mappedLength()!=matchLength()){incrementStop(numX);}
+					if(verbose){System.err.println("B: Start="+start+", stop="+stop+", numX="+numX+", lengthsAgree()="+lengthsAgree());}
+					if(subs>maxSubs && subs>numX*maxSubRate){
+						if(verbose){System.err.println("Failed to correct alignment; clipping right side of read.");}
+						for(int i=firstSub; i<match.length; i++){
+							match[i]='C';
+						}
+						int clipped=match.length-firstSub+1;
+						if(!lengthsAgree()){
+							assert(false);
+							incrementStop(-clipped);
+							assert(lengthsAgree());
+						}
+						if(verbose){System.err.println("C: Start="+start+", stop="+stop+", numX="+numX+", lengthsAgree()="+lengthsAgree());}
+					}
+					if(verbose){System.err.println("mappedLength()="+mappedLength()+", matchLength()="+matchLength()+", numX="+numX);}
+				}
 			}
 			if(verbose){System.err.println("Finished right side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
+			if(verbose){System.err.println("lengthsAgree: "+this.lengthsAgree());}
 		}
 		
 		success=success && !matchContainsXY()/* && mappedLength()==matchLength()*/;
-		if(!success && nullifyOnFailure){match=null;}
+		if(!success){
+			if(verbose){System.err.println("E: Set success to false.");}
+			if(nullifyOnFailure){match=null;}
+		}else{
+			if(verbose){System.err.println("E: Success!");}
+		}
 		
-//		assert(false) : "TODO: Alter score to reflect changes"; //TODO
-		if(match!=null){slowScore=msa.score(match);}
+		if(match!=null){
+			int oldScore=slowScore;
+			setSlowScore(msa.score(match));
+			setScore(score+(slowScore-oldScore));
+		}
+		if(verbose){System.err.println("lengthsAgree: "+this.lengthsAgree());}
 		
 		setPerfect(bases); //Fixes a rare bug
 		return success;
+	}
+	
+	public boolean lengthsAgree(){
+		return match==null ? true : matchLength()==mappedLength();
 	}
 	
 	public int mappedLength(){
@@ -598,7 +901,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 		gaps=null;
 	}
 	public void incrementStart(int x){setStart(start+x);}
-	public void incrementStop(int x){setStop(start+x);}
+	public void incrementStop(int x){setStop(stop+x);}
 	public void setLimits(int a, int b){
 		start=a;
 		stop=b;
@@ -609,6 +912,24 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 			assert(CHECKGAPS()) : Arrays.toString(gaps);
 		}
 	}
+	
+	public void fixLimitsXY(){
+		if(match==null || match.length<1){return;}
+		int x=0, y=0;
+		for(int i=0; i<match.length; i++){
+			if(match[i]=='X'){x++;}else{break;}
+		}
+		for(int i=match.length-1; i>=0; i--){
+			if(match[i]=='Y'){y++;}else{break;}
+		}
+//		if((x!=0 || y!=0) && !lengthsAgree()){
+//			setLimits(start-x, stop+y);
+//		}
+		if((y!=0)){
+			setLimits(start, stop+y);
+		}
+	}
+	
 	public void setStart(int a){
 		start=a;
 		if(gaps!=null){
@@ -638,6 +959,42 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serial
 	
 	public int start(){return start;}
 	public int stop(){return stop;}
+	public void setSlowScore(int x){
+//		assert(x!=-1);
+		if(verbose){System.err.println("Before setSlowScore: x="+x+", quick="+quickScore+", slow="+slowScore+", paired="+pairedScore);}
+//		assert(slowScore<=0 || pairedScore<=0 || pairedScore>=slowScore) : "x="+x+", quick="+quickScore+", slow="+slowScore+", paired="+pairedScore+"\n"+this;  //Correct, but temporarily disabled for stability
+		if(x<=0){
+			pairedScore=slowScore=x;
+		}else if(pairedScore<=0){
+			slowScore=x;
+		}else{
+			assert(pairedScore>=slowScore) : this;
+			if(pairedScore>0){
+				if(slowScore>0){
+					pairedScore=x+(pairedScore-slowScore);
+				}else{
+					pairedScore=x+1;
+				}
+			}
+		}
+		slowScore=x;
+		if(verbose){System.err.println("After setSlowScore: "+this);}
+//		assert(pairedScore<=0 || pairedScore>=slowScore) : "quick="+quickScore+", slow="+slowScore+", paired="+pairedScore+"\n"+this;  //Correct, but temporarily disabled for stability
+	}
+	public void setPairedScore(int x){
+//		assert(x==0 || slowScore<=0 || x>=slowScore) : "x="+x+", quick="+quickScore+", slow="+slowScore+", paired="+pairedScore+"\n"+this;  //Correct, but temporarily disabled for stability
+		pairedScore=x;
+//		assert(slowScore<=0 || pairedScore<=0 || pairedScore>=slowScore) : "x="+x+", quick="+quickScore+", slow="+slowScore+", paired="+pairedScore+"\n"+this;  //Correct, but temporarily disabled for stability
+	}
+	public void setSlowPairedScore(int x, int y){
+//		assert(slowScore<=0 || pairedScore<=0 || pairedScore>=slowScore) : "x="+x+", quick="+quickScore+", slow="+slowScore+", paired="+pairedScore+"\n"+this;  //Correct, but temporarily disabled for stability
+		slowScore=x;
+		pairedScore=y;
+//		assert(pairedScore<=0 || pairedScore>=slowScore) : this;  //Correct, but temporarily disabled for stability
+	}
+	public void setScore(int x){
+		score=x;
+	}
 	
 	public int start;
 	public int stop;

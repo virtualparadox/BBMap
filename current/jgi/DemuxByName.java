@@ -41,7 +41,6 @@ public class DemuxByName {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		DemuxByName mb=new DemuxByName(args);
 		mb.process(t);
 	}
@@ -49,7 +48,7 @@ public class DemuxByName {
 	public DemuxByName(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -59,13 +58,13 @@ public class DemuxByName {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -78,8 +77,6 @@ public class DemuxByName {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -108,8 +105,6 @@ public class DemuxByName {
 				outu2=b;
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];

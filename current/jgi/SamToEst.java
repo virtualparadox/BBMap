@@ -6,8 +6,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 
-import stream.FASTQ;
-import stream.FastaReadInputStream;
 import stream.Read;
 import stream.SamLine;
 
@@ -40,8 +38,8 @@ public class SamToEst {
 	public static void main(String[] args){
 		
 		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		ReadWrite.USE_UNPIGZ=true;
 		
 		String est=null, stats=null, ref=null, sam=null;
@@ -62,8 +60,6 @@ public class SamToEst {
 				//do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("sam")){
 				sam=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("stats")){
@@ -107,7 +103,6 @@ public class SamToEst {
 	}
 	
 	public void process(){
-//		HashMap<String, Scaffold> table=new HashMap<String, Scaffold>(initialSize);
 		HashMap<String, EST> table=new HashMap<String, EST>(initialSize);
 		TextFile tf=new TextFile(in, true, false);
 		String line=null;
@@ -204,7 +199,8 @@ public class SamToEst {
 					String name=sl.qname;
 					int x=name.lastIndexOf('_');
 					int part=1;
-					if(x>0){
+//					if(x>0){
+					if(x>5 && name.charAt(x-5)=='_' && name.charAt(x-4)=='p' && name.charAt(x-3)=='a' && name.charAt(x-2)=='r' && name.charAt(x-1)=='t'){
 						int partlen=name.length()-x-1;
 						if(partlen>0 && partlen<6){
 							int p2=0;
@@ -218,7 +214,23 @@ public class SamToEst {
 							}
 							if(p2>-1){
 								part=p2;
-								name=name.substring(0, x);
+								name=name.substring(0, x-5);
+//								name=name.substring(0, x);
+//								if(current!=null && !current.name.equals(name)){
+//									//Special case test for sequences that already end with underscore number
+//									if(name.length()>current.name.length()+1 && name.startsWith(current.name) && name.charAt(current.name.length())=='_'){
+//										boolean specialCase=true;
+//										for(int i=x+1; i<name.length(); i++){
+//											char c=name.charAt(i);
+//											int c2=c-'0';
+//											if(c2<0 || c2>9){
+//												specialCase=false;
+//												break;
+//											}
+//										}
+//										if(specialCase){name=current.name;}
+//									}
+//								}
 							}else{
 //								assert(false) : x+"\t"+p2+"\t"+name;
 							}
@@ -418,9 +430,11 @@ public class SamToEst {
 		
 		public EST(String name_){
 			name=name_;
+			System.err.println("New EST: "+name);
 		}
 		
 		public void add(SamLine sl){
+			System.err.println("Adding samline "+sl.qname+" to EST "+name);
 			parts++;
 //			length+=sl.seq.length();
 			length+=sl.seq.length;

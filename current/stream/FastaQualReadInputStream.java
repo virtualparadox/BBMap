@@ -82,7 +82,6 @@ public class FastaQualReadInputStream extends ReadInputStream {
 //		System.err.println(hashCode()+" produced "+r[0].numericID);
 		return r;
 	}
-	public final boolean preferArrays(){return false;}
 	
 	private synchronized void fillBuffer(){
 		if(builder==null){builder=new ByteBuilder(2000);}
@@ -318,7 +317,7 @@ public class FastaQualReadInputStream extends ReadInputStream {
 	private final ByteFile qtf;
 	private final boolean interleaved;
 
-	public static final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
 
 	public long generated=0;
 	public long consumed=0;

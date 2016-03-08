@@ -2,6 +2,7 @@ package bloom;
 
 import java.lang.Thread.State;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
@@ -33,7 +34,7 @@ public final class KCountArray7MTA extends KCountArray {
 		
 		verbose=false;
 		
-		KCountArray7MTA kca=new KCountArray7MTA(cells, bits, gap, hashes, null);
+		KCountArray7MTA kca=new KCountArray7MTA(cells, bits, gap, hashes, null, 0);
 		
 		System.out.println(kca.read(0));
 		kca.increment(0);
@@ -66,7 +67,7 @@ public final class KCountArray7MTA extends KCountArray {
 		
 	}
 	
-	public KCountArray7MTA(long cells_, int bits_, int gap_, int hashes_, KCountArray prefilter_){
+	public KCountArray7MTA(long cells_, int bits_, int gap_, int hashes_, KCountArray prefilter_, int prefilterLimit_){
 		super(getPrimeCells(cells_, bits_), bits_, gap_, getDesiredArrays(cells_, bits_));
 //		verbose=false;
 //		System.out.println(cells);
@@ -75,11 +76,16 @@ public final class KCountArray7MTA extends KCountArray {
 		cellMod=cellsPerArray;
 		hashes=hashes_;
 		prefilter=prefilter_;
+		prefilterLimit=(prefilter==null ? 0 : Tools.min(prefilter.maxValue, prefilterLimit_));
 //		System.out.println("cells="+cells+", words="+words+", wordsPerArray="+wordsPerArray+", numArrays="+numArrays+", hashes="+hashes);
-		matrix=new AtomicIntegerArray[numArrays];
-		for(int i=0; i<matrix.length; i++){
-			matrix[i]=new AtomicIntegerArray(wordsPerArray);
-		}
+		
+		matrix=allocMatrix(numArrays, wordsPerArray);
+				
+//		matrix=new AtomicIntegerArray[numArrays];
+//		for(int i=0; i<matrix.length; i++){
+//			matrix[i]=new AtomicIntegerArray(wordsPerArray);
+//		}
+		
 		assert(hashes>0 && hashes<=hashMasks.length);
 	}
 	
@@ -109,7 +115,7 @@ public final class KCountArray7MTA extends KCountArray {
 		if(verbose){System.err.println("Reading raw key "+rawKey);}
 		if(prefilter!=null){
 			int pre=prefilter.read(rawKey);
-			if(pre<prefilter.maxValue){return pre;}
+			if(pre<prefilterLimit){return pre;}
 		}
 		long key2=hash(rawKey, 0);
 		int min=readHashed(key2);
@@ -119,6 +125,27 @@ public final class KCountArray7MTA extends KCountArray {
 			key2=hash(key2, i);
 			if(verbose){System.err.println("Rot/hash. i="+i+", key2="+key2);}
 			min=min(min, readHashed(key2));
+		}
+		return min;
+	}
+	
+	@Override
+	public final int read(final long[] rawKeys){
+		if(verbose){System.err.println("Reading raw key "+Arrays.toString(rawKeys));}
+		if(prefilter!=null){
+			int pre=prefilter.read(rawKeys);
+			if(pre<prefilterLimit){return pre;}
+		}
+		long key2=hash(rawKeys[0], (int)(1+(rawKeys[0])%5));
+		int min=maxValue;
+		for(int i=0; i<hashes; i++){
+			for(int keynum=0; keynum<rawKeys.length; keynum++){
+				if(verbose){System.err.println("Reading. i="+i+", key2="+key2);}
+				key2=hash(key2^rawKeys[keynum], i);
+				if(verbose){System.err.println("Rot/hash. i="+i+", key2="+key2);}
+			}
+			min=min(min, readHashed(key2));
+			key2=Long.rotateRight(key2, hashBits);
 		}
 		return min;
 	}
@@ -231,7 +258,7 @@ public final class KCountArray7MTA extends KCountArray {
 		
 		if(prefilter!=null){
 			int x=prefilter.read(rawKey);
-			if(x<prefilter.maxValue){return;}
+			if(x<prefilterLimit){return;}
 		}
 		
 		long key2=rawKey;
@@ -279,7 +306,7 @@ public final class KCountArray7MTA extends KCountArray {
 		
 		if(prefilter!=null){
 			int x=prefilter.read(rawKey);
-			if(x<prefilter.maxValue){return x;}
+			if(x<prefilterLimit){return x;}
 		}
 		
 		long key2=rawKey;
@@ -296,6 +323,35 @@ public final class KCountArray7MTA extends KCountArray {
 //			assert(readHashed(key2)>=min+incr) : "i="+i+", original="+min+", new should be <="+(min+incr)+", new="+read(rawKey)+", max="+maxValue+", key="+rawKey;
 			key2=Long.rotateRight(key2, hashBits);
 		}
+		return value;
+	}
+	
+	public int incrementAndReturnUnincremented(final long[] rawKeys, final int incr){
+
+		if(verbose){System.err.println("\n*** Incrementing raw keys "+Arrays.toString(rawKeys)+" ***");}
+		
+		if(prefilter!=null){
+			int x=prefilter.read(rawKeys);
+			if(x<prefilterLimit){return x;}
+		}
+		
+		long key2=hash(rawKeys[0], (int)(1+(rawKeys[0])%5));
+		int value=maxValue;
+		for(int i=0; i<hashes; i++){
+			for(int keynum=0; keynum<rawKeys.length; keynum++){
+				key2=hash(key2^rawKeys[keynum], i);
+				if(verbose){System.err.println("key2="+key2+", value="+readHashed(key2));}
+				//			assert(readHashed(key2)==0);
+
+				//			int bnum=(int)(key2&arrayMask);
+				//			assert(read(rawKey)<=min+incr) : "i="+i+", original="+min+", new should be <="+(min+incr)+", new="+read(rawKey)+", max="+maxValue+", key="+rawKey;
+				//			assert(readHashed(key2)>=min+incr) : "i="+i+", original="+min+", new should be <="+(min+incr)+", new="+read(rawKey)+", max="+maxValue+", key="+rawKey;
+			}
+			int x=incrementHashedLocalAndReturnUnincremented(key2, incr);
+			value=min(value, x);
+			key2=Long.rotateRight(key2, hashBits);
+		}
+//		assert(value+1==read(rawKeys) || value==maxValue) : value+", "+read(rawKeys);
 		return value;
 	}
 	
@@ -403,7 +459,9 @@ public final class KCountArray7MTA extends KCountArray {
 //			cell=(int)(hashCellMask&(key>>hashBits));
 //			cell=(int)((Long.MAX_VALUE&key)%(hashArrayLength-1));
 		}
-		
+
+		assert(row>=0 && row<hashMasks.length) : row+", "+hashMasks.length;
+		assert(cell>=0 && cell<hashMasks[0].length) : cell+", "+hashMasks[0].length;
 		return key^hashMasks[row][cell];
 	}
 	
@@ -421,7 +479,6 @@ public final class KCountArray7MTA extends KCountArray {
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		long[][] r=new long[rows][cols];
 		Random randy=new Random(seed);
 		for(int i=0; i<r.length; i++){
@@ -573,6 +630,14 @@ public final class KCountArray7MTA extends KCountArray {
 		return cellsUsed;
 	}
 	
+	public KCountArray prefilter(){
+		return prefilter;
+	}
+	
+	public void purgeFilter(){
+		prefilter=null;
+	}
+	
 	private boolean finished=false;
 	
 	private long cellsUsed;
@@ -582,12 +647,13 @@ public final class KCountArray7MTA extends KCountArray {
 	private final long cellsPerArray;
 	private final long cellMod;
 	private final long[][] hashMasks=makeMasks(8, hashArrayLength);
+	private final int prefilterLimit;
 	
 	private static final int hashBits=6;
 	private static final int hashArrayLength=1<<hashBits;
 	private static final int hashCellMask=hashArrayLength-1;
 	
-	public final KCountArray prefilter;
+	private KCountArray prefilter;
 	
 	private static long counter=0;
 	

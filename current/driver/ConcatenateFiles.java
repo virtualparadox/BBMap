@@ -17,7 +17,6 @@ public class ConcatenateFiles {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		final String in=args[0];
 		final String out=(args.length>1 ? args[1] : null);
 		if(new File(in).isDirectory()){

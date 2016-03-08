@@ -7,10 +7,6 @@ public abstract class ReadInputStream {
 
 	public abstract Read next();
 	
-	public Read[] nextBlock(){
-		throw new RuntimeException("Deprecated, use nextList() instead.");
-	}
-	
 //	public final ArrayList<Read> fetchAll(){
 //		ArrayList<Read> out=new ArrayList<Read>();
 //		for(ArrayList<Read> list=nextList(); list!=null && list.size()>0; list=nextList()){
@@ -42,9 +38,8 @@ public abstract class ReadInputStream {
 	public boolean errorState(){return errorState;}
 	/** TODO */
 	protected boolean errorState=false;
-
-	public abstract boolean preferArrays();
-	public final boolean preferLists(){return !preferArrays();}
+	
+	public final boolean preferLists(){return true;}
 
 	public abstract void start();
 	

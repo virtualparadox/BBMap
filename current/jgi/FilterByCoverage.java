@@ -26,6 +26,7 @@ import fileIO.TextStreamWriter;
 import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
+import align2.TrimRead;
 
 /**
  * @author Brian Bushnell
@@ -36,7 +37,6 @@ public class FilterByCoverage {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FilterByCoverage mb=new FilterByCoverage(args);
 		mb.process(t);
 	}
@@ -44,7 +44,7 @@ public class FilterByCoverage {
 	public FilterByCoverage(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -53,13 +53,13 @@ public class FilterByCoverage {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(20, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -72,8 +72,6 @@ public class FilterByCoverage {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -99,6 +97,13 @@ public class FilterByCoverage {
 				basesUnderMin=Integer.parseInt(b);
 			}else if(a.equals("minl") || a.equals("minlen") || a.equals("minlength")){
 				minLength=Integer.parseInt(b);
+			}else if(a.equals("trim") || a.equals("trimends")){
+				if(b==null || Character.isLetter(b.charAt(0))){
+					trimEnds=Tools.parseBoolean(b) ? 100 : 0;
+				}else{
+					trimEnds=Integer.parseInt(b);
+				}
+				trimEnds=Tools.max(trimEnds, 0);
 			}else if(a.equals("appendresults") || a.equals("logappend") || a.equals("appendlog") || a.equals("appendtolog")){
 				logappend=Tools.parseBoolean(b);
 			}else if(a.equals("log") || a.equals("results")){
@@ -141,6 +146,7 @@ public class FilterByCoverage {
 			extin=parser.extin;
 			extout=parser.extout;
 		}
+		minLength=Tools.max(1, minLength);
 		
 		assert(FastaReadInputStream.settingsOK());
 		
@@ -169,6 +175,8 @@ public class FilterByCoverage {
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTA, extin, true, true);
 		ffCov0=FileFormat.testInput(covStatsBefore, FileFormat.TEXT, ".txt", true, false);
 		ffCov1=FileFormat.testInput(covStatsAfter, FileFormat.TEXT, ".txt", true, false);
+		
+		assert(covStatsAfter!=null) : "No coverage file specified.";
 	}
 	
 	void process(Timer t){
@@ -232,6 +240,8 @@ public class FilterByCoverage {
 		
 		long readsProcessed=0;
 		long basesProcessed=0;
+
+		long basesTrimmed=0;
 		
 		long readsOut=0;
 		long basesOut=0;
@@ -271,6 +281,16 @@ public class FilterByCoverage {
 					readsProcessed++;
 					basesProcessed+=initialLength1;
 					
+					if(trimEnds>0){
+						if(initialLength1-trimEnds*2<minLength){
+							r1.bases=r1.quality=null;
+						}else{
+							TrimRead.trimByAmount(r1, trimEnds, trimEnds, 0);
+						}
+					}
+					final int length=r1.length();
+					basesTrimmed+=(initialLength1-length);
+					
 					final double covRatio;
 					final boolean contam;
 					
@@ -282,7 +302,7 @@ public class FilterByCoverage {
 							covRatio=csl0.avgFold/Tools.max(0.01, csl1.avgFold);
 							int underMin=csl0.underMin-csl1.underMin;
 							
-							if(csl1.reads()<minReads || csl1.length<minLength || csl1.coveredPercent()<minCoveredPercent){
+							if(csl1.reads()<minReads || length<minLength || csl1.coveredPercent()<minCoveredPercent){
 								contam=true;
 							}else if((csl1.avgFold<minCoverage && covRatio>minRatio) || csl1.avgFold<0.5){
 								contam=true;
@@ -295,7 +315,7 @@ public class FilterByCoverage {
 							covRatio=0;
 							int underMin=csl1.underMin;
 							
-							if(csl1.reads()<minReads || csl1.length<minLength || csl1.coveredPercent()<minCoveredPercent || csl1.avgFold<0.5){
+							if(csl1.reads()<minReads || length<minLength || csl1.coveredPercent()<minCoveredPercent || csl1.avgFold<minCoverage){
 								contam=true;
 							}else if(basesUnderMin>0 && underMin>basesUnderMin){
 								contam=true;
@@ -309,35 +329,34 @@ public class FilterByCoverage {
 						covRatio=0;
 					}
 					
-					
 					if(!contam){
 						cleanList.add(r1);
 						readsOut++;
-						basesOut+=initialLength1;
+						basesOut+=length;
 					}else{
 						dirtyList.add(r1);
 						readsFiltered++;
-						basesFiltered+=initialLength1;
+						basesFiltered+=length;
 					}
-					if(tsw!=null && (r1.length()>=minLength || PRINT_SHORT_CONTIG_RESULTS)){
+					if(tsw!=null && (length>=minLength || PRINT_SHORT_CONTIG_RESULTS)){
 						if(csl1==null){
 							if(ffCov0==null){
-								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, r1.id, contam ? "1" : "0", r1.length(), 0, 0, 0));
+								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, r1.id, contam ? "1" : "0", length, 0, 0, 0));
 							}else{
 								tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", 
-										name, r1.id, contam ? "1" : "0", r1.length(), 0, 0, 0, 0, 0, 0));
+										name, r1.id, contam ? "1" : "0", length, 0, 0, 0, 0, 0, 0));
 							}
 							
 						}else if(csl0==null){
-							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", csl1.length,
+							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
 									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent()));
 						}else{
-							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", csl1.length,
+							tsw.print(String.format("%s\t%s\t%s\t%d\t%.2f\t%d\t%.2f\t%.2f\t%d\t%.2f\n", name, csl1.id, contam ? "1" : "0", length,
 									csl1.avgFold, csl1.plusReads+csl1.minusReads, csl1.coveredPercent(), csl0.avgFold, csl0.plusReads+csl0.minusReads, covRatio));
 						}
 					}
 				}
-
+				
 				if(rosClean!=null){rosClean.add(cleanList, ln.id);}
 				if(rosDirty!=null){rosDirty.add(dirtyList, ln.id);}
 
@@ -365,6 +384,9 @@ public class FilterByCoverage {
 		outstream.println("Bases Out:          "+basesOut);
 		outstream.println("Reads Filtered:     "+readsFiltered);
 		outstream.println("Bases Filtered:     "+basesFiltered);
+		if(trimEnds>0){
+			outstream.println("Bases Trimmed:      "+basesTrimmed);
+		}
 		
 		if(errorState){
 			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -423,6 +445,9 @@ public class FilterByCoverage {
 	private double minRatio=0;
 	/** Scaffolds will be discarded if there are at least this many bases in windows below a coverage cutoff. */
 	private int basesUnderMin=-1;
+	
+	/** Trim this much from sequence ends */
+	private int trimEnds=0;
 	
 	/*--------------------------------------------------------------*/
 	

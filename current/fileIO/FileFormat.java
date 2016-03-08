@@ -10,6 +10,7 @@ import java.util.Arrays;
 
 import align2.Tools;
 
+import dna.Gene;
 import dna.Parser;
 
 /**
@@ -48,7 +49,7 @@ public final class FileFormat {
 //	/** Returns an int array: {format, compression, type, interleaved} */
 	private static void test(String fname, boolean forceFileRead){
 		FileFormat ffName=testInput(fname, FASTQ, null, false, false, false);
-		FileFormat ffContent=testInput(fname, UNKNOWN, null, false, true, true);
+		FileFormat ffContent=testInput(fname, ffName.format(), null, false, true, true);
 		FileFormat ff=ffContent;
 //		assert(false) : ffName+"\n"+ffContent;
 		if(ff==null){
@@ -266,12 +267,12 @@ public final class FileFormat {
 		else if(ext.equals("info") || ext.equals("attachment")){r[0]=ATTACHMENT;}
 		else if(ext.equals("scarf")){r[0]=SCARF;}
 		else if(ext.equals("phylip")){r[0]=PHYLIP;}
+		else if(ext.equals("header")){r[0]=HEADER;}
 		
-		if(comp==null){}
-		else if(comp.equals("gz")){r[1]=GZ;}
-		else if(comp.equals("zip")){r[1]=ZIP;}
-		else if(comp.equals("bz2")){r[1]=BZ2;}
-		else if(comp.equals("xz")){r[1]=XZ;}
+		if(comp!=null){
+			r[1]=Gene.find3(comp, COMPRESSION_ARRAY);
+			assert(r[1]>0) : "Unhandled compression type: "+comp;
+		}
 
 		if(slc.length()>2 && slc.charAt(0)=='s' && slc.charAt(1)=='t'){
 			if(slc.equals("stdin") || slc.startsWith("stdin.") || slc.equals("standardin")){r[2]=STDIO;}
@@ -323,7 +324,7 @@ public final class FileFormat {
 						final int aq=a[0], ai=a[1], al=a[2], af=a[3];
 						if(aq>-1){r[4]=aq;}
 						if(ai!=UNKNOWN){r[3]=ai;}
-						if(af!=UNKNOWN){r[0]=af;}
+						if(af!=UNKNOWN && (af!=BREAD || (r[0]!=HEADER && r[0]!=TEXT))){r[0]=af;}
 						if(al>1 && r[5]==-1){r[5]=al;}
 					}
 				} catch (Exception e) {
@@ -408,6 +409,9 @@ public final class FileFormat {
 	public static int[] testInterleavedAndQuality(final ArrayList<String> oct, String fname, boolean forceFastq){
 		int len=-1, format=UNKNOWN;
 		byte q=-1, i=UNKNOWN;
+		if(oct==null || oct.size()<1){
+			return new int[] {q, i, len, format};
+		}
 		{
 			String s1=oct.size()>0 ? oct.get(0) : "";
 			String s2=oct.size()>1 ? oct.get(1) : "";
@@ -451,6 +455,14 @@ public final class FileFormat {
 		if(ext==null){return false;}
 		return (ext.equals("fa") || ext.equals("fasta") || ext.equals("fas") || ext.equals("fna") || ext.equals("ffn") 
 			|| ext.equals("frn") || ext.equals("seq") || ext.equals("fsa") || ext.equals("faa"));
+	}
+	
+	public static boolean isStdio(String s){
+		if(s==null){return false;}
+		if(new File(s).exists()){return false;}
+		if(s.contains(".")){s=s.substring(0, s.indexOf('.'));
+		}
+		return (s.equalsIgnoreCase("stdin") || s.equalsIgnoreCase("stdout") || s.equalsIgnoreCase("stderr"));
 	}
 	
 	public static boolean isFastq(String ext){
@@ -505,6 +517,7 @@ public final class FileFormat {
 	public final boolean random(){return format==RANDOM;}
 	public final boolean sites(){return format==SITES;}
 	public final boolean attachment(){return format==ATTACHMENT;}
+	public final boolean header(){return format==HEADER;}
 	public final boolean bam(){return format==BAM;}
 	public final boolean scarf(){return format==SCARF;}
 	public final boolean text(){return format==TEXT;}
@@ -516,6 +529,7 @@ public final class FileFormat {
 	public final boolean bz2(){return compression==BZ2;}
 	public final boolean xz(){return compression==XZ;}
 	public final boolean sevenz(){return compression==SEVENZ;}
+	public final boolean dsrc(){return compression==DSRC;}
 
 	public final boolean unknownType(){return type<=UNKNOWN;}
 	public final boolean file(){return type==FILE;}
@@ -589,13 +603,14 @@ public final class FileFormat {
 	public static final int ATTACHMENT=10;
 	public static final int BAM=11;
 	public static final int SCARF=12;
-	public static final int TEXT=13;
+	public static final int TEXT=13, TXT=13;
 	public static final int PHYLIP=14;
+	public static final int HEADER=15;
 	
 	private static final String[] FORMAT_ARRAY=new String[] {
 		"unknown", "fasta", "fastq", "bread", "sam", "csfasta",
 		"qual", "sequential", "random", "sites", "attachment",
-		"bam", "scarf", "text", "phylip"
+		"bam", "scarf", "text", "phylip", "header"
 	};
 	
 	public static final String[] EXTENSION_LIST=new String[] {
@@ -603,7 +618,7 @@ public final class FileFormat {
 		"ffn", "frn", "seq", "fsa", "faa",
 		"bread", "sam", "csfasta", "qual", "bam",
 		"scarf", "phylip", "txt",
-		"gz", "gzip", "bz2", "zip", "xz"
+		"gz", "gzip", "bz2", "zip", "xz", "dsrc", "header"
 	};
 	
 	/* Compression */
@@ -615,10 +630,11 @@ public final class FileFormat {
 	public static final int XZ=5;
 	public static final int c4=6;
 	public static final int SEVENZ=7;
+	public static final int DSRC=8;
 	
 	private static final String[] COMPRESSION_ARRAY=new String[] {
 		"unknown", "raw", "gz", "zip", "bz2", "xz",
-		"c4", "7z"
+		"c4", "7z", "dsrc"
 	};
 	
 	/* Type */

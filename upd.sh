@@ -18,5 +18,5 @@ ls -la t tt sh/current
 git add sh docs resources current
 
 echo git commit . -m "'Extract Version 3?.?? from `basename $1`'"
-# git tag -a v31.56 -F tt/README.md
+# git tag -a v35.85 -F tt/README.md
 # git push && git push --tags

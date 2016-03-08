@@ -38,9 +38,9 @@ import fileIO.FileFormat;
 import fileIO.TextStreamWriter;
 
 /**
- * Separates or trims reads based on matching kmers in a reference.
- * Supports arbitrary K and inexact matches. 
- * Supercedes BBDuk by replacing Java's HashMap with HashArray and HashForest.
+ * Separates, trims, or masks sequences based on matching kmers in a reference.
+ * Supports Hamming and and edit distance. 
+ * Supports K 1-31 and emulated K>31.
  * @author Brian Bushnell
  * @date Aug 30, 2013
  *
@@ -58,7 +58,7 @@ public class BBDukF {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -66,7 +66,7 @@ public class BBDukF {
 		//Create a new BBDuk instance
 		BBDukF bbd=new BBDukF(args);
 		
-		///And run it
+		//And run it
 		bbd.process();
 	}
 	
@@ -74,43 +74,7 @@ public class BBDukF {
 	 * Display usage information.
 	 */
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.BBDuk in=<input file> out=<output file> ref=<contaminant files>");
-		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-		outstream.println("out=<file>         \t(outnonmatch) The 'out=' flag is needed if the output file is not the second parameter.  'out=stdout' will pipe to standard out.");
-		outstream.println("out2=<file>        \t(outnonmatch2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("outmatch=<file>    \t(outm or outb) Write 'bad' reads here (containing contaminant kmers).");
-		outstream.println("outmatch2=<file>   \t(outm2 or outb2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
-		outstream.println("duk=<file>         \tWrite duk-like output.");
-		outstream.println("");
-		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-		outstream.println("k=31               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
-		outstream.println("maskmiddle=t       \t(mm) Treat the middle base of a kmer as a wildcard.");
-		outstream.println("maxbadkmers=0      \t(mbk) Reads with more than this many contaminant kmers will be discarded.");
-		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
-		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
-		outstream.println("ktrim=f            \tTrim reads to remove bases matching reference kmers. ");
-		outstream.println("                   \tValues: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming).");
-		outstream.println("useshortkmers=f    \t(usk) Look for shorter kmers at read tips (only for k-trimming).");
-		outstream.println("mink=6             \tMinimum length of short kmers.  Setting this automatically sets useshortkmers=t.");
-		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
-		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-		outstream.println("trimq=6            \tTrim quality threshold.");
-		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
-		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=70       \tLength of lines in fasta output");
-		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
-		outstream.println("forest=t           \tUse HashForest data structure");
-		outstream.println("table=f            \tUse KmerTable data structure");
-		outstream.println("array=f            \tUse HashArray data structure");
+		System.err.println("Please consult the shellscript for usage information.");
 	}
 	
 	
@@ -128,8 +92,8 @@ public class BBDukF {
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.USE_PIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		FastaReadInputStream.SPLIT_READS=false;
+		
+		
 		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		
 		/* Initialize local variables with defaults */
@@ -147,6 +111,8 @@ public class BBDukF {
 		long skipreads_=0;
 		byte TRIM_SYMBOL_='N';
 		boolean kmaskLowercase_=false;
+		boolean kmaskFullyCovered_=false;
+		
 		
 		Parser parser=new Parser();
 		parser.trimq=6;
@@ -166,6 +132,8 @@ public class BBDukF {
 		boolean skipr1_=false, skipr2_=false;
 		boolean ecc_=false;
 		float minBaseFrequency_=0;
+		float minKmerFraction_=0;
+		float minCoveredFraction_=0;
 		
 		scaffoldNames.add(""); //Necessary so that the first real scaffold gets an id of 1, not zero
 		scaffoldLengths.add(0);
@@ -206,6 +174,8 @@ public class BBDukF {
 				//do nothing
 			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
+			}else if(parser.parseCardinality(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -235,6 +205,8 @@ public class BBDukF {
 				outrefstats=b;
 			}else if(a.equals("rpkm") || a.equals("fpkm") || a.equals("cov") || a.equals("coverage")){
 				outrpkm=b;
+			}else if(a.equals("sam") || a.equals("bam")){
+				samFile=b;
 			}else if(a.equals("duk") || a.equals("outduk")){
 				outduk=b;
 			}else if(a.equals("rqc")){
@@ -314,6 +286,12 @@ public class BBDukF {
 				skipreads_=Tools.parseKMG(b);
 			}else if(a.equals("maxbadkmers") || a.equals("mbk")){
 				maxBadKmers_=Integer.parseInt(b);
+			}else if(a.equals("minhits") || a.equals("minkmerhits") || a.equals("mkh")){
+				maxBadKmers_=Integer.parseInt(b)-1;
+			}else if(a.equals("minkmerfraction") || a.equals("minfraction") || a.equals("mkf")){
+				minKmerFraction_=Float.parseFloat(b);
+			}else if(a.equals("mincoveredfraction") || a.equals("mincovfraction") || a.equals("mcf")){
+				minCoveredFraction_=Float.parseFloat(b);
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -360,6 +338,8 @@ public class BBDukF {
 						ktrimRight_=ktrimLeft_=ktrimN_=x;
 					}
 				}
+			}else if(a.equals("kmaskfullycovered") || a.equals("maskfullycovered") || a.equals("mfc")){
+				kmaskFullyCovered_=Tools.parseBoolean(b);
 			}else if(a.equals("ktrimright")){
 				ktrimRight_=Tools.parseBoolean(b);
 				ktrimLeft_=ktrimN_=!(ktrimRight_);
@@ -379,14 +359,14 @@ public class BBDukF {
 				useQualityForOverlap_=Tools.parseBoolean(b);
 			}else if(a.equals("tpe") || a.equals("tbe") || a.equals("trimpairsevenly")){
 				trimPairsEvenly_=Tools.parseBoolean(b);
-			}else if(a.equals("otm") || a.equals("outputtrimmedtomatch")){
+			}else if(a.equals("ottm") || a.equals("outputtrimmedtomatch")){
 				addTrimmedToBad_=Tools.parseBoolean(b);
 			}else if(a.equals("minoverlap")){
 				minoverlap_=Integer.parseInt(b);
 			}else if(a.equals("mininsert")){
 				mininsert_=Integer.parseInt(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
-				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
+				if(b==null || b.length()<1 || Character.isLetter(b.charAt(0))){
 					prealloc_=Tools.parseBoolean(b);
 				}else{
 					preallocFraction=Tools.max(0, Double.parseDouble(b));
@@ -413,18 +393,22 @@ public class BBDukF {
 				entropyK=Integer.parseInt(b);
 			}else if(a.equals("entropywindow") || a.equals("ew")){
 				entropyWindow=Integer.parseInt(b);
-			}else if(a.equals("minentropy") || a.equals("entropy")){
+			}else if(a.equals("minentropy") || a.equals("entropy") || a.equals("entropyfilter")){
 				entropyCutoff=Float.parseFloat(b);
 			}else if(a.equals("verifyentropy")){
 				verifyEntropy=Tools.parseBoolean(b);
 			}else if(a.equals("minbasefrequency")){
 				minBaseFrequency_=Float.parseFloat(b);
-			}else if(a.equals("ecc")){
+			}else if(a.equals("ecco") || a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
 			}else if(a.equals("copyundefined") || a.equals("cu")){
 				REPLICATE_AMBIGUOUS=Tools.parseBoolean(b);
 			}else if(a.equals("path")){
 				Data.setPath(b);
+			}else if(a.equals("maxbasesoutm")){
+				maxBasesOutm=Tools.parseKMG(b);
+			}else if(a.equals("maxbasesoutu") || a.equals("maxbasesout")){
+				maxBasesOutu=Tools.parseKMG(b);
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
 			}else if(i==1 && out1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
@@ -474,13 +458,17 @@ public class BBDukF {
 			minReadLength=parser.minReadLength;
 			maxReadLength=parser.maxReadLength;
 			maxNs=parser.maxNs;
+			minConsecutiveBases=parser.minConsecutiveBases;
 //			untrim=parser.untrim;
-//			minGC=parser.minGC;
-//			maxGC=parser.maxGC;
-//			filterGC=parser.filterGC;
 //			minTrimLength=(parser.minTrimLength>=0 ? parser.minTrimLength : minTrimLength);
 //			requireBothBad=parser.requireBothBad;
 			removePairsIfEitherBad=!parser.requireBothBad;
+
+			minGC=parser.minGC;
+			maxGC=parser.maxGC;
+			filterGC=(minGC>0 || maxGC<1);
+
+			loglog=(parser.loglog ? new LogLog(parser) : null);
 			
 			THREADS=Shared.threads();
 		}
@@ -501,8 +489,6 @@ public class BBDukF {
 			minInsert0=Tools.min(minInsert0, minInsert);
 		}
 		
-		if(recalibrateQuality){CalcTrueQuality.initializeMatrices();}
-		
 		/* Set final variables; post-process and validate argument combinations */
 		
 		useForest=useForest_;
@@ -517,6 +503,7 @@ public class BBDukF {
 		forbidNs=(forbidNs_ || hammingDistance<1);
 		trimSymbol=TRIM_SYMBOL_;
 		kmaskLowercase=kmaskLowercase_;
+		kmaskFullyCovered=kmaskFullyCovered_;
 		skipreads=skipreads_;
 		trimByOverlap=trimByOverlap_;
 		useQualityForOverlap=useQualityForOverlap_;
@@ -611,6 +598,7 @@ public class BBDukF {
 		k=k_;
 		k2=k-1;
 		kbig=kbig_;
+		keff=Tools.max(k, kbig);
 		if(kbig>k){
 			minSkip=maxSkip=0;
 			if(maskMiddle){
@@ -619,7 +607,14 @@ public class BBDukF {
 			}
 		}
 		mink=Tools.min((mink_<1 ? 6 : mink_), k);
-		maxBadKmers=maxBadKmers_;
+		maxBadKmers0=maxBadKmers_;
+
+		minKmerFraction=Tools.max(minKmerFraction_, 0);
+		assert(minKmerFraction<=1) : "minKmerFraction must range from 0 to 1; value="+minKmerFraction;
+		
+		minCoveredFraction=Tools.max(minCoveredFraction_, 0);
+		assert(minCoveredFraction<=1) : "minCoveredFraction must range from 0 to 1; value="+minCoveredFraction;
+		
 		if(mink_>0 && mink_<k){useShortKmers=true;}
 		if(useShortKmers){
 			if(maskMiddle){
@@ -774,6 +769,13 @@ public class BBDukF {
 	
 	public void process(){
 		
+		if(recalibrateQuality){
+			if(samFile!=null){
+				CalcTrueQuality.main2(new String[] {"in="+samFile, "showstats=f"});
+			}
+			CalcTrueQuality.initializeMatrices();
+		}
+		
 		/* Check for output file collisions */
 		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outstats, outrpkm, outduk, outrqc, outrefstats)){
 			throw new RuntimeException("One or more output files were duplicate or could not be written to.  Check the names or set the 'overwrite=true' flag.");
@@ -781,7 +783,6 @@ public class BBDukF {
 		
 		/* Start overall timer */
 		Timer t=new Timer();
-		t.start();
 		
 //		boolean dq0=FASTQ.DETECT_QUALITY;
 //		boolean ti0=FASTQ.TEST_INTERLEAVED;
@@ -818,7 +819,7 @@ public class BBDukF {
 		
 		/* Throw an exception if errors were detected */
 		if(errorState){
-			throw new RuntimeException("BBDuk terminated in an error state; the output may be corrupt.");
+			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
 	
@@ -827,11 +828,10 @@ public class BBDukF {
 		
 		/* Start phase timer */
 		Timer t=new Timer();
-		t.start();
 
 		if(DISPLAY_PROGRESS){
 			outstream.println("Initial:");
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -883,8 +883,13 @@ public class BBDukF {
 			assert(false) : "You can bypass this assertion with the -da flag.";
 		}
 		
+		final boolean vic=Read.VALIDATE_IN_CONSTRUCTOR;
+		Read.VALIDATE_IN_CONSTRUCTOR=THREADS<4;
+		
 		/* Do kmer matching of input reads */
 		spawnProcessThreads(t);
+		
+		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		/* Write legacy duk statistics (which requires tables) */
 		writeDuk(System.nanoTime()-startTime);
@@ -925,6 +930,10 @@ public class BBDukF {
 			outstream.println("Trimmed by overlap:     \t"+readsTrimmedByOverlap+" reads ("+String.format("%.2f",readsTrimmedByOverlap*100.0/readsIn)+"%) \t"+
 					basesTrimmedByOverlap+" bases ("+String.format("%.2f",basesTrimmedByOverlap*100.0/basesIn)+"%)");
 		}
+		if(filterGC){
+			outstream.println("Filtered by GC:         \t"+badGcReads+" reads ("+String.format("%.2f",badGcReads*100.0/readsIn)+"%) \t"+
+					badGcBases+" bases ("+String.format("%.2f",badGcBases*100.0/basesIn)+"%)");
+		}
 		if(minAvgQuality>0 || maxNs>=0 || minBaseFrequency>0 || chastityFilter || removeBadBarcodes){
 			outstream.println("Low quality discards:   \t"+readsQFiltered+" reads ("+String.format("%.2f",readsQFiltered*100.0/readsIn)+"%) \t"+
 					basesQFiltered+" bases ("+String.format("%.2f",basesQFiltered*100.0/basesIn)+"%)");
@@ -936,6 +945,10 @@ public class BBDukF {
 		
 		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
 				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
+		
+		if(loglog!=null){
+			outstream.println("Unique "+loglog.k+"-mers:         \t"+loglog.cardinality());
+		}
 	}
 	
 	/**
@@ -1191,7 +1204,7 @@ public class BBDukF {
 		long size=0;
 		for(AbstractKmerTable x : keySets){size+=x.size();}
 		sb.append("#Avg step size:	"+String.format("%.1f", refKmers/(double)(Tools.max(1, size)))+"\n");
-		sb.append("#Cut off:	"+maxBadKmers+"\n");
+		sb.append("#Cut off:	"+maxBadKmers0+"\n");
 		sb.append("#Mask middle:	"+maskMiddle+"\n");
 		sb.append("#Quality trim:	"+((qtrimLeft || qtrimRight) ? trimq : "false")+"\n");
 		sb.append("\n");
@@ -1263,7 +1276,6 @@ public class BBDukF {
 	 */
 	private long spawnLoadThreads(){
 		Timer t=new Timer();
-		t.start();
 		if((ref==null || ref.length<1) && (literal==null || literal.length<1)){return 0;}
 		long added=0;
 		
@@ -1386,6 +1398,7 @@ public class BBDukF {
 		}
 		
 		/* Wait for loaders to die, and gather statistics */
+		boolean success=true;
 		for(LoadThread lt : loaders){
 			while(lt.getState()!=Thread.State.TERMINATED){
 				try {
@@ -1400,7 +1413,10 @@ public class BBDukF {
 			refBases+=lt.refBasesT;
 			refReads+=lt.refReadsT;
 			modsum+=lt.modsumT;
+			success&=lt.success;
 		}
+		if(!success){KillSwitch.kill("Failed loading ref kmers; aborting.");}
+		
 		//Correct statistics for number of threads, since each thread processes all reference data
 		refKmers/=WAYS;
 		refBases/=WAYS;
@@ -1412,7 +1428,7 @@ public class BBDukF {
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("Added "+added+" kmers; time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -1509,18 +1525,21 @@ public class BBDukF {
 		
 		/* Wait for threads to die, and gather statistics */
 		for(ProcessThread pt : alpt){
+			
+			/* Wait for a thread to die */
 			while(pt.getState()!=Thread.State.TERMINATED){
 				try {
 					pt.join();
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
+			
+			/* Accumulate data from per-thread counters */
 			readsIn+=pt.readsInT;
 			basesIn+=pt.basesInT;
-			readsOut+=pt.readsOutT;
-			basesOut+=pt.basesOutT;
+			readsOut+=pt.readsOutuT;
+			basesOut+=pt.basesOutuT;
 			readsKFiltered+=pt.readsKFilteredT;
 			basesKFiltered+=pt.basesKFilteredT;
 			readsQTrimmed+=pt.readsQTrimmedT;
@@ -1531,6 +1550,8 @@ public class BBDukF {
 			basesKTrimmed+=pt.basesKTrimmedT;
 			readsTrimmedByOverlap+=pt.readsTrimmedByOverlapT;
 			basesTrimmedByOverlap+=pt.basesTrimmedByOverlapT;
+			badGcReads+=pt.badGcReadsT;
+			badGcBases+=pt.badGcBasesT;
 			readsQFiltered+=pt.readsQFilteredT;
 			basesQFiltered+=pt.basesQFilteredT;
 			readsEFiltered+=pt.readsEFilteredT;
@@ -1613,9 +1634,11 @@ public class BBDukF {
 			if(map.canRebalance() && map.size()>2L*map.arrayLength()){
 				map.rebalance();
 			}
+			success=true;
 		}
 
 		/**
+		 * Store the read's kmers in a table.
 		 * @param r The current read to process
 		 * @param skip Number of bases to skip between kmers
 		 * @return Number of kmers stored
@@ -1864,6 +1887,9 @@ public class BBDukF {
 		/** Destination for storing kmers */
 		private final AbstractKmerTable map;
 		
+		/** Completed successfully */
+		boolean success=false;
+		
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -1878,6 +1904,7 @@ public class BBDukF {
 		 * @param cris_ Read input stream
 		 * @param ros_ Unmatched read output stream (optional)
 		 * @param rosb_ Matched read output stream (optional)
+		 * @param ross_ Singleton read output stream (optional)
 		 */
 		public ProcessThread(ConcurrentReadInputStream cris_, ConcurrentReadOutputStream ros_, ConcurrentReadOutputStream rosb_, ConcurrentReadOutputStream ross_, boolean localArrays){
 			cris=cris_;
@@ -1918,6 +1945,9 @@ public class BBDukF {
 			}else{
 				entropyCounts=entropyCountCounts=null;
 			}
+			
+			maxBasesOutmT=(maxBasesOutm>0 ? Tools.max(1, maxBasesOutm/THREADS) : -1);
+			maxBasesOutuT=(maxBasesOutu>0 ? Tools.max(1, maxBasesOutu/THREADS) : -1);
 		}
 		
 		@Override
@@ -1937,6 +1967,9 @@ public class BBDukF {
 					final Read r1=reads.get(i);
 					final Read r2=r1.mate;
 					
+					if(!r1.validated()){r1.validate(true);}
+					if(r2!=null && !r2.validated()){r2.validate(true);}
+					
 					if(readstats!=null){
 						if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r1);}
 						if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r1);}
@@ -1950,6 +1983,8 @@ public class BBDukF {
 						if(MAKE_IDHIST){readstats.addToIdentityHistogram(r1);}
 					}
 
+					if(loglog!=null){loglog.hash(r1);}
+					
 					final int initialLength1=r1.length();
 					final int initialLength2=r1.mateLength();
 
@@ -1974,7 +2009,7 @@ public class BBDukF {
 					
 					if(removeBadBarcodes){
 						if(r1!=null && !r1.discarded() && r1.failsBarcode(barcodes, failIfNoBarcode)){
-							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id);}
+							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id+"\nThis can be disabled with the flag barcodefilter=f");}
 							r1.setDiscarded(true);
 							if(r2!=null){r2.setDiscarded(true);}
 						}
@@ -1986,6 +2021,27 @@ public class BBDukF {
 						}
 						if(r2!=null && !r2.discarded()){
 							CalcTrueQuality.recalibrate(r2);
+						}
+					}
+					
+					if(filterGC && (initialLength1>0 || initialLength2>0)){
+						final float gc;
+						if(r2==null){
+							gc=r1.gc();
+						}else{
+							gc=(r1.gc()*initialLength1+r2.gc()*initialLength2)/(initialLength1+initialLength2);
+						}
+						if(gc<minGC || gc>maxGC){
+							if(r1!=null && !r1.discarded()){
+								r1.setDiscarded(true);
+								badGcBasesT+=initialLength1;
+								badGcReadsT++;
+							}
+							if(r2!=null && !r2.discarded()){
+								r2.setDiscarded(true);
+								badGcBasesT+=initialLength2;
+								badGcReadsT++;
+							}
 						}
 					}
 					
@@ -2098,19 +2154,42 @@ public class BBDukF {
 						}else{
 							//Do kmer matching
 							
-							if(!findBestMatch){
-								final int a=(kbig<=k ? countSetKmers(r1, keySets) : countSetKmersBig(r1, keySets));
-								final int b=(kbig<=k ? countSetKmers(r2, keySets) : countSetKmersBig(r2, keySets));
-
-								if(r1!=null && a>maxBadKmers){r1.setDiscarded(true);}
-								if(r2!=null && b>maxBadKmers){r2.setDiscarded(true);}
-								
+							if(minCoveredFraction>0){
+								if(r1!=null && !r1.discarded()){
+									final int minCoveredBases=(int)Math.ceil(minCoveredFraction*r1.length());
+									final int covered=countCoveredBases(r1, keySets, minCoveredBases);
+									if(covered>=minCoveredBases){r1.setDiscarded(true);}
+								}
+								if(r2!=null && !r2.discarded()){
+									final int minCoveredBases=(int)Math.ceil(minCoveredFraction*r2.length());
+									final int covered=countCoveredBases(r2, keySets, minCoveredBases);
+									if(covered>=minCoveredBases){r2.setDiscarded(true);}
+								}
 							}else{
-								final int a=findBestMatch(r1, keySets);
-								final int b=findBestMatch(r2, keySets);
+
+								final int maxBadKmersR1, maxBadKmersR2;
+								if(minKmerFraction==0){
+									maxBadKmersR1=maxBadKmersR2=maxBadKmers0;
+								}else{
+									final int vk1=r1.numValidKmers(keff), vk2=(r2==null ? 0 : r2.numValidKmers(keff));
+									maxBadKmersR1=Tools.max(maxBadKmers0, (int)((vk1-1)*minKmerFraction));
+									maxBadKmersR2=Tools.max(maxBadKmers0, (int)((vk2-1)*minKmerFraction));
+								}
 								
-								if(r1!=null && a>0){r1.setDiscarded(true);}
-								if(r2!=null && b>0){r2.setDiscarded(true);}
+								if(!findBestMatch){
+									final int a=(kbig<=k ? countSetKmers(r1, keySets, maxBadKmersR1) : countSetKmersBig(r1, keySets, maxBadKmersR1));
+									final int b=(kbig<=k ? countSetKmers(r2, keySets, maxBadKmersR2) : countSetKmersBig(r2, keySets, maxBadKmersR2));
+
+									if(r1!=null && a>maxBadKmersR1){r1.setDiscarded(true);}
+									if(r2!=null && b>maxBadKmersR2){r2.setDiscarded(true);}
+
+								}else{
+									final int a=findBestMatch(r1, keySets, maxBadKmersR1);
+									final int b=findBestMatch(r2, keySets, maxBadKmersR2);
+
+									if(r1!=null && a>0){r1.setDiscarded(true);}
+									if(r2!=null && b>0){r2.setDiscarded(true);}
+								}
 							}
 							
 							if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
@@ -2229,6 +2308,11 @@ public class BBDukF {
 							if(r1!=null && r1.countUndefined()>maxNs){r1.setDiscarded(true);}
 							if(r2!=null && r2.countUndefined()>maxNs){r2.setDiscarded(true);}
 						}
+						//Determine whether to discard the reads based on a lack of useful kmers
+						if(minConsecutiveBases>0){
+							if(r1!=null && !r1.discarded() && !r1.hasMinConsecutiveBases(minConsecutiveBases)){r1.setDiscarded(true);}
+							if(r2!=null && !r2.discarded() && !r2.hasMinConsecutiveBases(minConsecutiveBases)){r2.setDiscarded(true);}
+						}
 						//Determine whether to discard the reads based on minimum base frequency
 						if(minBaseFrequency>0){
 							if(r1!=null && r1.minBaseCount()<minBaseFrequency*r1.length()){r1.setDiscarded(true);}
@@ -2279,19 +2363,12 @@ public class BBDukF {
 						removed++;
 						if(r2!=null){removed++;}
 						reads.set(i, null);
-//						System.err.println("X1\t"+removed);
-					}else{
-						//Track statistics
 						
-						if(r1!=null){
-							readsOutT++;
-							basesOutT+=r1.length();
-						}
-						if(r2!=null){
-							readsOutT++;
-							basesOutT+=r2.length();
-						}
-//						System.err.println("X2\t"+readsOutT);
+						readsOutmT+=1+r1.mateCount();
+						basesOutmT+=r1.length()+r1.mateLength();
+					}else{
+						readsOutuT+=1+r1.mateCount();
+						basesOutuT+=r1.length()+r1.mateLength();
 					}
 				}
 				
@@ -2310,6 +2387,9 @@ public class BBDukF {
 					ross.add(single, ln.id);
 					single.clear();
 				}
+
+				if(maxBasesOutmT>=0 && basesOutmT>=maxBasesOutmT){break;}
+				if(maxBasesOutuT>=0 && basesOutuT>=maxBasesOutuT){break;}
 				
 				//Fetch a new read list
 				cris.returnList(ln.id, ln.list.isEmpty());
@@ -2336,6 +2416,7 @@ public class BBDukF {
 		 * @return Value stored in table, or -1
 		 */
 		private final int getValue(final long kmer, final long rkmer, final long lengthMask, final int qPos, final int len, final int qHDist, final AbstractKmerTable[] sets){
+			assert(lengthMask==0 || (kmer<lengthMask && rkmer<lengthMask)) : lengthMask+", "+kmer+", "+rkmer;
 			int id=getValue(kmer, rkmer, lengthMask, qPos, sets);
 			if(id<1 && qHDist>0){
 				final int qHDist2=qHDist-1;
@@ -2344,9 +2425,15 @@ public class BBDukF {
 				for(int j=0; j<4 && id<1; j++){
 					for(int i=0; i<len && id<1; i++){
 						final long temp=(kmer&clearMasks[i])|setMasks[j][i];
+//						System.err.println(i+", "+j+", "+setMasks[j][i]+", "+qHDist);
 						if(temp!=kmer){
 							long rtemp=AminoAcid.reverseComplementBinaryFast(temp, len);
-							id=getValue(temp, rtemp, lengthMask, len, qPos, qHDist2, sets);
+//							assert(lengthMask==0 || (temp<lengthMask && rtemp<lengthMask)) : lengthMask+", "+temp+", "+rtemp+", "+kmer+", "+rkmer+
+//							"\n"+len+", "+Long.numberOfTrailingZeros(lengthMask)+"\n"+
+//									Long.toBinaryString(lengthMask|0x8000000000000000L)+"\n"+
+//											Long.toBinaryString(temp|0x8000000000000000L)+"\n"+
+//													Long.toBinaryString(rtemp|0x8000000000000000L);
+							id=getValue(temp, rtemp, lengthMask, qPos, len, qHDist2, sets);
 						}
 					}
 				}
@@ -2385,7 +2472,7 @@ public class BBDukF {
 		 * @param sets Kmer tables
 		 * @return Number of hits
 		 */
-		private final int countSetKmers(final Read r, final AbstractKmerTable[] sets){
+		private final int countSetKmers(final Read r, final AbstractKmerTable[] sets, final int maxBadKmers){
 			if(r==null || r.length()<k || storedKmers<1){return 0;}
 			if((skipR1 && r.pairnum()==0) || (skipR2 && r.pairnum()==1)){return 0;}
 			final byte[] bases=r.bases;
@@ -2438,13 +2525,81 @@ public class BBDukF {
 			return found;
 		}
 		
+		
+		/**
+		 * Counts the number of kmer hits for a read.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return Number of hits
+		 */
+		private final int countCoveredBases(final Read r, final AbstractKmerTable[] sets, final int minCoveredBases){
+			if(r==null || r.length()<k || storedKmers<1){return 0;}
+			if((skipR1 && r.pairnum()==0) || (skipR2 && r.pairnum()==1)){return 0;}
+			final byte[] bases=r.bases;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=lengthMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+			int lastFound=-1;
+			boolean recorded=false;
+			
+			final int start=(restrictRight<1 ? 0 : Tools.max(0, bases.length-restrictRight));
+			final int stop=(restrictLeft<1 ? bases.length : Tools.min(bases.length, restrictLeft));
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=start; i<stop; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final int id=getValue(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
+					if(verbose){System.err.println("Testing kmer "+kmer+"; id="+id);}
+					if(id>0){
+						
+						int extra=Tools.min(k, i-lastFound);
+						found+=extra;
+						lastFound=i;
+						
+						if(verbose){System.err.println("Found = "+found+"/"+minCoveredBases);}
+						if(found>=minCoveredBases){
+							if(!recorded){
+								if(scaffoldReadCountsT!=null){
+									scaffoldReadCountsT[id]++;
+									scaffoldBaseCountsT[id]+=bases.length;
+								}else{
+									scaffoldReadCounts.addAndGet(id, 1);
+									scaffoldBaseCounts.addAndGet(id, bases.length);
+								}
+							}
+							if(hitCounts==null){
+								return found;
+							}
+						}
+					}
+				}
+			}
+			
+			if(hitCountsT!=null){hitCountsT[Tools.min(found, HITCOUNT_LEN)]++;}
+			return found;
+		}
+		
 		/**
 		 * Returns the id of the sequence with the most kmer matches to this read, or -1 if none are over maxBadKmers.
 		 * @param r Read to process
 		 * @param sets Kmer tables
 		 * @return id of best match
 		 */
-		private final int findBestMatch(final Read r, final AbstractKmerTable[] sets){
+		private final int findBestMatch(final Read r, final AbstractKmerTable[] sets, final int maxBadKmers){
 			idList.size=0;
 			if(r==null || r.length()<k || storedKmers<1){return -1;}
 			if((skipR1 && r.pairnum()==0) || (skipR2 && r.pairnum()==1)){return -1;}
@@ -2518,7 +2673,7 @@ public class BBDukF {
 		 * @param sets
 		 * @return Number of sets of consecutive hits of exactly length kbig
 		 */
-		private final int countSetKmersBig(final Read r, final AbstractKmerTable[] sets){
+		private final int countSetKmersBig(final Read r, final AbstractKmerTable[] sets, final int maxBadKmers){
 			if(r==null || r.length()<kbig || storedKmers<1){return 0;}
 			if((skipR1 && r.pairnum()==0) || (skipR2 && r.pairnum()==1)){return 0;}
 			assert(kbig>k);
@@ -2787,6 +2942,7 @@ public class BBDukF {
 			final byte[] bases=r.bases, quals=r.quality;
 			if(bases==null || bases.length<k){return 0;}
 			final int minlen=k-1;
+			final int minminlen=mink-1;
 			final int minlen2=(maskMiddle ? k/2 : k);
 			final int shift=2*k;
 			final int shift2=shift-2;
@@ -2798,7 +2954,8 @@ public class BBDukF {
 			int len=0;
 			int id0=-1; //ID of first kmer found.
 			
-			BitSet bs=new BitSet(bases.length+trimPad+1); 
+			final BitSet bs=new BitSet(bases.length+trimPad+1);
+			if(kmaskFullyCovered){bs.set(0, bases.length);}
 			
 			final int minus=k-1-trimPad;
 			final int plus=trimPad+1;
@@ -2815,8 +2972,14 @@ public class BBDukF {
 				rkmer=(rkmer>>>2)|(x2<<shift2);
 				if(b=='N' && forbidNs){len=0;}else{len++;}
 				if(verbose){System.err.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-				if(len>=minlen2 && i>=minlen){
-					final int id=getValue(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
+				
+				if(i>=minlen){
+					final int id;
+					if(len>=minlen2){ 
+						id=getValue(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
+					}else{
+						id=-1;
+					}
 					if(id>0){
 						if(id0<0){id0=id;}
 						if(verbose){
@@ -2824,8 +2987,10 @@ public class BBDukF {
 							System.err.println("Setting "+Tools.max(0, i-minus)+", "+(i+plus));
 							System.err.println("i="+i+", minus="+minus+", plus="+plus+", trimpad="+trimPad+", k="+k);
 						}
-						bs.set(Tools.max(0, i-minus), i+plus);
+						if(!kmaskFullyCovered){bs.set(Tools.max(0, i-minus), i+plus);}
 						found++;
+					}else if(kmaskFullyCovered){
+						bs.clear(Tools.max(0, i-minus), i+plus);
 					}
 				}
 			}
@@ -2839,6 +3004,7 @@ public class BBDukF {
 					kmer=0;
 					rkmer=0;
 					len=0;
+					int len2=0;
 					final int lim=Tools.min(k, stop);
 					for(int i=start; i<lim; i++){
 						byte b=bases[i];
@@ -2847,22 +3013,30 @@ public class BBDukF {
 						kmer=((kmer<<2)|x)&mask;
 						rkmer=rkmer|(x2<<(2*len));
 						len++;
+						len2++;
 						if(verbose){System.err.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-						if(len>=mink){
-							
+						
+						if(len2>=minminlen){
 							if(verbose){
 								System.err.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
 								System.err.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
 							}
-							final int id=getValue(kmer, rkmer, lengthMasks[len], i, len, qHammingDistance2, sets);
+							final int id;
+							if(len>=mink){ 
+								id=getValue(kmer, rkmer, lengthMasks[len], i, len, qHammingDistance2, sets);
+							}else{
+								id=-1;
+							}
 							if(id>0){
 								if(id0<0){id0=id;}
 								if(verbose){
 									System.err.println("b: Found "+kmer);
 									System.err.println("Setting "+0+", "+(i+plus));
 								}
-								bs.set(0, i+plus);
+								if(!kmaskFullyCovered){bs.set(0, i+plus);}
 								found++;
+							}else if(kmaskFullyCovered){
+								bs.clear(0, i+plus);
 							}
 						}
 					}
@@ -2873,6 +3047,7 @@ public class BBDukF {
 					kmer=0;
 					rkmer=0;
 					len=0;
+					int len2=0;
 					final int lim=Tools.max(-1, stop-k);
 					for(int i=stop-1; i>lim; i--){
 						byte b=bases[i];
@@ -2881,21 +3056,30 @@ public class BBDukF {
 						kmer=kmer|(x<<(2*len));
 						rkmer=((rkmer<<2)|x2)&mask;
 						len++;
+						len2++;
 						if(verbose){System.err.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-						if(len>=mink){
+						
+						if(len2>=minminlen){
 							if(verbose){
 								System.err.println("Looking for right kmer "+
 										AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+"; value="+toValue(kmer, rkmer, lengthMasks[len])+"; kmask="+lengthMasks[len]);
 							}
-							final int id=getValue(kmer, rkmer, lengthMasks[len], i, len, qHammingDistance2, sets);
+							final int id;
+							if(len>=mink){ 
+								id=getValue(kmer, rkmer, lengthMasks[len], i, len, qHammingDistance2, sets);
+							}else{
+								id=-1;
+							}
 							if(id>0){
 								if(id0<0){id0=id;}
 								if(verbose){
 									System.err.println("c: Found "+kmer);
 									System.err.println("Setting "+Tools.max(0, i-trimPad)+", "+bases.length);
 								}
-								bs.set(Tools.max(0, i-trimPad), bases.length);
+								if(!kmaskFullyCovered){bs.set(Tools.max(0, i-trimPad), bases.length);}
 								found++;
+							}else if(kmaskFullyCovered){
+								bs.clear(Tools.max(0, i-trimPad), bases.length);
 							}
 						}
 					}
@@ -2917,9 +3101,9 @@ public class BBDukF {
 					scaffoldBaseCounts.addAndGet(id0, bases.length);
 				}
 			}
-			
+//			int y=r.countNocalls();
 			int cardinality=bs.cardinality();
-			assert(cardinality>0);
+//			assert(cardinality>0);
 			
 			//Replace kmer hit zone with the trim symbol
 			for(int i=0; i<bases.length; i++){
@@ -2932,6 +3116,7 @@ public class BBDukF {
 					}
 				}
 			}
+//			assert(cardinality==r.countNocalls() || y>0) : cardinality+", "+r.countNocalls()+"\n"+r.length()+"\n"+bs+"\n"+r;//123
 			return cardinality;
 		}
 		
@@ -2988,6 +3173,17 @@ public class BBDukF {
 		/*----------------        Entropy Methods       ----------------*/
 		/*--------------------------------------------------------------*/
 		
+		/**
+		 * Returns the average entropy over all windows for the read.
+		 * @param bases Read sequence
+		 * @param k Kmer length
+		  * @param window Window length.
+		 * @param counts An array of counts indexed by kmer
+		 * @param countCounts An array of counts of counts indexed by count
+		 * @param kmerspace 2^k
+		 * @param verify Check consistency of data structures (slow)
+		 * @return Entropy
+		 */
 		private float averageEntropy(final byte[] bases, final int k, 
 				final int window, final short[] counts, final short[] countCounts, final int kmerspace, boolean verify){
 			assert(k>0) : "k must be greater than 0";
@@ -3082,6 +3278,13 @@ public class BBDukF {
 			return (float)(entropySum/(Tools.max(1, entropyMeasurements)));
 		}
 		
+		/**
+		 * Calculate the entropy of the countCounts for a particular window.
+		 * @param countCounts element i holds the number of unique kmers occurring i times in the window.
+		 * @param window Window length.
+		 * @param kmerspace 2^k
+		 * @return Entropy
+		 */
 		private float calcEntropy(short[] countCounts, int window, int kmerspace){
 			double sum=0;
 			for(int i=1; i<countCounts.length; i++){
@@ -3108,6 +3311,8 @@ public class BBDukF {
 		private final IntList idList;
 		private final IntList countList;
 		
+		//These "*T" fields are used to store counts on a per-thread basis.
+		
 		long[] hitCountsT;
 		long[] scaffoldReadCountsT;
 		long[] scaffoldBaseCountsT;
@@ -3119,8 +3324,14 @@ public class BBDukF {
 		
 		private long readsInT=0;
 		private long basesInT=0;
-		private long readsOutT=0;
-		private long basesOutT=0;
+		private long readsOutuT=0;
+		private long basesOutuT=0;
+		
+		private long readsOutmT=0;
+		private long basesOutmT=0;
+
+		private final long maxBasesOutmT;
+		private final long maxBasesOutuT;
 		
 		private long readsQTrimmedT=0;
 		private long basesQTrimmedT=0;
@@ -3139,12 +3350,15 @@ public class BBDukF {
 		private long readsTrimmedByOverlapT=0;
 		private long basesTrimmedByOverlapT=0;
 		
+		private long badGcBasesT=0;
+		private long badGcReadsT=0;
+		
 	}
 	
 	/*--------------------------------------------------------------*/
 	
 	/**
-	 * Object holding a String and numbers, for tracking the number of read and base hits per scaffold.
+	 * Object holding a String and numbers, for tracking the number of read and base hits per sequence.
 	 */
 	private static class StringNum implements Comparable<StringNum>{
 		
@@ -3168,28 +3382,17 @@ public class BBDukF {
 		
 		/*--------------------------------------------------------------*/
 		
+		/** Sequence name */
 		public final String name;
+		/** Sequence length */
 		public final int length;
+		/** Number of reads or bases mapped to this sequence */
 		public final long reads, bases;
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
-	
-	/** Print statistics about current memory use and availability */
-	private static final void printMemory(){
-		if(GC_BEFORE_PRINT_MEMORY){
-			System.gc();
-			System.gc();
-		}
-		Runtime rt=Runtime.getRuntime();
-		long mmemory=rt.maxMemory()/1000000;
-		long tmemory=rt.totalMemory()/1000000;
-		long fmemory=rt.freeMemory()/1000000;
-		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
-	}
 	
 	/** Current available memory */
 	private static final long freeMemory(){
@@ -3213,6 +3416,9 @@ public class BBDukF {
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
+	
+	/** For calculating kmer cardinality */
+	private final LogLog loglog;
 	
 	/** Has this class encountered errors while processing? */
 	public boolean errorState=false;
@@ -3257,10 +3463,21 @@ public class BBDukF {
 	/** Output reads whose mate was discarded */
 	private String outsingle=null;
 	/** Statistics output files */
-	private String outstats=null, outduk=null, outrqc=null, outrpkm=null, outrefstats=null;
+	private String outstats=null, outrqc=null, outrpkm=null, outrefstats=null;
+	@Deprecated
+	/** duk-style statistics */
+	private String outduk=null;
+	
+	/** Optional file for quality score recalibration */
+	private String samFile=null;
 	
 	/** Dump kmers here. */
 	private String dump=null;
+
+	/** Quit after this many bases written to outm */
+	private long maxBasesOutm=-1;
+	/** Quit after this many bases written to outu */
+	private long maxBasesOutu=-1;
 	
 	/** Maximum input reads (or pairs) to process.  Does not apply to references.  -1 means unlimited. */
 	private long maxReads=-1;
@@ -3275,7 +3492,7 @@ public class BBDukF {
 	private boolean useShortKmers=false;
 	/** Make the middle base in a kmer a wildcard to improve sensitivity */
 	private boolean maskMiddle=true;
-
+	
 	/** Store reference kmers with up to this many substitutions */
 	private int hammingDistance=0;
 	/** Search for query kmers with up to this many substitutions */
@@ -3301,14 +3518,22 @@ public class BBDukF {
 	/*----------------        Entropy Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	/** Kmer length for entropy calculation */
 	private int entropyK=5;
+	/** Window length for entropy calculation */
 	private int entropyWindow=50;
+	/** Minimum entropy to be considered "complex", on a scale of 0-1 */
 	private float entropyCutoff=-1;
+	/** Verify consistency of related data structures (slow) */
 	private boolean verifyEntropy=false;
 
+	/** Perform entropy calculation */
 	private final boolean calcEntropy;
+	/** Number of possible unique kmers */
 	private final int entropyKmerspace;
+	/** A precalculated constant */
 	private final double entropyMult;
+	/** Array of precalculated constants */
 	private final double[] entropy;
 	
 	/*--------------------------------------------------------------*/
@@ -3333,6 +3558,9 @@ public class BBDukF {
 	long basesKTrimmed=0;
 	long readsKFiltered=0;
 	long basesKFiltered=0;
+	
+	long badGcReads;
+	long badGcBases;
 	
 	long readsTrimmedByOverlap;
 	long basesTrimmedByOverlap;
@@ -3376,10 +3604,16 @@ public class BBDukF {
 	private final int k2;
 	/** Emulated kmer greater than k */
 	private final int kbig;
+	/** Effective kmer size */
+	private final int keff;
 	/** Shortest kmer to use for trimming */
 	private final int mink;
 	/** A read may contain up to this many kmers before being considered a match.  Default: 0 */
-	private final int maxBadKmers;
+	private final int maxBadKmers0;
+	/** A read must share at least this fraction of its kmers to be considered a match.  Default: 0 */
+	private final float minKmerFraction;
+	/** Reference kmers must cover at least this fraction of read bases to be considered a match.  Default: 0 */
+	private final float minCoveredFraction;
 	
 	/** Recalibrate quality scores using matrices */
 	private final boolean recalibrateQuality;
@@ -3405,6 +3639,8 @@ public class BBDukF {
 	private final HashSet<String> barcodes;
 	/** Throw away reads containing more than this many Ns.  Default: -1 (disabled) */
 	private final int maxNs;
+	/** Throw away reads containing without at least this many consecutive called bases. */
+	private int minConsecutiveBases=0;
 	/** Throw away reads containing fewer than this fraction of any particular base. */
 	private final float minBaseFrequency;
 	/** Throw away reads shorter than this after trimming.  Default: 10 */
@@ -3427,6 +3663,8 @@ public class BBDukF {
 	private final byte trimSymbol;
 	/** Convert masked bases to lowercase */
 	private final boolean kmaskLowercase;
+	/** Only mask fully-covered bases **/
+	private final boolean kmaskFullyCovered;
 	/** Output over-trimmed reads to outbad (outmatch).  If false, they are discarded. */
 	private final boolean addTrimmedToBad;
 	/** Find the sequence that shares the most kmer matches when filtering. */
@@ -3443,35 +3681,17 @@ public class BBDukF {
 	 * e.g. forceTrimModulo=50 would trim the last 3bp from a 153bp read. */
 	private final int forceTrimModulo;
 	
+	/** Discard reads with GC below this. */
+	private final float minGC;
+	/** Discard reads with GC above this. */
+	private final float maxGC;
+	/** Discard reads outside of GC bounds. */
+	private final boolean filterGC;
+	
 	/** If positive, only look for kmer matches in the leftmost X bases */
 	private int restrictLeft;
 	/** If positive, only look for kmer matches the rightmost X bases */
 	private int restrictRight;
-	
-	/** Trim implied adapters based on overlap, for reads with insert size shorter than read length */
-	private final boolean trimByOverlap;
-	private final boolean useQualityForOverlap;
-	private final boolean strictOverlap;
-	
-//	private int minOverlap0=11;
-//	private int minOverlap=24;
-//	private final int overlapMargin=2;
-//	private final int overlapMaxMismatches0=4;
-//	private final int overlapMaxMismatches=4;
-//	private final int overlapMinq=13;
-	
-	private int minOverlap0=7;
-	private int minOverlap=14;
-	private int minInsert0=16;
-	private int minInsert=50;
-	
-	private final float maxRatio;
-	private final float ratioMargin;
-	private final float ratioOffset;
-	private final float efilterRatio;
-	private final float efilterOffset;
-	private final float pfilterRatio;
-	private final float meeFilter;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
@@ -3502,6 +3722,32 @@ public class BBDukF {
 	
 	/** noAccel is true if speed and qSkip are disabled, accel is the opposite. */
 	private final boolean noAccel, accel;
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         BBMerge Flags        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/** Trim implied adapters based on overlap, for reads with insert size shorter than read length */
+	private final boolean trimByOverlap;
+	private final boolean useQualityForOverlap;
+	private final boolean strictOverlap;
+	
+	private int minOverlap0=7;
+	private int minOverlap=14;
+	private int minInsert0=16;
+	private int minInsert=40;
+	
+	private final float maxRatio;
+	private final float ratioMargin;
+	private final float ratioOffset;
+	private final float efilterRatio;
+	private final float efilterOffset;
+	private final float pfilterRatio;
+	private final float meeFilter;
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Histogram Flags       ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	private final boolean MAKE_QUALITY_ACCURACY;
 	private final boolean MAKE_QUALITY_HISTOGRAM;
@@ -3539,8 +3785,6 @@ public class BBDukF {
 	public static int THREADS=Shared.threads();
 	/** Indicates end of input stream */
 	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
-	/** Do garbage collection prior to printing memory usage */
-	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	/** Number of columns for statistics output, 3 or 5 */
 	public static int STATS_COLUMNS=3;
 	/** Release memory used by kmer storage after processing reads */

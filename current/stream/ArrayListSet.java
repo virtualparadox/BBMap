@@ -177,6 +177,7 @@ public class ArrayListSet {
 		}
 		
 		final String name;
+		@SuppressWarnings("unused")
 		final int id;
 		private ArrayList<Read> list;
 	}

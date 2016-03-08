@@ -988,6 +988,7 @@ public class ReadStats {
 		sb.append("#Median\t"+Tools.percentile(insertHist.array, 0.5)+"\n");
 		sb.append("#Mode\t"+Tools.calcMode(insertHist.array)+"\n");
 		sb.append("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(insertHist.array))+"\n");
+		sb.append("#PercentOfPairs\t"+String.format("%.3f", matedPercent)+"\n");
 		sb.append("#InsertSize\tCount\n");
 		writeHistogramToFile(fname, sb.toString(), insertHist, !skipZeroInsertCount);
 	}
@@ -1134,13 +1135,6 @@ public class ReadStats {
 					
 					tsw.print(String.format("%.3f\t", sum*fractionMult));
 					
-//					int len=(int)((x*6000)/total);
-//					int len2=len/8;
-//					for(int j=0; j<len2; j++){tsw.print("X");}
-//					if(len2<1 && x>0){
-//						if(len>0){tsw.print("x");}
-//						else{tsw.print(".");}
-//					}
 					int len=(int)((x*1000)/countsPerX);
 					for(int j=0; j<len; j++){tsw.print("X");}
 					if(len<1 && x>0){
@@ -1268,6 +1262,8 @@ public class ReadStats {
 	public boolean errorState=false;
 	
 	public static ReadStats merged=null;
+	
+	public static double matedPercent=0;
 	
 	public static ArrayList<ReadStats> objectList=new ArrayList<ReadStats>();
 	public static boolean COLLECT_QUALITY_STATS=false;

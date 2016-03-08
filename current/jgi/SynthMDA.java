@@ -11,6 +11,7 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
+import stream.KillSwitch;
 import stream.Read;
 import align2.ListNum;
 import align2.RandomReads3;
@@ -40,7 +41,6 @@ public class SynthMDA {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		SynthMDA mb=new SynthMDA(args);
 		mb.process(t);
 	}
@@ -48,7 +48,7 @@ public class SynthMDA {
 	public SynthMDA(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -56,13 +56,13 @@ public class SynthMDA {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
 		
 		Parser parser=new Parser();
@@ -75,11 +75,7 @@ public class SynthMDA {
 			if(b==null || b.equalsIgnoreCase("null")){b=null;}
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(parser.parse(arg, a, b)){
-				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
-			}else if(a.equals("verbose")){
+			if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
 				ByteFile2.verbose=verbose;
@@ -115,6 +111,8 @@ public class SynthMDA {
 				ref=b;
 			}else if(a.equals("prefix")){
 				prefix=b;
+			}else if(parser.parse(arg, a, b)){
+				//do nothing
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
@@ -125,6 +123,7 @@ public class SynthMDA {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		minlen2=Tools.min(minlen2, minlen);
 		
 		{//Process parser fields
 			Parser.processQuality();
@@ -336,6 +335,9 @@ public class SynthMDA {
 		assert(minlen<=maxlen && minlen>0 && maxlen>0);
 		final int range=maxlen-minlen+1;
 		final int slen=source.length();
+		if(slen<minlen2*1.1f){
+			KillSwitch.kill("Input ("+slen+") must be at least 10% longer than minlen ("+minlen2+").");
+		}
 		if(source.length()>=500000000){retain=false;}
 		ByteBuilder dest=(retain ? source : new ByteBuilder());
 		int goal=(int)Tools.min((long)(slen*ratio), 600000000);
@@ -373,7 +375,7 @@ public class SynthMDA {
 			long added=dest.length()-initialLength;
 //			System.err.println("added "+added+"/"+len0+" ("+initialLength+" -> "+dest.length()+")");
 //			if(added<Tools.min(200, minlen) || (added<Tools.min(1000, minlen) && randy.nextBoolean())){dest.setLength(initialLength);}
-			if(added<Tools.min(4000, minlen)){dest.setLength((int)initialLength);}
+			if(added<Tools.min(minlen2, minlen)){dest.setLength((int)initialLength);}
 		}
 		return dest;
 	}
@@ -410,8 +412,9 @@ public class SynthMDA {
 	private final FileFormat ffout1;
 	
 	/*--------------------------------------------------------------*/
-	
+
 	private int minlen=10000;
+	private int minlen2=4000;
 	private int maxlen=150000;
 	private int cycles=9;
 	private float initialRatio=1.3f;

@@ -106,7 +106,6 @@ function freeRam(){
 		
 		if [ "$x" = "unlimited" ] || (("$x" > $x2)); then x=$x2; fi
 		if [ $x -lt 1 ]; then x=$x2; fi
-		
 	fi
 	
 	#echo "x=$x"
@@ -115,10 +114,10 @@ function freeRam(){
 		#echo "branch for unknown memory"
 		#echo $x
 		#echo "ram is unlimited"
-		
 		RAM=$((defaultMem/1024))
 		echo "Max memory cannot be determined.  Attempting to use $RAM MB." 1>&2
-		echo "If this fails, please add the -Xmx flag (e.g. -Xmx24g) to your command, or set ulimit to an appropriate value." 1>&2
+		echo "If this fails, please add the -Xmx flag (e.g. -Xmx24g) to your command, " 1>&2
+		echo "or run this program qsubbed or from a qlogin session on Genepool, or set ulimit to an appropriate value." 1>&2
 	else
 		#echo "branch for known memory"
 		#echo $x

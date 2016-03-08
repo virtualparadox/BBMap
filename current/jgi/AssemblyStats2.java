@@ -15,6 +15,7 @@ import dna.AminoAcid;
 import dna.FastaToChromArrays2;
 import dna.Parser;
 import dna.Timer;
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 
@@ -29,28 +30,29 @@ public final class AssemblyStats2 {
 	/*--------------------------------------------------------------*/
 	
 	private static void printOptions(){
-		System.out.println("\nUsage: java -Xmx120m jgi.AssemblyStats2 <input file>");
-		System.out.println("\nOptional flags:");
-		System.out.println("in=<file>    \tThe 'in=' flag is only needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		System.out.println("format=1     \tUses variable units like MB and KB, and is designed for compatibility with existing tools.");
-		System.out.println("format=2     \tUses only whole numbers of bases, with no commas in numbers, and is designed for machine parsing.");
-		System.out.println("format=3     \tOutputs stats in 2 rows of tab-delimited columns: a header row and a data row.");
-		System.out.println("format=4     \tLike 3 but with scaffold data only.");
-		System.out.println("format=5     \tLike 3 but with contig data only.");
-		System.out.println("format=6     \tLike 3 but the header starts with a #.");
-		System.out.println("format=7     \tLike 1 but without scaffold data.");
-		System.out.println("gc=<file>    \tPrint gc statistics per scaffold to a file (or stdout).");
-		System.out.println("gcformat=1   \tid start stop A C G T N GC");
-		System.out.println("gcformat=2   \tid gc");
-		System.out.println("gcformat=3   \tid length A C G T N GC");
-		System.out.println("gcformat=4   \tid length gc");
-		System.out.println("gchist=<file>\tPrint gc content histogram to this file.");
-		System.out.println("gcbins=200   \tNumber of bins in gc histogram.");
-		System.out.println("n=10         \tMinimum number of consecutive Ns between contigs.");
-		System.out.println("k=13         \tDisplay BBMap's estimated memory usage for this genome with specified kmer length.");
-		System.out.println("showspeed=t  \tSet to 'f' to suppress display of processing speed.");
-		System.out.println("minscaf=0    \tIgnore scaffolds shorter than this.");
-		System.out.println("n_=t         \tThis flag will prefix the terms 'contigs' and 'scaffolds' with 'n_' in formats 3-6.");
+		System.err.println("Please consult the shellscript for usage information.");
+//		System.out.println("\nUsage: java -Xmx120m jgi.AssemblyStats2 <input file>");
+//		System.out.println("\nOptional flags:");
+//		System.out.println("in=<file>    \tThe 'in=' flag is only needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
+//		System.out.println("format=1     \tUses variable units like MB and KB, and is designed for compatibility with existing tools.");
+//		System.out.println("format=2     \tUses only whole numbers of bases, with no commas in numbers, and is designed for machine parsing.");
+//		System.out.println("format=3     \tOutputs stats in 2 rows of tab-delimited columns: a header row and a data row.");
+//		System.out.println("format=4     \tLike 3 but with scaffold data only.");
+//		System.out.println("format=5     \tLike 3 but with contig data only.");
+//		System.out.println("format=6     \tLike 3 but the header starts with a #.");
+//		System.out.println("format=7     \tLike 1 but without scaffold data.");
+//		System.out.println("gc=<file>    \tPrint gc statistics per scaffold to a file (or stdout).");
+//		System.out.println("gcformat=1   \tid start stop A C G T N GC");
+//		System.out.println("gcformat=2   \tid gc");
+//		System.out.println("gcformat=3   \tid length A C G T N GC");
+//		System.out.println("gcformat=4   \tid length gc");
+//		System.out.println("gchist=<file>\tPrint gc content histogram to this file.");
+//		System.out.println("gcbins=200   \tNumber of bins in gc histogram.");
+//		System.out.println("n=10         \tMinimum number of consecutive Ns between contigs.");
+//		System.out.println("k=13         \tDisplay BBMap's estimated memory usage for this genome with specified kmer length.");
+//		System.out.println("showspeed=t  \tSet to 'f' to suppress display of processing speed.");
+//		System.out.println("minscaf=0    \tIgnore scaffolds shorter than this.");
+//		System.out.println("n_=t         \tThis flag will prefix the terms 'contigs' and 'scaffolds' with 'n_' in formats 3-6.");
 //		System.out.println("verbose=t    \tSet to false to remove superfluous info.");
 //		System.out.println("Output is always tab-delimited.  AGCT are fractions of defined bases; N is fraction of total bases.");
 	}
@@ -65,13 +67,12 @@ public final class AssemblyStats2 {
 	public AssemblyStats2(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		ReadWrite.USE_UNPIGZ=ReadWrite.USE_PIGZ=true;
 		
 		int GCBINS_=200;
@@ -155,7 +156,7 @@ public final class AssemblyStats2 {
 					useheader=Tools.parseBoolean(b);
 				}else if(a.equals("addfilename") || a.equals("addname")){
 					addfilename=Tools.parseBoolean(b);
-				}else if(a.equals("minscaf")){
+				}else if(a.equals("minscaf") || a.equals("mincontig") || a.equals("minlen") || a.equals("min")){
 					MINSCAF_=Integer.parseInt(b);
 				}else if(a.equals("showspeed") || a.equals("ss")){
 					showspeed=Tools.parseBoolean(b);
@@ -171,16 +172,8 @@ public final class AssemblyStats2 {
 					maxNs=Integer.parseInt(b);
 				}else if(i>0 && (a.equals("n") || a.equals("-n")) && b!=null){
 					maxNs=Integer.parseInt(b);
-				}else if(a.equals("-n") && b==null && args.length>i+1){
-					maxNs=Integer.parseInt(args[i+1]);
 				}else if(in==null && i==0 && !arg.contains("=")){
 					in=arg;
-				}else if(maxNs<0 && i==1 && !arg.contains("=") && Character.isDigit(arg.charAt(0))){
-					try {
-						maxNs=Integer.parseInt(arg);
-					} catch (NumberFormatException e) {
-						assert(false) : "Unknown parameter "+arg;
-					}
 				}else{
 					throw new RuntimeException("Unknown parameter "+arg);
 				}
@@ -228,7 +221,6 @@ public final class AssemblyStats2 {
 	
 	public void process(){
 		Timer t=new Timer();
-		t.start();
 		
 		InputStream is=null;
 		{
@@ -246,10 +238,30 @@ public final class AssemblyStats2 {
 		long[] counts=null;
 		long sum=0;
 		
+		boolean fastqMode=false;
+		if(is!=System.in){
+			FileFormat ff=null;
+			try {
+				ff=FileFormat.testInput(in, FileFormat.FA, null, false, true, true);
+			} catch (Throwable e) {
+				//Ignore
+			}
+			if(ff!=null){
+				fastqMode=ff.fastq();
+			}
+//			assert(ff==null || (!ff.fastq())) : "AssemblyStats only supports fasta files.  To override this message, use the -da flag.";
+		}
+		
 		if(is==null){is=ReadWrite.getInputStream(in, false, true);}
 		try {
 			if(benchmark){sum=bench(is);}
-			else{counts=countFasta(is, gc);}
+			else{
+				if(fastqMode){
+					counts=countFastq(is, gc);
+				}else{
+					counts=countFasta(is, gc);
+				}
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -545,6 +557,232 @@ public final class AssemblyStats2 {
 		
 //		System.err.println("clist="+clist+"\nslist="+slist+"\nsclist1="+sclist1+"\nsclist2="+sclist2+"\nllist="+llist+"\ntlist="+tlist); //***
 		
+		
+		if(tswgc!=null){
+			if(tswgc.fname.equalsIgnoreCase("stdout") || tswgc.fname.startsWith("stdout.")){
+				if(FORMAT>0 && (out==null || out.equalsIgnoreCase("stdout") || out.startsWith("stdout."))){
+					tswgc.print("\n");
+				}
+			}
+			tswgc.poison();
+			tswgc.waitForFinish();
+		}
+		LIMSUM=limsum;
+		HEADERLENSUM=headerlen;
+		
+
+		gc_std=Tools.standardDeviationHistogram(gchistArray)/gcbins2;
+		gchistArray_downsampled=Tools.downsample(gchistArray, gcbins);
+
+		gc_bb_std=Tools.standardDeviationHistogram(gchist_by_base)/gcbins2;
+		gchist_by_base_downsampled=Tools.downsample(gchist_by_base, gcbins);
+		
+		return overall;
+	}
+	
+	public long[] countFastq(final InputStream is, String gcout) throws IOException{
+		
+		long limsum=0;
+		long headerlen=0;
+		final byte[] buf=new byte[32768];
+		final TextStreamWriter tswgc=(gcout==null ? null : new TextStreamWriter(gcout, overwrite, false, false));
+		if(tswgc!=null){
+			tswgc.start();
+			if(GCFORMAT==0 || GCFORMAT==1){
+				tswgc.println("#Name\tLength\tA\tC\tG\tT\tN\tIUPAC\tOther\tGC");
+			}else if(GCFORMAT==2){
+				tswgc.println("#Name\tGC");
+			}else if(GCFORMAT==3){
+				tswgc.println("#Name\tLength\tA\tC\tG\tT\tN\tIUPAC\tOther\tGC");
+			}else if(GCFORMAT==4){
+				tswgc.println("#Name\tLength\tGC");
+			}else{
+				throw new RuntimeException("Unknown format.");
+			}
+		}
+//		assert(false) : GCFORMAT+", "+out+", "+tswgc;
+		final long[] counts=new long[8];
+		final long[] overall=new long[8];
+		final StringBuilder hdr=(gcout==null ? null : new StringBuilder());
+		int line=0;
+		
+		int i=0;
+		int lim=is.read(buf);
+		limsum+=lim;
+		
+		int contigs=0;
+		int contiglen=0;
+//		int contiglensum=0;
+		int scaffoldlen=0;
+		int ns=0;
+		
+		final IntList currentContigs=new IntList(10000);
+		
+		while(lim>0){
+			if(line==0){//Scan to end of header.
+//				System.err.println("1");
+				if(hdr==null){//Header is not being stored
+					while(i<lim){
+						final byte c=buf[i];
+						i++;
+						if(c<=slashr){
+							line++;
+//							System.err.println("1.1");
+							contiglen=0;
+//							contiglensum=0;
+							scaffoldlen=0;
+							ns=0;
+							contigs=0;
+							break;
+						}
+						headerlen++;
+					}
+				}else{//Store the header
+					while(i<lim){
+						final byte c=buf[i];
+						i++;
+						if(c<=slashr){
+							line++;
+//							System.err.println("1.2");
+							contiglen=0;
+//							contiglensum=0;
+							scaffoldlen=0;
+							ns=0;
+							contigs=0;
+							break;
+						}
+						hdr.append((char)c);
+					}
+				}
+			}
+			
+			if(line==1){//Scan bases
+//				System.err.println("2");
+				while(i<lim){
+					final byte c=buf[i];
+					final byte cnum=charToNum[c];
+					i++;
+
+					if(c<=slashr){//Finish the contig
+//						assert(false) : scaffoldlen;
+						line=(line+1)&3;
+//						System.err.println("2.1");
+						if(scaffoldlen>0){//if the scaffold was not blank
+							
+							{//NEW
+								if(contiglen>0 || contigs==0){
+									currentContigs.set(contigs, contiglen);
+									contigs++;
+//									System.out.println("For header "+hdr+": added contig.  len="+contiglen+", contigs="+contigs);
+//									contiglensum+=contiglen;
+								}
+							}
+							
+//							assert(false);
+							if(scaffoldlen>=minScaffold){
+
+								int contiglensum=0;
+								{//NEW
+//									System.out.println("Dumping "+contigs+" contigs.");
+									for(int j=0; j<contigs; j++){
+										final int cl=currentContigs.get(j);
+										if(cl>0 || contigs==0){
+											contiglensum+=cl;
+											if(cl<cutoff){
+												clist.increment(cl, 1);
+											}else{
+												llist.add(cl);
+											}
+										}
+									}
+								}
+								
+								if(scaffoldlen<cutoff){
+									slist.increment(scaffoldlen, 1);
+									sclist1.increment(scaffoldlen, contigs);
+									sclist2.increment(scaffoldlen, contiglensum);
+								}else{
+									tlist.add(new Triple(scaffoldlen, contigs, contiglensum));
+								}
+
+
+								if(hdr!=null){
+									tswgc.print(toString2(hdr, counts));
+									headerlen+=hdr.length();
+									hdr.setLength(0);
+								}
+								{
+									long gc=counts[1]+counts[2];
+									long acgt=gc+counts[0]+counts[3];
+									if(acgt>0){
+										int index=Tools.min((int)((gc*gcbins2)/acgt),gcbins2-1);
+										gchistArray[index]++;
+										gchist_by_base[index]+=scaffoldlen;
+//										assert(false);
+									}
+								}
+								for(int j=0; j<counts.length; j++){
+									overall[j]+=counts[j];
+									counts[j]=0;
+								}
+							}else{
+								Arrays.fill(counts, 0);
+								if(hdr!=null){hdr.setLength(0);}
+							}
+						}
+
+						break;
+					}
+					
+					if(c>slashr){
+						counts[cnum]++;
+						scaffoldlen++;
+						
+//						if(c!=noref && c!=noref2){
+						if(cnum!=5){
+							ns=0;
+							contiglen++;
+						}else{
+							ns++;
+							if(ns==maxNs && contiglen>0){
+//								if(contiglen<cutoff){
+//									clist.increment(contiglen, 1);
+//								}else{
+//									llist.add(contiglen);
+//								}
+////								clist.increment(contiglen, 1);
+//								contiglensum+=contiglen;
+//								contiglen=0;
+//								contigs++;
+
+								{//NEW
+									currentContigs.set(contigs, contiglen);
+									contiglen=0;
+									contigs++;
+								}
+							}
+						}
+					}
+				}
+			}
+
+//			System.err.println("3");
+			if(i>=lim){
+				i=0;
+				lim=is.read(buf);
+				limsum+=lim;
+			}
+
+//			System.err.println("4");
+			assert(line>1 || lim<=i || i==0) : line+", "+i+", "+lim;
+			while(i<lim && line>1){
+				final byte c=buf[i];
+				i++;
+				if(c<=slashr){
+					line=(line+1)&3;
+				}
+			}
+		}
 		
 		if(tswgc!=null){
 			if(tswgc.fname.equalsIgnoreCase("stdout") || tswgc.fname.startsWith("stdout.")){
@@ -926,6 +1164,11 @@ public final class AssemblyStats2 {
 //		ByteStreamWriter tsw=new ByteStreamWriter((out==null ? "stdout" : out) , overwrite, append, false);
 		TextStreamWriter tsw=new TextStreamWriter((out==null ? "stdout" : out) , overwrite, append, false);
 		tsw.start();
+		
+		lastL50=ln50;
+		lastSize=contiglen;
+		lastContigs=contigs;
+		lastMaxContig=maxContig;
 		
 		if(FORMAT<1){
 			//Do nothing
@@ -1514,6 +1757,11 @@ public final class AssemblyStats2 {
 	
 	/** gc standard deviation, using base counts rather than scaffold counts */
 	private double gc_bb_std;
+	
+	public static long lastL50;
+	public static long lastSize;
+	public static long lastContigs;
+	public static long lastMaxContig;
 	
 	/*--------------------------------------------------------------*/
 	

@@ -17,7 +17,6 @@ public class PartitionFastaFile {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		String infile=args[0];
 		String outfile=args[1];
 		assert(!infile.equalsIgnoreCase(outfile));

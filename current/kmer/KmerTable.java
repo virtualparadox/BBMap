@@ -1,8 +1,10 @@
 package kmer;
 
 import java.util.ArrayList;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-import dna.CoverageArray;
+import stream.ByteBuilder;
 
 
 import fileIO.ByteStreamWriter;
@@ -152,6 +154,13 @@ public final class KmerTable extends AbstractKmerTable {
 	}
 	
 	@Override
+	public final void clearOwnership(){
+		for(KmerLink n : array){
+			if(n!=null){n.clearOwnership();}
+		}
+	}
+	
+	@Override
 	public final int setOwner(final long kmer, final int newOwner){
 		final int cell=(int)(kmer%prime);
 		KmerLink n=array[cell];
@@ -273,6 +282,17 @@ public final class KmerTable extends AbstractKmerTable {
 		throw new RuntimeException("TODO");
 	}
 	
+	@Override
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		for(int i=0; i<array.length; i++){
+			KmerLink node=array[i];
+			if(node!=null && node.value>=mincount){
+				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount);
+			}
+		}
+		return true;
+	}
+	
 	@Deprecated
 	@Override
 	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
@@ -281,8 +301,14 @@ public final class KmerTable extends AbstractKmerTable {
 	
 	@Deprecated
 	@Override
-	public void fillHistogram(CoverageArray ca, int max){
+	public void fillHistogram(long[] ca, int max){
 		throw new RuntimeException("TODO");
+	}
+	
+	@Deprecated
+	@Override
+	public long regenerate(){
+		throw new RuntimeException("TODO - remove zero-value links.");
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -294,6 +320,10 @@ public final class KmerTable extends AbstractKmerTable {
 	long size=0;
 	long sizeLimit;
 	final boolean autoResize;
+	private final Lock lock=new ReentrantLock();
+	
+	@Override
+	final Lock getLock(){return lock;}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/

@@ -11,6 +11,7 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
+import ukmer.Kmer;
 
 import align2.ListNum;
 import align2.Tools;
@@ -28,7 +29,6 @@ public class KmerCount7MT extends KmerCountAbstract {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String fname1=args[0];
 		String fname2=(args.length>1 ? args[1] : null);
@@ -44,9 +44,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 
-			if(a.equals("null")){
-				// do nothing
-			}else if(a.equals("k") || a.equals("kmer")){
+			if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.startsWith("cbits") || a.startsWith("cellbits")){
 				cbits=Integer.parseInt(b);
@@ -147,18 +145,18 @@ public class KmerCount7MT extends KmerCountAbstract {
 			int k, int cbits, int gap, int matrixbits, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
 		assert(matrixbits<63);
 		return makeKca(fname1, fname2, extraFiles, 
-				k, cbits, gap, 1L<<matrixbits, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null);
+				k, cbits, gap, 1L<<matrixbits, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
 	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
 		return makeKca(fname1, fname2, extraFiles, 
-				k, cbits, gap, cells, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null);
+				k, cbits, gap, cells, hashes, minqual, rcomp, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
 	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, long maxreads, int passes, int stepsize, int thresh1, int thresh2,
-			KCountArray prefilter){
+			KCountArray prefilter, int prefilterLimit_){
 		final int kbits=Tools.min(2*k, 62);
 //		verbose=true;
 		if(verbose){System.err.println("Making kca from ("+fname1+", "+fname2+")\nk="+k+", gap="+gap+", cells="+Tools.toKMG(cells)+", cbits="+cbits);}
@@ -169,7 +167,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 		maxReads=maxreads;
 		minQuality=(byte)minqual;
 		//	System.out.println("kbits="+(kbits)+" -> "+(1L<<kbits)+", matrixbits="+(matrixbits)+" -> "+(1L<<matrixbits)+", cbits="+cbits+", gap="+gap+", hashes="+hashes);
-		KCountArray kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+		KCountArray kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter, prefilterLimit_);
 		
 //		System.out.println("a");
 		{//For processing input lists
@@ -258,7 +256,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 				
 				System.out.println("Trusted:   \t"+kca.toShortString());
 				trusted=kca;
-				kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+				kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter, prefilterLimit_);
 
 			}
 
@@ -488,15 +486,11 @@ public class KmerCount7MT extends KmerCountAbstract {
 				while(reads!=null && reads.size()>0){
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r : reads){
-						
-						if(readsamplerate<2 || r.numericID%readsamplerate==0){
-							readsProcessedLocal++;
-							addRead(r, count, k, mask, rcomp);
-							if(r.mate!=null){
-								addRead(r.mate, count, k, mask, rcomp);
-							}
+						readsProcessedLocal++;
+						addRead(r, count, k, mask, rcomp);
+						if(r.mate!=null){
+							addRead(r.mate, count, k, mask, rcomp);
 						}
-
 					}
 					//System.err.println("returning list");
 					cris.returnList(ln.id, ln.list.isEmpty());
@@ -515,15 +509,11 @@ public class KmerCount7MT extends KmerCountAbstract {
 				while(reads!=null && reads.size()>0){
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r : reads){
-						
-						if(readsamplerate<2 || r.numericID%readsamplerate==0){
-							readsProcessedLocal++;
-							addReadSplit(r, count, k1, k2, mask1, mask2, gap, rcomp);
-							if(r.mate!=null){
-								addReadSplit(r.mate, count, k1, k2, mask1, mask2, gap, rcomp);
-							}
+						readsProcessedLocal++;
+						addReadSplit(r, count, k1, k2, mask1, mask2, gap, rcomp);
+						if(r.mate!=null){
+							addReadSplit(r.mate, count, k1, k2, mask1, mask2, gap, rcomp);
 						}
-
 					}
 					//System.err.println("returning list");
 					cris.returnList(ln.id, ln.list.isEmpty());
@@ -677,7 +667,7 @@ public class KmerCount7MT extends KmerCountAbstract {
 		
 		private void addRead(Read r, final KCountArray count, final int k, final long mask, boolean rcomp){
 			if(k>31){
-				addReadLong(r, count, k, mask, rcomp);
+				addReadLong(r, count, k, mask);
 				return;
 			}
 			if(PREJOIN && r.mate!=null && r.insert()>0){
@@ -692,84 +682,40 @@ public class KmerCount7MT extends KmerCountAbstract {
 			byte[] quals=r.quality;
 			
 			if(bases==null || bases.length<k+count.gap){return;}
-			
-			if(kmersamplerate<2){
-				for(int i=0; i<bases.length; i++){
-					byte b=bases[i];
-					int x=AminoAcid.baseToNumber[b];
 
-					byte q;
-					if(quals==null){
-						q=50;
-					}else{
-						q=quals[i];
-						prob=prob*align2.QualityTools.PROB_CORRECT[q];
-						if(len>k){
-							byte oldq=quals[i-k];
-							prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
-						}
-					}
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				int x=AminoAcid.baseToNumber[b];
 
-					if(x<0 || q<minQuality){
-						len=0;
-						kmer=0;
-						prob=1;
-					}else if(prob<minProb){
-						//do nothing
-					}else{
-						kmer=((kmer<<2)|x)&mask;
-						len++;
-						if(len>=k && (!CANONICAL || KCountArray.isCanonical(kmer, k))){
-							keysCountedLocal++;
-							//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
-							buffer[bufflen]=kmer;
-							bufflen++;
-							if(bufflen>=buffer.length){
-								//							assert(false) : "Submitting "+Arrays.toString(buffer);
-								count.increment(buffer);
-								bufflen=0;
-								if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
-							}
-						}
+				byte q;
+				if(quals==null){
+					q=50;
+				}else{
+					q=quals[i];
+					prob=prob*align2.QualityTools.PROB_CORRECT[q];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
 					}
 				}
-			}else{
-				for(int i=0; i<bases.length; i++){
-					byte b=bases[i];
-					int x=AminoAcid.baseToNumber[b];
 
-					byte q;
-					if(quals==null){
-						q=50;
-					}else{
-						q=quals[i];
-						prob=prob*align2.QualityTools.PROB_CORRECT[q];
-						if(len>k){
-							byte oldq=quals[i-k];
-							prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
-						}
-					}
-
-					if(x<0 || q<minQuality){
-						len=0;
-						kmer=0;
-						prob=1;
-					}else if(prob<minProb){
-						//do nothing
-					}else{
-						kmer=((kmer<<2)|x)&mask;
-						len++;
-						if(len>=k && i%kmersamplerate==0 && (!CANONICAL || KCountArray.isCanonical(kmer, k))){
-							keysCountedLocal++;
-							//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
-							buffer[bufflen]=kmer;
-							bufflen++;
-							if(bufflen>=buffer.length){
-								//							assert(false) : "Submitting "+Arrays.toString(buffer);
-								count.increment(buffer);
-								bufflen=0;
-								if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
-							}
+				if(x<0 || q<minQuality){
+					len=0;
+					kmer=0;
+					prob=1;
+				}else{
+					kmer=((kmer<<2)|x)&mask;
+					len++;
+					if(len>=k && prob>=minProb && (!CANONICAL || KCountArray.isCanonical(kmer, k))){
+						keysCountedLocal++;
+						//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
+						buffer[bufflen]=kmer;
+						bufflen++;
+						if(bufflen>=buffer.length){
+							//							assert(false) : "Submitting "+Arrays.toString(buffer);
+							count.increment(buffer);
+							bufflen=0;
+							if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
 						}
 					}
 				}
@@ -783,122 +729,55 @@ public class KmerCount7MT extends KmerCountAbstract {
 		
 		
 		
-		private void addReadLong(Read r, final KCountArray count, final int k, final long mask, boolean rcomp){
+		private void addReadLong(Read r, final KCountArray count, final int k, final long mask){
 			
 			if(PREJOIN && r.mate!=null && r.insert()>0){
 				r.mate.reverseComplement();
 				r=r.joinRead();
 			}
 			
-			int tailshift=k%32;
-			int tailshiftbits=tailshift*2;
+			Kmer kmer=new Kmer(k);
 			
-			int len=0;
-			long kmer=0;
 			float prob=1;
 			byte[] bases=r.bases;
 			byte[] quals=r.quality;
+
+			assert(k>31) : k;
+			kmer.clear();
 			
-			if(kmersamplerate<2){
-				for(int i=0; i<bases.length; i++){
-					byte b=bases[i];
-					int x=AminoAcid.baseToNumber[b];
-
-					byte q;
-					if(quals==null){
-						q=50;
-					}else{
-						q=quals[i];
-						prob=prob*align2.QualityTools.PROB_CORRECT[q];
-						if(len>k){
-							byte oldq=quals[i-k];
-							prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
-						}
-					}
-
-					if(x<0 || q<minQuality){
-						len=0;
-						kmer=0;
-						prob=1;
-					}else if(prob<minProb){
-						//do nothing
-					}else{
-
-						kmer=Long.rotateLeft(kmer, 2);
-						kmer=kmer^x;
-						len++;
-						if(len>k){
-							long x2=AminoAcid.baseToNumber[bases[i-k]];
-							kmer=kmer^(x2<<tailshiftbits);
-						}
-						if(len>=k){
-							keysCountedLocal++;
-							//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
-							//						System.out.println("Arrays.toString(buffer));
-							buffer[bufflen]=kmer;
-							bufflen++;
-							if(bufflen>=buffer.length){
-								//							assert(false) : "Submitting "+Arrays.toString(buffer);
-								count.increment(buffer);
-								bufflen=0;
-								if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
-							}
-						}
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				kmer.addRight(b);
+				
+				byte q;
+				if(quals==null){
+					q=50;
+				}else{
+					q=quals[i];
+					prob=prob*align2.QualityTools.PROB_CORRECT[q];
+					if(kmer.len>k){
+						byte oldq=quals[i-k];
+						prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
 					}
 				}
-			}else{
-				for(int i=0; i<bases.length; i++){
-					byte b=bases[i];
-					int x=AminoAcid.baseToNumber[b];
-
-					byte q;
-					if(quals==null){
-						q=50;
-					}else{
-						q=quals[i];
-						prob=prob*align2.QualityTools.PROB_CORRECT[q];
-						if(len>k){
-							byte oldq=quals[i-k];
-							prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
-						}
-					}
-
-					if(x<0 || q<minQuality){
-						len=0;
-						kmer=0;
-						prob=1;
-					}else if(prob<minProb){
-						//do nothing
-					}else{
-
-						kmer=Long.rotateLeft(kmer, 2);
-						kmer=kmer^x;
-						len++;
-						if(len>k){
-							long x2=AminoAcid.baseToNumber[bases[i-k]];
-							kmer=kmer^(x2<<tailshiftbits);
-						}
-						if(len>=k && i%kmersamplerate==0){
-							keysCountedLocal++;
-							//							System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
-							//							System.out.println("Arrays.toString(buffer));
-							buffer[bufflen]=kmer;
-							bufflen++;
-							if(bufflen>=buffer.length){
-								//								assert(false) : "Submitting "+Arrays.toString(buffer);
-								count.increment(buffer);
-								bufflen=0;
-								if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
-							}
-						}
+				
+				if(!AminoAcid.isFullyDefined(b) || q<minQuality){
+					kmer.clear();
+					prob=1;
+				}
+				if(kmer.len>=k && prob>=minProb){
+					keysCountedLocal++;
+					//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
+					//						System.out.println("Arrays.toString(buffer));
+					buffer[bufflen]=kmer.xor();
+					bufflen++;
+					if(bufflen>=buffer.length){
+						//							assert(false) : "Submitting "+Arrays.toString(buffer);
+						count.increment(buffer);
+						bufflen=0;
+						if(MAKE_NEW_ARRAY){buffer=new long[BUFFERLEN];}
 					}
 				}
-			}
-			
-			
-			if(rcomp){
-				r.reverseComplement();
-				addReadLong(r, count, k, mask, false);
 			}
 		}
 		
@@ -947,13 +826,11 @@ public class KmerCount7MT extends KmerCountAbstract {
 					kmer1=0;
 					kmer2=0;
 					prob=1;
-				}else if(prob<minProb){
-					//do nothing
 				}else{
 					kmer1=((kmer1<<2)|x1)&mask1;
 					kmer2=((kmer2<<2)|x2)&mask2;
 					len++;
-					if(len>=k1){
+					if(len>=k1 && prob>=minProb){
 						
 						keysCountedLocal++;
 //						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));

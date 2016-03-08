@@ -1,10 +1,13 @@
 package kmer;
 
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.locks.Lock;
+
 import stream.ByteBuilder;
+import stream.KillSwitch;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
-import dna.CoverageArray;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
@@ -87,12 +90,103 @@ public abstract class AbstractKmerTable {
 
 	public abstract boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount);
 	public abstract boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount);
+	public abstract boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount);
 	
-	public abstract void fillHistogram(CoverageArray ca, int max);
+	public abstract void fillHistogram(long[] ca, int max);
 	
 	abstract Object get(long kmer);
 	abstract void resize();
 	abstract boolean canResize();
+	
+
+
+	/**
+	 * Removes entries with a value of zero or less.
+	 * Rehashes the remainder.
+	 * @return Number removed.
+	 */
+	abstract long regenerate();
+
+	final void lock(){getLock().lock();}
+	final void unlock(){getLock().unlock();}
+	final boolean tryLock(){return getLock().tryLock();}
+	Lock getLock(){
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*---------------       Allocation Methods      ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	final AtomicIntegerArray allocAtomicInt(int len){
+		AtomicIntegerArray ret=null;
+		try {
+			ret=new AtomicIntegerArray(len);
+		} catch (OutOfMemoryError e) {
+			synchronized(killMessage){
+				e.printStackTrace();
+				System.err.println(killMessage);
+				KillSwitch.killSilent();
+			}
+		}
+		return ret;
+	}
+	
+	final long[] allocLong1D(int len){
+		long[] ret=null;
+		try {
+			ret=new long[len];
+		} catch (OutOfMemoryError e) {
+			synchronized(killMessage){
+				e.printStackTrace();
+				System.err.println(killMessage);
+				KillSwitch.killSilent();
+			}
+		}
+		return ret;
+	}
+	
+	final int[] allocInt1D(int len){
+		int[] ret=null;
+		try {
+			ret=new int[len];
+		} catch (OutOfMemoryError e) {
+			synchronized(killMessage){
+				e.printStackTrace();
+				System.err.println(killMessage);
+				KillSwitch.killSilent();
+			}
+		}
+		return ret;
+	}
+	
+	final int[][] allocInt2D(int len){
+		int[][] ret=null;
+		try {
+			ret=new int[len][];
+		} catch (OutOfMemoryError e) {
+			synchronized(killMessage){
+				e.printStackTrace();
+				System.err.println(killMessage);
+				KillSwitch.killSilent();
+			}
+		}
+		return ret;
+	}
+	
+	final KmerNode[] allocKmerNodeArray(int len){
+		KmerNode[] ret=null;
+		try {
+			ret=new KmerNode[len];
+		} catch (OutOfMemoryError e) {
+			synchronized(killMessage){
+				e.printStackTrace();
+				System.err.println(killMessage);
+				KillSwitch.killSilent();
+			}
+		}
+		return ret;
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*---------------       Ownership Methods       ----------------*/
@@ -110,6 +204,9 @@ public abstract class AbstractKmerTable {
 	
 	/** Create data structures needed for ownership representation */
 	public abstract void initializeOwnership();
+	
+	/** Eliminate ownership data structures or set them to -1. */
+	public abstract void clearOwnership();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------           Methods            ----------------*/
@@ -388,5 +485,10 @@ public abstract class AbstractKmerTable {
 	public static final boolean TESTMODE=false; //123 SLOW!
 	
 	public static final int UNKNOWN=0, ARRAY1D=1, FOREST1D=2, TABLE=3, NODE1D=4, ARRAY2D=5, FOREST2D=6, TABLE2D=7, NODE2D=8, ARRAYH=9;
+	
+	public static final int NOT_PRESENT=-1, HASH_COLLISION=-2;
+	public static final int NO_OWNER=-1;
+	
+	private final static String killMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
 	
 }

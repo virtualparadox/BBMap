@@ -26,7 +26,6 @@ public class SplitNexteraLMP extends BBTool_ST {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		SplitNexteraLMP bbt=new SplitNexteraLMP(args);
 		bbt.process(t);
 	}

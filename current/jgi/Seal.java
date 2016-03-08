@@ -16,6 +16,7 @@ import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
+import stream.KillSwitch;
 import stream.MultiCros;
 import stream.Read;
 import stream.SamLine;
@@ -43,6 +44,7 @@ import fileIO.TextStreamWriter;
  * Derived from BBDuk.
  * Allows multiple values stored per kmer.
  * Intended for RNA-seq, coverage, and other reads-per-sequence quantification.
+ * Also performs binning.
  * @author Brian Bushnell
  * @date November 10, 2014
  *
@@ -60,7 +62,7 @@ public class Seal {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -76,37 +78,38 @@ public class Seal {
 	 * Display usage information.
 	 */
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.Seal in=<input file> out=<output file> ref=<contaminant files>");
-		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-		outstream.println("out=<file>         \t(outmatch) 'out=stdout' will pipe to standard out.");
-		outstream.println("out2=<file>        \t(outmatch2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("outu=<file>        \t(outunmatched) Write unmatched reads here.");
-		outstream.println("outu2=<file>       \t(outunmatched2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
-		outstream.println("rpkm=<file>        \tWrite coverage and RPKM/FPKM info.");
-		outstream.println("");
-		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-		outstream.println("k=31               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
-		outstream.println("maskmiddle=t       \t(mm) Treat the middle base of a kmer as a wildcard.");
-		outstream.println("minkmerhits=0      \t(mh) Reads with more than this many contaminant kmers will be discarded.");
-		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
-		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
-		outstream.println("                   \tValues: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming).");
-		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
-		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-		outstream.println("trimq=6            \tTrim quality threshold.");
-		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
-		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=70       \tLength of lines in fasta output");
-		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
+		outstream.println("Please consult the shellscript (seal.sh) for usage information.");
+//		outstream.println("Syntax:\n");
+//		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.Seal in=<input file> out=<output file> ref=<contaminant files>");
+//		outstream.println("\nOptional flags:");
+//		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
+//		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
+//		outstream.println("out=<file>         \t(outmatch) 'out=stdout' will pipe to standard out.");
+//		outstream.println("out2=<file>        \t(outmatch2) Use this to write 2nd read of pairs to a different file.");
+//		outstream.println("outu=<file>        \t(outunmatched) Write unmatched reads here.");
+//		outstream.println("outu2=<file>       \t(outunmatched2) Use this to write 2nd read of pairs to a different file.");
+//		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
+//		outstream.println("rpkm=<file>        \tWrite coverage and RPKM/FPKM info.");
+//		outstream.println("");
+//		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
+//		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
+//		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
+//		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
+//		outstream.println("k=31               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
+//		outstream.println("maskmiddle=t       \t(mm) Treat the middle base of a kmer as a wildcard.");
+//		outstream.println("minkmerhits=0      \t(mh) Reads with more than this many contaminant kmers will be discarded.");
+//		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
+//		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
+//		outstream.println("                   \tValues: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming).");
+//		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
+//		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
+//		outstream.println("trimq=6            \tTrim quality threshold.");
+//		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
+//		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
+//		outstream.println("fastawrap=70       \tLength of lines in fasta output");
+//		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
+//		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
+//		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
 	}
 	
 	
@@ -123,8 +126,8 @@ public class Seal {
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.USE_PIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		FastaReadInputStream.SPLIT_READS=false;
+		
+		
 		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		SamLine.SET_FROM_OK=true;
 		
@@ -161,6 +164,8 @@ public class Seal {
 		
 		scaffoldNames.add(""); //Necessary so that the first real scaffold gets an id of 1, not zero
 		scaffoldLengths.add(0);
+		scaffoldKmers.add(0);
+		scaffolds.add(null);
 		
 		{
 			boolean b=false;
@@ -287,7 +292,7 @@ public class Seal {
 			}else if(a.equals("forbidns") || a.equals("forbidn") || a.equals("fn")){
 				forbidNs_=Tools.parseBoolean(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
-				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
+				if(b==null || b.length()<1 || Character.isLetter(b.charAt(0))){
 					prealloc_=Tools.parseBoolean(b);
 				}else{
 					preallocFraction=Tools.max(0, Double.parseDouble(b));
@@ -344,20 +349,22 @@ public class Seal {
 				dump=b;
 			}else if(a.equals("countvector")){
 				useCountvector_=Tools.parseBoolean(b);
-			}else if(a.equals("ecc")){
+			}else if(a.equals("ecco") || a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
 			}else if(a.equals("copyundefined") || a.equals("cu")){
 				REPLICATE_AMBIGUOUS=Tools.parseBoolean(b);
 			}else if(a.equals("bbsplit")){
 				BBSPLIT_STYLE=Tools.parseBoolean(b);
-			}else if(a.equals("gi") || a.equals("gitoncbi")){
-				giToNcbiFile=b;
+			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
+				giTableFile=b;
+				if("auto".equalsIgnoreCase(b)){giTableFile=TaxTree.DefaultTableFile;}
 			}else if(a.equals("taxnames") || a.equals("taxname")){
 				taxNameFile=b;
 			}else if(a.equals("taxnodes") || a.equals("taxnode")){
 				taxNodeFile=b;
 			}else if(a.equals("taxtree") || a.equals("tree")){
 				taxTreeFile=b;
+				if("auto".equalsIgnoreCase(b)){taxTreeFile=TaxTree.DefaultTreeFile;}
 			}else if(a.equals("mincount")){
 				taxNodeCountLimit=Long.parseLong(b);
 			}else if(a.equals("maxnodes")){
@@ -368,7 +375,16 @@ public class Seal {
 				taxNodeMaxLevel=TaxTree.stringToLevel(b.toLowerCase());
 			}else if(a.equals("clearzone") || a.equals("cz")){
 				clearzone_=Integer.parseInt(b);
-			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
+			}
+			
+			
+			else if(a.equals("processcontainedref")){
+				processContainedRef=Tools.parseBoolean(b);
+			}else if(a.equals("storerefbases")){
+				storeRefBases=Tools.parseBoolean(b);
+			}
+			
+			else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
 			}else if(i==1 && outu1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				outu1=args[i];
@@ -404,6 +420,7 @@ public class Seal {
 			minReadLength=parser.minReadLength;
 			maxReadLength=parser.maxReadLength;
 			maxNs=parser.maxNs;
+			minConsecutiveBases=parser.minConsecutiveBases;
 //			minGC=parser.minGC;
 //			maxGC=parser.maxGC;
 //			filterGC=parser.filterGC;
@@ -573,7 +590,7 @@ public class Seal {
 		if(!Tools.testOutputFiles(overwrite, append, false, outu1, outu2, outm1, outm2, outpattern, outstats, outrpkm, outrefstats)){
 			throw new RuntimeException("\nCan't write to some output files; overwrite="+overwrite+"\n");
 		}
-		if(!Tools.testInputFiles(false, true, in1, in2, qfin1, qfin2, taxNameFile, taxNodeFile, giToNcbiFile, taxTreeFile)){
+		if(!Tools.testInputFiles(false, true, in1, in2, qfin1, qfin2, taxNameFile, taxNodeFile, giTableFile, taxTreeFile)){
 			throw new RuntimeException("\nCan't read to some input files.\n");
 		}
 		if(!Tools.testInputFiles(true, true, ref)){
@@ -620,7 +637,6 @@ public class Seal {
 		
 		/* Start overall timer */
 		Timer t=new Timer();
-		t.start();
 		
 //		boolean dq0=FASTQ.DETECT_QUALITY;
 //		boolean ti0=FASTQ.TEST_INTERLEAVED;
@@ -666,11 +682,10 @@ public class Seal {
 		
 		/* Start phase timer */
 		Timer t=new Timer();
-		t.start();
 
 		if(DISPLAY_PROGRESS){
 			outstream.println("Initial:");
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -713,8 +728,13 @@ public class Seal {
 			bsw.poisonAndWait();
 		}
 		
+		final boolean vic=Read.VALIDATE_IN_CONSTRUCTOR;
+		Read.VALIDATE_IN_CONSTRUCTOR=THREADS<4;
+		
 		/* Do kmer matching of input reads */
 		spawnProcessThreads(t);
+		
+		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		/* Unload kmers to save memory */
 		if(RELEASE_TABLES){
@@ -722,7 +742,7 @@ public class Seal {
 		}
 		
 		if(USE_TAXTREE){
-			if(giToNcbiFile!=null){loadGiToNcbi();}
+			if(giTableFile!=null){loadGiToNcbi();}
 			if(USE_TAXTREE){tree=loadTaxTree();}
 			addToTree();
 		}
@@ -795,6 +815,8 @@ public class Seal {
 		scaffoldFragCounts=null;
 		scaffoldBaseCounts=null;
 		scaffoldLengths=null;
+		scaffoldKmers=null;
+		scaffolds=null;
 	}
 	
 	/**
@@ -1070,11 +1092,11 @@ public class Seal {
 	private void loadGiToNcbi(){
 		Timer t=new Timer();
 		outstream.println("Loading gi to taxa translation table.");
-		GiToNcbi.initialize(giToNcbiFile);
+		GiToNcbi.initialize(giTableFile);
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("Time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 	}
@@ -1092,7 +1114,7 @@ public class Seal {
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		return tree;
@@ -1106,7 +1128,7 @@ public class Seal {
 				assert(name.startsWith("ncbi|") || (name.startsWith("gi|") && GiToNcbi.isInitialized())) :
 					"\nFor taxonomy, all ref names must start with 'gi|' or 'ncbi|'.\n" +
 					"If the names start with 'gi', the gi= flag must be set.\n";
-				int id=GiToNcbi.get(name);
+				int id=GiToNcbi.getID(name);
 				if(id>-1){
 					tree.incrementRaw(id, count);
 				}
@@ -1121,7 +1143,6 @@ public class Seal {
 	 */
 	private long spawnLoadThreads(){
 		Timer t=new Timer();
-		t.start();
 		if((ref==null || ref.length<1) && (literal==null || literal.length<1)){return 0;}
 		long added=0;
 		
@@ -1301,11 +1322,11 @@ public class Seal {
 				}
 			}else{
 				for(int i=0; i<literal.length; i++){
-					final Integer id=scaffoldNames.size();
+					final int id=scaffoldNames.size();
 					final Read r=new Read(literal[i].getBytes(), null, id);
 					refScafCounts[refNum]++;
-					scaffoldNames.add(id.toString());
-					scaffoldLengths.increment(id, r.length());
+					scaffoldNames.add(""+id);
+					scaffoldLengths.set(id, r.length());
 					r.obj=id;
 					list.add(r);
 				}
@@ -1345,6 +1366,7 @@ public class Seal {
 		}
 		
 		/* Wait for loaders to die, and gather statistics */
+		boolean success=true;
 		for(LoadThread lt : loaders){
 			while(lt.getState()!=Thread.State.TERMINATED){
 				try {
@@ -1358,7 +1380,10 @@ public class Seal {
 			refKmers+=lt.refKmersT;
 			refBases+=lt.refBasesT;
 			refReads+=lt.refReadsT;
+			success&=lt.success;
 		}
+		if(!success){KillSwitch.kill("Failed loading ref kmers; aborting.");}
+		
 		//Correct statistics for number of threads, since each thread processes all reference data
 		refKmers/=WAYS;
 		refBases/=WAYS;
@@ -1371,7 +1396,7 @@ public class Seal {
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("Added "+added+" kmers; time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -1578,6 +1603,7 @@ public class Seal {
 			if(map.canRebalance() && map.size()>2L*map.arrayLength()){
 				map.rebalance();
 			}
+			success=true;
 		}
 
 		/**
@@ -1595,7 +1621,17 @@ public class Seal {
 			long rkmer=0;
 			long added=0;
 			int len=0;
-
+			int totalKmers=0;
+			
+			if(tnum==0){
+				if(storeRefBases){
+					assert(r.mate==null);
+					assert(scaffolds.size()==(Integer)r.obj) : scaffolds.size()+", "+(Integer)r.obj/*+"\n"+r.toFasta()*/;
+					scaffolds.add(bases);
+				}
+				if(bases==null || bases.length<k){scaffoldKmers.add(0);}
+			}
+			
 			if(bases!=null){
 				refReadsT++;
 				refBasesT+=bases.length;
@@ -1614,7 +1650,7 @@ public class Seal {
 					if(b=='N'){len=0;}else{len++;}
 					if(verbose){System.err.println("Scanning1 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
-						refKmersT++;
+						totalKmers++;
 						if(len%skip==0){
 							final long extraBase=(i>=bases.length-1 ? -1 : AminoAcid.baseToNumber[bases[i+1]]);
 							added+=addToMap(kmer, rkmer, k, extraBase, id, kmask);
@@ -1631,13 +1667,16 @@ public class Seal {
 					if(b=='N'){len=0;}else{len++;}
 					if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 					if(len>=k){
-						refKmersT++;
+						totalKmers++;
 						final long extraBase=(i>=bases.length-1 ? -1 : AminoAcid.baseToNumber[bases[i+1]]);
 						final long atm=addToMap(kmer, rkmer, k, extraBase, id, kmask);
 						added+=atm;
 					}
 				}
 			}
+			refKmersT+=totalKmers;
+			if(tnum==0){scaffoldKmers.add(totalKmers);}
+			
 			return added;
 		}
 		
@@ -1664,9 +1703,12 @@ public class Seal {
 				if(key%WAYS!=tnum){return 0;}
 				if(verbose){System.err.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~lengthMasks[len], len)+" = "+key);}
 //				int[] old=map.getValues(key, new int[1]);
+				
+//				int[] old=map.getValues(key, new int[1]); //123
+				
 				added=map.set(key, id);
-//				assert(old==null || map.contains(key, old));
-//				assert(map.contains(key, id));
+//				assert(old==null || map.contains(key, old)); //123
+//				assert(map.contains(key, id)); //123
 //				ll.add(key);
 //				il.add(id); assert(AbstractKmerTable.TESTMODE);
 				
@@ -1772,6 +1814,9 @@ public class Seal {
 		/** Destination for storing kmers */
 		private final AbstractKmerTable map;
 		
+		/** Completed successfully */
+		boolean success=false;
+		
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -1832,6 +1877,9 @@ public class Seal {
 				for(int i=0; i<reads.size(); i++){
 					final Read r1=reads.get(i);
 					final Read r2=r1.mate;
+					
+					if(!r1.validated()){r1.validate(true);}
+					if(r2!=null && !r2.validated()){r2.validate(true);}
 					
 					if(readstats!=null){
 						if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r1);}
@@ -1970,6 +2018,12 @@ public class Seal {
 							}
 						}
 						
+						//Determine whether to discard the reads based on a lack of useful kmers
+						if(minConsecutiveBases>0){
+							if(r1!=null && !r1.discarded() && !r1.hasMinConsecutiveBases(minConsecutiveBases)){r1.setDiscarded(true);}
+							if(r2!=null && !r2.discarded() && !r2.hasMinConsecutiveBases(minConsecutiveBases)){r2.setDiscarded(true);}
+						}
+						
 						//Discard reads if too short
 						if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
 								(r1.discarded() && (r2==null || r2.discarded()))){
@@ -2021,7 +2075,7 @@ public class Seal {
 								rename(r1, idList1, countList1);
 								rename(r2, idList1, countList1);
 							}
-							filterTopScaffolds(idList1, countList1, finalList1, max, clearzone);
+							filterTopScaffolds(r1, r2, idList1, countList1, finalList1, max, clearzone);
 							if(verbose){
 								System.err.println("idList1: "+idList1);
 								System.err.println("countList1: "+countList1);
@@ -2032,7 +2086,11 @@ public class Seal {
 							final int minhits=Tools.max(minKmerHits, (int)(minKmerFraction*numKmers(r1, r2, k)));
 							if(max>=minhits){
 								assigned=assignTogether(r1, r2, als);
-							}else{assigned=0;}
+							}else{
+								readsUnmatchedT+=1+r1.mateCount();
+								basesUnmatchedT+=r1.length()+r1.mateLength();
+								assigned=0;
+							}
 							
 						}else{
 							final int max1, max2, a, b;
@@ -2047,7 +2105,7 @@ public class Seal {
 									max1=condenseLoose(countArray, idList1, countList1);
 								}
 								if(rename){rename(r1, idList1, countList1);}
-								filterTopScaffolds(idList1, countList1, finalList1, max1, clearzone);
+								filterTopScaffolds(r1, null, idList1, countList1, finalList1, max1, clearzone);
 							}
 							if(r2!=null){
 								if(countArray==null){
@@ -2059,7 +2117,7 @@ public class Seal {
 									b=findBestMatch(r2, keySets, countArray, idList2);
 									max2=condenseLoose(countArray, idList2, countList2);
 								}
-								filterTopScaffolds(idList2, countList2, finalList2, max2, clearzone);
+								filterTopScaffolds(r2, null, idList2, countList2, finalList2, max2, clearzone);
 								if(rename){rename(r2, idList2, countList2);}
 							}else{max2=0;}
 							
@@ -2391,13 +2449,39 @@ public class Seal {
 			return max;
 		}
 		
-		private void filterTopScaffolds(IntList packed, IntList counts, IntList out, int max, int cz){
-			final int thresh=Tools.max(1, max-cz);
+		private void filterTopScaffolds(Read r1, Read r2, IntList packed, IntList counts, IntList out, int max, int cz){
 			out.size=0;
 			if(packed.size<1){return;}
+			if(processContainedRef){
+				filterTopScaffolds_withContainedRef(r1, r2, packed, counts, out);
+			}else{
+				filterTopScaffolds_withClearzone(packed, counts, out, max, cz);
+			}
+		}
+		
+		private void filterTopScaffolds_withContainedRef(Read r1, Read r2, IntList packed, IntList counts, IntList out){
+			for(int i=0; i<packed.size; i++){
+				final int p=packed.get(i);
+				final int c=counts.get(i);
+				if(storeRefBases){
+					if(Tools.containsForward(r1.bases, scaffolds.get(p), hammingDistance)>=0 ||
+							(r2!=null && Tools.containsForward(r2.bases, scaffolds.get(p), hammingDistance)>=0)){
+						out.add(p);
+					}else if(rcomp && (Tools.containsReverse(r1.bases, scaffolds.get(p), hammingDistance)>=0 ||
+							(r2!=null && Tools.containsReverse(r2.bases, scaffolds.get(p), hammingDistance)>=0))){
+						out.add(p);
+					}
+				}else if(c>=scaffoldKmers.get(p)){
+					out.add(p);
+				}
+			}
+		}
+		
+		private void filterTopScaffolds_withClearzone(IntList packed, IntList counts, IntList out, int max, int cz){
+			final int thresh=Tools.max(1, max-cz);
 			for(int i=0; i<packed.size; i++){
 				final int c=counts.get(i);
-				assert(c>0 && c<=max) : c+"\n"+packed+"\n"+counts;
+				assert((c>0) && c<=max) : c+"\n"+packed+"\n"+counts;
 				if(c>=thresh){
 					out.add(packed.get(i));
 				}
@@ -2417,7 +2501,8 @@ public class Seal {
 		 * @return Value stored in table, or -1
 		 */
 		private final int[] getValues(final long kmer, final long rkmer, final long lengthMask, final int qPos, final int len, final int qHDist, final AbstractKmerTable[] sets){
-			int[] ids=getValues(kmer, rkmer, lengthMask, qPos, sets);
+			if(qHDist>0){return getValuesQHD(kmer, rkmer, lengthMask, qPos, len, qHDist, sets, qhList);}
+			int[] ids=getValuesInner(kmer, rkmer, lengthMask, qPos, sets);
 			if((ids==null || ids[0]<0) && qHDist>0){
 				final int qHDist2=qHDist-1;
 				
@@ -2427,13 +2512,51 @@ public class Seal {
 						final long temp=(kmer&clearMasks[i])|setMasks[j][i];
 						if(temp!=kmer){
 							long rtemp=AminoAcid.reverseComplementBinaryFast(temp, len);
-							ids=getValues(temp, rtemp, lengthMask, len, qPos, qHDist2, sets);
+							ids=getValues(temp, rtemp, lengthMask, qPos, len, qHDist2, sets);
 							if(ids!=null && ids[0]>-1){return ids;}
 						}
 					}
 				}
 			}
 			return ids;
+		}
+		
+		private final int[] getValuesQHD(final long kmer, final long rkmer, final long lengthMask, final int qPos, final int len, final int qHDist, final AbstractKmerTable[] sets, IntList list){
+			assert(qHDist>0);
+			list.clear();
+			getValuesQHD_inner(kmer, rkmer, lengthMask, qPos, len, qHDist, sets, list);
+			if(list.size>qhdistSizeLimit){
+				list.sort();
+				list.shrinkToUnique();
+			}
+			if(list.size>0){
+				list.add(-1);//indicates end
+				return list.array;
+			}
+			return null;
+		}
+			
+		private final void getValuesQHD_inner(final long kmer, final long rkmer, final long lengthMask, final int qPos, final int len, final int qHDist, final AbstractKmerTable[] sets, IntList list){
+			final int sizeLimit=10;
+			int[] ids=getValuesInner(kmer, rkmer, lengthMask, qPos, sets);
+			for(int x : ids){
+				if(x<0){break;}
+				if(list.size>sizeLimit || !list.contains(x)){list.add(x);}
+			}
+			if(qHDist>0){
+				final int qHDist2=qHDist-1;
+				
+				//Sub
+				for(int j=0; j<4; j++){
+					for(int i=0; i<len; i++){
+						final long temp=(kmer&clearMasks[i])|setMasks[j][i];
+						if(temp!=kmer){
+							long rtemp=AminoAcid.reverseComplementBinaryFast(temp, len);
+							getValuesQHD_inner(temp, rtemp, lengthMask, qPos, len, qHDist2, sets, list);
+						}
+					}
+				}
+			}
 		}
 		
 		/**
@@ -2445,7 +2568,7 @@ public class Seal {
 		 * @param sets Kmer hash tables
 		 * @return Value stored in table
 		 */
-		private final int[] getValues(final long kmer, final long rkmer, final long lengthMask, final int qPos, final AbstractKmerTable[] sets){
+		private final int[] getValuesInner(final long kmer, final long rkmer, final long lengthMask, final int qPos, final AbstractKmerTable[] sets){
 			assert(lengthMask==0 || (kmer<lengthMask && rkmer<lengthMask)) : lengthMask+", "+kmer+", "+rkmer;
 			if(qSkip>1 && (qPos%qSkip!=0)){return null;}
 			
@@ -2576,6 +2699,7 @@ public class Seal {
 		private final IntList idList1=new IntList(), idList2=new IntList();
 		private final IntList countList1=new IntList(), countList2=new IntList();
 		private final IntList finalList1=new IntList(), finalList2=new IntList();
+		private final IntList qhList=new IntList();
 		
 		long[] scaffoldReadCountsT;
 		long[] scaffoldBaseCountsT;
@@ -2640,20 +2764,6 @@ public class Seal {
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Print statistics about current memory use and availability */
-	private static final void printMemory(){
-		if(GC_BEFORE_PRINT_MEMORY){
-			System.gc();
-			System.gc();
-		}
-		Runtime rt=Runtime.getRuntime();
-		long mmemory=rt.maxMemory()/1000000;
-		long tmemory=rt.totalMemory()/1000000;
-		long fmemory=rt.freeMemory()/1000000;
-		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
-	}
-	
 	/** Current available memory */
 	private static final long freeMemory(){
 		Runtime rt=Runtime.getRuntime();
@@ -2685,7 +2795,7 @@ public class Seal {
 	/** Initial size of data structures */
 	private int initialSize=-1;
 	/** Default initial size of data structures */
-	private static final int initialSizeDefault=128000;
+	private static final int initialSizeDefault=128000; //123
 	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in keySets[Y] */
 	private final AbstractKmerTable[] keySets;
@@ -2706,6 +2816,10 @@ public class Seal {
 	private boolean ALLOW_LOCAL_ARRAYS=true;
 	/** scaffoldLengths[id] stores the length of that scaffold */ 
 	private IntList scaffoldLengths=new IntList();
+	/** scaffoldLengths[id] stores the number of kmers in that scaffold (excluding mutants) */ 
+	private IntList scaffoldKmers=new IntList();
+	/** scaffolds[id] stores the number of kmers in that scaffold */ 
+	private ArrayList<byte[]> scaffolds=new ArrayList<byte[]>();
 	/** Array of reference files from which to load kmers */
 	private String[] ref=null;
 	/** Array of literal strings from which to load kmers */
@@ -2726,13 +2840,18 @@ public class Seal {
 	/** Statistics output files */
 	private String outstats=null, outrpkm=null, outrefstats=null, outtax=null;
 	/** NCBI file mapping gi numbers to taxa IDs (gi_taxid_nucl.dmp) */
-	private String giToNcbiFile=null;
+	private String giTableFile=null;
 	/** NCBI file of taxonomy names (names.dmp) */
 	private String taxNameFile=null;
 	/** NCBI file of taxonomic tree (nodes.dmp) */
 	private String taxNodeFile=null;
 	/** File containing a serialized TaxTree */
 	private String taxTreeFile;
+	
+	/** Store reference sequences */
+	private boolean storeRefBases=false;
+	/** Only look for fully-contained reference sequences */
+	private boolean processContainedRef=false;
 	
 	/** Dump kmers here. */
 	private String dump=null;
@@ -2839,6 +2958,8 @@ public class Seal {
 	private final boolean chastityFilter;
 	/** Throw away reads containing more than this many Ns.  Default: -1 (disabled) */
 	private final int maxNs;
+	/** Throw away reads containing without at least this many consecutive called bases. */
+	private int minConsecutiveBases=0;
 	/** Throw away reads shorter than this after trimming.  Default: 10 */
 	private final int minReadLength;
 	/** Throw away reads longer than this after trimming.  Default: Integer.MAX_VALUE */
@@ -2935,8 +3056,6 @@ public class Seal {
 	public static int THREADS=Shared.threads();
 	/** Indicates end of input stream */
 	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
-	/** Do garbage collection prior to printing memory usage */
-	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	/** Number of columns for statistics output, 3 or 5 */
 	public static int STATS_COLUMNS=5;
 	/** Release memory used by kmer storage after processing reads */
@@ -2958,6 +3077,8 @@ public class Seal {
 	private static final long[] rightMasks;
 	/** x|kMasks[i] will set the bit to the left of the leftmost base */
 	private static final long[] lengthMasks;
+	
+	private static final int qhdistSizeLimit=10;
 	
 	public static HashMap<String,String> RQC_MAP=null;
 

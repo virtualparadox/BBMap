@@ -4,6 +4,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 //import com.sun.management.OperatingSystemMXBean;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
 /**
  * Monitors CPU utilization to determine if the program has crashed.
@@ -102,6 +103,10 @@ public final class KillSwitch extends Thread {
 		kill0();
 	}
 	
+	public static void killSilent(){
+		kill0();
+	}
+	
 	private static void kill0(){
 		Runtime.getRuntime().halt(1);
 	}
@@ -122,5 +127,78 @@ public final class KillSwitch extends Thread {
 	private static int count=0;
 	private static KillSwitch ks;
 	private static boolean suppressMessages=false;
+	
+	
+
+	
+	public static final AtomicIntegerArray allocAtomicInt(int len){
+		AtomicIntegerArray ret=null;
+		try {
+			ret=new AtomicIntegerArray(len);
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final long[] allocLong1D(int len){
+		long[] ret=null;
+		try {
+			ret=new long[len];
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final int[] allocInt1D(int len){
+		int[] ret=null;
+		try {
+			ret=new int[len];
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final byte[] allocByte1D(int len){
+		byte[] ret=null;
+		try {
+			ret=new byte[len];
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final char[] allocChar1D(int len){
+		char[] ret=null;
+		try {
+			ret=new char[len];
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final int[][] allocInt2D(int len){
+		int[][] ret=null;
+		try {
+			ret=new int[len][];
+		} catch (OutOfMemoryError e) {
+			memKill(e);
+		}
+		return ret;
+	}
+	
+	public static final void memKill(OutOfMemoryError e){
+		synchronized(MemKillMessage){
+			e.printStackTrace();
+			System.err.println(MemKillMessage);
+			killSilent();
+		}
+	}
+	
+	private final static String MemKillMessage=new String("\nThis program ran out of memory.  Try increasing the -Xmx flag and setting prealloc.");
 	
 }

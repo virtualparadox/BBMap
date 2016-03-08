@@ -19,7 +19,7 @@ public final class HashArray1D extends HashArray {
 	
 	public HashArray1D(int initialSize, boolean autoResize_){
 		super(initialSize, autoResize_, false);
-		values=new int[prime+extra];
+		values=allocInt1D(prime+extra);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -36,15 +36,17 @@ public final class HashArray1D extends HashArray {
 				values[cell]++;
 				if(values[cell]<0){values[cell]=Integer.MAX_VALUE;}
 				return values[cell];
-			}else if(n==-1){
+			}else if(n==NOT_PRESENT){
 				array[cell]=kmer;
 				size++;
 				values[cell]=1;
-				if(autoResize && size>sizeLimit){resize();}
+				if(autoResize && size+victims.size>sizeLimit){resize();}
 				return 1;
 			}
 		}
-		return victims.increment(kmer);
+		int x=victims.increment(kmer);
+		if(autoResize && size+victims.size>sizeLimit){resize();}
+		return x;
 	}
 	
 	@Override
@@ -57,11 +59,11 @@ public final class HashArray1D extends HashArray {
 				values[cell]++;
 				if(values[cell]<0){values[cell]=Integer.MAX_VALUE;}
 				return 0;
-			}else if(n==-1){
+			}else if(n==NOT_PRESENT){
 				array[cell]=kmer;
 				size++;
 				values[cell]=1;
-				if(autoResize && size>sizeLimit){resize();}
+				if(autoResize && size+victims.size>sizeLimit){resize();}
 				return 1;
 			}
 		}
@@ -111,9 +113,12 @@ public final class HashArray1D extends HashArray {
 			sizeLimit=0xFFFFFFFFFFFFL;
 			return;
 		}
-
-		final long maxAllowedByLoadFactor=(long)(size*minLoadMult);
-		final long minAllowedByLoadFactor=(long)(size*maxLoadMult);
+		
+		final long oldSize=size, oldVSize=victims.size;
+		final long totalSize=oldSize+oldVSize;
+		
+		final long maxAllowedByLoadFactor=(long)(totalSize*minLoadMult);
+		final long minAllowedByLoadFactor=(long)(totalSize*maxLoadMult);
 
 //		sizeLimit=Tools.min((long)(maxLoadFactor*prime), maxPrime);
 		
@@ -131,35 +136,30 @@ public final class HashArray1D extends HashArray {
 		
 		if(prime2<=prime){
 			sizeLimit=(long)(maxLoadFactor*prime);
-			assert(prime2==prime) : "Resizing to smaller array? "+size+", "+prime+", "+x;
+			assert(prime2==prime) : "Resizing to smaller array? "+totalSize+", "+prime+", "+x;
 			return;
 		}
-		
-		final long oldSize=size, oldVSize=victims.size;
 		
 		prime=prime2;
 //		System.err.println("Resized to "+prime+"; load="+(size*1f/prime));
 		long[] oldk=array;
 		int[] oldc=values;
 		KmerNode[] oldv=victims.array;
-		array=new long[prime2+extra];
-		Arrays.fill(array, -1);
-		values=new int[prime2+extra];
-		ArrayList<KmerNode> list=new ArrayList<KmerNode>((int)(victims.size)); //Can fail if more than Integer.MAX_VALUE
-		for(int i=0; i<oldv.length; i++){
-			if(oldv[i]!=null){oldv[i].traverseInfix(list);}
-		}
+		array=allocLong1D(prime2+extra);
+		Arrays.fill(array, NOT_PRESENT);
+		values=allocInt1D(prime2+extra);
+		ArrayList<KmerNode> list=victims.toList();
 		Arrays.fill(oldv, null);
 		victims.size=0;
 		size=0;
 		sizeLimit=Long.MAX_VALUE;
 		
 		for(int i=0; i<oldk.length; i++){
-			if(oldk[i]>-1){set(oldk[i], oldc[i]);}
+			if(oldk[i]>NOT_PRESENT){set(oldk[i], oldc[i]);}
 		}
 
 		for(KmerNode n : list){
-			if(n.pivot>-1){set(n.pivot, n.value());}
+			if(n.pivot>NOT_PRESENT){set(n.pivot, n.value());}
 		}
 		
 		assert(oldSize+oldVSize==size+victims.size) : oldSize+", "+oldVSize+" -> "+size+", "+victims.size;
@@ -173,11 +173,46 @@ public final class HashArray1D extends HashArray {
 		throw new RuntimeException("Unimplemented.");
 	}
 	
+	@Override
+	public long regenerate(){
+		long sum=0;
+		assert(owners==null) : "Clear ownership before regeneration.";
+		for(int pos=0; pos<values.length; pos++){
+			final long key=array[pos];
+			if(key>=0){
+				final int value=values[pos];
+				values[pos]=NOT_PRESENT;
+				array[pos]=NOT_PRESENT;
+				size--;
+				if(value>0){
+					set(key, value);
+				}else{
+					sum++;
+				}
+			}
+		}
+		
+		ArrayList<KmerNode> nodes=victims.toList();
+		victims.clear();
+		for(KmerNode node : nodes){
+			int value=node.value();
+			if(value<1){
+				sum++;
+			}else{
+				set(node.pivot, node.value());
+			}
+		}
+		
+		return sum;
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	private int[] values;
+	
+	public int[] values(){return values;}
 	
 
 	

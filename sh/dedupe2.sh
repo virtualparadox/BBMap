@@ -3,8 +3,8 @@
 
 usage(){
 echo "
-Written by Brian Bushnell and Jonathan Rood"
-Last modified May 28, 2015"
+Written by Brian Bushnell and Jonathan Rood
+Last modified September 15, 2015
 
 Dedupe2 is identical to Dedupe except it supports hashing unlimited kmer
 prefixes and suffixes per sequence.  Dedupe supports at most 2 of each,
@@ -16,7 +16,17 @@ For documentation, please consult dedupe.sh; syntax is identical.
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -43,9 +53,11 @@ calcXmx () {
 calcXmx "$@"
 
 dedupe() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.Dedupe2 $@"
 	echo $CMD >&2
 	eval $CMD

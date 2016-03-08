@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell.
-Last modified March 13, 2015
+Last modified December 15, 2015
 
 Description:  Renames fasta sequences with gi numbers to NCBI taxa IDs.
 
@@ -28,7 +28,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -56,9 +66,11 @@ calcXmx "$@"
 
 
 gi2taxid() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z $z2 -cp $CP tax.RenameGiToNcbi $@"
 	echo $CMD >&2
 	eval $CMD

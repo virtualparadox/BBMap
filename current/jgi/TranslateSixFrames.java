@@ -36,7 +36,6 @@ public class TranslateSixFrames {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		TranslateSixFrames rr=new TranslateSixFrames(args);
 		rr.process(t);
 	}
@@ -44,7 +43,7 @@ public class TranslateSixFrames {
 	public TranslateSixFrames(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -54,8 +53,8 @@ public class TranslateSixFrames {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -73,8 +72,6 @@ public class TranslateSixFrames {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;

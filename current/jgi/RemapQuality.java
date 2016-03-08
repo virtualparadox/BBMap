@@ -5,6 +5,7 @@ import stream.SamLine;
 import dna.Timer;
 
 /**
+ * Changes quality scores to other quality scores.
  * @author Brian Bushnell
  * @date Apr 27, 2015
  *
@@ -19,7 +20,6 @@ public class RemapQuality extends BBTool_ST {
 	public static void main(String[] args){
 		//Example:
 		Timer t=new Timer();
-		t.start();
 		RemapQuality bbt=new RemapQuality(args);
 		bbt.process(t);
 	}

@@ -31,7 +31,6 @@ public class GradeMergedReads {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		GradeMergedReads gmr=new GradeMergedReads(args);
 		gmr.process(t);
 	}
@@ -39,7 +38,7 @@ public class GradeMergedReads {
 	public GradeMergedReads(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -47,8 +46,8 @@ public class GradeMergedReads {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -66,8 +65,6 @@ public class GradeMergedReads {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("raw") || a.equals("raw1")){
 				raw1=b;
 				if(b.indexOf("#")>=0){

@@ -236,8 +236,9 @@ public abstract class MSA {
 			assert(match==r.match);
 			assert(r.start==ss.start);
 			assert(r.stop==ss.stop);
-			assert(ss.mappedLength()==ss.matchLength()) : ss+"\n"+r+"\n";
+			assert(ss.lengthsAgree()) : ss.mappedLength()+"!="+ss.matchLength()+"\n"+ss+"\n\n"+r+"\n";
 		}
+		assert(ss.lengthsAgree()) : ss.mappedLength()+"!="+ss.matchLength()+"\n"+ss+"\n\n"+r+"\n";
 		
 		int maxScore=-1;
 		
@@ -312,6 +313,7 @@ public abstract class MSA {
 					cpos+=current;
 				}else if(mode=='C'){
 					cpos+=current;
+					rpos+=current;
 				}else if(mode=='X' || mode=='Y'){
 					score+=calcInsScore(current);//TODO: Consider changing XY to subs
 					cpos+=current;
@@ -371,9 +373,11 @@ public abstract class MSA {
 				cpos+=current;
 			}else if(mode=='C'){
 				cpos+=current;
+				rpos+=current;
 			}else if(mode=='X' || mode=='Y'){
 				score+=calcInsScore(current);
 				cpos+=current;
+				rpos+=current;
 			}else if(mode=='N'){
 				score+=calcNocallScore(current);
 				cpos+=current;
@@ -389,14 +393,17 @@ public abstract class MSA {
 		}
 		
 		if(startLocC<0 || stopLocC<0){
-			assert(false) : "Failed.";
+			//This can happen if there are zero matches.  Which would be rare, but I have seen it occur.
+			r.clearMapping();
+//			assert(false) : "Failed: "+startLocC+", "+stopLocC+"\n"+r+"\n"+r.mate+"\n"+r.toFastq()+"\n"+(r.mate==null ? "null" : r.mate.toFastq());
 			return false;
 		}
 		
-
+		
 		if(verbose){System.err.println("A: r.start="+r.start+", r.stop="+r.stop+"; rpos="+rpos+"; len="+bases.length+"; reflen="+(r.stop-r.start+1));}
 		
-		assert(rpos==r.stop+1) : rpos+"!="+(r.stop+1)+"\n"+r;
+		assert(rpos==r.stop+1) : "\n\n\n"+rpos+"!="+(r.stop+1)+"\n"+r+"\n\n"+
+			(r.topSite()==null ? "null" : r.topSite().mappedLength()+", "+r.topSite().matchLength()+", "+r.topSite().start+", "+r.topSite().stop+"\n"+r.topSite());
 		
 		if(verbose){System.err.println("B: rpos="+rpos+", startLocR="+startLocR+", stopLocR="+stopLocR);}
 		
@@ -466,7 +473,7 @@ public abstract class MSA {
 			ss.perfect=ss.semiperfect=true;
 			r.setPerfect(true);
 			Arrays.fill(r.match, (byte)'m');
-			ss.slowScore=maxScore;
+			ss.setSlowScore(maxScore);
 		}else if(!ss.semiperfect && ss.isSemiPerfect(bases)){
 			ss.semiperfect=true;
 			ChromosomeArray cha=Data.getChromosome(ss.chrom);

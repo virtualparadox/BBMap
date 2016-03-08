@@ -38,8 +38,6 @@ public abstract class KmerCountAbstract {
 	public static byte minQuality=6;
 	public static long readsProcessed=0;
 	public static long maxReads=-1;
-	public static int kmersamplerate=1;
-	public static int readsamplerate=1;
 	public static int BUFFERLEN=500;
 	
 	public static float minProb=0.5f;
@@ -47,7 +45,7 @@ public abstract class KmerCountAbstract {
 	public static long keysCounted=0;
 	
 	public static int THREADS=Shared.threads();
-	public static boolean verbose=false;
+	public static final boolean verbose=false;
 	public static boolean PREJOIN=false;
 	public static boolean CANONICAL=false;
 	public static boolean KEEP_DUPLICATE_KMERS=false;

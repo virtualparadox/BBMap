@@ -64,8 +64,6 @@ public class ErrorCorrect extends Thread{
 				//do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.startsWith("cbits") || a.startsWith("cellbits")){

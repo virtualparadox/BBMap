@@ -1,81 +1,95 @@
 #!/bin/bash
 
 function usage(){
-	echo "BBSplit / BBMap v35.x"
-	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified April 13, 2015"
-	echo ""
-	echo "Description:  Maps reads to multiple references simultaneously."
-	echo "Outputs reads to a file for the reference they best match, with multiple options for dealing with ambiguous mappings."
-	echo ""
-	echo "To index:  	bbsplit.sh build=<1> ref_x=<reference fasta> ref_y=<another reference fasta>"
-	echo "To map:    	bbsplit.sh build=<1> in=<reads> out_x=<output file> out_y=<another output file>"
-	echo ""
-	echo "To be concise, and do everything in one command:"
-	echo "bbsplit.sh ref=x.fa,y.fa in=reads.fq basename=o%.sam"
-	echo ""
-	echo "that is equivalent to"
-	echo "bbsplit.sh build=1 in=reads.fq ref_x=x.fa ref_y=y.fa out_x=ox.sam out_y=oy.sam"
-	echo ""
-	echo "By default paired reads will yield interleaved output, but you can use the # symbol to produce twin output files."
-	echo "For example, basename=o%_#.fq will produce ox_1.fq, ox_2.fq, oy_1.fq, and oy_2.fq."
-	echo ""
-	echo "in=stdin will accept reads from standard in, and out=stdout will write to standard out,"
-	echo "but file extensions are still needed to specify the format of the input and output files."
-	echo "e.g. in=stdin.fa.gz will read gzipped fasta from standard in; out=stdout.sam.gz will write gzipped sam."
-	echo ""	
-	echo "Indexing Parameters (required when building the index):"
-       echo "ref=<file,file>              A list of references, or directories containing fasta files."
-	echo "ref_<name>=<ref.fasta>  	Alternate, longer way to specify references. e.g., ref_ecoli=ecoli.fasta"
-	echo "                      	These can also be comma-delimited lists of files; e.g., ref_a=a1.fa,a2.fa,a3.fa"
-	echo "build=<1>        		If multiple references are indexed in the same directory, each needs a unique build ID."
-	echo "path=<.>         		Specify the location to write the index, if you don't want it in the current working directory."
-	echo ""
-	echo "Input Parameters:"
-	echo "build=<1>        		Designate index to use.  Corresponds to the number specified when building the index."
-	echo "in=<reads.fq>    		Primary reads input; required parameter."
-	echo "in2=<reads2.fq>  		For paired reads in two files."
-	echo "qin=<auto>       		Set to 33 or 64 to specify input quality value ASCII offset."
-	echo "interleaved=<auto>  		True forces paired/interleaved input; false forces single-ended mapping."
-	echo "                 		If not specified, interleaved status will be autodetected from read names."
-	echo ""
-	echo "Mapping Parameters:"
-	echo "maxindel=<20>    		Don't look for indels longer than this.  Lower is faster.  Set to >=100k for RNA-seq."
-	echo "minratio=<0.9>   		Fraction of max alignment score required to keep a site.  Higher is faster."
-	echo "minhits=<2>      		Minimum number of seed hits required for candidate sites.  Higher is faster."
-	echo "ambiguous=<best> 		Set behavior on ambiguously-mapped reads (with multiple top-scoring mapping locations)."
-	echo "                 			best	(use the first best site)"
-	echo "                 			toss	(consider unmapped)"
-	echo "                 			random	(select one top-scoring site randomly)"
-	echo "                 			all	(retain all top-scoring sites.  Does not work yet with SAM output)"
-	echo "ambiguous2=<best> 		Set behavior only for reads that map ambiguously to multiple different references."
-	echo "                 		Normal 'ambiguous=' controls behavior on all ambiguous reads;"
-	echo "                 		Ambiguous2 excludes reads that map ambiguously within a single reference."
-	echo "                 			best	(use the first best site)"
-	echo "                 			toss	(consider unmapped)"
-	echo "                 			all	(write a copy to the output for each reference to which it maps)"
-	echo "                 			split	(write a copy to the AMBIGUOUS_ output for each reference to which it maps)"
-	echo "trim=<true> 		 	Quality-trim ends to Q5 before mapping.  Options are 'l' (left), 'r' (right), and 'lr' (both)."
-	echo "untrim=<true>  		Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings."
-	echo ""
-	echo "Output Parameters:"
-	echo "out_<name>=<file>		Output reads that map to the reference <name> to <file>."
-	echo "basename=prefix%suffix	Equivalent to multiple out_%=prefix%suffix expressions, in which each % is replaced by the name of a reference file."
-	echo "bs=<file>        		Write a shell script to 'file' that will turn the sam output into a sorted, indexed bam file."
-	echo "scafstats=<file>     		Write statistics on how many reads mapped to which scaffold to this file."
-	echo "refstats=<file>      		Write statistics on how many reads mapped to which reference to this file."
-	echo ""
-	echo "***** All BBMap parameters can be used; run bbmap.sh for more details. *****"
-	echo ""
-	echo "Java Parameters:"
-	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
-	echo ""
-	echo "This list is not complete.  For more information, please consult $DIR""docs/readme.txt"
-	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+echo "
+BBSplit / BBMap v35.x
+Written by Brian Bushnell, from Dec. 2010 - present
+Last modified October 9, 2015
+
+Description:  Maps reads to multiple references simultaneously.
+Outputs reads to a file for the reference they best match, with multiple options for dealing with ambiguous mappings.
+
+To index:     bbsplit.sh build=<1> ref_x=<reference fasta> ref_y=<another reference fasta>
+To map:       bbsplit.sh build=<1> in=<reads> out_x=<output file> out_y=<another output file>
+
+To be concise, and do everything in one command:
+bbsplit.sh ref=x.fa,y.fa in=reads.fq basename=o%.fq
+
+that is equivalent to
+bbsplit.sh build=1 in=reads.fq ref_x=x.fa ref_y=y.fa out_x=ox.fq out_y=oy.fq
+
+By default paired reads will yield interleaved output, but you can use the # symbol to produce twin output files.
+For example, basename=o%_#.fq will produce ox_1.fq, ox_2.fq, oy_1.fq, and oy_2.fq.
+
+     
+Indexing Parameters (required when building the index):
+ref=<file,file>      A list of references, or directories containing fasta files.
+ref_<name>=<ref.fa>  Alternate, longer way to specify references. e.g., ref_ecoli=ecoli.fa
+                     These can also be comma-delimited lists of files; e.g., ref_a=a1.fa,a2.fa,a3.fa
+build=<1>            If multiple references are indexed in the same directory, each needs a unique build ID.
+path=<.>             Specify the location to write the index, if you don't want it in the current working directory.
+
+Input Parameters:
+build=<1>            Designate index to use.  Corresponds to the number specified when building the index.
+in=<reads.fq>        Primary reads input; required parameter.
+in2=<reads2.fq>      For paired reads in two files.
+qin=<auto>           Set to 33 or 64 to specify input quality value ASCII offset.
+interleaved=<auto>   True forces paired/interleaved input; false forces single-ended mapping.
+                     If not specified, interleaved status will be autodetected from read names.
+
+Mapping Parameters:
+maxindel=<20>        Don't look for indels longer than this.  Lower is faster.  Set to >=100k for RNA-seq.
+minratio=<0.65>      Fraction of max alignment score required to keep a site.  Higher is faster.
+minhits=<1>          Minimum number of seed hits required for candidate sites.  Higher is faster.
+ambiguous=<best>     Set behavior on ambiguously-mapped reads (with multiple top-scoring mapping locations).
+                     best   (use the first best site)
+                     toss   (consider unmapped)
+                     random   (select one top-scoring site randomly)
+                     all   (retain all top-scoring sites.  Does not work yet with SAM output)
+ambiguous2=<best>    Set behavior only for reads that map ambiguously to multiple different references.
+                     Normal 'ambiguous=' controls behavior on all ambiguous reads;
+                     Ambiguous2 excludes reads that map ambiguously within a single reference.
+                     best   (use the first best site)
+                     toss   (consider unmapped)
+                     all   (write a copy to the output for each reference to which it maps)
+                     split   (write a copy to the AMBIGUOUS_ output for each reference to which it maps)
+trim=<true>          Quality-trim ends to Q5 before mapping.  Options are 'l' (left), 'r' (right), and 'lr' (both).
+untrim=<true>        Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings.
+
+Output Parameters:
+out_<name>=<file>    Output reads that map to the reference <name> to <file>.
+basename=prefix%suffix     Equivalent to multiple out_%=prefix%suffix expressions, in which each % is replaced by the name of a reference file.
+bs=<file>            Write a shell script to 'file' that will turn the sam output into a sorted, indexed bam file.
+scafstats=<file>     Write statistics on how many reads mapped to which scaffold to this file.
+refstats=<file>      Write statistics on how many reads mapped to which reference to this file.
+nzo=t                Only print lines with nonzero coverage.
+
+***** Notes *****
+Almost all BBMap parameters can be used; run bbmap.sh for more details.
+Exceptions include the 'nodisk' flag, which BBSplit does not support.
+BBSplit is recommended for fastq and fasta output, not for sam/bam output.
+When the reference sequences are shorter than read length, use Seal instead of BBSplit.
+
+Java Parameters:
+-Xmx                 This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
+                     -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory.
+
+This list is not complete.  For more information, please consult $DIRdocs/readme.txt
+Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems.
+"
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 NATIVELIBDIR="$DIR""jni/"
 
@@ -93,7 +107,7 @@ calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
-		return
+	return
 	fi
 	freeRam 3200m 84
 	z="-Xmx${RAM}m"
@@ -102,12 +116,14 @@ calcXmx () {
 calcXmx "$@"
 
 function bbsplit() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
-	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBSplitter build=1 ow=t fastareadlen=500 minhits=2 minratio=0.9 maxindel=20 trim=rl untrim=t $@"
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBSplitter ow=t fastareadlen=500 minhits=1 minratio=0.56 maxindel=20 qtrim=rl untrim=t trimq=6 $@"
 	echo $CMD >&2
 	eval $CMD
 }

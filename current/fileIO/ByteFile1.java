@@ -40,7 +40,6 @@ public class ByteFile1 extends ByteFile {
 	
 	private static void speedtest(ByteFile1 tf, long first, long last, boolean reprint){
 		Timer t=new Timer();
-		t.start();
 		long lines=0;
 		long bytes=0;
 		for(long i=0; i<first; i++){tf.nextLine();}

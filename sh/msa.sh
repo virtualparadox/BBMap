@@ -9,6 +9,7 @@ Last modified December 5, 2014
 Description:  Aligns a query sequence to reference sequences.
 Outputs the best matching position per reference sequence.
 If there are multiple queries, only the best-matching query will be used.
+MSA in this context stands for MultiStateAligner, not Multiple Sequence Alignment.
 
 Usage:	msa.sh in=<file> out=<file> query=<literal,literal,...>
 
@@ -29,7 +30,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx1g"
@@ -55,9 +66,11 @@ calcXmx () {
 calcXmx "$@"
 
 msa() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP jgi.FindPrimers $@"
 	echo $CMD >&2
 	eval $CMD

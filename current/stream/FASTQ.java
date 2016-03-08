@@ -194,7 +194,7 @@ public class FASTQ {
 				quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
 				if(verbose){System.err.println(quals[i]);}
 				if(DETECT_QUALITY){
-					if(ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
+					if(ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH || (bases[i]=='N' && quals[i]=='B'))){
 						if(warnQualityChange && qflips<4){System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
 						qflips++;
 						ASCII_OFFSET=64;
@@ -263,7 +263,7 @@ public class FASTQ {
 				}
 			}
 		}
-
+		
 		if(idxSpace1==idxSpace2 && idxSpace1>=0){
 			//				System.out.println("C");
 			if(idxSpace1==idxSpace2 && idxSpace1>1){
@@ -288,31 +288,59 @@ public class FASTQ {
 	}
 	
 	public static String customID(Read r){
-		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
-			if(DELETE_OLD_NAME){
-				r.id=null;
+		if(!TAG_CUSTOM){return r.id;}
+		
+		if(DELETE_OLD_NAME){
+			assert(false) : "Seems odd so I added this assertion.  I don't see anywhere it was being used. Use -da flag to override.";
+			r.id=null;
+		}
+
+		ByteBuilder sb=new ByteBuilder();
+		if(r.id==null /*|| DELETE_OLD_NAME*/){
+			sb.append(r.numericID);
+		}else{
+			sb.append(r.id);
+		}
+		if(r.chrom>-1 && r.stop>-1){
+			if(TAG_CUSTOM_SIMPLE){
+				sb.append('_');
+				sb.append(r.strand()==0 ? '+' : '-');
+			}else{
+				sb.append("_chr");
+				sb.append(r.chrom);
+				sb.append('_');
+				sb.append((int)r.strand());
+				sb.append('_');
+				sb.append(r.start);
+				sb.append('_');
+				sb.append(r.stop);
 			}
+
 			if(Data.GENOME_BUILD>=0){
 				final int chrom1=r.chrom;
 				final int start1=r.start;
 				final int stop1=r.stop;
-				int idx1=Data.scaffoldIndex(chrom1, (start1+stop1)/2);
-				byte[] name1=Data.scaffoldNames[chrom1][idx1];
-				int a1=Data.scaffoldRelativeLoc(chrom1, start1, idx1);
-				if(r.mate==null || !ADD_PAIRNUM_TO_CUSTOM_ID){
-					return (r.id==null ? ""+r.numericID : r.id)+"_chr"+r.chrom+"_"+r.strand()+"_"+r.start+"_"+r.stop+"_"+a1+"_"+new String(name1);
-				}else{
-					return (r.id==null ? ""+r.numericID : r.id)+"_chr"+r.chrom+"_"+r.strand()+"_"+r.start+"_"+r.stop+"_"+a1+"_"+new String(name1)+" /"+(r.pairnum()+1);
+				final int idx1=Data.scaffoldIndex(chrom1, (start1+stop1)/2);
+				final byte[] name1=Data.scaffoldNames[chrom1][idx1];
+				final int a1=Data.scaffoldRelativeLoc(chrom1, start1, idx1);
+				final int b1=a1-start1+stop1;
+				sb.append('_');
+				sb.append(a1);
+				if(TAG_CUSTOM_SIMPLE){
+					sb.append('_');
+					sb.append(b1);
 				}
-			}else{
-				if(r.mate==null || !ADD_PAIRNUM_TO_CUSTOM_ID){
-					return (r.id==null ? ""+r.numericID : r.id)+"_chr"+r.chrom+"_"+r.strand()+"_"+r.start+"_"+r.stop;
-				}else{
-					return (r.id==null ? ""+r.numericID : r.id)+"_chr"+r.chrom+"_"+r.strand()+"_"+r.start+"_"+r.stop+" /"+(r.pairnum()+1);
-				}
+				sb.append('_');
+				sb.append(new String(name1));
 			}
 		}
-		return r.id;
+		
+		if(ADD_PAIRNUM_TO_CUSTOM_ID){
+			sb.append(' ');
+			sb.append('/');
+			sb.append(r.pairnum()+1);
+		}
+		return sb.toString();
 	}
 	
 	private static int fastqLength(Read r){
@@ -692,7 +720,7 @@ public class FASTQ {
 
 		assert(scarf || (quad[0].length>0 && quad[0][0]==(byte)'@')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
 			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
-		assert(scarf || (quad[0].length>0 && quad[2][0]==(byte)'+')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
+		assert(scarf || (quad[0].length>0 && quad[2].length>0 && quad[2][0]==(byte)'+')) : "\nError in "+tf.name()+", line "+tf.lineNum()+", with these 4 lines:\n"+
 			new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
 
 		//			if(quad[0].startsWith("@HW") || quad[0].startsWith("@FC")){ascii_offset=66;} //TODO: clumsy
@@ -837,6 +865,7 @@ public class FASTQ {
 
 	public static boolean PARSE_CUSTOM=false;
 	public static boolean TAG_CUSTOM=false;
+	public static boolean TAG_CUSTOM_SIMPLE=false;
 	public static boolean DELETE_OLD_NAME=false;
 	public static byte ASCII_OFFSET=33;
 	public static byte ASCII_OFFSET_OUT=33;

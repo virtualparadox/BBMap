@@ -24,7 +24,6 @@ public class CountGC {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		if(args.length==0){
 			System.out.println("Usage: CountGC in=<infile> out=<outfile>");
 			System.out.println("Alternately, 'out=stdout' will print to standard out.");

@@ -36,7 +36,6 @@ public class StackSites {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 		
 		for(int i=4; i<args.length; i++){
 			final String arg=args[i];

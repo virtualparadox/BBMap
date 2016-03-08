@@ -37,7 +37,6 @@ public class FilterReadsByName {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FilterReadsByName mb=new FilterReadsByName(args);
 		mb.process(t);
 	}
@@ -45,7 +44,7 @@ public class FilterReadsByName {
 	public FilterReadsByName(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -54,14 +53,12 @@ public class FilterReadsByName {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
-
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		SamLine.SET_FROM_OK=true;
 		ReadStreamWriter.USE_ATTACHED_SAMLINE=true;
 		
@@ -76,8 +73,6 @@ public class FilterReadsByName {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -111,10 +106,10 @@ public class FilterReadsByName {
 				exclude=Tools.parseBoolean(b);
 			}else if(a.equals("minlen") || a.equals("minlength")){
 				minLength=(int)Tools.parseKMG(b);
+			}else if(a.equals("truncateheadersymbol") || a.equals("truncate") || a.equals("ths")){
+				truncateHeaderSymbol=Tools.parseBoolean(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -126,7 +121,7 @@ public class FilterReadsByName {
 			String[] x=names.toArray(new String[names.size()]);
 			names.clear();
 			for(String s : x){
-				Tools.addNames(s, names);
+				Tools.addNames(s, names, true);
 			}
 		}
 		if(ignoreCase){
@@ -134,6 +129,15 @@ public class FilterReadsByName {
 			names.clear();
 			for(String s : x){
 				names.add(s.toLowerCase());
+			}
+		}
+		if(truncateHeaderSymbol){
+			String[] x=names.toArray(new String[names.size()]);
+			names.clear();
+			for(String s : x){
+				String s2=s;
+				if(s.length()>1 && (s.charAt(0)=='@' || s.charAt(0)=='>')){s2=s.substring(1);}
+				names.add(s2);
 			}
 		}
 		
@@ -406,6 +410,7 @@ public class FilterReadsByName {
 	private boolean nameSubstringOfHeader=false;
 	private boolean headerSubstringOfName=false;
 	private boolean ignoreCase=true;
+	private boolean truncateHeaderSymbol=false;
 	
 	private int minLength=0;
 	

@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 29, 2015
+Last modified October 23, 2015
 
 Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format.
 Optionally performs additional functions such as quality trimming, subsetting, and subsampling.
@@ -24,7 +24,7 @@ zl=4                    (ziplevel) Set compression level, 1 (low) to 9 (max).
 int=f                   (interleaved) Determines whether INPUT file is considered interleaved.
 fastawrap=70            Length of lines in fasta output.
 fastareadlen=0          Set to a non-zero number to break fasta files into reads of at most this length.
-minscaf=1               Ignore fasta reads shorter than this.
+fastaminlen=1           Ignore fasta reads shorter than this.
 qin=auto                ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto.
 qout=auto               ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input).
 qfake=30                Quality value used for fasta to fastq reformatting.
@@ -47,7 +47,6 @@ underscore=f            Change whitespace in read names to underscores.
 rcomp=f                 (rc) Reverse-compliment reads.
 rcompmate=f             (rcm) Reverse-compliment read 2 only.
 changequality=t         (cq) N bases always get a quality of 0 and ACGT bases get a min quality of 2.
-fixquality=f            Quality scores above 41 are capped at 41.
 quantize=f              Quantize qualities to a subset of values like NextSeq.  Can also be used with comma-delimited list, like quantize=0,8,13,22,27,32,37
 tuc=f                   (touppercase) Change lowercase letters in reads to uppercase.
 uniquenames=f           Make duplicate names unique by appending _<number>.
@@ -100,6 +99,7 @@ qtrim=f                 Trim read ends to remove bases with quality below trimq.
                         Values: t (trim both ends), f (neither end), r (right end only), l (left end only), w (sliding window).
 trimq=6                 Regions with average quality BELOW this will be trimmed.
 minlength=0             (ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.
+mlf=0                   (mlf) Reads shorter than this fraction of original length after trimming will be discarded.
 maxlength=0             If nonzero, reads longer than this after trimming will be discarded.
 breaklength=0           If nonzero, reads longer than this will be broken into multiple reads of this length.  Does not work for paired reads.
 requirebothbad=t        (rbb) Only discard pairs if both reads are shorter than minlen.
@@ -110,6 +110,7 @@ barcodefilter=f         Remove reads with unexpected barcodes if barcodes is set
                         A barcode must be the last part of the read header.
 barcodes=               Comma-delimited list of barcodes or files of barcodes.
 maxns=-1                If 0 or greater, reads with more Ns than this (after trimming) will be discarded.
+minconsecutivebases=0   (mcb) Discard reads without at least this many consecutive called bases.
 forcetrimleft=0         (ftl) If nonzero, trim left bases of the read to this position (exclusive, 0-based).
 forcetrimright=0        (ftr) If nonzero, trim right bases of the read after this position (exclusive, 0-based).
 forcetrimright2=0       (ftr2) If positive, trim this many bases on the right end.
@@ -125,6 +126,12 @@ primaryonly=f           Toss secondary alignments.  Set this to true for sam to 
 requiredbits=0          (rbits) Toss sam lines with any of these flag bits unset.  Similar to samtools -f.
 filterbits=0            (fbits) Toss sam lines with any of these flag bits set.  Similar to samtools -F.
 stoptag=f               Set to true to write a tag indicating read stop location, prefixed by YS:i:
+sam=                    Set to 'sam=1.3' to convert '=' and 'X' cigar symbols (from sam 1.4+ format) to 'M'.
+
+Cardinality estimation:
+cardinality=f           (loglog) Count unique kmers using the LogLog algorithm.
+loglogk=31              Use this kmer length for counting.
+loglogbuckets=1999      Use this many buckets for counting.
 
 Shortcuts: 
 The # symbol will be substituted for 1 and 2.  The % symbol in out will be substituted for input name minus extensions.
@@ -155,7 +162,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 #                        or unstranded libraries.  Needed by Cufflinks.  JGI mainly uses 'firststrand'.
 #idtag=t                 Set to true to write a tag indicating percent identity, prefixed by YI:f:
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx200m"
@@ -174,11 +191,13 @@ calcXmx () {
 calcXmx "$@"
 
 function reformat() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z -cp $CP jgi.ReformatReads $@"
 	echo $CMD >&2
 	eval $CMD

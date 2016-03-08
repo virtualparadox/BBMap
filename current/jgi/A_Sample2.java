@@ -24,7 +24,6 @@ public class A_Sample2 {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		A_Sample2 as=new A_Sample2(args);
 		as.process(t);
 	}
@@ -32,7 +31,7 @@ public class A_Sample2 {
 	public A_Sample2(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}

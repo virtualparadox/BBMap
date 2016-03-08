@@ -45,7 +45,6 @@ public class CoveragePileup {
 		CoveragePileup sp=new CoveragePileup(args);
 		
 		Timer t=new Timer();
-		t.start();
 		
 		sp.process();
 		
@@ -177,6 +176,10 @@ public class CoveragePileup {
 				printHeader=Tools.parseBoolean(b);
 			}else if(a.equals("headerpound") || a.equals("#")){
 				headerPound=Tools.parseBoolean(b);
+			}else if(a.equals("stdev")){
+				calcCovStdev=Tools.parseBoolean(b);
+			}else if(a.equals("delcov") || a.equals("dels") || a.equals("includedels") || a.equals("includedeletions") || a.equals("delcoverage")){
+				INCLUDE_DELETIONS=Tools.parseBoolean(b);
 			}else if(a.equals("normb") || a.equals("normalizebins")){
 				try {
 					NORMALIZE_LENGTH_BINS=Integer.parseInt(b);
@@ -602,7 +605,6 @@ public class CoveragePileup {
 			assert(false) : "Adding coverage to a null Scaffold.";
 			return false;
 		}
-		assert(INCLUDE_DELETIONS) : "TODO";
 		final int start=Tools.max(start0, 0);
 		final int stop=Tools.min(stop0, scaf.length-1);
 		
@@ -610,13 +612,27 @@ public class CoveragePileup {
 			"\nscafName="+scaf.name+"\nseq="+new String(seq)+"\nstart="+start+
 			"\nstop="+stop+"\nreadlen="+readlen+"\nstrand="+strand+"\nscaf.length="+scaf.length+"\nscaf="+scaf;
 		
-		final int bases=stop-start+1;
 		mappedBases+=readlen;
 		mappedReads++;
-		scaf.basehits+=bases;
+
 		scaf.readhits++;
 		scaf.fraghits+=incrementFrags;
 		if(strand==1){scaf.readhitsMinus++;}
+		
+		if(seq!=null && scaf.basecount!=null){
+			final long[] counts=scaf.basecount;
+			for(int i=0; i<seq.length; i++){
+				counts[charToNum[seq[i]]]++;
+			}
+		}
+		
+		if(!INCLUDE_DELETIONS && !START_ONLY){
+			assert(match!=null) : "Coverage excluding deletions cannot be calculated without a match string.";
+			return addCoverageIgnoringDeletions(scaf, seq, match, start, stop, readlen, strand, incrementFrags);
+		}
+		
+		final int basehits=stop-start+1;
+		scaf.basehits+=basehits;
 		
 		if(USE_COVERAGE_ARRAYS){
 			if(scaf.obj1==null){
@@ -646,12 +662,65 @@ public class CoveragePileup {
 			}
 		}
 		
-		if(seq!=null && scaf.basecount!=null){
-			final long[] counts=scaf.basecount;
-			for(int i=0; i<seq.length; i++){
-				counts[charToNum[seq[i]]]++;
+		return true;
+	}
+	
+	private boolean addCoverageIgnoringDeletions(final Scaffold scaf, final byte[] seq, byte match[], final int start, final int stop, final int readlen, final int strand, int incrementFrags){
+		assert(!INCLUDE_DELETIONS && !START_ONLY);
+		assert(match!=null) : "Coverage excluding deletions cannot be calculated without a match string.";
+		
+		if(Read.isShortMatchString(match)){
+			match=Read.toLongMatchString(match);
+		}
+		
+		int basehits=0;
+		if(USE_COVERAGE_ARRAYS){
+			if(scaf.obj1==null){
+				scaf.obj1=(bits32 ? new CoverageArray3(table.size(), scaf.length+1) : new CoverageArray2(table.size(), scaf.length+1));
+				if(STRANDED){
+					scaf.obj2=(bits32 ? new CoverageArray3(table.size(), scaf.length+1) : new CoverageArray2(table.size(), scaf.length+1));
+				}
+			}
+			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+			for(int rpos=start, mpos=0; mpos<match.length && rpos<=stop; mpos++){
+				byte m=match[mpos];
+				if(m=='m' || m=='S' || m=='N'){
+					ca.increment(rpos, 1);
+					basehits++;
+					rpos++;
+				}else if(m=='X' || m=='Y' || m=='C' || m=='I'){
+					//do nothing
+				}else if(m=='D'){
+					rpos++;
+				}else{
+					assert(false) : "Unhandled symbol "+m;
+				}
+			}
+		}else if(USE_BITSETS){
+			if(scaf.obj1==null){
+				scaf.obj1=new BitSet(scaf.length+1);
+				if(STRANDED){
+					scaf.obj2=new BitSet(scaf.length+1);
+				}
+			}
+			BitSet bs=(BitSet)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+			for(int rpos=start, mpos=0; mpos<match.length && rpos<=stop; mpos++){
+				byte m=match[mpos];
+				if(m=='m' || m=='S' || m=='N'){
+					bs.set(rpos);
+					basehits++;
+					rpos++;
+				}else if(m=='X' || m=='Y' || m=='C' || m=='I'){
+					//do nothing
+				}else if(m=='D'){
+					rpos++;
+				}else{
+					assert(false) : "Unhandled symbol "+m;
+				}
 			}
 		}
+		scaf.basehits+=basehits;
+		
 		return true;
 	}
 	
@@ -822,6 +891,10 @@ public class CoveragePileup {
 		double pctCovered=totalCoveredBases1*100*mult;
 		
 		Data.sysout.println(String.format("\nAverage coverage:                    \t%.2f", depthCovered));
+		if(USE_COVERAGE_ARRAYS && calcCovStdev){
+			double[] stdev=standardDeviation(list, 0, minscaf);
+			Data.sysout.println(String.format("Standard deviation:                    \t%.2f", stdev[1]));
+		}
 		Data.sysout.println(String.format("Percent scaffolds with any coverage: \t%.2f", pctScaffoldsWithCoverage));
 		if(USE_COVERAGE_ARRAYS || USE_BITSETS){
 			Data.sysout.println(String.format("Percent of reference bases covered:  \t%.2f", pctCovered));
@@ -1160,6 +1233,13 @@ public class CoveragePileup {
 		tsw.start();
 		if(printHeader){
 			String pound=(headerPound ? "#" : "");
+			if(calcCovStdev){
+				double[] stdev=standardDeviation(list, strand, minscaf);
+				if(stdev!=null){
+					tsw.print(pound+"Mean\t"+String.format("%.3f", stdev[0])+"\n");
+					tsw.print(pound+"STDev\t"+String.format("%.3f", stdev[1])+"\n");
+				}
+			}
 			tsw.print(pound+"RefName\tCov\tPos\tRunningPos\n");
 		}
 		
@@ -1189,7 +1269,177 @@ public class CoveragePileup {
 		tsw.poisonAndWait();
 	}
 	
+	/**
+	 * This version will NOT truncate all trailing bases of each scaffold's length modulo binsize.
+	 * @param fname Output filename
+	 * @param list List of reference scaffolds
+	 * @param binsize Width of coverage bins in bp
+	 * @param strand Only use coverage from reads mapped to this strand (0=plus, 1=minus)
+	 */
+	public static void writeCoveragePerBaseBinned2(String fname, ArrayList<Scaffold> list, int binsize, int strand, int minscaf){
+		if(fname==null || (!STRANDED && strand>0)){return;}
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		tsw.start();
+		if(printHeader){
+			String pound=(headerPound ? "#" : "");
+			if(calcCovStdev){
+				double[] stdev=standardDeviationBinned(list, binsize, strand, minscaf);
+				if(stdev!=null){
+					tsw.print(pound+"Mean\t"+String.format("%.3f", stdev[0])+"\n");
+					tsw.print(pound+"STDev\t"+String.format("%.3f", stdev[1])+"\n");
+				}
+			}
+			tsw.print(pound+"RefName\tCov\tPos\tRunningPos\n");
+		}
+		
+		long running=0;
+		for(Scaffold scaf : list){
+			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+			int lastPos=-1, nextPos=binsize-1;
+			long sum=0;
+			final int lim=scaf.length-1;
+			for(int i=0; i<scaf.length; i++){
+				int x=(ca==null ? 0 : ca.get(i));
+				sum+=x;
+				if(i>=nextPos || i==lim){
+					int bin=(i-lastPos);
+					if(scaf.length>=minscaf){
+						tsw.print(String.format("%s\t%.2f\t%d\t%d\n", scaf.name, sum/(float)bin, (i+1), running));
+					}
+					running+=bin;
+					nextPos+=binsize;
+					lastPos=i;
+					sum=0;
+				}
+			}
+		}
+		
+		tsw.poisonAndWait();
+	}
 
+	//Unsafe because it will fail if there are over 2 billion bins
+	public static double[] standardDeviationBinnedUnsafe(String fname, ArrayList<Scaffold> scaffolds, int binsize, int strand, int minscaf){
+		
+		LongList list=new LongList();
+		for(Scaffold scaf : scaffolds){
+			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+			int lastPos=-1, nextPos=binsize-1;
+			long sum=0;
+			final int lim=scaf.length-1;
+			for(int i=0; i<scaf.length; i++){
+				int x=(ca==null ? 0 : ca.get(i));
+				sum+=x;
+				if(i>=nextPos || i==lim){
+					int bin=(i-lastPos);
+					if(scaf.length>=minscaf){
+						list.add((int)(10*(sum/(double)bin)));
+					}
+					nextPos+=binsize;
+					lastPos=i;
+					sum=0;
+				}
+			}
+		}
+		list.sort();
+		
+		double mean=0.1*list.mean();
+		double median=0.1*list.median();
+		double mode=0.1*list.mode();
+		double stdev=0.1*list.stdev();
+		return new double[] {mean, median, mode, stdev};
+	}
+
+	public static double[] standardDeviationBinned(ArrayList<Scaffold> scaffolds, int binsize, int strand, int minscaf){
+		double totalSum=0;
+		long bins=0;
+		
+		for(Scaffold scaf : scaffolds){
+			if(scaf.length>=minscaf){
+				CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+				int lastPos=-1, nextPos=binsize-1;
+				long tempSum=0;
+				final int lim=scaf.length-1;
+				for(int i=0; i<scaf.length; i++){
+					int x=(ca==null ? 0 : ca.get(i));
+					tempSum+=x;
+					if(i>=nextPos || i==lim){
+						int bin=(i-lastPos);
+						double depth=(tempSum/(double)bin);
+						totalSum+=depth;
+						bins++;
+						nextPos+=binsize;
+						lastPos=i;
+						tempSum=0;
+					}
+				}
+			}
+		}
+		
+		if(bins<1){return new double[] {0, 0};}
+		final double mean=totalSum/(double)bins;
+		double sumdev2=0;
+		
+		for(Scaffold scaf : scaffolds){
+			if(scaf.length>=minscaf){
+				CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+				int lastPos=-1, nextPos=binsize-1;
+				long tempSum=0;
+				final int lim=scaf.length-1;
+				for(int i=0; i<scaf.length; i++){
+					int x=(ca==null ? 0 : ca.get(i));
+					tempSum+=x;
+					if(i>=nextPos || i==lim){
+						int bin=(i-lastPos);
+						double depth=(tempSum/(double)bin);
+						double dev=mean-depth;
+						sumdev2+=(dev*dev);
+						nextPos+=binsize;
+						lastPos=i;
+						tempSum=0;
+					}
+				}
+			}
+		}
+		
+		final double stdev=Math.sqrt(sumdev2/bins);
+		return new double[] {mean, stdev};
+	}
+
+	public static double[] standardDeviation(ArrayList<Scaffold> scaffolds, int strand, int minscaf){
+		long totalSum=0, bins=0;
+		
+		for(Scaffold scaf : scaffolds){
+			if(scaf.length>=minscaf){
+				final CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+				bins+=scaf.length;
+				for(int i=0; i<scaf.length; i++){
+					int depth=(ca==null ? 0 : ca.get(i));
+					totalSum+=depth;
+				}
+			}
+		}
+
+		if(bins<1){return new double[] {0, 0};}
+		final double mean=totalSum/(double)bins;
+		double sumdev2=0;
+		
+		for(Scaffold scaf : scaffolds){
+			if(scaf.length>=minscaf){
+				final CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
+				double sumTemp=0;
+				for(int i=0; i<scaf.length; i++){
+					int depth=(ca==null ? 0 : ca.get(i));
+					double dev=mean-depth;
+					sumTemp+=(dev*dev);
+				}
+				sumdev2+=sumTemp;
+			}
+		}
+
+		final double stdev=Math.sqrt(sumdev2/bins);
+		return new double[] {mean, stdev};
+	}
+	
 	
 	/**
 	 * @param fname Output filename
@@ -1358,47 +1608,6 @@ public class CoveragePileup {
 		tsw.poisonAndWait();
 	}
 	
-	/**
-	 * This version will NOT truncate all trailing bases of each scaffold's length modulo binsize.
-	 * @param fname Output filename
-	 * @param list List of reference scaffolds
-	 * @param binsize Width of coverage bins in bp
-	 * @param strand Only use coverage from reads mapped to this strand (0=plus, 1=minus)
-	 */
-	public static void writeCoveragePerBaseBinned2(String fname, ArrayList<Scaffold> list, int binsize, int strand, int minscaf){
-		if(fname==null || (!STRANDED && strand>0)){return;}
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-		if(printHeader){
-			String pound=(headerPound ? "#" : "");
-			tsw.print(pound+"RefName\tCov\tPos\tRunningPos\n");
-		}
-		
-		long running=0;
-		for(Scaffold scaf : list){
-			CoverageArray ca=(CoverageArray)(STRANDED && strand==1 ? scaf.obj2 : scaf.obj1);
-			int lastPos=-1, nextPos=binsize-1;
-			long sum=0;
-			final int lim=scaf.length-1;
-			for(int i=0; i<scaf.length; i++){
-				int x=(ca==null ? 0 : ca.get(i));
-				sum+=x;
-				if(i>=nextPos || i==lim){
-					int bin=(i-lastPos);
-					if(scaf.length>=minscaf){
-						tsw.print(String.format("%s\t%.2f\t%d\t%d\n", scaf.name, sum/(float)bin, (i+1), running));
-					}
-					running+=bin;
-					nextPos+=binsize;
-					lastPos=i;
-					sum=0;
-				}
-			}
-		}
-		
-		tsw.poisonAndWait();
-	}
-	
 
 	
 	/**
@@ -1534,6 +1743,8 @@ public class CoveragePileup {
 	public static boolean printHeader=true;
 	/** Prepend '#' symbol to header lines */
 	public static boolean headerPound=true;
+	/** Calculate standard deviation of coverage */
+	public static boolean calcCovStdev=true;
 	
 	/** Window size to use when calculating average coverage,
 	 * for detecting contiguous low-coverage areas */
@@ -1580,7 +1791,7 @@ public class CoveragePileup {
 	/** Include soft-clipped bases in coverage */
 	public static boolean INCLUDE_SOFT_CLIP=false;
 	/** Include deletions/introns in coverage */
-	public static boolean INCLUDE_DELETIONS=true; //TODO: Note enabled; use BBMask increment method to implement.
+	public static boolean INCLUDE_DELETIONS=true; //TODO: Not enabled; use BBMask increment method to implement.
 
 	/** Translation array for tracking base counts */
 	private static final byte[] charToNum=AssemblyStats2.makeCharToNum();

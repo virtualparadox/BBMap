@@ -46,7 +46,6 @@ public class GetReads {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
-		t.start();
 
 		Parser parser=new Parser();
 		String in1=null;
@@ -70,8 +69,8 @@ public class GetReads {
 		float samplerate=1f;
 		long sampleseed=1;
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		HashSet<Long> table=new HashSet<Long>();
@@ -95,8 +94,6 @@ public class GetReads {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("id") || a.equals("number")){
 				String[] b2=b.split(",");
 				for(String c : b2){
@@ -167,12 +164,6 @@ public class GetReads {
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
 					in1=arg.replace("#", "1");
 					in2=arg.replace("#", "2");
-				}
-			}else if(out1==null && i==1 && !arg.contains("=")){
-				out1=arg;
-				if(arg.indexOf('#')>-1){
-					out1=arg.replace("#", "1");
-					out2=arg.replace("#", "2");
 				}
 			}else{
 				System.err.println("Unknown parameter "+args[i]);

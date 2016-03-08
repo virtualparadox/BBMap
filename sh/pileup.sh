@@ -4,14 +4,12 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 19, 2015
+Last modified August 25, 2015
 
-Description:  Calculates per-scaffold coverage information from an unsorted sam file.
+Description:  Calculates per-scaffold coverage information from an unsorted sam or bam file.
 
-Usage:  pileup.sh in=<input> out=<output>
+Usage:        pileup.sh in=<input> out=<output>
 
-Input may be stdin or a SAM file, compressed or uncompressed.
-Output may be stdout or a file.
 
 Input Parameters:
 in=<file>           The input sam file; this is the only required parameter.
@@ -40,6 +38,7 @@ nzo=f               Only print scaffolds with nonzero coverage.
 concise=f           Write 'basecov' in a more concise format.
 header=t            (hdr) Include headers in output files.
 headerpound=t       (#) Prepend header lines with '#' symbol.
+stdev=t             Calculate coverage standard deviation.
 covminscaf=0        (minscaf) Don't print coverage for scaffolds shorter than this.
 covwindow=0         Calculate how many bases are in windows of this size with
                     low average coverage.  Produces an extra stats column.
@@ -57,7 +56,8 @@ arrays=auto         Set to t/f to manually force the use of coverage arrays.  Ar
 bitsets=auto        Set to t/f to manually force the use of coverage bitsets.
 32bit=f             Set to true if you need per-base coverage over 64k; does not affect per-scaffold coverage precision.
                     This option will double RAM usage (when calculating per-base coverage).
-monitor=f           Kill this process if it crashes.  monitor=600,0.01 would kill after 600 seconds under 1% usage.
+delcoverage=t       (delcov) Count bases covered by deletions as covered.
+                    True is faster than false.
 
 Java Parameters:
 -Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.
@@ -93,7 +93,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx1g"
@@ -119,11 +129,13 @@ calcXmx () {
 calcXmx "$@"
 
 pileup() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z -cp $CP jgi.CoveragePileup $@"
 	echo $CMD >&2
 	eval $CMD

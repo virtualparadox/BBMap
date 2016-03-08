@@ -30,10 +30,9 @@ public class PartitionReads {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		
 		Timer t=new Timer();
-		t.start();
 		
 		boolean verbose=false;
 		int ziplevel=-1;

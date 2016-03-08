@@ -31,7 +31,6 @@ public class IdentityMatrix {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		IdentityMatrix as=new IdentityMatrix(args);
 		as.process(t);
 	}
@@ -39,7 +38,7 @@ public class IdentityMatrix {
 	public IdentityMatrix(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -161,7 +160,6 @@ public class IdentityMatrix {
 	
 	private ArrayList<Read> load(){
 		Timer t=new Timer();
-		t.start();
 		final ConcurrentReadInputStream cris;
 		{
 			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, true, ffin1, null);

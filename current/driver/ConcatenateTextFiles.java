@@ -23,7 +23,6 @@ public class ConcatenateTextFiles {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 		
 		if(ReadWrite.ZIPLEVEL<6){ReadWrite.ZIPLEVEL=6;}
 		
@@ -37,8 +36,6 @@ public class ConcatenateTextFiles {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){

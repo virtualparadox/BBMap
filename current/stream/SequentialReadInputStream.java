@@ -52,52 +52,46 @@ public class SequentialReadInputStream extends ReadInputStream {
 	@Override
 	public boolean hasMore() {
 		if(verbose){
-			System.out.println("Called hasMore(): "+(id>=maxReads)+", "+(chrom<maxChrom)+", "+(position<=maxPosition)+", "+(buffer==null || next>=buffer.length));
-			System.out.println(id+", "+maxReads+", "+chrom+", "+maxChrom+", "+position+", "+maxPosition+", "+buffer+", "+next+", "+(buffer==null ? -1 : buffer.length));
+			System.out.println("Called hasMore(): "+(id>=maxReads)+", "+(chrom<maxChrom)+", "+(position<=maxPosition)+", "+(buffer==null || next>=BUF_LEN));
+			System.out.println(id+", "+maxReads+", "+chrom+", "+maxChrom+", "+position+", "+maxPosition+", "+buffer+", "+next+", "+(buffer==null ? -1 : BUF_LEN));
 		}
-//		if(buffer==null || next>=buffer.length){
+//		if(buffer==null || next>=buffer.size()){
 //			if(tf.isOpen()){
 //				fillBuffer();
 //			}else{
 //				assert(generated>0) : "Was the file empty?";
 //			}
 //		}
-//		return (buffer!=null && next<buffer.length);
+//		return (buffer!=null && next<buffer.size());
 		if(id>=maxReads){return false;}
 		if(chrom<maxChrom){return true;}
 		if(position<=maxPosition){return true;}
-		if(buffer==null || next>=buffer.length){return false;}
+		if(buffer==null || next>=buffer.size()){return false;}
 		return true;
 	}
 
 	@Override
 	public Read next() {
 		if(!hasMore()){return null;}
-		if(buffer==null || next>=buffer.length){fillBuffer();}
-		Read r=buffer[next];
-		buffer[next]=null;
+		if(buffer==null || next>=buffer.size()){fillBuffer();}
+		Read r=buffer.get(next);
+		buffer.set(next, null);
 		next++;
 		consumed++;
-		return r;
-	}
-
-	@Override
-	public synchronized Read[] nextBlock() {
-		if(next!=0){throw new RuntimeException("'next' should not be used when doing blockwise access.");}
-		if(!hasMore()){return null;}
-		if(buffer==null || next>=buffer.length){fillBuffer();}
-		Read[] r=buffer;
-		buffer=null;
-		if(r!=null && r.length==0){r=null;}
-		consumed+=(r==null ? 0 : r.length);
 		return r;
 	}
 	
 	@Override
 	public synchronized ArrayList<Read> nextList() {
-		return toList(nextBlock());
+		if(next!=0){throw new RuntimeException("'next' should not be used when doing blockwise access.");}
+		if(!hasMore()){return null;}
+		if(buffer==null || next>=buffer.size()){fillBuffer();}
+		ArrayList<Read> r=buffer;
+		buffer=null;
+		if(r!=null && r.size()==0){r=null;}
+		consumed+=(r==null ? 0 : r.size());
+		return r;
 	}
-	public final boolean preferArrays(){return true;}
 	
 	private synchronized void fillBuffer(){
 //		System.out.println("fill "+chrom+", "+position);
@@ -110,10 +104,10 @@ public class SequentialReadInputStream extends ReadInputStream {
 			while(position<=maxPosition && !AminoAcid.isFullyDefined((char)cha.get(position))){position++;}
 		}
 		
-		Read[] reads=new Read[BUF_LEN];
+		ArrayList<Read> reads=new ArrayList<Read>(BUF_LEN);
 		int index=0;
 		
-		while(position<=maxPosition && index<reads.length && id<maxReads){
+		while(position<=maxPosition && index<buffer.size() && id<maxReads){
 			int start=position;
 			int stop=Tools.min(position+readlen-1, cha.maxIndex);
 			byte[] s=cha.getBytes(start, stop);
@@ -144,7 +138,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 //				System.out.println("Made read: "+r);
 //				assert(id!=54406) : "\n"+r.toString()+"\nbases: "+s.length+"\nstart: "+start+"\nstop: "+stop+"\nminlen: "+minReadlen+"\n";
 				
-				reads[index]=r;
+				reads.add(r);
 				index++;
 				position+=(POSITION_INCREMENT-overlap);
 				id++;
@@ -167,27 +161,7 @@ public class SequentialReadInputStream extends ReadInputStream {
 		
 		generated+=index;
 		
-		if(index<reads.length){
-			reads=Arrays.copyOf(reads, index);
-		}
-		
 		buffer=reads;
-		
-		
-		
-//		ArrayList<Read> list=new ArrayList<Read>(BUF_LEN);
-//		
-//		
-//		while(position<=maxPosition && list.size()<BUF_LEN){
-//			String s=cha.getString(position, position+readlen-1);
-//			assert(s.length()==readlen);
-//			long id=(lschr|position);
-//			Read r=new Read(s, chrom, Gene.PLUS, position, id, null);
-//			list.add(r);
-//		}
-//		
-//		generated+=list.size();
-//		buffer=list.toArray(new Read[list.size()]);
 	}
 	
 	private long id=0;
@@ -197,10 +171,10 @@ public class SequentialReadInputStream extends ReadInputStream {
 	
 	private int chrom;
 	
-	private Read[] buffer=null;
+	private ArrayList<Read> buffer=null;
 	private int next=0;
 	
-	public static final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
 	public static boolean UNLOAD=false;
 
 	public long generated=0;

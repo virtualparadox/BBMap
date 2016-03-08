@@ -31,7 +31,6 @@ public class MakeCoverageHistogram {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		Timer t=new Timer();
-		t.start();
 		
 		Data.GENOME_BUILD=-1;
 		for(int i=2; i<args.length; i++){

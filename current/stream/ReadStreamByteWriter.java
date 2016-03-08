@@ -47,7 +47,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	/*--------------------------------------------------------------*/
 	
 	private void writeHeader() throws IOException {
-		if(!OUTPUT_SAM && !OUTPUT_FASTQ && !OUTPUT_FASTA && !OUTPUT_ATTACHMENT){
+		if(!OUTPUT_SAM && !OUTPUT_FASTQ && !OUTPUT_FASTA && !OUTPUT_ATTACHMENT && !OUTPUT_HEADER){
 			if(OUTPUT_INTERLEAVED){
 //				assert(false) : OUTPUT_SAM+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT+", "+OUTPUT_INTERLEAVED+", "+SITES_ONLY;
 				myOutstream.write("#INTERLEAVED\n".getBytes());
@@ -92,6 +92,8 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 					writeFasta(job, bb, os);
 				}else if(OUTPUT_ATTACHMENT){
 					writeAttachment(job, bb, os);
+				}else if(OUTPUT_HEADER){
+					writeHeader(job, bb, os);
 				}else{
 					writeBread(job, bb, os);
 				}
@@ -256,13 +258,13 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 		if(read1){
 			for(final Read r : job.list){
 				if(r!=null){
-					if(r.obj==null){bb.append('.').append('\n');}
+					if(r.obj==null){/*bb.append('.').append('\n');*/}
 					else{bb.append(r.obj.toString()).append('\n');}
 					readsWritten++;
 					validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
 					Read r2=r.mate;
 					if(OUTPUT_INTERLEAVED && r2!=null){
-						if(r2.obj==null){bb.append('.').append('\n');}
+						if(r2.obj==null){/*bb.append('.').append('\n');*/}
 						else{bb.append(r2.obj.toString()).append('\n');}
 						readsWritten++;
 						validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
@@ -278,12 +280,57 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 				if(r1!=null){
 					final Read r2=r1.mate;
 					if(r2!=null){
-						if(r2.obj==null){bb.append('.').append('\n');}
+						if(r2.obj==null){/*bb.append('.').append('\n');*/}
 						else{bb.append(r2.obj.toString()).append('\n');}
 						readsWritten++;
 						validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
 					}else{
-						bb.append('.').append('\n');
+//						bb.append('.').append('\n');
+					}
+				}
+				if(bb.length>=32768){
+					os.write(bb.array, 0, bb.length);
+					bb.setLength(0);
+				}
+			}
+		}
+	}
+
+	/**
+	 * @param job
+	 * @param bb
+	 * @param os
+	 * @throws IOException 
+	 */
+	private void writeHeader(Job job, ByteBuilder bb, OutputStream os) throws IOException {
+		if(read1){
+			for(final Read r : job.list){
+				if(r!=null){
+					bb.append(r.id).append('\n');
+					readsWritten++;
+					validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
+					Read r2=r.mate;
+					if(OUTPUT_INTERLEAVED && r2!=null){
+						bb.append(r2.id).append('\n');
+						readsWritten++;
+						validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+					}
+				}
+				if(bb.length>=32768){
+					os.write(bb.array, 0, bb.length);
+					bb.setLength(0);
+				}
+			}
+		}else{
+			for(final Read r1 : job.list){
+				if(r1!=null){
+					final Read r2=r1.mate;
+					if(r2!=null){
+						bb.append(r2.id).append('\n');
+						readsWritten++;
+						validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+					}else{
+//						bb.append('.').append('\n');
 					}
 				}
 				if(bb.length>=32768){

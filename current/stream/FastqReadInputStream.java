@@ -91,13 +91,6 @@ public class FastqReadInputStream extends ReadInputStream {
 	}
 	
 	@Override
-	public synchronized Read[] nextBlock() {
-		ArrayList<Read> x=nextList();
-		if(x==null){return null;}
-		return x.toArray(new Read[x.size()]);
-	}
-	
-	@Override
 	public synchronized ArrayList<Read> nextList() {
 		if(next!=0){throw new RuntimeException("'next' should not be used when doing blockwise access.");}
 		if(buffer==null || next>=buffer.size()){fillBuffer();}
@@ -107,7 +100,6 @@ public class FastqReadInputStream extends ReadInputStream {
 		consumed+=(list==null ? 0 : list.size());
 		return list;
 	}
-	public final boolean preferArrays(){return false;}
 	
 	private synchronized void fillBuffer(){
 		

@@ -9,11 +9,10 @@ Last modified February 17, 2015
 Description:  Translates nucleotide sequences to all 6 amino acid frames,
 or amino acids to a canonical nucleotide representation.
 
-Usage:   translate6frames.sh in=<input file> out=<output file>
+Usage:        translate6frames.sh in=<input file> out=<output file>
 
-Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed.
-Output may be stdout or a file.
-If you pipe via stdin/stdout, please include the file type; e.g. for gzipped fasta input, set in=stdin.fa.gz
+Input may be fasta or fastq, compressed or uncompressed.
+
 
 Optional parameters (and their defaults)
 
@@ -47,7 +46,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx2g"
@@ -73,11 +82,13 @@ calcXmx () {
 calcXmx "$@"
 
 translate6frames() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module unload samtools
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+		module load samtools
+	fi
 	local CMD="java $EA $z -cp $CP jgi.TranslateSixFrames $@"
 	echo $CMD >&2
 	eval $CMD

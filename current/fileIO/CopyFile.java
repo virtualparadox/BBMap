@@ -62,7 +62,6 @@ public class CopyFile {
 		assert(in!=null && out!=null);
 		long bytes=new File(in).length();
 		Timer t=new Timer();
-		t.start();
 		copyFile(in, out, false, overwrite);
 		t.stop();
 		double mbps1=bytes*1000d/t.elapsed;

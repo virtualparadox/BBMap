@@ -23,7 +23,6 @@ public class KmerCount3 extends KmerCountAbstract {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String fname1=args[0];
 		String fname2=(args.length>3 || args[1].contains(".") ? args[1] : null);

@@ -83,8 +83,6 @@ public class BBQC {
 				}
 			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;

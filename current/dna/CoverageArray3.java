@@ -1,6 +1,8 @@
 package dna;
 import java.io.Serializable;
 
+import stream.KillSwitch;
+
 import driver.Translator2;
 
 import fileIO.ReadWrite;
@@ -60,7 +62,6 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	public static void translateGenomeBuild(String[] args){
 
 		Timer t=new Timer();
-		t.start();
 
 		int inBuild=Integer.parseInt(args[0]);
 		int outBuild=Integer.parseInt(args[1]);
@@ -123,7 +124,7 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	
 	public CoverageArray3(int chrom, int initialLen){
 		super(chrom);
-		array=new int[initialLen];
+		array=KillSwitch.allocInt1D(initialLen);
 	}
 	
 	/**
@@ -203,8 +204,8 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 	}
 	
 	public void resize(int newlen){
-		System.err.println("Resized CoverageArray "+chromosome+" to "+newlen);
-		int[] temp=new int[newlen];
+//		System.err.println("Resized CoverageArray "+chromosome+" to "+newlen);
+		int[] temp=KillSwitch.allocInt1D(newlen);
 		int lim=min(array.length, newlen);
 		assert(lim>maxIndex) : lim+","+maxIndex;
 		for(int i=0; i<lim; i++){
@@ -213,11 +214,16 @@ public class CoverageArray3 extends CoverageArray implements Serializable {
 		array=temp;
 	}
 	
-	
-	private static final long min(long x, long y){return x<y ? x : y;}
-	private static final long max(long x, long y){return x>y ? x : y;}
-	private static final int min(int x, int y){return x<y ? x : y;}
-	private static final int max(int x, int y){return x>y ? x : y;}
+	public String toString(){
+		StringBuilder sb=new StringBuilder();
+		sb.append('[');
+		for(int i=0; i<=maxIndex; i++){
+			if(i>0){sb.append(", ");}
+			sb.append((int)array[i]);
+		}
+		sb.append(']');
+		return sb.toString();
+	}
 	
 	
 	public int[] array;

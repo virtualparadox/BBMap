@@ -91,7 +91,7 @@ public class KmerNode2D extends KmerNode {
 		return values;
 	}
 	
-	protected int set(int value_){
+	public int set(int value_){
 		insertValue(value_);
 		return value_;
 	}
@@ -184,6 +184,21 @@ public class KmerNode2D extends KmerNode {
 		bsw.printlnKmer(pivot, values, k);
 		if(left!=null){left.dumpKmersAsBytes(bsw, k, mincount);}
 		if(right!=null){right.dumpKmersAsBytes(bsw, k, mincount);}
+		return true;
+	}
+	
+	@Override
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		if(values==null){return true;}
+		toBytes(pivot, values, k, bb);
+		bb.append('\n');
+		if(bb.length()>=16000){
+			ByteBuilder bb2=new ByteBuilder(bb);
+			synchronized(bsw){bsw.addJob(bb2);}
+			bb.clear();
+		}
+		if(left!=null){left.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
+		if(right!=null){right.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
 		return true;
 	}
 	

@@ -228,7 +228,10 @@ public final class TranslateColorspaceRead {
 	/** For some reason realign was making the match string backwards... */
 	public static void realign_new(final SiteScore ss, final byte[] bases, final MSA msa, int padding, final int recur, int minValidScore, 
 			boolean forbidIndels, boolean fixXY, final long id){
-		if(ss.matchContainsXY()){ss.fixXY(bases, false, msa);} //This must run regardless of 'fixXY' or else an XY read could be semiperfect but not marked as such 
+		if(verbose){System.err.println("Calling realign_new on ss "+ss);}
+		if(ss.matchContainsXY()){ss.fixXY(bases, false, msa);} //This must run regardless of 'fixXY' or else an XY read could be semiperfect but not marked as such
+		ss.clipTipIndels(bases, 4, 10, msa);
+		if(verbose){System.err.println("After fixXY and clipTipIndels: "+ss);}
 		assert(Read.CHECKSITE(ss, bases, id));
 //		final byte[] bases=ss.plus() ? basesP : basesM;
 		
@@ -335,7 +338,7 @@ public final class TranslateColorspaceRead {
 //				assert(ss.match[ss.match.length-1]!='X') : ss.toText();
 				//				assert(ss.setStop()=ss.start()+bases.length-1);
 				ss.setStop(ss.start()+bases.length-1);
-				ss.slowScore=scoreNoIndel;
+				ss.setSlowScore(scoreNoIndel);
 				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}else{
 				if(verbose){System.err.println("Slow match.");}
@@ -401,7 +404,7 @@ public final class TranslateColorspaceRead {
 							}
 						}
 						
-						assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+id+", "+ss;
+						assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+id+", "+ss+", "+new String(bases);
 						minLoc=Tools.max(0, minLoc-extraPadLeft);
 						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
 
@@ -440,7 +443,7 @@ public final class TranslateColorspaceRead {
 								}
 							}
 							
-							assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+id+", "+ss;
+							assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+id+", "+ss+", "+new String(bases);
 							minLoc=Tools.max(0, minLoc-extraPadLeft);
 							maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
 							
@@ -466,14 +469,20 @@ public final class TranslateColorspaceRead {
 				if(max!=null){
 					ss.match=msa.traceback(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null);
 					ss.setLimits(score[1], score[2]);
-					ss.slowScore=score[0];
+					if(verbose){System.err.println(ss.lengthsAgree()+", "+ss.start+", "+ss.stop);}
+					ss.fixLimitsXY();
+					if(verbose){System.err.println(ss.lengthsAgree()+", "+ss.start+", "+ss.stop);}
+					ss.setSlowScore(score[0]);
+					assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 				}else{
 					ss.setStop(ss.start()+bases.length-1);
-					ss.slowScore=scoreNoIndel;
+					ss.setSlowScore(scoreNoIndel);
+					assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 				}
 				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}
 			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
+			assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 		}else{
 			assert(maxQ>maxI);
 
@@ -492,8 +501,8 @@ public final class TranslateColorspaceRead {
 				assert(ss.match[0]!='X') : ss.toText();
 				assert(ss.match[ss.match.length-1]!='X') : ss.toText();
 				ss.setStop(ss.start()+bases.length-1);
-				ss.slowScore=scoreNoIndel;
-//				Tools.reverseInPlace(ss.match);
+				ss.setSlowScore(scoreNoIndel);
+				assert(ss.lengthsAgree());
 			}else{
 				if(verbose){System.err.println("Slow match.");}
 				
@@ -592,50 +601,55 @@ public final class TranslateColorspaceRead {
 				
 				
 				if(verbose){System.err.println(Arrays.toString(max));}
-				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases)+"\n"+ss;
 				
 				if(max!=null){
 					ss.match=msa.traceback(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null);
 					ss.setLimits(score[1], score[2]);
-					ss.slowScore=score[0];
+					ss.fixLimitsXY();
+					ss.setSlowScore(score[0]);
 					if(verbose){System.err.println("Aligned4:\n"+new String(bases)+"\n"+chacs.getString(ss.start(), ss.stop())+"\n"+new String(ss.match));}
+					assert(ss.lengthsAgree()) : id+"\n"+new String(bases)+"\n"+ss;
 				}else{
-					assert(ss.match[0]!='X') : ss.toText();
-					assert(ss.match[ss.match.length-1]!='X') : ss.toText();
+					assert(ss.match[0]!='X') : id+"\n"+new String(bases)+"\n"+ss;
+					assert(ss.match[ss.match.length-1]!='X' && ss.match[ss.match.length-1]!='Y') : id+"\n"+new String(bases)+"\n"+ss;
 					ss.setStop(ss.start()+bases.length-1);
-					ss.slowScore=scoreNoIndel;
+					ss.setSlowScore(scoreNoIndel);
+					assert(ss.lengthsAgree()) : id+"\n"+new String(bases)+"\n"+ss;
 				}
-				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases)+"\n"+ss;
+				assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 			}
 			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
+			assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 		}
 		if(verbose){System.err.println("Final: "+ss.start()+", "+ss.stop()+", "+Gene.strandCodes[ss.strand()]+", recur="+recur);}
+		assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 		
-		if(ss.stop()<chacs.maxIndex && ss.start()>0 && (ss.match[0]=='X' || ss.match[0]=='I' || 
-				ss.match[ss.match.length-1]=='Y' || ss.match[ss.match.length-1]=='X' || ss.match[ss.match.length-1]=='I')){
+		final int leftPaddingNeeded=ss.leftPaddingNeeded(4, 5), rightPaddingNeeded=ss.rightPaddingNeeded(4, 5);
+		if(ss.stop()<chacs.maxIndex && ss.start()>0 && (leftPaddingNeeded>0 || rightPaddingNeeded>0)){
+			assert(ss.lengthsAgree()) : ss.matchLength()+", "+ss.mappedLength()+"\n\nss: "+ss+"\nbases: "+new String(bases);
 			if(recur>0){
-				int xy=0;
-				for(int i=0; i<ss.match.length; i++){
-					byte b=ss.match[i];
-					if(b=='X' || b=='Y' || b=='I'){xy++;}
-				}
-				//			System.err.println("xy = "+xy);
-
 				ss.gaps=GapTools.fixGaps(ss.start(), ss.stop(), ss.gaps, Shared.MINGAP);
 
-				int p_temp=Tools.min(10+padding+2*xy, (msa.maxColumns-bases.length)/2-20);
-
+				int p_temp=Tools.min(10+Tools.max(leftPaddingNeeded, rightPaddingNeeded), (msa.maxColumns-bases.length)/2-20);
+				
+				if(verbose){System.err.println("re-calling realign_new.");}
 				realign_new(ss, bases, msa, p_temp, recur-1, minValidScore, forbidIndels, fixXY, id);
+				assert(ss.lengthsAgree());
 			}else{
+				if(verbose){System.err.println("Not recurring. fixXY="+fixXY);}
 //				int len1=Read.calcMatchLength(ss.match);
 //				int len2=ss.stop()-ss.start()+1;
 				if(fixXY && ss.matchContainsXY()){
 					ss.fixXY(bases, false, msa);
+					assert(ss.lengthsAgree());
 				}
 				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}
 		}
 		ss.setPerfect(bases);
+		assert(Read.CHECKSITE(ss, bases, id));
 	}
 	
 	private static final boolean checkArray(byte[] bases){

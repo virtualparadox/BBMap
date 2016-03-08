@@ -14,7 +14,7 @@ resulting stats files (one per library) to a single text file, with multiple
 columns, indicating how much of the input hit the primary versus nonprimary 
 scaffolds.
 
-Usage: summarizescafstats.sh in=<file,file...> out=<file>
+Usage:  summarizescafstats.sh in=<file,file...> out=<file>
 
 You can alternatively use a wildcard, like this:
 summarizescafstats.sh scafstats_*.txt out=summary.txt
@@ -27,7 +27,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx120m"
@@ -40,8 +50,10 @@ if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 fi
 
 summarizescafstats() {
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP driver.SummarizeCoverage $@"
 #	echo $CMD >&2
 	eval $CMD

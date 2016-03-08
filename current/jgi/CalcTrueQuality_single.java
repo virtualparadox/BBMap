@@ -62,8 +62,8 @@ public class CalcTrueQuality_single {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=false;
@@ -84,8 +84,6 @@ public class CalcTrueQuality_single {
 				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -98,7 +96,7 @@ public class CalcTrueQuality_single {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Integer.parseInt(b));
+				Shared.setThreads(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1") || a.equals("sam")){
@@ -152,7 +150,6 @@ public class CalcTrueQuality_single {
 	
 	public void process(){
 		Timer t=new Timer();
-		t.start();
 		for(String s : in){
 			if(threads>1){
 				process_MT(s);

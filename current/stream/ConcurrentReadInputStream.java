@@ -1,10 +1,12 @@
 package stream;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import stream.mpi.ConcurrentReadInputStreamMPI;
 
 import fileIO.FileFormat;
+import fileIO.ReadWrite;
 import align2.ListNum;
 import align2.Shared;
 
@@ -57,6 +59,35 @@ public abstract class ConcurrentReadInputStream implements ConcurrentReadStreamI
 	public static ConcurrentReadInputStream getReadInputStream(long maxReads, boolean keepSamHeader, 
 			FileFormat ff1, FileFormat ff2, String qf1, String qf2){
 		return getReadInputStream(maxReads, keepSamHeader, ff1, ff2, qf1, qf2, Shared.USE_MPI, Shared.MPI_KEEP_ALL);
+	}
+	
+	public static ArrayList<Read> getReads(long maxReads, boolean keepSamHeader, 
+			FileFormat ff1, FileFormat ff2, String qf1, String qf2){
+		ConcurrentReadInputStream cris=getReadInputStream(maxReads, keepSamHeader, ff1, ff2, qf1, qf2, Shared.USE_MPI, Shared.MPI_KEEP_ALL);
+		return cris.getReads();
+	}
+	
+	public ArrayList<Read> getReads(){
+		
+		ListNum<Read> ln=nextList();
+		ArrayList<Read> reads=(ln!=null ? ln.list : null);
+		
+		ArrayList<Read> out=new ArrayList<Read>();
+		
+		while(reads!=null && reads.size()>0){
+			out.addAll(reads);
+			returnList(ln.id, ln.list.isEmpty());
+			ln=nextList();
+			reads=(ln!=null ? ln.list : null);
+		}
+		if(ln!=null){
+			returnList(ln.id, ln.list==null || ln.list.isEmpty());
+		}
+		boolean error=ReadWrite.closeStream(this);
+		if(error){
+			System.err.println("Warning - an error was encountered during read input.");
+		}
+		return out;
 	}
 	
 	public static ConcurrentReadInputStream getReadInputStream(long maxReads, boolean keepSamHeader, 
@@ -212,8 +243,9 @@ public abstract class ConcurrentReadInputStream implements ConcurrentReadStreamI
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
-	
+
 	public static boolean SHOW_PROGRESS=false;
+	public static boolean SHOW_PROGRESS2=false; //Indicate time in seconds between dots.
 	public static long PROGRESS_INCR=1000000;
 	public static boolean REMOVE_DISCARDED_READS=false;
 	

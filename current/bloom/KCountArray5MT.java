@@ -226,7 +226,6 @@ public class KCountArray5MT extends KCountArray {
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		long[][] r=new long[rows][cols];
 		Random randy=new Random(seed);
 		for(int i=0; i<r.length; i++){

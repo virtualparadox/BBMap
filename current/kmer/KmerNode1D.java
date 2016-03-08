@@ -1,8 +1,6 @@
 package kmer;
 
 import stream.ByteBuilder;
-import align2.Tools;
-import dna.CoverageArray;
 import fileIO.ByteStreamWriter;
 
 /**
@@ -54,7 +52,7 @@ public class KmerNode1D extends KmerNode {
 		return singleton;
 	}
 	
-	protected int set(int value_){return value=value_;}
+	public int set(int value_){return value=value_;}
 	
 	protected int set(int[] values_){
 		throw new RuntimeException("Unimplemented");
@@ -108,6 +106,23 @@ public class KmerNode1D extends KmerNode {
 		if(value>=mincount){bsw.printlnKmer(pivot, value, k);}
 		if(left!=null){left.dumpKmersAsBytes(bsw, k, mincount);}
 		if(right!=null){right.dumpKmersAsBytes(bsw, k, mincount);}
+		return true;
+	}
+	
+	@Override
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		if(value<1){return true;}
+		if(value>=mincount){
+			toBytes(pivot, value, k, bb);
+			bb.append('\n');
+			if(bb.length()>=16000){
+				ByteBuilder bb2=new ByteBuilder(bb);
+				synchronized(bsw){bsw.addJob(bb2);}
+				bb.clear();
+			}
+		}
+		if(left!=null){left.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
+		if(right!=null){right.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
 		return true;
 	}
 	

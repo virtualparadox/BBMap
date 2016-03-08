@@ -19,7 +19,7 @@ public class GiToNcbi {
 		ReadWrite.USE_PIGZ=true;
 		ReadWrite.ZIPLEVEL=8;
 		initialize(args[0]);
-		if(args.length>2){//Write array
+		if(args.length>2){//Run a test
 			test(args);
 		}else if(args.length==2){//Write array
 			ReadWrite.write(array, args[1], true);
@@ -27,16 +27,16 @@ public class GiToNcbi {
 	}
 	
 	public static void test(String[] args){
-		System.err.println(get(1000));
-		System.err.println(get(10000));
-		System.err.println(get(10001));
-		System.err.println(get(10002));
-		System.err.println(get(10003));
-		System.err.println(get(10004));
-		System.err.println(get(10005));
-		System.err.println(get(100000));
-		System.err.println(get(1000000));
-		System.err.println(get(10000000));
+		System.err.println(getID(1000));
+		System.err.println(getID(10000));
+		System.err.println(getID(10001));
+		System.err.println(getID(10002));
+		System.err.println(getID(10003));
+		System.err.println(getID(10004));
+		System.err.println(getID(10005));
+		System.err.println(getID(100000));
+		System.err.println(getID(1000000));
+		System.err.println(getID(10000000));
 		
 		TaxTree tree=null;
 		if(args.length>1){
@@ -45,19 +45,19 @@ public class GiToNcbi {
 		
 		System.err.println("Strings:");
 		int x;
-		x=get("gi|18104025|emb|AJ427095.1| Ceratitis capitata centromeric or pericentromeric satellite DNA, clone 44");
+		x=getID("gi|18104025|emb|AJ427095.1| Ceratitis capitata centromeric or pericentromeric satellite DNA, clone 44");
 		System.err.println(x);
 		if(tree!=null){
 			System.err.println(tree.getNode(x));
 			tree.incrementRaw(x, 30);
 		}
-		x=get("gi|15982920|gb|AY057568.1| Arabidopsis thaliana AT5g43500/MWF20_22 mRNA, complete cds");
+		x=getID("gi|15982920|gb|AY057568.1| Arabidopsis thaliana AT5g43500/MWF20_22 mRNA, complete cds");
 		System.err.println(x);
 		if(tree!=null){
 			System.err.println(tree.getNode(x));
 			tree.incrementRaw(x, 40);
 		}
-		x=get("gi|481043749|gb|KC494054.1| Plesiochorus cymbiformis isolate ST05-58 internal transcribed spacer 2, partial sequence");
+		x=getID("gi|481043749|gb|KC494054.1| Plesiochorus cymbiformis isolate ST05-58 internal transcribed spacer 2, partial sequence");
 		System.err.println(x);
 		if(tree!=null){
 			System.err.println(tree.getNode(x));
@@ -73,79 +73,108 @@ public class GiToNcbi {
 		}
 	}
 	
-	public static int get(String s){
-		assert(s!=null && s.length()>3);
-		final int initial=s.indexOf('|');
-		assert(initial>1);
-		boolean giMode=s.startsWith("gi|");
-		assert(giMode || s.startsWith("ncbi|"));
+	/** Parse a gi number, or return -1 if formatted incorrectly. */
+	private static int parseGiNumber(String s){
+		if(s==null || s.length()<4){return -1;}
+		if(s.charAt(0)=='>'){return getID(s.substring(1));}
+		if(!s.startsWith("gi")){return -1;}
+		char delimiter='|';
+		int initial=s.indexOf(delimiter);
+		if(initial<0){delimiter='_';}
+		initial=s.indexOf(delimiter);
+		if(initial<0){return -1;}
+		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length(); i++){
 			char c=s.charAt(i);
-			if(c=='|'){break;}
+			if(c==delimiter){break;}
 			assert(Character.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
-		if(giMode){return array[number];}
 		return number;
 	}
 	
-	public static int getCarrot(String s){
-		assert(s!=null && s.length()>3);
-		final int initial=s.indexOf('|');
-		assert(initial>1);
-		boolean giMode=s.startsWith(">gi|");
-		assert(giMode || s.startsWith(">ncbi|"));
+	/** Parse a ncbi number, or return -1 if formatted incorrectly. */
+	private static int parseNcbiNumber(String s){
+		if(s==null || s.length()<6){return -1;}
+		if(s.charAt(0)=='>'){return getID(s.substring(1));}
+		if(!s.startsWith("ncbi")){return -1;}
+		char delimiter='|';
+		int initial=s.indexOf(delimiter);
+		if(initial<0){delimiter='_';}
+		initial=s.indexOf(delimiter);
+		if(initial<0){return -1;}
+		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length(); i++){
 			char c=s.charAt(i);
-			if(c=='|'){break;}
+			if(c==delimiter){break;}
 			assert(Character.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
-		if(giMode){return array[number];}
 		return number;
 	}
 	
-	public static int get(byte[] s){
-		assert(s!=null && s.length>3);
-		final int initial=Tools.indexOf(s, (byte)'|');
-		assert(initial>1);
-		boolean giMode=(s[0]=='g' && s[1]=='i' && s[2]=='|');
-		assert(giMode || (s[0]=='n' && s[1]=='c' && s[2]=='b'));
+	/** Get the taxID from a header starting with a taxID or gi number */
+	public static int getID(String s){
+		int x=parseGiNumber(s);
+		if(x>=0){return array[x];}
+		return parseNcbiNumber(s);
+	}
+	
+	/** Parse a gi number, or return -1 if formatted incorrectly. */
+	private static int parseGiNumber(byte[] s){
+		if(s==null || s.length<4){return -1;}
+		if(!Tools.startsWith(s, "gi") && !Tools.startsWith(s, ">gi")){return -1;}
+		char delimiter='|';
+		int initial=Tools.indexOf(s, (byte)delimiter);
+		if(initial<0){delimiter='_';}
+		initial=Tools.indexOf(s, (byte)delimiter);
+		if(initial<0){return -1;}
+		if(!Character.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length; i++){
 			byte c=s[i];
-			if(c=='|'){break;}
+			if(c==delimiter){break;}
 			assert(Character.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
-		if(giMode){return array[number];}
 		return number;
 	}
 	
-	public static int getCarrot(byte[] s){
-		assert(s!=null && s.length>3);
-		final int initial=Tools.indexOf(s, (byte)'|');
-		assert(initial>1);
-		boolean giMode=(s[0]=='>' && s[1]=='g' && s[2]=='i' && s[3]=='|');
-		assert(giMode || (s[0]=='>' && s[1]=='n' && s[2]=='c' && s[3]=='b'));
+	/** Parse a gi number, or return -1 if formatted incorrectly. */
+	private static int parseNcbiNumber(byte[] s){
+		if(s==null || s.length<4){return -1;}
+		if(!Tools.startsWith(s, "ncbi") && !Tools.startsWith(s, ">ncbi")){return -1;}
+		char delimiter='|';
+		int initial=Tools.indexOf(s, (byte)delimiter);
+		if(initial<0){delimiter='_';}
+		initial=Tools.indexOf(s, (byte)delimiter);
+		if(initial<0){return -1;}
+		if(!Character.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
 		for(int i=initial+1; i<s.length; i++){
 			byte c=s[i];
-			if(c=='|'){break;}
+			if(c==delimiter){break;}
 			assert(Character.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
-		if(giMode){return array[number];}
 		return number;
 	}
 	
-	public static int get(int gi){
+	/** Get the taxID from a header starting with a taxID or gi number */
+	public static int getID(byte[] s){
+		int x=parseGiNumber(s);
+		if(x>=0){return array[x];}
+		return parseNcbiNumber(s);
+	}
+	
+	/** Get the taxID from a gi number */
+	public static int getID(int gi){
 		assert(gi>=0) : gi;
 		assert(gi<array.length) : gi+", "+array.length;
 		return array[gi];
@@ -155,7 +184,7 @@ public class GiToNcbi {
 		assert(fname!=null);
 		if(file==null || !file.equals(fname)){
 			synchronized(GiToNcbi.class){
-				if(file==null || !file.equals(fname)){
+				if(!initialized || file==null || !file.equals(fname)){
 					file=fname;
 					if(fname.contains(".int1d")){
 						array=ReadWrite.read(int[].class, fname, true);

@@ -19,7 +19,7 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 	@Override
 	public void run() {
 		
-		if(!OUTPUT_SAM && !OUTPUT_FASTQ && !OUTPUT_FASTA && !OUTPUT_ATTACHMENT){
+		if(!OUTPUT_SAM && !OUTPUT_FASTQ && !OUTPUT_FASTA && !OUTPUT_ATTACHMENT && !OUTPUT_HEADER){
 			if(OUTPUT_INTERLEAVED){
 //				assert(false) : OUTPUT_SAM+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT+", "+OUTPUT_INTERLEAVED+", "+SITES_ONLY;
 				myWriter.print("#INTERLEAVED\n");
@@ -259,6 +259,36 @@ public class ReadStreamStringWriter extends ReadStreamWriter {
 //								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
 								if(r2!=null){
 									job.writer.println(r2.obj==null ? "." : r2.obj.toString());
+									readsWritten++;
+									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+								}else{
+									job.writer.println(".");
+								}
+							}
+						}
+					}
+				}else if(OUTPUT_HEADER){
+					if(read1){
+						for(final Read r : job.list){
+							if(r!=null){
+								job.writer.println(r.id);
+								readsWritten++;
+								validReadsWritten+=(r.valid() && r.mapped() ? 1 : 0);
+								Read r2=r.mate;
+								if(OUTPUT_INTERLEAVED && r2!=null){
+									job.writer.println(r.id);
+									readsWritten++;
+									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+								}
+							}
+						}
+					}else{
+						for(final Read r1 : job.list){
+							if(r1!=null){
+								final Read r2=r1.mate;
+//								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
+								if(r2!=null){
+									job.writer.println(r2.id);
 									readsWritten++;
 									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
 								}else{

@@ -32,10 +32,9 @@ public final class RandomReads3 {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 
 		FASTQ.ADD_PAIRNUM_TO_CUSTOM_ID=false;
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		FastaReadInputStream.MIN_READ_LEN=1;
 		Data.GENOME_BUILD=-1;
 		int build=1;
@@ -116,6 +115,8 @@ public final class RandomReads3 {
 				//do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
+			}else if(a.equals("simplenames") || a.equals("simple") || a.equals("tagsimple")){
+				FASTQ.TAG_CUSTOM_SIMPLE=Tools.parseBoolean(b);
 			}else if(a.equals("reads")){
 				maxReads=(int)Tools.parseKMG(b);
 			}else if(a.equals("len") || a.equals("length") || a.equals("readlen") || a.equals("readlength")){
@@ -158,6 +159,8 @@ public final class RandomReads3 {
 				maxSubs=Integer.parseInt(b);
 			}else if(a.equals("maxinss") || a.equals("maxins")){
 				maxInss=Integer.parseInt(b);
+			}else if(a.equals("banns")){
+				BAN_NS=Tools.parseBoolean(b);
 			}else if(a.equals("maxns")){
 				maxNs=Integer.parseInt(b);
 			}else if(a.startsWith("maxdellen")){
@@ -286,7 +289,7 @@ public final class RandomReads3 {
 				RANDOM_SCAFFOLD=Tools.parseBoolean(b);
 			}else if(a.startsWith("replacenoref")){
 				REPLACE_NOREF=Tools.parseBoolean(b);
-			}else if(a.equals("out")){
+			}else if(a.equals("out") || a.equals("out1")){
 				out=b;
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
@@ -304,6 +307,15 @@ public final class RandomReads3 {
 				MIN_SCAFFOLD_OVERLAP=Integer.parseInt(b);
 			}else if(a.equals("prefix")){
 				prefix_=b;
+			}else if(a.equals("slashspace") || a.equals("spaceslash")){
+				boolean y=Tools.parseBoolean(b);
+				if(y){
+					slash1=" /1";
+					slash2=" /2";
+				}else{
+					slash1="/1";
+					slash2="/2";
+				}
 			}else if(a.equals("in")){
 				in1=(b==null || b.equalsIgnoreCase("null") ? null : b);
 			}else{throw new RuntimeException("Unknown parameter "+args[i]);}
@@ -320,7 +332,6 @@ public final class RandomReads3 {
 		}else{
 			mateMiddleDev=Tools.absdif(mateMiddleMax, mateMiddleMin)/6;
 		}
-		
 		assert(pbMaxErrorRate>=pbMinErrorRate) : "pbMaxErrorRate must be >= pbMinErrorRate";
 		
 		ArrayList<ChromosomeArray> chromlist=null;
@@ -410,6 +421,7 @@ public final class RandomReads3 {
 		System.err.println("REPLACE_NOREF="+REPLACE_NOREF);
 		System.err.println("paired="+paired);
 		System.err.println("read length="+(minlen==maxlen ? ""+minlen : minlen+"-"+maxlen));
+		System.err.println("reads="+maxReads);
 		if(paired){
 			System.err.println("insert size="+(mateMiddleMin+2*minlen)+"-"+(mateMiddleMax+2*maxlen));
 		}
@@ -427,9 +439,10 @@ public final class RandomReads3 {
 		
 		if(out!=null){
 			fname1=out.replaceFirst("#", "1");
-			fname2=(!out.contains("#") || !paired || OUTPUT_INTERLEAVED) ? null : out.replaceFirst("#", "2");
+			fname2=(!out.contains("#") || !paired/* || OUTPUT_INTERLEAVED*/) ? null : out.replaceFirst("#", "2");
 		}
-		
+		if(fname2!=null){OUTPUT_INTERLEAVED=false;}
+//		assert(false) : out+", "+fname1+", "+fname2;
 		rr.writeRandomReadsX(maxReads, minlen, maxlen,
 				maxSnps, maxInss, maxDels, maxSubs, maxNs,
 				snpRate, insRate, delRate, subRate, nRate,
@@ -1130,13 +1143,13 @@ public final class RandomReads3 {
 			if(r1!=null){
 				final Read r2=r1.mate;
 //				assert(false) : r1;
-				if(prefix!=null){r1.id=prefix+"_"+r1.numericID+" /1";}
-				else if(ILLUMINA_NAMES){r1.id=r1.numericID+" /1";}
+				if(prefix!=null){r1.id=prefix+"_"+r1.numericID+slash1;}
+				else if(ILLUMINA_NAMES){r1.id=r1.numericID+slash1;}
 				tsw1.println(r1);
 				if(r2!=null){
 					r2.setPairnum(1);
-					if(prefix!=null){r2.id=prefix+"_"+r1.numericID+" /2";}
-					else if(ILLUMINA_NAMES){r2.id=r1.numericID+" /2";}
+					if(prefix!=null){r2.id=prefix+"_"+r1.numericID+slash2;}
+					else if(ILLUMINA_NAMES){r2.id=r1.numericID+slash2;}
 					if(tsw2!=null){tsw2.println(r2);}
 					else{tsw1.println(r2);}
 						
@@ -1304,10 +1317,10 @@ public final class RandomReads3 {
 			}
 			if(r1!=null){
 //				assert(false) : r1;
-				if(ILLUMINA_NAMES){r1.id=r1.numericID+" /1";}
+				if(ILLUMINA_NAMES){r1.id=r1.numericID+slash1;}
 				if(r1.mate!=null){
 					r1.mate.setPairnum(1);
-					if(ILLUMINA_NAMES){r1.mate.id=r1.numericID+" /2";}
+					if(ILLUMINA_NAMES){r1.mate.id=r1.numericID+slash2;}
 				}
 				list.add(r1);
 				nextReadID++;
@@ -1427,6 +1440,12 @@ public final class RandomReads3 {
 		if(verbose){
 			System.err.println(new String(bases));
 			System.err.println(Arrays.toString(Arrays.copyOf(locs, bases.length)));
+		}
+		
+		if(BAN_NS){
+			for(byte b : bases){
+				if(!AminoAcid.isFullyDefined(b)){return null;}
+			}
 		}
 		
 		if(pbadapter1!=null && (rid&3)==0){
@@ -1679,6 +1698,9 @@ public final class RandomReads3 {
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
+
+	private static String slash1="/1";
+	private static String slash2="/2";
 	
 	private static int[] randomChrom;
 	
@@ -1718,6 +1740,9 @@ public final class RandomReads3 {
 	public static int qVariance=4;
 	
 	public static float PERFECT_READ_RATIO=0f;
+	
+	/** Ban generation of reads over unspecified reference bases */
+	static boolean BAN_NS=false;
 
 	public static boolean USE_UNIQUE_SNPS=true;
 	public static boolean FORCE_SINGLE_SCAFFOLD=true;

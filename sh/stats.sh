@@ -4,13 +4,15 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified February 24, 2015
+Last modified November 2, 2015
 
 Description:  Generates basic assembly statistics such as scaffold count, 
               N50, L50, GC content, gap percent, etc.  For multiple files,
-              please use statswrapper.sh.
+              please use statswrapper.sh.  Works with fasta and fastq only
+              (gzipped is fine).
 
-Usage: stats.sh in=<file>
+Usage:        stats.sh in=<file>
+
 
 Parameters:
 in=<file>       Specify the input fasta file, or stdin.
@@ -49,7 +51,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx120m"
@@ -68,9 +80,11 @@ calcXmx () {
 calcXmx "$@"
 
 stats() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP jgi.AssemblyStats2 $@"
 #	echo $CMD >&2
 	eval $CMD

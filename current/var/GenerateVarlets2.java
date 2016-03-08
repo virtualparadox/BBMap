@@ -133,7 +133,6 @@ public class GenerateVarlets2 {
 	public void process(){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		if(sitesfile!=null){
 			sitemap=loadSites(sitesfile);

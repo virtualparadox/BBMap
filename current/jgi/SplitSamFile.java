@@ -12,7 +12,6 @@ public class SplitSamFile {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String in=args[0];
 		String outF=args.length>1 ? args[1] : null;

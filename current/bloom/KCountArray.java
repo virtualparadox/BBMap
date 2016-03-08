@@ -1,6 +1,9 @@
 package bloom;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+
+import ukmer.Kmer;
 
 import dna.AminoAcid;
 import dna.Data;
@@ -18,7 +21,7 @@ public abstract class KCountArray {
 	}
 	
 	public static KCountArray makeNew(long keys_, long cells_, int cbits_, int gap_, int hashes_){
-		return makeNew(keys_, cells_, cbits_, gap_, hashes_, null);
+		return makeNew(keys_, cells_, cbits_, gap_, hashes_, null, 0);
 	}
 	
 //	public static KCountArray makeNew(long keys_, long cells_, int cbits_, int gap_, int hashes_, boolean prefilter_){
@@ -33,7 +36,7 @@ public abstract class KCountArray {
 //		}
 //	}
 	
-	public static KCountArray makeNew(long keys_, long cells_, int cbits_, int gap_, int hashes_, KCountArray prefilter){
+	public static KCountArray makeNew(long keys_, long cells_, int cbits_, int gap_, int hashes_, KCountArray prefilter, int prefilterLimit_){
 //		assert(keys_>=cells_) : keys_+", "+cells_;
 //		assert(cells_>1) : cells_;
 		KCountArray kca;
@@ -51,7 +54,7 @@ public abstract class KCountArray {
 //			}else{
 //				kca=new KCountArray8MT(cells_, cbits_, gap_, hashes_, prefilter); //Like 7MT but uses prefilter
 //			}
-			kca=new KCountArray7MTA(cells_, cbits_, gap_, hashes_, prefilter); //Like 4MT but uses primes
+			kca=new KCountArray7MTA(cells_, cbits_, gap_, hashes_, prefilter, prefilterLimit_); //Like 4MT but uses primes
 
 //			if(prefilter==null){
 //				kca=new KCountArray9MT(cells_, cbits_, gap_, hashes_); //Like 7MT but uses canonical kmers
@@ -130,6 +133,7 @@ public abstract class KCountArray {
 	}
 
 	public abstract int read(long key);
+	public int read(long keys[]){throw new RuntimeException("Unimplemented.");}
 	public final int read(long key, int k, boolean makeCanonical){return read(makeCanonical ? makeCanonical2(key, k) : key);}
 
 	public abstract void write(long key, int value);
@@ -201,6 +205,15 @@ public abstract class KCountArray {
 	
 	/** Returns unincremented value */
 	public abstract int incrementAndReturnUnincremented(long key, int incr);
+	
+//	/** Returns unincremented value */
+//	public final int incrementAndReturnUnincremented(Kmer kmer, int incr){
+//		return incrementAndReturnUnincremented(kmer.xor(), incr);
+//	}
+	
+	public int incrementAndReturnUnincremented(long[] keys, int incr){
+		throw new RuntimeException("Unimplemented.");
+	}
 	
 	public abstract long[] transformToFrequency();
 	public final long[] transformToFrequency(int[][] matrix){
@@ -349,7 +362,52 @@ public abstract class KCountArray {
 		}
 		return String.format("%.2f", x/div)+ext;
 	}
-
+	
+	static final AtomicIntegerArray[] allocMatrix(final int numArrays, final int wordsPerArray){
+		final AtomicIntegerArray[] matrix=new AtomicIntegerArray[numArrays];
+		final AllocThread[] array=new AllocThread[Tools.min(Tools.max(Shared.threads()/2, 1), numArrays)];
+		final AtomicInteger next=new AtomicInteger(0);
+		for(int i=0; i<array.length; i++){
+			array[i]=new AllocThread(matrix, next, wordsPerArray);
+		}
+		for(int i=0; i<array.length; i++){array[i].start();}
+		for(AllocThread at : array){
+			while(at.getState()!=Thread.State.TERMINATED){
+				try {
+					at.join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+		return matrix;
+	}
+	
+	private static class AllocThread extends Thread{
+		
+		AllocThread(AtomicIntegerArray[] matrix_, AtomicInteger next_, int wordsPerArray_){
+			matrix=matrix_;
+			next=next_;
+			wordsPerArray=wordsPerArray_;
+		}
+		
+		@Override
+		public void run(){
+			int x=next.getAndIncrement();
+			while(x<matrix.length){
+				matrix[x]=new AtomicIntegerArray(wordsPerArray);
+				x=next.getAndIncrement();
+			}
+		}
+		
+		private final AtomicIntegerArray[] matrix;
+		private final AtomicInteger next;
+		private final int wordsPerArray;
+		
+	}
+	
+	
 //	long hash(long x, int y){throw new RuntimeException("Not supported.");}
 	abstract long hash(long x, int y);
 	
@@ -435,6 +493,14 @@ public abstract class KCountArray {
 //		assert(isCanonical(r, k)) : k+"\n"+Long.toBinaryString(key)+"\n"+Long.toBinaryString(r)+"\n"+Long.toBinaryString(AminoAcid.reverseComplementBinaryFast(r, k));
 //		assert(AminoAcid.reverseComplementBinaryFast(r, k)==key) : k+"\n"+Long.toBinaryString(key)+"\n"+Long.toBinaryString(r)+"\n"+Long.toBinaryString(AminoAcid.reverseComplementBinaryFast(r, k));
 		return r;
+	}
+	
+	public KCountArray prefilter(){
+		throw new RuntimeException("TODO: Override");
+	}
+	
+	public void purgeFilter(){
+		throw new RuntimeException("TODO: Override");
 	}
 	
 //	private static final short[] canonMask={0, 3, 15, 63, 255, 1023, 4095, 16383};

@@ -91,7 +91,6 @@ public class RTextInputStream extends ReadInputStream {
 		if(finished){return null;}
 		return readList();
 	}
-	public final boolean preferArrays(){return false;}
 	
 	private synchronized ArrayList<Read> readList(){
 		assert(buffer==null);

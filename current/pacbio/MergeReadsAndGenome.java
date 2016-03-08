@@ -61,8 +61,6 @@ public class MergeReadsAndGenome {
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("in")){
 				if("null".equalsIgnoreCase(b)){
 					//do nothing

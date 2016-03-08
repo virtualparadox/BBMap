@@ -36,22 +36,23 @@ public class RenameReads {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		RenameReads rr=new RenameReads(args);
 		rr.process(t);
 	}
 	
 	private void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("java -ea -Xmx1g -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2> prefix=<>");
-		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
-		outstream.println("Other parameters and their defaults:\n");
-		outstream.println("overwrite=false  \tOverwrites files that already exist");
-		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
-		outstream.println("interleaved=auto \tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=70     \tLength of lines in fasta output");
-		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
+		System.err.println("See shellscript for usage information.");
+		System.exit(1);
+//		outstream.println("Syntax:\n");
+//		outstream.println("java -ea -Xmx1g -cp <path> jgi.ReformatReads in=<infile> in2=<infile2> out=<outfile> out2=<outfile2> prefix=<>");
+//		outstream.println("\nin2 and out2 are optional.  \nIf input is paired and there is only one output file, it will be written interleaved.\n");
+//		outstream.println("Other parameters and their defaults:\n");
+//		outstream.println("overwrite=false  \tOverwrites files that already exist");
+//		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
+//		outstream.println("interleaved=auto \tDetermines whether input file is considered interleaved");
+//		outstream.println("fastawrap=70     \tLength of lines in fasta output");
+//		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
+//		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
 	
 	public RenameReads(String[] args){
@@ -64,8 +65,8 @@ public class RenameReads {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Parser parser=new Parser();
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -91,8 +92,6 @@ public class RenameReads {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("passes")){
 				assert(false) : "'passes' is disabled.";
 //				passes=Integer.parseInt(b);
@@ -148,8 +147,6 @@ public class RenameReads {
 				stream.FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-			}else if(out1==null && i==1 && !arg.contains("=")){
-				out1=arg;
 			}else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -289,8 +286,8 @@ public class RenameReads {
 					}else{
 						r1.id=prefix+x;
 						if(r2!=null){
-							r1.id=r1.id+" /1";
-							r2.id=prefix+x+" /2";
+							r1.id=r1.id+" /1:"+r1.numericID;
+							r2.id=prefix+x+" /2:"+r1.numericID;
 						}
 					}
 					
@@ -323,8 +320,8 @@ public class RenameReads {
 		cris.returnList(ln.id, ln.list.isEmpty());
 		errorState|=ReadWrite.closeStreams(cris, ros);
 		
-//		tsw.poisonAndWait();
-		
+		t.stop();
+		System.err.println("Time: "+t);
 	}
 	
 	private PrintStream outstream=System.err;

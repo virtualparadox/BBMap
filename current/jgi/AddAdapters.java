@@ -37,7 +37,6 @@ public class AddAdapters {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		AddAdapters rr=new AddAdapters(args);
 		if(rr.writeMode){
 			rr.write(t);
@@ -61,8 +60,8 @@ public class AddAdapters {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
 		Parser parser=new Parser();
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -88,8 +87,6 @@ public class AddAdapters {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -102,7 +99,7 @@ public class AddAdapters {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Integer.parseInt(b));
+				Shared.setThreads(b);
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 			}else if(a.equals("in2") || a.equals("input2")){
@@ -130,7 +127,7 @@ public class AddAdapters {
 			}else if(a.equals("end")){
 				if(b.equals("3'") || b.equalsIgnoreCase("3prime") || b.equalsIgnoreCase("3-prime") || b.equalsIgnoreCase("right") || a.equalsIgnoreCase("r")){
 					right=true;
-				}if(b.equals("5'") || b.equalsIgnoreCase("5prime") || b.equalsIgnoreCase("5-prime") || b.equalsIgnoreCase("left") || a.equalsIgnoreCase("l")){
+				}else if(b.equals("5'") || b.equalsIgnoreCase("5prime") || b.equalsIgnoreCase("5-prime") || b.equalsIgnoreCase("left") || a.equalsIgnoreCase("l")){
 					right=true;
 				}
 			}else if(a.equals("addslash")){
@@ -159,8 +156,6 @@ public class AddAdapters {
 				}
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
-			}else if(out1==null && i==1 && !arg.contains("=")){
-				out1=arg;
 			}else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];

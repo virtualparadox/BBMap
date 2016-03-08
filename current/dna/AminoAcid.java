@@ -211,7 +211,7 @@ public final class AminoAcid {
 	
 
 	public static final void reverseComplementBasesInPlace(final byte[] in){
-		reverseComplementBasesInPlace(in, in.length);
+		if(in!=null){reverseComplementBasesInPlace(in, in.length);}
 	}
 	
 	public static final void reverseComplementBasesInPlace(final byte[] in, final int length){

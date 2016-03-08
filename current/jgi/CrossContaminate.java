@@ -44,7 +44,6 @@ public class CrossContaminate {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		CrossContaminate cc=new CrossContaminate(args);
 		cc.process(t);
 	}
@@ -52,7 +51,7 @@ public class CrossContaminate {
 	public CrossContaminate(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -62,13 +61,13 @@ public class CrossContaminate {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 
 		ArrayList<String> inTemp=new ArrayList<String>();
 		ArrayList<String> outTemp=new ArrayList<String>();
@@ -96,8 +95,6 @@ public class CrossContaminate {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;

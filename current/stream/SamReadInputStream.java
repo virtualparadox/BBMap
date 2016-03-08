@@ -27,7 +27,7 @@ public class SamReadInputStream extends ReadInputStream {
 		
 	public SamReadInputStream(FileFormat ff, boolean loadHeader_, boolean interleaved_){
 		loadHeader=loadHeader_;
-		
+//		assert(loadHeader);
 //		interleaved=((tf.is==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : true);
 		interleaved=interleaved_;
 		
@@ -69,13 +69,6 @@ public class SamReadInputStream extends ReadInputStream {
 	}
 	
 	@Override
-	public synchronized Read[] nextBlock() {
-		ArrayList<Read> x=nextList();
-		if(x==null){return null;}
-		return x.toArray(new Read[x.size()]);
-	}
-	
-	@Override
 	public synchronized ArrayList<Read> nextList() {
 		if(next!=0){throw new RuntimeException("'next' should not be used when doing blockwise access.");}
 		if(buffer==null || next>=buffer.size()){fillBuffer();}
@@ -86,7 +79,6 @@ public class SamReadInputStream extends ReadInputStream {
 //		System.err.println(hashCode()+" produced "+r[0].numericID);
 		return list;
 	}
-	public final boolean preferArrays(){return false;}
 	
 	private synchronized void fillBuffer(){
 		
@@ -115,8 +107,10 @@ public class SamReadInputStream extends ReadInputStream {
 			byte[] line=tf2.nextLine();
 //			System.out.println("A: Read line "+new String(line));
 			while(line!=null && line[0]=='@'){
+//				System.out.println(">"+new String(line));
 				if(loadHeader){header.add(line);}
 				line=tf2.nextLine();
+//				assert(false) : new String(line)+"\n"+header.size()+", "+SHARED_HEADER;
 //				System.out.println("B: Read line "+new String(line));
 			}
 			if(loadHeader && nextReadID2==0){setSharedHeader(header);}
@@ -189,6 +183,7 @@ public class SamReadInputStream extends ReadInputStream {
 	}
 	
 	public static synchronized void setSharedHeader(ArrayList<byte[]> list){
+//		assert(false) : list.size();
 		SHARED_HEADER=list;
 		SamReadInputStream.class.notifyAll();
 	}

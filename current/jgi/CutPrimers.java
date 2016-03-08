@@ -30,7 +30,6 @@ public class CutPrimers {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		CutPrimers as=new CutPrimers(args);
 		as.process(t);
 	}
@@ -38,7 +37,7 @@ public class CutPrimers {
 	public CutPrimers(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -64,6 +63,8 @@ public class CutPrimers {
 				sam2=b;
 			}else if(a.equals("fake") || a.equals("addfake")){
 				ADD_FAKE_READS=Tools.parseBoolean(b);
+			}else if(a.equals("include") || a.equals("includeprimer") || a.equals("includeprimers")){
+				INCLUDE_PRIMERS=Tools.parseBoolean(b);
 			}else{
 				outstream.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -133,22 +134,39 @@ public class CutPrimers {
 					
 					int oldSize=readsOut.size();
 					
+					final int len=r.length();
 					if(sl1!=null && sl2!=null){
-						final int a1=sl1.start(true, false);
-						final int a2=sl2.start(true, false);
-						final int b1=sl1.stop(a1, true, false);
-						final int b2=sl2.stop(a2, true, false);
+						final int a1=Tools.mid(0, len, sl1.start(true, false));
+						final int a2=Tools.mid(0, len, sl2.start(true, false));
+						final int b1=Tools.mid(0, len, sl1.stop(a1, true, false));
+						final int b2=Tools.mid(0, len, sl2.stop(a2, true, false));
 						if(Tools.overlap(a1, b1, a2, b2)){
 							
 						}else{
-							final byte[] bases, quals;
-							if(a1<a2){
-								bases=Arrays.copyOfRange(r.bases, b1+1, a2);
-								quals=(r.quality==null ? null : Arrays.copyOfRange(r.quality, b1+1, a2));
+							
+							final int from, to;
+							if(INCLUDE_PRIMERS){
+								if(a1<a2){
+									from=a1;
+									to=b2+1;
+								}else{
+									from=a2;
+									to=b1+1;
+								}
 							}else{
-								bases=Arrays.copyOfRange(r.bases, b2+1, a1);
-								quals=(r.quality==null ? null : Arrays.copyOfRange(r.quality, b2+1, a1));
+								if(a1<a2){
+									from=b1+1;
+									to=a2;
+								}else{
+									from=b2+1;
+									to=a1;
+								}
 							}
+							
+							assert(from>=0 && from<r.bases.length && to>=from) : from+", "+to+", "+r.bases.length+"\n"+
+								new String(r.bases)+"\n"+sl1+"\n"+sl2+"\n";
+							final byte[] bases=Arrays.copyOfRange(r.bases, from, to);
+							final byte[] quals=(r.quality==null ? null : Arrays.copyOfRange(r.quality, from, to));
 							readsOut.add(new Read(bases, -1, (byte)0, -1, -1, r.id, quals, r.numericID));
 							readsSuccess++;
 						}
@@ -206,6 +224,7 @@ public class CutPrimers {
 	private String out1=null;
 	
 	private boolean ADD_FAKE_READS=true;
+	private boolean INCLUDE_PRIMERS=false;
 	
 	private final FileFormat ffin1;
 	private final FileFormat ffout1;

@@ -21,7 +21,6 @@ public class StackVariations2 {
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String inPattern=(args[0].equalsIgnoreCase("null") ? null : args[0]);
 		String outPattern=args[1];

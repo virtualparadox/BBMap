@@ -1,9 +1,12 @@
 package kmer;
 
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
-import dna.CoverageArray;
+import stream.ByteBuilder;
 
 
 import fileIO.ByteStreamWriter;
@@ -16,7 +19,7 @@ import align2.Tools;
  * @date Oct 23, 2013
  *
  */
-public final class HashForest extends AbstractKmerTable {
+public final class HashForest extends AbstractKmerTable implements Iterable<KmerNode> {
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
@@ -34,7 +37,7 @@ public final class HashForest extends AbstractKmerTable {
 		}
 		prime=initialSize;
 		sizeLimit=(long) (initialSize*resizeMult);
-		array=new KmerNode[prime];
+		array=allocKmerNodeArray(prime);
 		autoResize=autoResize_;
 		TWOD=twod_;
 	}
@@ -239,6 +242,9 @@ public final class HashForest extends AbstractKmerTable {
 	}
 	
 	@Override
+	public final void clearOwnership(){initializeOwnership();}
+	
+	@Override
 	public final int setOwner(final long kmer, final int newOwner){
 		final int cell=(int)(kmer%prime);
 		KmerNode n=array[cell];
@@ -334,7 +340,7 @@ public final class HashForest extends AbstractKmerTable {
 		prime=prime2;
 //		System.err.println("Resized to "+prime+"; load="+(size*1f/prime));
 		KmerNode[] old=array;
-		array=new KmerNode[prime2];
+		array=allocKmerNodeArray(prime2);
 		ArrayList<KmerNode> list=new ArrayList<KmerNode>(1000);
 		for(int i=0; i<old.length; i++){
 			if(old[i]!=null){
@@ -352,6 +358,16 @@ public final class HashForest extends AbstractKmerTable {
 		for(int i=0; i<array.length; i++){
 			if(array[i]!=null){array[i]=array[i].rebalance(list);}
 		}
+	}
+	
+	public void clear() {
+		size=0;
+		Arrays.fill(array, null);
+	}
+	
+	@Override
+	long regenerate() {
+		throw new RuntimeException("Not implemented.");
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -374,12 +390,9 @@ public final class HashForest extends AbstractKmerTable {
 	
 	@Override
 	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
-//		tsw.print("HashForest:\n");
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
 			if(node!=null && node.value()>=mincount){
-//				StringBuilder sb=new StringBuilder();
-//				tsw.print(node.dumpKmersAsText(sb, k, mincount));
 				node.dumpKmersAsBytes(bsw, k, mincount);
 			}
 		}
@@ -387,13 +400,43 @@ public final class HashForest extends AbstractKmerTable {
 	}
 	
 	@Override
-	public void fillHistogram(CoverageArray ca, int max){
+	public boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		for(int i=0; i<array.length; i++){
+			KmerNode node=array[i];
+			if(node!=null && node.value()>=mincount){
+				node.dumpKmersAsBytes_MT(bsw, bb, k, mincount);
+			}
+		}
+		return true;
+	}
+	
+	@Override
+	public void fillHistogram(long[] ca, int max){
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
 			if(node!=null){
 				node.fillHistogram(ca, max);
 			}
 		}
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------          Iteration           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public Iterator<KmerNode> iterator() {
+		return toList().iterator();
+	}
+	
+	public ArrayList<KmerNode> toList(){
+		assert(size<Integer.MAX_VALUE);
+		ArrayList<KmerNode> list=new ArrayList<KmerNode>((int)size);
+		for(int i=0; i<array.length; i++){
+			if(array[i]!=null){array[i].traverseInfix(list);}
+		}
+		assert(list.size()==size);
+		return list;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -404,12 +447,18 @@ public final class HashForest extends AbstractKmerTable {
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public KmerNode[] array() {return array;}
+	
 	KmerNode[] array;
 	int prime;
 	long size=0;
 	long sizeLimit;
 	final boolean autoResize;
 	final boolean TWOD;
+	private final Lock lock=new ReentrantLock();
+	
+	@Override
+	final Lock getLock(){return lock;}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/

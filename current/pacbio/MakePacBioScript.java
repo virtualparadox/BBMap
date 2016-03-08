@@ -53,7 +53,7 @@ public class MakePacBioScript {
 //			System.out.println("\n\nOr to be concise:");
 			System.out.println("java -ea -Xmx64m"+(Data.WINDOWS ? "" : " -cp "+Data.ROOT())+" jgi.MakePacBioScript " +
 					"d=subreads.fa c=illumina.fq tpl=template.sh ts=5.4m t=24 nm=256");
-			System.out.println("\n\nInput files can optionally be comma-seperated lists of files, and absolute pathing can be used.");
+			System.out.println("\n\nInput files can optionally be comma-separated lists of files, and absolute pathing can be used.");
 			System.out.println("All input files may be raw, gzipped, or bzipped as long as they have the correct file extension.");
 			System.out.println();
 			System.out.println("\n*****    Required Parameters   *****\n");
@@ -130,8 +130,6 @@ public class MakePacBioScript {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("threads") || a.startsWith("slots") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("mode")){

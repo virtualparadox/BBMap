@@ -3,9 +3,7 @@ package pacbio;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
-import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
@@ -34,10 +32,9 @@ public class RemoveAdapters2 {
 	public static void main(String[] args){
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 		
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		
 		Timer t=new Timer();
-		t.start();
 		
 		boolean verbose=false;
 
@@ -164,7 +161,6 @@ public class RemoveAdapters2 {
 	public static void process(ConcurrentReadInputStream cris, ConcurrentReadOutputStream ros, String query, boolean split){
 
 		Timer t=new Timer();
-		t.start();
 		
 		cris.start(); //4567
 		

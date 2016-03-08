@@ -20,7 +20,7 @@ public final class HashArrayHybrid extends HashArray {
 	
 	public HashArrayHybrid(int initialSize, boolean autoResize_){
 		super(initialSize, autoResize_, true);
-		values=new int[prime+extra];
+		values=allocInt1D(prime+extra);
 		setList=new IntList2();
 		setList.add(null);
 		setList.add(null);
@@ -42,15 +42,17 @@ public final class HashArrayHybrid extends HashArray {
 				values[cell]++;
 				if(values[cell]<0){values[cell]=Integer.MAX_VALUE;}
 				return values[cell];
-			}else if(n==-1){
+			}else if(n==NOT_PRESENT){
 				array[cell]=kmer;
 				size++;
 				values[cell]=1;
-				if(autoResize && size>sizeLimit){resize();}
+				if(autoResize && size+victims.size>sizeLimit){resize();}
 				return 1;
 			}
 		}
-		return victims.increment(kmer);
+		int x=victims.increment(kmer);
+		if(autoResize && size+victims.size>sizeLimit){resize();}
+		return x;
 	}
 	
 	@Override
@@ -65,15 +67,17 @@ public final class HashArrayHybrid extends HashArray {
 				values[cell]++;
 				if(values[cell]<0){values[cell]=Integer.MAX_VALUE;}
 				return 0;
-			}else if(n==-1){
+			}else if(n==NOT_PRESENT){
 				array[cell]=kmer;
 				size++;
 				values[cell]=1;
-				if(autoResize && size>sizeLimit){resize();}
+				if(autoResize && size+victims.size>sizeLimit){resize();}
 				return 1;
 			}
 		}
-		return victims.incrementAndReturnNumCreated(kmer);
+		int x=victims.incrementAndReturnNumCreated(kmer);
+		if(autoResize && size+victims.size>sizeLimit){resize();}
+		return x;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -107,8 +111,7 @@ public final class HashArrayHybrid extends HashArray {
 			return;
 		}
 		final int old=values[cell];
-		final int v=vals[0];
-		if(old==vals[0] && vals[1]==-1){
+		if(old==vals[0] && vals[1]==NOT_PRESENT){
 			if(verbose){System.err.println("B: old==vals[0] && vals[1]==-1");}
 			return; //Nothing to do
 		}else if(old<-1){//An array already exists
@@ -121,7 +124,7 @@ public final class HashArrayHybrid extends HashArray {
 			final int[] temp;
 			if(old>0){//Move the old value to a new array.  Note that this will probably never be used.
 				if(verbose){System.err.println("D: old>0");}
-				temp=new int[vals.length+1];
+				temp=allocInt1D(vals.length+1);
 				temp[0]=old;
 				for(int i=0; i<vals.length; i++){temp[i+1]=vals[i];}
 			}else{
@@ -204,9 +207,12 @@ public final class HashArrayHybrid extends HashArray {
 			sizeLimit=0xFFFFFFFFFFFFL;
 			return;
 		}
-
-		final long maxAllowedByLoadFactor=(long)(size*minLoadMult);
-		final long minAllowedByLoadFactor=(long)(size*maxLoadMult);
+		
+		final long oldSize=size, oldVSize=victims.size;
+		final long totalSize=oldSize+oldVSize;
+		
+		final long maxAllowedByLoadFactor=(long)(totalSize*minLoadMult);
+		final long minAllowedByLoadFactor=(long)(totalSize*maxLoadMult);
 
 //		sizeLimit=Tools.min((long)(maxLoadFactor*prime), maxPrime);
 		
@@ -224,11 +230,9 @@ public final class HashArrayHybrid extends HashArray {
 		
 		if(prime2<=prime){
 			sizeLimit=(long)(maxLoadFactor*prime);
-			assert(prime2==prime) : "Resizing to smaller array? "+size+", "+prime+", "+x;
+			assert(prime2==prime) : "Resizing to smaller array? "+totalSize+", "+prime+", "+x;
 			return;
 		}
-		
-		final long oldSize=size, oldVSize=victims.size;
 		
 		prime=prime2;
 //		System.err.println("Resized to "+prime+"; load="+(size*1f/prime));
@@ -239,9 +243,9 @@ public final class HashArrayHybrid extends HashArray {
 		setList.add(null);
 		setList.add(null);
 		KmerNode[] oldVictims=victims.array;
-		array=new long[prime2+extra];
+		array=allocLong1D(prime2+extra);
 		Arrays.fill(array, -1);
-		values=new int[prime2+extra];
+		values=allocInt1D(prime2+extra);
 		ArrayList<KmerNode> nodeList=new ArrayList<KmerNode>((int)(victims.size)); //Can fail if more than Integer.MAX_VALUE
 		for(int i=0; i<oldVictims.length; i++){
 			if(oldVictims[i]!=null){oldVictims[i].traverseInfix(nodeList);}
@@ -251,6 +255,7 @@ public final class HashArrayHybrid extends HashArray {
 		size=0;
 		sizeLimit=Long.MAX_VALUE;
 		
+//		long added=0;
 		for(int i=0; i<oldKmers.length; i++){
 			final long kmer=oldKmers[i];
 			if(kmer!=-1){
@@ -258,35 +263,57 @@ public final class HashArrayHybrid extends HashArray {
 //				final long oldsize=(size+victims.size);
 //				assert(old==null);
 				final int v=oldValues[i];
+//				added++;
+				
+//				System.err.println("Found "+kmer+"->"+v);
+				
 				assert(v<-1 || v>0);
 				if(v>=0){
+//					assert(!contains(kmer));
+//					long olds=size+victims.size; //123
 					set(kmer, v);
-//					assert(size+victims.size==oldsize+1);
+//					assert(contains(kmer));
+//					assert(size+victims.size==olds+1);
 				}else{
 //					if(verbose){
 //						System.err.println("i="+i+", v="+v+", old="+Arrays.toString(oldList.get(-v))+", current="+Arrays.toString(setList.get(-v))+
 //								", get()="+Arrays.toString(getValues(kmer, new int[1])));
 //					}
+//					assert(!contains(kmer));
+//					long olds=size+victims.size; //123
 					set(kmer, oldList.get(-v));
-//					assert(size+victims.size==oldsize+1);
+//					assert(contains(kmer));
+//					assert(size+victims.size==olds+1);
 				}
 			}
 		}
+//		assert(added==oldSize);
 		
 		final int[] singleton=new int[1];
+//		added=0;
 		for(KmerNode n : nodeList){
 			if(n.pivot>-1){
+//				added++;
 //				final int[] old=getValues(n.pivot, new int[1]);
 //				assert(old==null);
 				if(n.numValues()>1){
+//					assert(!contains(n.pivot()));
+//					long olds=size+victims.size; //123
 					set(n.pivot, n.values(singleton));
+//					assert(size+victims.size==olds+1);
+//					assert(contains(n.pivot()));
 				}else{
+//					assert(!contains(n.pivot()));
+//					long olds=size+victims.size; //123
 					set(n.pivot, n.value());
+//					assert(size+victims.size==olds+1);
+//					assert(contains(n.pivot()));
 				}
 //				assert(old==null || contains(n.pivot, old));
 //				assert(contains(n.pivot, n.value()));
 			}
 		}
+//		assert(added==oldVSize);
 		
 		assert(oldSize+oldVSize==size+victims.size) : oldSize+" + "+oldVSize+" = "+(oldSize+oldVSize)+" -> "+size+" + "+victims.size+" = "+(size+victims.size);
 		
@@ -309,6 +336,12 @@ public final class HashArrayHybrid extends HashArray {
 	@Override
 	public void rebalance(){
 		throw new RuntimeException("Unimplemented.");
+	}
+	
+	@Deprecated
+	@Override
+	public long regenerate(){
+		throw new RuntimeException("Not supported.");
 	}
 	
 	/*--------------------------------------------------------------*/

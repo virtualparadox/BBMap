@@ -82,70 +82,71 @@ public final class Dedupe {
 	}
 	
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx106g -cp <path> jgi.Dedupe <input file> <output file>");
-		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tInput file.  'in=stdin' will pipe from standard in.");
-		outstream.println("out=<file>         \tOutput file.  'out=stdout' will pipe to standard out.");
-		outstream.println("dot=<file>         \tOutput a dot-format overlap graph to this file.");
-		outstream.println("pattern=<file>     \tClusters will be written to individual files, where the '%' symbol in the pattern is replaced by cluster number.");
-		outstream.println("");
-		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-		outstream.println("minscaf=0          \t(ms) Ignore contigs/scaffolds shorter than this.");
-		outstream.println("interleaved=auto   \tIf true, forces fastq input to be paired and interleaved.");
-		
-		outstream.println("absorbrc=t         \t(arc) Absorb reverse-complements as well as normal orientation.");
-		outstream.println("absorbmatch=t      \t(am) Absorb exact matches of contigs.");
-		outstream.println("absorbcontainment=t\t(ac) Absorb full containments of contigs.");
-		outstream.println("absorboverlap=f    \t(ao) Absorb (merge) non-contained overlaps of contigs.");
-		
-		outstream.println("numaffixmaps=1     \t(nam) Set to 2 to index two prefixes and suffixes per contig.");
-		outstream.println("ignoreaffix1=f     \t(ia1) Ignore first affix (for testing).");
-		outstream.println("storesuffix=f      \t(ss) Store suffix as well as prefix.  Automatically set to true when doing inexact matches.");
-		
-		outstream.println("findoverlap=f      \t(fo) Find overlaps between contigs (containments and non-containments).");
-		outstream.println("cluster=f          \t(c) Group overlapping contigs into clusters.");
-		outstream.println("fixmultijoins=t    \t(fmj) Remove redundant overlaps between the same two contigs.");
-		outstream.println("removecycles=t     \t(rc) Remove all cycles so clusters form trees.");
-		outstream.println("renameclusters=f   \t(rnc) Rename contigs to indicate which cluster they are in.");
-		outstream.println("minclustersize=1   \t(mcs) Don't output clusters smaller than this.");
-		outstream.println("pbr=f              \t(pickbestrepresentative) Only output the single highest-quality read per cluster.");
-		outstream.println("cc=t               \t(canonicizeclusters) Flip contigs so clusters have a single orientation.");
-		outstream.println("fcc=f              \t(fixcanoncontradictions) Truncate graph at nodes with canonization disputes.");
-		outstream.println("foc=f              \t(fixoffsetcontradictions) Truncate graph at nodes with offset disputes.");
-		outstream.println("pto=f              \t(preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster.");
-		
-		outstream.println("storename=t        \t(sn) Store contig names (set false to save memory).");
-		outstream.println("storequality=t     \t(sq) Store quality values for fastq assemblies (set false to save memory).");
-		outstream.println("exact=t            \t(ex) Only allow exact symbol matches.  When false, an 'N' will match any symbol.");
-		outstream.println("touppercase=f      \t(tuc) Change all input bases to upper case.");
-		outstream.println("uniquenames=t      \t(un) Ensure all output contigs have unique names.  Uses more memory.");
-		outstream.println("maxsubs=0          \t(s) Allow up to this many mismatches (substitutions only, no indels).  May be set higher than maxedits.");
-		outstream.println("maxedits=0         \t(e) Allow up to this many edits (subs or indels).  Higher is slower, so below 20 is suggested.");
-		//outstream.println("bandwidth=9        \t(bw) Width of banded alignment, if maxedits>0.  To ensure correctness, set bandwidth=2*maxedits+1.  Higher is slower.");
-		outstream.println("minidentity=100    \t(mid) Allow inter-sequence identity as low as this (subs only, no indels).");
-		outstream.println("k=31               \tKmer length used for finding containments.  Containments shorter than k will not be found.");
-		outstream.println("minlengthpercent=0 \t(mlp) Smaller contig must be at least this percent of larger contig's length to be absorbed.");
-		outstream.println("minoverlappercent=0\t(mop) Overlap must be at least this percent of smaller contig's length to cluster and merge.");
-		outstream.println("minoverlap=200     \t(mo) Overlap must be at least this long to cluster and merge.");
-
-		outstream.println("mopc=0             \t(minoverlappercentmerge) Overlap must be at least this percent of smaller contig's length to cluster.");
-		outstream.println("mopm=0             \t(minoverlappercentcluster) Overlap must be at least this percent of smaller contig's length to merge.");
-		outstream.println("moc=200            \t(minoverlapcluster) Overlap must be at least this long to cluster.");
-		outstream.println("mom=200            \t(minoverlapmerge) Overlap must be at least this long to merge.");
-		outstream.println("rt=f               \t(rigoroustransitive) Ensure exact transitivity.  Slow.  For testing only.");
-		
-		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("sort=f             \tsort output by contig length (otherwise it will be random).\n" +
-						  "                   \t'a' for ascending, 'd' for descending, 'f' for false (no sorting).");
-		outstream.println("");
-		outstream.println("Note!  When allowing inexact alignments, if maxsubs is less than maxedits, maxsubs is set to maxedits.");
-		outstream.println("If maxsubs and minidentity yield different numbers for some contig, the more liberal is used for substitutions.");
-		outstream.println("For indels, minidentity is ignored and maxedits is always used (due to time and memory constraints).");
-		outstream.println("Regardless of maxsubs, maxedits, or minidentity, no comparison will be made between two sequences unless ");
-		outstream.println("one contains the first or last k bases of the other, exactly, with no edits.");
+		System.err.println("Please consult the shellscript for usage information.");
+//		outstream.println("Syntax:\n");
+//		outstream.println("\njava -ea -Xmx106g -cp <path> jgi.Dedupe <input file> <output file>");
+//		outstream.println("\nOptional flags:");
+//		outstream.println("in=<file>          \tInput file.  'in=stdin' will pipe from standard in.");
+//		outstream.println("out=<file>         \tOutput file.  'out=stdout' will pipe to standard out.");
+//		outstream.println("dot=<file>         \tOutput a dot-format overlap graph to this file.");
+//		outstream.println("pattern=<file>     \tClusters will be written to individual files, where the '%' symbol in the pattern is replaced by cluster number.");
+//		outstream.println("");
+//		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
+//		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
+//		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
+//		outstream.println("minscaf=0          \t(ms) Ignore contigs/scaffolds shorter than this.");
+//		outstream.println("interleaved=auto   \tIf true, forces fastq input to be paired and interleaved.");
+//		
+//		outstream.println("absorbrc=t         \t(arc) Absorb reverse-complements as well as normal orientation.");
+//		outstream.println("absorbmatch=t      \t(am) Absorb exact matches of contigs.");
+//		outstream.println("absorbcontainment=t\t(ac) Absorb full containments of contigs.");
+//		outstream.println("absorboverlap=f    \t(ao) Absorb (merge) non-contained overlaps of contigs.");
+//		
+//		outstream.println("numaffixmaps=1     \t(nam) Set to 2 to index two prefixes and suffixes per contig.");
+//		outstream.println("ignoreaffix1=f     \t(ia1) Ignore first affix (for testing).");
+//		outstream.println("storesuffix=f      \t(ss) Store suffix as well as prefix.  Automatically set to true when doing inexact matches.");
+//		
+//		outstream.println("findoverlap=f      \t(fo) Find overlaps between contigs (containments and non-containments).");
+//		outstream.println("cluster=f          \t(c) Group overlapping contigs into clusters.");
+//		outstream.println("fixmultijoins=t    \t(fmj) Remove redundant overlaps between the same two contigs.");
+//		outstream.println("removecycles=t     \t(rc) Remove all cycles so clusters form trees.");
+//		outstream.println("renameclusters=f   \t(rnc) Rename contigs to indicate which cluster they are in.");
+//		outstream.println("minclustersize=1   \t(mcs) Don't output clusters smaller than this.");
+//		outstream.println("pbr=f              \t(pickbestrepresentative) Only output the single highest-quality read per cluster.");
+//		outstream.println("cc=t               \t(canonicizeclusters) Flip contigs so clusters have a single orientation.");
+//		outstream.println("fcc=f              \t(fixcanoncontradictions) Truncate graph at nodes with canonization disputes.");
+//		outstream.println("foc=f              \t(fixoffsetcontradictions) Truncate graph at nodes with offset disputes.");
+//		outstream.println("pto=f              \t(preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster.");
+//		
+//		outstream.println("storename=t        \t(sn) Store contig names (set false to save memory).");
+//		outstream.println("storequality=t     \t(sq) Store quality values for fastq assemblies (set false to save memory).");
+//		outstream.println("exact=t            \t(ex) Only allow exact symbol matches.  When false, an 'N' will match any symbol.");
+//		outstream.println("touppercase=f      \t(tuc) Change all input bases to upper case.");
+//		outstream.println("uniquenames=t      \t(un) Ensure all output contigs have unique names.  Uses more memory.");
+//		outstream.println("maxsubs=0          \t(s) Allow up to this many mismatches (substitutions only, no indels).  May be set higher than maxedits.");
+//		outstream.println("maxedits=0         \t(e) Allow up to this many edits (subs or indels).  Higher is slower, so below 20 is suggested.");
+//		//outstream.println("bandwidth=9        \t(bw) Width of banded alignment, if maxedits>0.  To ensure correctness, set bandwidth=2*maxedits+1.  Higher is slower.");
+//		outstream.println("minidentity=100    \t(mid) Allow inter-sequence identity as low as this (subs only, no indels).");
+//		outstream.println("k=31               \tKmer length used for finding containments.  Containments shorter than k will not be found.");
+//		outstream.println("minlengthpercent=0 \t(mlp) Smaller contig must be at least this percent of larger contig's length to be absorbed.");
+//		outstream.println("minoverlappercent=0\t(mop) Overlap must be at least this percent of smaller contig's length to cluster and merge.");
+//		outstream.println("minoverlap=200     \t(mo) Overlap must be at least this long to cluster and merge.");
+//
+//		outstream.println("mopc=0             \t(minoverlappercentmerge) Overlap must be at least this percent of smaller contig's length to cluster.");
+//		outstream.println("mopm=0             \t(minoverlappercentcluster) Overlap must be at least this percent of smaller contig's length to merge.");
+//		outstream.println("moc=200            \t(minoverlapcluster) Overlap must be at least this long to cluster.");
+//		outstream.println("mom=200            \t(minoverlapmerge) Overlap must be at least this long to merge.");
+//		outstream.println("rt=f               \t(rigoroustransitive) Ensure exact transitivity.  Slow.  For testing only.");
+//		
+//		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
+//		outstream.println("sort=f             \tsort output by contig length (otherwise it will be random).\n" +
+//						  "                   \t'a' for ascending, 'd' for descending, 'f' for false (no sorting).");
+//		outstream.println("");
+//		outstream.println("Note!  When allowing inexact alignments, if maxsubs is less than maxedits, maxsubs is set to maxedits.");
+//		outstream.println("If maxsubs and minidentity yield different numbers for some contig, the more liberal is used for substitutions.");
+//		outstream.println("For indels, minidentity is ignored and maxedits is always used (due to time and memory constraints).");
+//		outstream.println("Regardless of maxsubs, maxedits, or minidentity, no comparison will be made between two sequences unless ");
+//		outstream.println("one contains the first or last k bases of the other, exactly, with no edits.");
 		
 	}
 	
@@ -155,7 +156,7 @@ public final class Dedupe {
 		
 		ReadWrite.ZIPLEVEL=2;
 		//ReadWrite.USE_UNPIGZ=true;
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		
 		Parser parser=new Parser();
 		boolean setOut=false, setMcsfs=false;
@@ -466,13 +467,12 @@ public final class Dedupe {
 	public void process(){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		boolean dq0=FASTQ.DETECT_QUALITY;
 		boolean ti0=FASTQ.TEST_INTERLEAVED;
 		int rbl0=Shared.READ_BUFFER_LENGTH;
-		FASTQ.DETECT_QUALITY=false;
-		FASTQ.TEST_INTERLEAVED=false;
+//		FASTQ.DETECT_QUALITY=false;
+//		FASTQ.TEST_INTERLEAVED=false;
 		Shared.READ_BUFFER_LENGTH=16;
 		
 		process2();
@@ -503,23 +503,14 @@ public final class Dedupe {
 		}
 	}
 	
-	private static final void printMemory(){
-		long mmemory=Runtime.getRuntime().maxMemory()/1000000;
-		long tmemory=Runtime.getRuntime().totalMemory()/1000000;
-		long fmemory=Runtime.getRuntime().freeMemory()/1000000;
-		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
-	}
-	
 	public void process2(){
 		if(dupeWriter!=null){dupeWriter.start();}
 //		assert(false) : out;
 		Timer t=new Timer();
-		t.start();
 		
 		if(DISPLAY_PROGRESS){
 			outstream.println("Initial:");
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -663,7 +654,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Found "+matches+" duplicates.");
 			outstream.println("Finished exact matches.    Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			if(verbose){outstream.println(affixMap1);}
 			outstream.println();
 			t.start();
@@ -728,7 +719,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Found "+containments+" contained sequences.");
 			outstream.println("Finished containment.      Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -744,7 +735,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Removed "+x+" invalid entries.");
 			outstream.println("Finished invalid removal.  Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -809,7 +800,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Found "+overlaps+" overlaps.");
 			outstream.println("Finished finding overlaps. Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -884,7 +875,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Added overlaps: "+added);
 			outstream.println("Made overlaps transitive.  Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -913,7 +904,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Intransitive:   "+intransitive+", \ttransitive: "+transitive);
 			outstream.println("Checked transitivity.      Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -943,7 +934,7 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Redundant:      "+redundant+",  \tnonredundant: "+nonredundant);
 			outstream.println("Checked redundancy.        Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -971,16 +962,36 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Overlaps:       "+overlaps+",  \tlength: "+length);
 			outstream.println("Counted overlaps.          Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
 		return overlaps;
 	}
 	
+	private long fillClusterSizeMatrix(ArrayList<ArrayList<Unit>> clusters, long[][] clusterSize){
+		int max=0;
+		for(ArrayList<Unit> cluster : clusters){
+			final int cs=Tools.min(clusterSize.length-1, cluster.size());
+			{
+				long reads=0, bases=0;
+				for(Unit u2 : cluster){
+					reads++;
+					bases+=u2.length();
+				}
+				clusterSize[0][cs]++;
+				clusterSize[1][cs]+=reads;
+				clusterSize[2][cs]+=bases;
+			}
+			max=Tools.max(max, cluster.size());
+		}
+		return max;
+	}
+	
 	private void makeClusters(Timer t, ArrayList<Read> list){
 		
-		int[] clusterSize=new int[70000];
+		final int clusterlen=70000;
+		long[][] clusterSize=new long[3][clusterlen];
 		int max=0;
 		for(Read r : list){
 			Unit u=(Unit) r.obj;
@@ -990,7 +1001,17 @@ public final class Dedupe {
 				if(cluster.size()>2){cluster.trimToSize();}
 				if(cluster.size()==1 || (!processClusters && !maxSpanningTree)){processedClusters.add(cluster);}
 				else{clusterQueue.add(cluster);}
-				clusterSize[Tools.min(clusterSize.length-1, cluster.size())]++;
+				final int cs=Tools.min(clusterlen-1, cluster.size());
+				{
+					long reads=0, bases=0;
+					for(Unit u2 : cluster){
+						reads++;
+						bases+=u2.length();
+					}
+					clusterSize[0][cs]++;
+					clusterSize[1][cs]+=reads;
+					clusterSize[2][cs]+=bases;
+				}
 				max=Tools.max(max, cluster.size());
 			}
 		}
@@ -998,9 +1019,9 @@ public final class Dedupe {
 		if(DISPLAY_PROGRESS){
 			t.stop();
 			outstream.println(toClusterSizeString(clusterSize));
-			outstream.println("Largest:          "+max);
+			outstream.println("\nLargest:          "+max);
 			outstream.println("Finished making clusters.  Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -1012,13 +1033,17 @@ public final class Dedupe {
 			t.stop();
 			outstream.println("Removed "+x+" invalid entries.");
 			outstream.println("Finished invalid removal.  Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
 	}
 	
-	private String toClusterSizeString(int[] clusterSize){
+	private String toClusterSizeString(long[][] clusterSizeMatrix){
+		
+		long[] clusterSize=clusterSizeMatrix[0];
+		long[] clusterReads=clusterSizeMatrix[1];
+		long[] clusterBases=clusterSizeMatrix[2];
 		
 		long totalClusters=Tools.sum(clusterSize);
 		
@@ -1026,33 +1051,69 @@ public final class Dedupe {
 		for(int i=minClusterSize; i<clusterSize.length; i++){
 			bigClusters+=clusterSize[i];
 		}
+		
+		final int spaces=18;
+		final int spaces2=spaces*2, spaces3=spaces*3;
 
 		final StringBuilder sb=new StringBuilder(100), sb2=new StringBuilder(1000);
-		sb2.append("Clusters:         "+totalClusters+(minClusterSize<2 ? "" : "  \t("+bigClusters+" of at least size "+minClusterSize+")"));
-		final int spaces=19;
+		sb2.append("Clusters:");
+		while(sb2.length()<spaces){sb2.append(' ');}
+		sb2.append(totalClusters+(minClusterSize<2 ? "" : " ("+bigClusters+" of at least size "+minClusterSize+")")+"\n");
+		
+		sb.append("Size Range");
+		while(sb.length()<spaces){sb.append(' ');}
+		sb.append("Clusters");
+		while(sb.length()<spaces2){sb.append(' ');}
+		sb.append("Reads");
+		while(sb.length()<spaces3){sb.append(' ');}
+		sb.append("Bases");
+		
+		sb2.append('\n');
+		sb2.append(sb);
+		sb.setLength(0);
+		
 		for(int i=0; i<clusterSize.length-1; i=Tools.max(i+1, i*2)){
 			int a=i+1, b=i*2;
 			if(i<2){
-				sb.append("\nSize "+a+":");
+				sb.append(a);
 				while(sb.length()<spaces){sb.append(' ');}
 				sb.append(clusterSize[a]);
+				while(sb.length()<spaces2){sb.append(' ');}
+				sb.append(clusterReads[a]);
+				while(sb.length()<spaces3){sb.append(' ');}
+				sb.append(clusterBases[a]);
 			}else if(b>=clusterSize.length){
 				long x=Tools.sum(clusterSize, a, clusterSize.length-1);
+				long y=Tools.sum(clusterReads, a, clusterSize.length-1);
+				long z=Tools.sum(clusterBases, a, clusterSize.length-1);
 				if(x>0){
-					sb.append("\nSize "+a+"+:");
+					sb.append(a+"+");
 					while(sb.length()<spaces){sb.append(' ');}
 					sb.append(x);
+					while(sb.length()<spaces2){sb.append(' ');}
+					sb.append(y);
+					while(sb.length()<spaces3){sb.append(' ');}
+					sb.append(z);
 				}
 			}else{
 				long x=Tools.sum(clusterSize, a, b);
+				long y=Tools.sum(clusterReads, a, b);
+				long z=Tools.sum(clusterBases, a, b);
 				if(x>0){
-					sb.append("\nSize "+a+"-"+b+":");
+					sb.append(a+"-"+b);
 					while(sb.length()<spaces){sb.append(' ');}
 					sb.append(x);
+					while(sb.length()<spaces2){sb.append(' ');}
+					sb.append(y);
+					while(sb.length()<spaces3){sb.append(' ');}
+					sb.append(z);
 				}
 			}
-			sb2.append(sb);
-			sb.setLength(0);
+			if(sb.length()>0){
+				sb2.append('\n');
+				sb2.append(sb);
+				sb.setLength(0);
+			}
 		}
 		return sb2.toString();
 	}
@@ -1081,7 +1142,7 @@ public final class Dedupe {
 		if(DISPLAY_PROGRESS){
 			t.stop();
 			outstream.println("Finished cluster renaming. Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -1153,7 +1214,7 @@ public final class Dedupe {
 //			outstream.println("Largest:          "+max);
 
 			outstream.println("Finished MST conversion.   Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -1239,17 +1300,13 @@ public final class Dedupe {
 			}
 			
 			outstream.println("\nAfter processing clusters:");
-			final int[] clusterSize=new int[8200];
-			int max=0;
-			for(ArrayList<Unit> cluster : processedClusters){
-				clusterSize[Tools.min(clusterSize.length-1, cluster.size())]++;
-				max=Tools.max(max, cluster.size());
-			}
+			final long[][] clusterSize=new long[3][70000];
+			final long max=fillClusterSizeMatrix(processedClusters, clusterSize);
 			outstream.println(toClusterSizeString(clusterSize));
-			outstream.println("Largest:          "+max);
+			outstream.println("\nLargest:          "+max);
 
 			outstream.println("Finished processing.       Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -1411,7 +1468,7 @@ public final class Dedupe {
 					if(DISPLAY_PROGRESS){
 						t.stop();
 						outstream.println("Sorted output.             Time: "+t);
-						printMemory();
+						Shared.printMemory();
 						outstream.println();
 						t.start();
 					}
@@ -1431,7 +1488,7 @@ public final class Dedupe {
 		if(DISPLAY_PROGRESS){
 			t.stop();
 			outstream.println("Printed output.            Time: "+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 			t.start();
 		}
@@ -1687,10 +1744,12 @@ public final class Dedupe {
 									Read r2=r.mate;
 									tsw.print(toGraphName(r)+" -> "+toGraphName(r2)+" [label=mate]");
 								}
-								for(Overlap o : u.overlapList){
-									if(u==o.u1){
-										Read r2=o.u2.r;
-										tsw.print("\t"+toGraphName(r)+" -> "+toGraphName(r2)+" [label=\""+o.toLabel()+"\"]\n");
+								if(u.overlapList!=null){
+									for(Overlap o : u.overlapList){
+										if(u==o.u1){
+											Read r2=o.u2.r;
+											tsw.print("\t"+toGraphName(r)+" -> "+toGraphName(r2)+" [label=\""+o.toLabel()+"\"]\n");
+										}
 									}
 								}
 							}
@@ -2001,10 +2060,12 @@ public final class Dedupe {
 							assert(!u.visited());
 							assert(!u.canonContradiction());
 							assert(!u.canonicized());
-							for(Overlap o : u.overlapList){
-								assert(!o.invalid());
-								assert(!o.canonContradiction()) : 
-									o.u1.canonContradiction()+", "+o.u2.canonContradiction()+", "+cluster.contains(o.u1)+", "+cluster.contains(o.u2);
+							if(u.overlapList!=null){
+								for(Overlap o : u.overlapList){
+									assert(!o.invalid());
+									assert(!o.canonContradiction()) : 
+										o.u1.canonContradiction()+", "+o.u2.canonContradiction()+", "+cluster.contains(o.u1)+", "+cluster.contains(o.u2);
+								}
 							}
 						}
 					}
@@ -2024,12 +2085,14 @@ public final class Dedupe {
 									assert(!u.visited());
 									assert(!u.canonContradiction());
 									assert(u.canonicized());
-									for(Overlap o : u.overlapList){
-										assert(!o.invalid());
-										assert(!o.canonContradiction());
-										assert(o.type==FORWARD) : "\n"+o+"\n"+
-										o.u1.canonContradiction()+", "+o.u2.canonContradiction()+", "+o.u1.canonicized()+", "+o.u2.canonicized()+
-										"\n"+cluster.contains(o.u1)+", "+cluster.contains(o.u2)+", "+cluster.size();
+									if(u.overlapList!=null){
+										for(Overlap o : u.overlapList){
+											assert(!o.invalid());
+											assert(!o.canonContradiction());
+											assert(o.type==FORWARD) : "\n"+o+"\n"+
+											o.u1.canonContradiction()+", "+o.u2.canonContradiction()+", "+o.u1.canonicized()+", "+o.u2.canonicized()+
+											"\n"+cluster.contains(o.u1)+", "+cluster.contains(o.u2)+", "+cluster.size();
+										}
 									}
 								}
 							}
@@ -2057,10 +2120,12 @@ public final class Dedupe {
 							assert(!u.offsetContradiction());
 							assert(!u.offsetValid());
 							assert(u.canonicized());
-							for(Overlap o : u.overlapList){
-								assert(!o.invalid());
-								assert(!o.offsetContradiction());
-								assert(o.type==FORWARD) : o;
+							if(u.overlapList!=null){
+								for(Overlap o : u.overlapList){
+									assert(!o.invalid());
+									assert(!o.offsetContradiction());
+									assert(o.type==FORWARD) : o;
+								}
 							}
 						}
 					}
@@ -2080,10 +2145,12 @@ public final class Dedupe {
 									assert(!u.visited());
 									assert(!u.offsetContradiction());
 									assert(u.offsetValid());
-									for(Overlap o : u.overlapList){
-										assert(!o.invalid());
-										assert(!o.offsetContradiction());
-										assert(o.type==FORWARD) : o;
+									if(u.overlapList!=null){
+										for(Overlap o : u.overlapList){
+											assert(!o.invalid());
+											assert(!o.offsetContradiction());
+											assert(o.type==FORWARD) : o;
+										}
 									}
 								}
 							}
@@ -2121,8 +2188,10 @@ public final class Dedupe {
 				ArrayList<Unit> subcluster=pruned;
 				for(Unit u : subcluster){
 					u.clearVolatileFlags();
-					for(Overlap o : u.overlapList){
-						o.clearVolatileFlags();
+					if(u.overlapList!=null){
+						for(Overlap o : u.overlapList){
+							o.clearVolatileFlags();
+						}
 					}
 				}
 				assert(subcluster.size()>0);
@@ -2231,42 +2300,44 @@ public final class Dedupe {
 				
 				if(ua.visited() && (!ua.contradiction() || !pruneContradictoryNodes)){
 					ArrayList<Overlap> list=ua.overlapList;
-					int removed=0;
-					for(int j=0; j<list.size(); j++){
-						Overlap o=list.get(j);
-						Unit ub=(o.u1==ua ? o.u2 : o.u1);
-						assert(o.u1==ua || o.u2==ua);
-						assert(ua!=ub);
-						assert(ub.valid());
+					if(list!=null){
+						int removed=0;
+						for(int j=0; j<list.size(); j++){
+							Overlap o=list.get(j);
+							Unit ub=(o.u1==ua ? o.u2 : o.u1);
+							assert(o.u1==ua || o.u2==ua);
+							assert(ua!=ub);
+							assert(ub.valid());
 
-						assert(!o.canonContradiction() || (ua.canonContradiction() || ub.canonContradiction())) : 
-							"\n"+o.canonContradiction()+", "+ua.canonContradiction()+", "+ub.canonContradiction();
+							assert(!o.canonContradiction() || (ua.canonContradiction() || ub.canonContradiction())) : 
+								"\n"+o.canonContradiction()+", "+ua.canonContradiction()+", "+ub.canonContradiction();
 
-						assert(!o.offsetContradiction() || (ua.offsetContradiction() || ub.offsetContradiction())) : 
-							"\n"+o.offsetContradiction()+", "+ua.offsetContradiction()+", "+ub.offsetContradiction();
-						
-//						assert(o.contradiction()==(ua.contradiction() && ub.contradiction())) : 
-//							"\n"+o.canonContradiction()+", "+o.offsetContradiction()+
-//							"\n"+ua.canonContradiction()+", "+ua.offsetContradiction()+
-//							"\n"+ub.canonContradiction()+", "+ub.offsetContradiction();
-						
-						final boolean remove=(pruneContradictoryNodes && ub.contradiction() || (pruneContradictoryOverlaps && o.contradiction()));
-						if(!remove && !ub.visited()){
-							ub.setVisited(true);
-							visited.add(ub);
-							visits++;
+							assert(!o.offsetContradiction() || (ua.offsetContradiction() || ub.offsetContradiction())) : 
+								"\n"+o.offsetContradiction()+", "+ua.offsetContradiction()+", "+ub.offsetContradiction();
+
+//							assert(o.contradiction()==(ua.contradiction() && ub.contradiction())) : 
+//								"\n"+o.canonContradiction()+", "+o.offsetContradiction()+
+//								"\n"+ua.canonContradiction()+", "+ua.offsetContradiction()+
+//								"\n"+ub.canonContradiction()+", "+ub.offsetContradiction();
+
+							final boolean remove=(pruneContradictoryNodes && ub.contradiction() || (pruneContradictoryOverlaps && o.contradiction()));
+							if(!remove && !ub.visited()){
+								ub.setVisited(true);
+								visited.add(ub);
+								visits++;
+							}
+
+							if(remove){
+								if(!o.invalid()){o.setInvalid(true);}
+								list.set(j, null);
+								removed++;
+								prunedOverlaps++;
+							}else{
+								assert(!o.invalid());
+							}
 						}
-						
-						if(remove){
-							if(!o.invalid()){o.setInvalid(true);}
-							list.set(j, null);
-							removed++;
-							prunedOverlaps++;
-						}else{
-							assert(!o.invalid());
-						}
+						if(removed>0){Tools.condenseStrict(list);}
 					}
-					if(removed>0){Tools.condenseStrict(list);}
 				}
 			}
 			
@@ -2299,21 +2370,23 @@ public final class Dedupe {
 					if(!ua.visited()){
 						pruned.add(ua);
 						ArrayList<Overlap> list=ua.overlapList;
-						int removed=0;
-						for(int j=0; j<list.size(); j++){
-							Overlap o=list.get(j);
-							Unit ub=(o.u1==ua ? o.u2 : o.u1);
-							assert(o.u1==ua || o.u2==ua);
-							assert(ua!=ub);
-							assert(ub.valid());
-							
-							if(ub.visited() || o.invalid()){
-								assert(ub.visited()==o.invalid()) : "\n"+o+"\n"+ub;
-								list.set(j, null);
-								removed++;
+						if(list!=null){
+							int removed=0;
+							for(int j=0; j<list.size(); j++){
+								Overlap o=list.get(j);
+								Unit ub=(o.u1==ua ? o.u2 : o.u1);
+								assert(o.u1==ua || o.u2==ua);
+								assert(ua!=ub);
+								assert(ub.valid());
+
+								if(ub.visited() || o.invalid()){
+									assert(ub.visited()==o.invalid()) : "\n"+o+"\n"+ub;
+									list.set(j, null);
+									removed++;
+								}
 							}
+							if(removed>0){Tools.condenseStrict(list);}
 						}
-						if(removed>0){Tools.condenseStrict(list);}
 					}
 				}
 				assert(pruned.size()==numUnvisited);
@@ -2323,7 +2396,9 @@ public final class Dedupe {
 			for(Unit u : cluster){
 				assert(u.isPerfectlyTransitive()) : u;
 				if(EA){
-					for(Overlap o : u.overlapList){assert(!o.invalid());}
+					if(u.overlapList!=null){
+						for(Overlap o : u.overlapList){assert(!o.invalid());}
+					}
 				}
 				if(u.visited()){u.setVisited(false);}
 			}
@@ -2372,37 +2447,41 @@ public final class Dedupe {
 			for(Unit ua : cluster){
 				assert(ua.visited());
 				ArrayList<Overlap> list=ua.overlapList;
-				int removed=0;
-				for(int i=0; i<list.size(); i++){
-					Overlap o=list.get(i);
-					Unit ub=(o.u1==ua ? o.u2 : o.u1);
-					assert(o.u1==ua || o.u2==ua);
-					assert(ua!=ub);
-					assert(ub.valid());
-					
-					if(!o.visited()){
-						o.setVisited(true);
-						if(ub.visited()){
-							if(!o.cyclic()){
-								o.setCyclic(true);
-								cycles++;
+				if(list!=null){
+					int removed=0;
+					for(int i=0; i<list.size(); i++){
+						Overlap o=list.get(i);
+						Unit ub=(o.u1==ua ? o.u2 : o.u1);
+						assert(o.u1==ua || o.u2==ua);
+						assert(ua!=ub);
+						assert(ub.valid());
+
+						if(!o.visited()){
+							o.setVisited(true);
+							if(ub.visited()){
+								if(!o.cyclic()){
+									o.setCyclic(true);
+									cycles++;
+								}
+							}else{
+								ub.setVisited(true);
 							}
-						}else{
-							ub.setVisited(true);
+						}
+						if(remove && o.cyclic()){
+							list.set(i, null);
+							removed++;
 						}
 					}
-					if(remove && o.cyclic()){
-						list.set(i, null);
-						removed++;
-					}
+					if(removed>0){Tools.condenseStrict(list);}
 				}
-				if(removed>0){Tools.condenseStrict(list);}
 			}
 			
 			for(Unit u : cluster){
 				if(u.visited()){u.setVisited(false);}
-				for(Overlap o : u.overlapList){
-					if(o.visited()){o.setVisited(false);}
+				if(u.overlapList!=null){
+					for(Overlap o : u.overlapList){
+						if(o.visited()){o.setVisited(false);}
+					}
 				}
 			}
 			
@@ -2439,8 +2518,10 @@ public final class Dedupe {
 			int min=0;
 			for(Unit u : temp){
 				if(u.visited()){u.setVisited(false);}
-				for(Overlap o : u.overlapList){
-					if(o.visited()){o.setVisited(false);}
+				if(u.overlapList!=null){
+					for(Overlap o : u.overlapList){
+						if(o.visited()){o.setVisited(false);}
+					}
 				}
 				if(u.offsetValid() && !u.offsetContradiction()){
 					min=Tools.min(min, u.offset());
@@ -2570,11 +2651,13 @@ public final class Dedupe {
 				if(u.canonicized() && !u.canonContradiction()){
 					contradictions+=canonicizeNeighbors(u, temp);
 					assert(contradictions==0 || (i>0 && temp.size()>2));
-					
-					for(Overlap o : u.overlapList){
-						assert(o.type==FORWARD || o.canonContradiction() || o.u1.canonContradiction() || o.u2.canonContradiction()) : 
-							o+"\n"+contradictions+", "+o.canonContradiction()+", "+o.u1.canonContradiction()+", "+o.u2.canonContradiction()+
-							"\n"+o.u1.canonicized()+", "+o.u2.canonicized()+", "+o.u1.visited()+", "+o.u2.visited();
+
+					if(u.overlapList!=null){
+						for(Overlap o : u.overlapList){
+							assert(o.type==FORWARD || o.canonContradiction() || o.u1.canonContradiction() || o.u2.canonContradiction()) : 
+								o+"\n"+contradictions+", "+o.canonContradiction()+", "+o.u1.canonContradiction()+", "+o.u2.canonContradiction()+
+								"\n"+o.u1.canonicized()+", "+o.u2.canonicized()+", "+o.u1.visited()+", "+o.u2.visited();
+						}
 					}
 				}
 				
@@ -2595,7 +2678,9 @@ public final class Dedupe {
 			for(Unit u : temp){
 				if(u.visited()){u.setVisited(false);}
 				if(EA){
-					for(Overlap o : u.overlapList){assert(!o.visited());}
+					if(u.overlapList!=null){
+						for(Overlap o : u.overlapList){assert(!o.visited());}
+					}
 				}
 			}
 			
@@ -2717,9 +2802,11 @@ public final class Dedupe {
 			sb.append("\n*****\n");
 			for(Unit u : cluster){
 				sb.append("\n"+u.name()+":");
-				for(Overlap o : u.overlapList){
-					Unit ub=(o.u1==u ? o.u2 : o.u1);
-					sb.append(" "+ub.name());
+				if(u.overlapList!=null){
+					for(Overlap o : u.overlapList){
+						Unit ub=(o.u1==u ? o.u2 : o.u1);
+						sb.append(" "+ub.name());
+					}
 				}
 			}
 			sb.append("\n");
@@ -2734,9 +2821,11 @@ public final class Dedupe {
 			StringBuilder sb=new StringBuilder(1000);
 			for(Unit u : cluster){
 				sb.append("\n"+u.name()+":");
-				for(Overlap o : u.overlapList){
-					Unit ub=(o.u1==u ? o.u2 : o.u1);
-					sb.append(" "+ub.name());
+				if(u.overlapList!=null){
+					for(Overlap o : u.overlapList){
+						Unit ub=(o.u1==u ? o.u2 : o.u1);
+						sb.append(" "+ub.name());
+					}
 				}
 			}
 			sb.append("\n");
@@ -2890,26 +2979,30 @@ public final class Dedupe {
 		for(int i=0; i<breadthFirst.size(); i++){
 			Unit u=breadthFirst.get(i);
 			Collections.sort(u.overlapList); //Sorted in descending overlap length
-			for(Overlap o : u.overlapList){
-				if(!o.u1.visited()){
-//					System.err.println("Visiting "+o.u1.name());
-					o.u1.setVisited(true);
-					breadthFirst.add(o.u1);
+			if(u.overlapList!=null){
+				for(Overlap o : u.overlapList){
+					if(!o.u1.visited()){
+						//					System.err.println("Visiting "+o.u1.name());
+						o.u1.setVisited(true);
+						breadthFirst.add(o.u1);
+					}
+					if(!o.u2.visited()){
+						//					System.err.println("Visiting "+o.u2.name());
+						o.u2.setVisited(true);
+						breadthFirst.add(o.u2);
+					}
+					//				System.err.println("***");
+					//				System.err.println(toShortString(breadthFirst));
 				}
-				if(!o.u2.visited()){
-//					System.err.println("Visiting "+o.u2.name());
-					o.u2.setVisited(true);
-					breadthFirst.add(o.u2);
-				}
-//				System.err.println("***");
-//				System.err.println(toShortString(breadthFirst));
 			}
 		}
 		for(Unit u : cluster){
 			assert(u.visited());
 			if(u.visited()){u.setVisited(false);}
 			if(EA){
-				for(Overlap o : u.overlapList){assert(!o.visited());}
+				if(u.overlapList!=null){
+					for(Overlap o : u.overlapList){assert(!o.visited());}
+				}
 			}
 		}
 //		System.err.println("***");
@@ -4250,7 +4343,7 @@ public final class Dedupe {
 		/**
 		 * 
 		 */
-		private static final long serialVersionUID = 5232407003873807737L;
+		private static final long serialVersionUID = 5232407003873807738L;
 		
 		public Unit(Read r_){
 			this(r_, isCanonical(r_.bases));
@@ -5606,8 +5699,8 @@ public final class Dedupe {
 	float minOverlapPercentCluster=0;
 	float minOverlapPercentMerge=0;
 
-	private int minClusterSize=2;
-	private int minClusterSizeForStats=2;
+	private int minClusterSize=1;
+	private int minClusterSizeForStats=1;
 	private boolean pickBestRepresentativePerCluster=false;
 
 	long readsProcessed=0;

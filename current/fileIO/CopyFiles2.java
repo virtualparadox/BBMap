@@ -12,7 +12,6 @@ public class CopyFiles2 {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		if(args.length>0){
 			assert(args.length==2);

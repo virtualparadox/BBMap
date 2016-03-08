@@ -1403,7 +1403,7 @@ public final class MultiStateAligner9PacBio extends MSA{
 	private final byte[] makeGref(byte[] ref, int[] gaps, int refStartLoc, int refEndLoc, byte[] read){
 		assert(gaps!=null && gaps.length>0);
 		
-		assert(refStartLoc<=gaps[0]) : refStartLoc+", "+refEndLoc+", "+Arrays.toString(gaps);
+		assert(refStartLoc<=gaps[0]) : refStartLoc+", "+refEndLoc+", "+Arrays.toString(gaps)+"\n"+new String(read);
 		assert(refEndLoc>=gaps[gaps.length-1]);
 		
 		final int g0_old=gaps[0];

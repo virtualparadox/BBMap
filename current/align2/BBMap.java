@@ -26,7 +26,6 @@ public final class BBMap extends AbstractMapper {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		BBMap mapper=new BBMap(args);
 		args=Tools.condenseStrict(args);
 		if(!INDEX_LOADED){mapper.loadIndex();}
@@ -78,6 +77,10 @@ public final class BBMap extends AbstractMapper {
 			list.add("midpad=150");
 			list.add("minscaf=50");
 			list.add("quickmatch=t");
+			list.add("rescuemismatches=15");
+			list.add("rescuedist=800");
+			list.add("maxsites=3");
+			list.add("maxsites2=100");
 //			list.add("k=13");
 			
 			//TODO:  Make these adjustable.
@@ -99,6 +102,8 @@ public final class BBMap extends AbstractMapper {
 			list.add("tipsearch="+(TIP_SEARCH_DIST*3)/2);
 			list.add("minhits=1");
 			list.add("minratio=0.25");
+			list.add("rescuemismatches=50");
+			list.add("rescuedist=3000");
 			
 			BBIndex.setFractionToExclude(0);
 			
@@ -296,7 +301,6 @@ public final class BBMap extends AbstractMapper {
 	@Override
 	void loadIndex(){
 		Timer t=new Timer();
-		t.start();
 		
 		if(build>-1){
 			Data.setGenome(build);
@@ -421,14 +425,24 @@ public final class BBMap extends AbstractMapper {
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		
 		final boolean paired=openStreams(t, args);
 		if(paired){BBIndex.QUIT_AFTER_TWO_PERFECTS=false;}
 		
 		t.start();
 		
-		adjustThreadsforMemory(25);
+		if(Shared.USE_JNI){
+			final int threads=Shared.threads();
+			adjustThreadsforMemory(105);
+			if(Shared.threads()<threads*0.9){
+				sysout.println("Disabling JNI due to low system memory.");
+				Shared.USE_JNI=false;
+				Shared.setThreads(threads);
+			}
+		}
+		if(!Shared.USE_JNI){
+			adjustThreadsforMemory(65);
+		}
 		
 		AbstractMapThread.CALC_STATISTICS=CALC_STATISTICS;
 		AbstractMapThread[] mtts=new AbstractMapThread[Shared.threads()];
@@ -442,9 +456,9 @@ public final class BBMap extends AbstractMapper {
 						REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, KILL_BAD_PAIRS, rcompMate, 
 						PERFECTMODE, SEMIPERFECTMODE, FORBID_SELF_MAPPING, TIP_SEARCH_DIST,
 						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, qtrimLeft, qtrimRight, untrim, TRIM_QUALITY, minTrimLength, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				e.printStackTrace();
-				abort(mtts, "Aborting due to prior error.");
+				abort(mtts, "Aborting due to prior error when making thread "+i+".");
 			}  
 			mtts[i].idmodulo=idmodulo;
 			if(verbose){
@@ -468,7 +482,7 @@ public final class BBMap extends AbstractMapper {
 		closeStreams(cris, rosA, rosM, rosU, rosB);
 		sysout.println();
 		printSettings(keylen);
-		printOutput(mtts, t, keylen, paired, false, pileup, scafNzo, sortStats);
+		printOutput(mtts, t, keylen, paired, false, pileup, scafNzo, sortStats, statsOutputFile);
 		if(broken>0 || errorState){throw new RuntimeException("BBMap terminated in an error state; the output may be corrupt.");}
 	}
 	

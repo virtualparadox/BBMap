@@ -35,8 +35,6 @@ public class TestLockSpeed {
 
 			if(Parser.isJavaFlag(arg)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("mode")){
 				mode=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
@@ -67,7 +65,6 @@ public class TestLockSpeed {
 		}
 
 		Timer t=new Timer();
-		t.start();
 		
 		for(CountThread ct : list){ct.start();}
 		for(CountThread ct : list){

@@ -14,11 +14,11 @@ Usage:  splitnextera.sh in=<file> out=<file> outf=<file> outu=<file> outs=<file>
 For pairs in two files, use in1, in2, out1, out2, etc.
 
 *** Note ***
-For maximal efficiency, before running splitnextera, the linkers should be replaced with a constant, like this:
-bbduk.sh in=reads.fq out=replaced.fq ktrim=J k=19 hdist=1 mink=11 hdist2=0 literal=CTGTCTCTTATACACATCTAGATGTGTATAAGAGACAG
+For maximal speed, before running splitnextera, the linkers should be replaced with a constant, like this:
+bbduk.sh in=reads.fq out=replaced.fq ktmask=J k=19 hdist=1 mink=11 hdist2=0 literal=CTGTCTCTTATACACATCTAGATGTGTATAAGAGACAG
+
 
 I/O parameters:
-
 in=<file>               Input reads.  Set to 'stdin.fq' to read from stdin.
 out=<file>              Output for pairs with LMP orientation.
 outf=<file>             Output for pairs with fragment orientation.
@@ -32,7 +32,6 @@ qin=auto                ASCII offset for input quality.  May be 33 (Sanger), 64 
 qout=auto               ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input).
 
 Processing Parameters:
-
 mask=f                  Set to true if you did not already convert junctions to some symbol, and it will be done automatically, but the program will run slower.
 junction=J              Look for this symbol to designate the junction bases.
 innerlmp=f              Generate long mate pairs from the inner pair also, when the junction is found in both reads.
@@ -60,7 +59,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx200m"
@@ -79,9 +88,11 @@ calcXmx () {
 calcXmx "$@"
 
 function splitnextera() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP jgi.SplitNexteraLMP $@"
 	echo $CMD >&2
 	eval $CMD

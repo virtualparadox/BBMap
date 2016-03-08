@@ -61,7 +61,7 @@ public class FastaToChromArrays2 {
 					//jvm argument; do nothing
 				}else if(a.equals("null")){
 					//do nothing
-				}if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
+				}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 					Data.setPath(b);
 				}else if(a.equals("name") || a.equals("organism")){
 					name=b;

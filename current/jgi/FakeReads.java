@@ -34,7 +34,6 @@ public class FakeReads {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FakeReads rr=new FakeReads(args);
 		rr.process(t);
 	}
@@ -50,8 +49,8 @@ public class FakeReads {
 		
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
@@ -75,8 +74,6 @@ public class FakeReads {
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("passes")){
 				assert(false) : "'passes' is disabled.";
 //				passes=Integer.parseInt(b);
@@ -94,7 +91,7 @@ public class FakeReads {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Integer.parseInt(b));
+				Shared.setThreads(b);
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
 				in1=b;
 			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
@@ -133,8 +130,6 @@ public class FakeReads {
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
 					in1=b.replace("#", "1");
 				}
-			}else if(out1==null && i==1 && !arg.contains("=")){
-				out1=arg;
 			}else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];

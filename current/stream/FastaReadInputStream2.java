@@ -46,72 +46,60 @@ public class FastaReadInputStream2 extends ReadInputStream {
 	
 	@Override
 	public boolean hasMore() {
-		if(buffer==null || next>=buffer.length){
+		if(buffer==null || next>=buffer.size()){
 			if(tf.isOpen()){
 				fillBuffer();
 			}else{
 				assert(generated>0) : "Was the file empty?";
 			}
 		}
-		return (buffer!=null && next<buffer.length);
+		return (buffer!=null && next<buffer.size());
 	}
 
 	@Override
 	public Read next() {
 		if(!hasMore()){
-			if(verbose){System.err.println("hasMore() returned false;  buffer="+(buffer==null ? null : buffer.length)+", next="+next+", consumed="+consumed);}
+			if(verbose){System.err.println("hasMore() returned false;  buffer="+(buffer==null ? null : buffer.size())+", next="+next+", consumed="+consumed);}
 			return null;
 		}
-		Read r=buffer[next];
-		buffer[next]=null;
+		Read r=buffer.get(next);
+		buffer.set(next, null);
 		next++;
 		consumed++;
 		return r;
 	}
 	
 	@Override
-	public synchronized Read[] nextBlock() {
+	public synchronized ArrayList<Read> nextList() {
 		if(next!=0){throw new RuntimeException("'next' should not be used when doing blockwise access.");}
-		if(buffer==null || next>=buffer.length){fillBuffer();}
-		Read[] r=buffer;
+		if(buffer==null || next>=buffer.size()){fillBuffer();}
+		ArrayList<Read> r=buffer;
 		buffer=null;
-		if(r!=null && r.length==0){r=null;}
-		consumed+=(r==null ? 0 : r.length);
+		if(r!=null && r.size()==0){r=null;}
+		consumed+=(r==null ? 0 : r.size());
 //		System.err.println(hashCode()+" produced "+r[0].numericID);
 		return r;
 	}
 	
-	@Override
-	public synchronized ArrayList<Read> nextList() {
-		return toList(nextBlock());
-	}
-	public final boolean preferArrays(){return true;}
-	
 	private synchronized void fillBuffer(){
-		if(verbose){System.err.println("Filling buffer.  buffer="+(buffer==null ? null : buffer.length));}
-		assert(buffer==null || next>=buffer.length);
+		if(verbose){System.err.println("Filling buffer.  buffer="+(buffer==null ? null : buffer.size()));}
+		assert(buffer==null || next>=buffer.size());
 		
 		buffer=null;
 		next=0;
 		
-		buffer=toReads(tf, BUF_LEN, nextReadID, interleaved, headerA);
+		buffer=toReadList(tf, BUF_LEN, nextReadID, interleaved, headerA);
 
-		if(verbose){System.err.println("Filled buffer.  buffer="+(buffer==null ? null : buffer.length));}
+		if(verbose){System.err.println("Filled buffer.  buffer="+(buffer==null ? null : buffer.size()));}
 		
-		nextReadID+=buffer.length;
-		if(buffer.length<BUF_LEN){
+		nextReadID+=buffer.size();
+		if(buffer.size()<BUF_LEN){
 			if(verbose){System.err.println("Closing tf");}
 			tf.close();
 		}
 		
-		generated+=buffer.length;
+		generated+=buffer.size();
 		if(verbose){System.err.println("generated="+generated);}
-	}
-	
-	private Read[] toReads(ByteFile tf, int maxReadsToReturn, long numericID, boolean interleaved, String[] headerA){
-		ArrayList<Read> list=toReadList(tf, maxReadsToReturn, numericID, interleaved, headerA);
-		assert(list.size()<=maxReadsToReturn);
-		return list.toArray(new Read[list.size()]);
 	}
 	
 	private ArrayList<Read> toReadList(ByteFile tf, int maxReadsToReturn, long numericID, boolean interleaved, String[] headerA){
@@ -283,13 +271,13 @@ public class FastaReadInputStream2 extends ReadInputStream {
 		return interleaved;
 	}
 
-	private Read[] buffer=null;
+	private ArrayList<Read> buffer=null;
 	private int next=0;
 	
 	private final ByteFile tf;
 	private final boolean interleaved;
 
-	public static final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
+	private final int BUF_LEN=Shared.READ_BUFFER_LENGTH;
 
 	public long generated=0;
 	public long consumed=0;

@@ -23,7 +23,6 @@ public class SmallKmerFrequency extends BBTool_ST {
 	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FileFormat.PRINT_WARNING=false;
 		SmallKmerFrequency bbt=new SmallKmerFrequency(args);
 		bbt.process(t);

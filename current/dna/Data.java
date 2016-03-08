@@ -17,6 +17,7 @@ import var.Variation;
 
 import align2.AbstractIndex;
 import align2.AbstractMapper;
+import align2.BBSplitter;
 import align2.ChromLoadThread;
 import align2.RefToIndex;
 import align2.Tools;
@@ -59,6 +60,11 @@ public class Data {
 		scaffoldNames=null;
 		scaffoldLocs=null;
 		scaffoldLengths=null;
+		
+		BBSplitter.setCountTable=null;
+		BBSplitter.scafCountTable=null;
+		BBSplitter.streamTable=null;
+		BBSplitter.streamTableAmbiguous=null;
 		
 		scaffoldNameTable=null;
 		genomeSource=null;
@@ -857,9 +863,9 @@ public class Data {
 			return;
 		}
 
-		assert(numChroms>0) : "Genome "+g+": numChroms="+numChroms;
-		assert(numBases>0) : "Genome "+g+": numBases="+numBases;
-		assert(numDefinedBases>0) : "Genome "+g+": numDefinedBases="+numDefinedBases;
+		assert(numChroms>0 || allowZeroSizedGenome) : "Genome "+g+": numChroms="+numChroms;
+		assert(numBases>0 || allowZeroSizedGenome) : "Genome "+g+": numBases="+numBases;
+		assert(numDefinedBases>0 || allowZeroSizedGenome) : "Genome "+g+": numDefinedBases="+numDefinedBases;
 		assert(numBases>=numDefinedBases) : "Genome "+g+": numBases>numDefinedBases : "+numBases+">"+numDefinedBases;
 		
 		chromosomePlusMatrix=new ChromosomeArray[numChroms+1];
@@ -1270,6 +1276,8 @@ public class Data {
 	public static int[] chromScaffolds;
 	public static int[] chromStartPad;
 	
+	public static boolean allowZeroSizedGenome=true;
+	
 	public static byte[][][] scaffoldNames;
 	public static int[][] scaffoldLocs;
 	/** Does NOT include interScaffoldPadding */
@@ -1316,6 +1324,7 @@ public class Data {
 
 	public static boolean ENV=(System.getenv()!=null);
 	public static boolean WINDOWS=(System.getenv().containsKey("OS") && System.getenv().get("OS").equalsIgnoreCase("Windows_NT"));
+	public static boolean GENEPOOL=(System.getenv().containsKey("NERSC_HOST") && System.getenv().get("NERSC_HOST").equalsIgnoreCase("genepool"));
 	public static int LOGICAL_PROCESSORS=CALC_LOGICAL_PROCESSORS();
 	private static String HOSTNAME;
 	
@@ -1542,12 +1551,20 @@ public class Data {
 		return GZIP>0;
 	}
 	public static boolean PIGZ(){
-		if(PIGZ==0/* && !WINDOWS*/){
+		if(PIGZ==0){
 			synchronized(SUBPROCSYNC){
 				if(PIGZ==0){PIGZ=testExecute("pigz --version");}
 			}
 		}
 		return PIGZ>0;
+	}
+	public static boolean DSRC(){
+		if(DSRC==0){
+			synchronized(SUBPROCSYNC){
+				if(DSRC==0){DSRC=testExecute("dsrc --version");}
+			}
+		} 
+		return DSRC>0;
 	}
 	public static boolean BZIP2(){
 		if(BZIP2==0 && !WINDOWS){
@@ -1592,6 +1609,7 @@ public class Data {
 //	private static int UNPIGZ=0;
 	private static int GZIP=0;
 	private static int PIGZ=0;
+	private static int DSRC=0;
 	private static int BZIP2=0;
 	private static int PBZIP2=0;
 	private static int SAMTOOLS=0;

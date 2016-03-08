@@ -5,6 +5,8 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import stream.KillSwitch;
+
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
@@ -23,7 +25,6 @@ public class IndexMaker4 {
 			int MAX_ALLOWED_CHROM_INDEX, int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, 
 			boolean WRITE, boolean DISK_INVALID, Block[] index){
 		Timer t=new Timer();
-		t.start();
 		
 		MAX_CONCURRENT_BLOCKS=(Shared.LOW_MEMORY ? 1 : (Data.WINDOWS ? (WRITE ? 1 : Tools.max(1, Shared.threads()/4)) : Tools.max(1, Shared.threads()/4)));
 		
@@ -157,7 +158,7 @@ public class IndexMaker4 {
 			}
 			
 			CountThread threads[]=new CountThread[4];
-			int[] sizes=new int[KEYSPACE+1];
+			int[] sizes=KillSwitch.allocInt1D(KEYSPACE+1);
 			int[] intercom=new int[4];
 			Block[] indexHolder=new Block[1];
 
@@ -170,7 +171,7 @@ public class IndexMaker4 {
 			}
 			Data.sysout.println("Indexing threads started for block "+baseChrom(minChrom)+"-"+maxChrom);
 			for(int i=0; i<threads.length; i++){
-				if(threads[i].getState()!=State.TERMINATED){
+				while(threads[i].getState()!=State.TERMINATED){
 					try {
 						threads[i].join();
 					} catch (InterruptedException e) {
@@ -269,10 +270,10 @@ public class IndexMaker4 {
 						
 						if(USE_ALLOC_SYNC){
 							synchronized(ALLOC_SYNC){//To allow contiguous memory allocation
-								b=new Block(new int[sum], sizes);
+								b=new Block(KillSwitch.allocInt1D(sum), sizes);
 							}
 						}else{
-							b=new Block(new int[sum], sizes);
+							b=new Block(KillSwitch.allocInt1D(sum), sizes);
 						}
 						indexHolder[0]=b;
 						intercom[2]++;

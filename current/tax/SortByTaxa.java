@@ -34,7 +34,6 @@ public class SortByTaxa {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		SortByTaxa mb=new SortByTaxa(args);
 		mb.process(t);
 	}
@@ -42,20 +41,20 @@ public class SortByTaxa {
 	public SortByTaxa(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
 		
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
 		
 		Parser parser=new Parser();
@@ -69,10 +68,12 @@ public class SortByTaxa {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("table") || a.equals("gi")){
+			}else if(a.equals("table") || a.equals("gi") || a.equals("gitable")){
 				tableFile=b;
-			}else if(a.equals("tree")){
+				if("auto".equalsIgnoreCase(b)){tableFile=TaxTree.DefaultTableFile;}
+			}else if(a.equals("tree") || a.equals("taxtree")){
 				treeFile=b;
+				if("auto".equalsIgnoreCase(b)){treeFile=TaxTree.DefaultTreeFile;}
 			}else if(a.equals("fuse")){
 				fuse=Tools.parseBoolean(b);
 			}else if(a.equals("dummyreads") || a.equals("adddummies") || a.equals("dummy")){
@@ -229,7 +230,7 @@ public class SortByTaxa {
 			long currentLength=0;
 			for(int i=0; i<all.size(); i++){
 				Read r=all.remove(i);
-				int tax=GiToNcbi.get(r.id);
+				int tax=GiToNcbi.getID(r.id);
 				if(promote>-1){
 					TaxNode n=tree.getNode(tax);
 					assert(n!=null) : "Can't find node for "+r.id+", "+r.numericID+", "+r.length();
@@ -361,6 +362,7 @@ public class SortByTaxa {
 		return x;
 	}
 	
+	@SuppressWarnings("unused")
 	private void validate(ArrayList<Read> all){
 		for(Read a : all){
 			for(Read b : all){
@@ -408,8 +410,8 @@ public class SortByTaxa {
 		@Override
 		public int compare(Read a, Read b) {
 			//if(verbose){System.err.println("Comparing "+a.id+", "+b.id);}
-			int atax=GiToNcbi.get(a.id);
-			int btax=GiToNcbi.get(b.id);
+			int atax=GiToNcbi.getID(a.id);
+			int btax=GiToNcbi.getID(b.id);
 			
 			if(tree!=null){
 				int x=compareWithTree(atax, btax);

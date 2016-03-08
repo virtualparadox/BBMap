@@ -27,7 +27,6 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		BBMapPacBioSkimmer mapper=new BBMapPacBioSkimmer(args);
 		args=Tools.condenseStrict(args);
 		if(!INDEX_LOADED){mapper.loadIndex();}
@@ -80,6 +79,8 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 //			list.add("minratio=0.5");
 //			list.add("k=13");
 			list.add("quickmatch=t");
+			list.add("rescuemismatches=15");
+			list.add("rescuedist=800");
 			
 //			BBIndexPacBioSkimmer.setFractionToExclude(BBIndexPacBioSkimmer.FRACTION_GENOME_TO_EXCLUDE*1.25f);
 			
@@ -94,6 +95,8 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 			list.add("tipsearch="+(TIP_SEARCH_DIST*3)/2);
 			list.add("minhits=1");
 			list.add("minratio=0.25");
+			list.add("rescuemismatches=50");
+			list.add("rescuedist=3000");
 			
 			BBIndexPacBioSkimmer.setFractionToExclude(0);
 			
@@ -280,7 +283,6 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 	@Override
 	void loadIndex(){
 		Timer t=new Timer();
-		t.start();
 		
 		if(build>-1){
 			Data.setGenome(build);
@@ -400,7 +402,6 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 		}
 		
 		Timer t=new Timer();
-		t.start();
 		
 		final boolean paired=openStreams(t, args);
 //		if(paired){BBIndexPacBioSkimmer.QUIT_AFTER_TWO_PERFECTS=false;}
@@ -447,7 +448,7 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 		closeStreams(cris, rosA, rosM, rosU, rosB);
 		sysout.println();
 		printSettings(keylen);
-		printOutput(mtts, t, keylen, paired, true, pileup, scafNzo, sortStats);
+		printOutput(mtts, t, keylen, paired, true, pileup, scafNzo, sortStats, statsOutputFile);
 		if(broken>0 || errorState){throw new RuntimeException("BBMap terminated in an error state; the output may be corrupt.");}
 	}
 	

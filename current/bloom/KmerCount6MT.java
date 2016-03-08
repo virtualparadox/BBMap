@@ -27,7 +27,6 @@ public class KmerCount6MT extends KmerCountAbstract {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String fname1=args[0];
 		String fname2=(args.length>1 ? args[1] : null);
@@ -43,9 +42,7 @@ public class KmerCount6MT extends KmerCountAbstract {
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 
-			if(a.equals("null")){
-				// do nothing
-			}else if(a.equals("k") || a.equals("kmer")){
+			if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.startsWith("cbits") || a.startsWith("cellbits")){
 				cbits=Integer.parseInt(b);

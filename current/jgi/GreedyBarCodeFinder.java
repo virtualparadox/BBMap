@@ -17,7 +17,6 @@ public class GreedyBarCodeFinder {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		
 		GreedyBarCodeFinder finder=new GreedyBarCodeFinder(args);
 		int best=finder.find(finder.rounds);

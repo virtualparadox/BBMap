@@ -15,7 +15,6 @@ import align2.QualityTools;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
-import align2.TrimRead;
 import dna.AminoAcid;
 import dna.Data;
 import dna.Gene;
@@ -41,11 +40,33 @@ public class CalcTrueQuality {
 	/*--------------------------------------------------------------*/
 	
 	public static void main(String[] args){
-		passes=2;
 		ReadStats.COLLECT_QUALITY_STATS=true;
 		CalcTrueQuality ctq=new CalcTrueQuality(args);
-		ReadStats.overwrite=ctq.overwrite;
+		ReadStats.overwrite=overwrite;
 		ctq.process();
+	}
+	
+	/** Calls main() but restores original static variable values. */
+	public static void main2(String[] args){
+		final boolean oldCOLLECT_QUALITY_STATS=ReadStats.COLLECT_QUALITY_STATS;
+		final boolean oldoverwrite=ReadStats.overwrite;
+		final int oldREAD_BUFFER_LENGTH=Shared.READ_BUFFER_LENGTH;
+		final boolean oldPIGZ=ReadWrite.USE_PIGZ;
+		final boolean oldUnPIGZ=ReadWrite.USE_UNPIGZ;
+		final int oldZL=ReadWrite.ZIPLEVEL;
+		final boolean oldBF1=ByteFile.FORCE_MODE_BF1;
+		final boolean oldBF2=ByteFile.FORCE_MODE_BF2;
+		
+		main(args);
+		
+		ReadStats.COLLECT_QUALITY_STATS=oldCOLLECT_QUALITY_STATS;
+		ReadStats.overwrite=oldoverwrite;
+		Shared.READ_BUFFER_LENGTH=oldREAD_BUFFER_LENGTH;
+		ReadWrite.USE_PIGZ=oldPIGZ;
+		ReadWrite.USE_UNPIGZ=oldUnPIGZ;
+		ReadWrite.ZIPLEVEL=oldZL;
+		ByteFile.FORCE_MODE_BF1=oldBF1;
+		ByteFile.FORCE_MODE_BF2=oldBF2;
 	}
 	
 	public static void printOptions(){
@@ -61,13 +82,13 @@ public class CalcTrueQuality {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 //		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=false;
 		ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.ZIPLEVEL=2;
+		ReadWrite.ZIPLEVEL=8;
 //		SamLine.CONVERT_CIGAR_TO_MATCH=true;
 		
 		for(int i=0; i<args.length; i++){
@@ -85,8 +106,8 @@ public class CalcTrueQuality {
 				//do nothing
 			}else if(Parser.parseQualityAdjust(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
+			}else if(a.equals("showstats")){
+				showStats=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -99,7 +120,7 @@ public class CalcTrueQuality {
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
-				Shared.setThreads(Integer.parseInt(b));
+				Shared.setThreads(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1") || a.equals("sam")){
@@ -155,39 +176,40 @@ public class CalcTrueQuality {
 	
 	public void process(){
 		Timer t=new Timer();
-		t.start();
 		for(int pass=0; pass<passes; pass++){
 			process(pass);
 		}
 		
 		t.stop();
-
-		readsProcessed/=passes;
-		basesProcessed/=passes;
-		readsUsed/=passes;
-		basesUsed/=passes;
-
-		double rpnano=readsProcessed/(double)(t.elapsed);
-		double bpnano=basesProcessed/(double)(t.elapsed);
-
-		String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
-		String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
-
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
 		
-		outstream.println("Time:                         \t"+t);
-		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
-		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+		if(showStats){
+			readsProcessed/=passes;
+			basesProcessed/=passes;
+			readsUsed/=passes;
+			basesUsed/=passes;
 
-		rpstring=(readsUsed<100000 ? ""+readsUsed : readsUsed<100000000 ? (readsUsed/1000)+"k" : (readsUsed/1000000)+"m");
-		bpstring=(basesUsed<100000 ? ""+basesUsed : basesUsed<100000000 ? (basesUsed/1000)+"k" : (basesUsed/1000000)+"m");
+			double rpnano=readsProcessed/(double)(t.elapsed);
+			double bpnano=basesProcessed/(double)(t.elapsed);
 
-		while(rpstring.length()<8){rpstring=" "+rpstring;}
-		while(bpstring.length()<8){bpstring=" "+bpstring;}
+			String rpstring=(readsProcessed<100000 ? ""+readsProcessed : readsProcessed<100000000 ? (readsProcessed/1000)+"k" : (readsProcessed/1000000)+"m");
+			String bpstring=(basesProcessed<100000 ? ""+basesProcessed : basesProcessed<100000000 ? (basesProcessed/1000)+"k" : (basesProcessed/1000000)+"m");
 
-		outstream.println("Reads Used:    "+rpstring);
-		outstream.println("Bases Used:    "+bpstring);
+			while(rpstring.length()<8){rpstring=" "+rpstring;}
+			while(bpstring.length()<8){bpstring=" "+bpstring;}
+
+			outstream.println("Time:                         \t"+t);
+			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
+			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+
+			rpstring=(readsUsed<100000 ? ""+readsUsed : readsUsed<100000000 ? (readsUsed/1000)+"k" : (readsUsed/1000000)+"m");
+			bpstring=(basesUsed<100000 ? ""+basesUsed : basesUsed<100000000 ? (basesUsed/1000)+"k" : (basesUsed/1000000)+"m");
+
+			while(rpstring.length()<8){rpstring=" "+rpstring;}
+			while(bpstring.length()<8){bpstring=" "+bpstring;}
+
+			outstream.println("Reads Used:    "+rpstring);
+			outstream.println("Bases Used:    "+bpstring);
+		}
 		
 		if(errorState){
 			throw new RuntimeException(this.getClass().getName()+" terminated in an error state; the output may be corrupt.");
@@ -349,7 +371,7 @@ public class CalcTrueQuality {
 		}
 		//System.err.println("Writing "+fname);
 		tsw.poisonAndWait();
-		System.err.println("Wrote "+fname);
+		if(showStats){System.err.println("Wrote "+fname);}
 	}
 	
 	public static void writeMatrix(String fname, long[][][][] goodMatrix, long[][][][] badMatrix, boolean overwrite, boolean append, int pass){
@@ -398,7 +420,7 @@ public class CalcTrueQuality {
 		}
 		//System.err.println("Writing "+fname);
 		tsw.poisonAndWait();
-		System.err.println("Wrote "+fname);
+		if(showStats){System.err.println("Wrote "+fname);}
 	}
 	
 	public static void writeMatrix(String fname, long[][][] goodMatrix, long[][][] badMatrix, boolean overwrite, boolean append, int pass){
@@ -442,7 +464,7 @@ public class CalcTrueQuality {
 		}
 		//System.err.println("Writing "+fname);
 		tsw.poisonAndWait();
-		System.err.println("Wrote "+fname);
+		if(showStats){System.err.println("Wrote "+fname);}
 	}
 	
 	public static void writeMatrix(String fname, long[][] goodMatrix, long[][] badMatrix, boolean overwrite, boolean append, int pass){
@@ -482,7 +504,7 @@ public class CalcTrueQuality {
 		}
 		//System.err.println("Writing "+fname);
 		tsw.poisonAndWait();
-		System.err.println("Wrote "+fname);
+		if(showStats){System.err.println("Wrote "+fname);}
 	}
 	
 	public static void writeMatrix(String fname, long[] goodMatrix, long[] badMatrix, boolean overwrite, boolean append, int pass){
@@ -518,7 +540,7 @@ public class CalcTrueQuality {
 		}
 		//System.err.println("Writing "+fname);
 		tsw.poisonAndWait();
-		System.err.println("Wrote "+fname);
+		if(showStats){System.err.println("Wrote "+fname);}
 	}
 	
 	
@@ -1612,6 +1634,7 @@ public class CalcTrueQuality {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
+	public static boolean showStats=true;
 	private static boolean verbose=false;	
 	private static boolean overwrite=true;
 	private static final boolean append=false;

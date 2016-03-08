@@ -26,7 +26,6 @@ public class PhylipToFasta {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		PhylipToFasta mb=new PhylipToFasta(args);
 		mb.process(t);
 	}
@@ -34,7 +33,7 @@ public class PhylipToFasta {
 	public PhylipToFasta(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -42,10 +41,10 @@ public class PhylipToFasta {
 		for(String s : args){if(s.startsWith("out=standardout") || s.startsWith("out=stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -58,8 +57,6 @@ public class PhylipToFasta {
 
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ReadWrite.verbose=verbose;

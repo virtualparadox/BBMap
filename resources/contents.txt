@@ -1,5 +1,8 @@
 Not: Unless otherwise mentioned, adapter sequences in this directory should be trimmed to the right.  For BBDuk, that means using the flag "ktrim=r".
 
+adapters.fa
+All adapters in one file, provided for convenience.
+
 truseq.fa.gz
 Illumina Truseq DNA adapters.
 

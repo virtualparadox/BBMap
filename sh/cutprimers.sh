@@ -17,6 +17,7 @@ out=<file>          Output sequences. out=stdout will pipe to stdout.
 sam1=<file>         Sam file containing mapped locations of primer sequence 1.
 sam2=<file>         Sam file containing mapped locations of primer sequence 2.
 fake=t              Output 1bp 'N' reads in cases where there is no primer.
+include=f           Include the flanking primer sequences in output.
 
 Java Parameters:
 
@@ -29,7 +30,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx1g"
@@ -55,9 +66,11 @@ calcXmx () {
 calcXmx "$@"
 
 cutprimers() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module unload oracle-jdk
+		module load oracle-jdk/1.7_64bit
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP jgi.CutPrimers $@"
 	echo $CMD >&2
 	eval $CMD

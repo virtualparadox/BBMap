@@ -4,21 +4,21 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified February 17, 2015
+Last modified October 22, 2015
 
-Description:  Generates synthetic reads following an MDA-amplified singe cell's coverage distribution.
+Description:  Generates synthetic reads following an MDA-amplified single cell's coverage distribution.
 
 Usage:  synthmda.sh in=<reference> out=<reads out file>
 
-Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed.
-Output may be stdout or a file.
+Input may be fasta or fastq, compressed or uncompressed.
+
 
 Optional parameters (and their defaults)
 
 reads=12000000      Generate this many reads.
 paired=t            Generate paired reads.
 length=150          Reads should be this long.
-minlen=10000        Min length of MDA contig.
+minlen=4000         Min length of MDA contig.
 maxlen=150000       Max length of MDA contig.
 cycles=9            Number of MDA cycles; higher is more spiky.
 initialratio=1.3    Fraction of genome initially replicated; 
@@ -40,7 +40,17 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 "
 }
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+pushd . > /dev/null
+DIR="${BASH_SOURCE[0]}"
+while [ -h "$DIR" ]; do
+  cd "$(dirname "$DIR")"
+  DIR="$(readlink "$(basename "$DIR")")"
+done
+cd "$(dirname "$DIR")"
+DIR="$(pwd)/"
+popd > /dev/null
+
+#DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx4g"
@@ -66,7 +76,9 @@ calcXmx () {
 calcXmx "$@"
 
 synthmda() {
-	#module load pigz
+	if [[ $NERSC_HOST == genepool ]]; then
+		module load pigz
+	fi
 	local CMD="java $EA $z -cp $CP jgi.SynthMDA $@"
 	echo $CMD >&2
 	eval $CMD

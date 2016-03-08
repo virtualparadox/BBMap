@@ -25,13 +25,11 @@ public class Shared {
 	public static final int GAPCOST=Tools.max(1, GAPLEN/64);
 	public static final byte GAPC='-';
 	
-	public static int BBMAP_VERSION=35;
-	public static String BBMAP_VERSION_MINOR="02";
-	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
+	public static String BBMAP_VERSION_STRING="35.85";
 	
 	public static boolean TRIM_READ_COMMENTS=false;
 	
-	public static boolean USE_JNI=false;
+	public static boolean USE_JNI=false;//Data.GENEPOOL;
 	public static boolean USE_MPI=false;
 	public static boolean MPI_KEEP_ALL=true;
 	/** Use ConcurrentReadInputStreamMPI instead of D */
@@ -76,17 +74,28 @@ public class Shared {
 	}
 	private static final ThreadLocal<char[]> TLCB=new ThreadLocal<char[]>();
 
+	public static int setThreads(String x){
+		int y=Data.LOGICAL_PROCESSORS;
+		if(x!=null && !x.equalsIgnoreCase("auto")){
+			y=Integer.parseInt(x);
+		}
+		return setThreads(y);
+	}
+
 	public static int setThreads(int x){
 		if(x>0){
 			THREADS=x;
 		}else{
-			THREADS=Data.LOGICAL_PROCESSORS;
+			THREADS=Tools.max(1, Data.LOGICAL_PROCESSORS);
 		}
 		setBuffers();
 		return THREADS;
 	}
 	
-	public static int threads(){return THREADS;}
+	public static int threads(){
+		assert(THREADS>0);
+		return THREADS;
+	}
 	
 	public static int capBuffers(int num){
 		return setBuffers(Tools.min(num, READ_BUFFER_NUM_BUFFERS));
@@ -116,5 +125,22 @@ public class Shared {
 		Runtime rt=Runtime.getRuntime();
 		return rt.totalMemory()*1.0/rt.maxMemory();
 	}
+	
+	/** Print statistics about current memory use and availability */
+	public static final void printMemory(){
+		if(GC_BEFORE_PRINT_MEMORY){
+			System.gc();
+			System.gc();
+		}
+		Runtime rt=Runtime.getRuntime();
+		long mmemory=rt.maxMemory()/1000000;
+		long tmemory=rt.totalMemory()/1000000;
+		long fmemory=rt.freeMemory()/1000000;
+		long umemory=tmemory-fmemory;
+		System.err.println("Memory: "+"max="+mmemory+/*"m, total="+tmemory+*/"m, "+"free="+fmemory+"m, used="+umemory+"m");
+	}
+	
+	/** Do garbage collection prior to printing memory usage */
+	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	
 }

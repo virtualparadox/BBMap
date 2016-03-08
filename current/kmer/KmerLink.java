@@ -2,9 +2,10 @@ package kmer;
 
 import java.util.ArrayList;
 
+import stream.ByteBuilder;
+
 import align2.Tools;
 
-import dna.CoverageArray;
 import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
@@ -134,8 +135,12 @@ public class KmerLink extends AbstractKmerTable {
 	
 	@Override
 	public final void initializeOwnership(){
-		//do nothing
+		owner=-1;
+		if(next!=null){next.initializeOwnership();}
 	}
+	
+	@Override
+	public final void clearOwnership(){initializeOwnership();}
 	
 	@Override
 	public final int setOwner(final long kmer, final int newOwner){
@@ -213,6 +218,22 @@ public class KmerLink extends AbstractKmerTable {
 	}
 	
 	@Override
+	public final boolean dumpKmersAsBytes_MT(final ByteStreamWriter bsw, final ByteBuilder bb, final int k, final int mincount){
+		if(value<1){return true;}
+		if(value>=mincount){
+			toBytes(pivot, value, k, bb);
+			bb.append('\n');
+			if(bb.length()>=16000){
+				ByteBuilder bb2=new ByteBuilder(bb);
+				synchronized(bsw){bsw.addJob(bb2);}
+				bb.clear();
+			}
+		}
+		if(next!=null){next.dumpKmersAsBytes_MT(bsw, bb, k, mincount);}
+		return true;
+	}
+	
+	@Override
 	public final boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount) {
 		tsw.print(dumpKmersAsText(new StringBuilder(32), k, mincount));
 		return true;
@@ -227,9 +248,9 @@ public class KmerLink extends AbstractKmerTable {
 	}
 	
 	@Override
-	public final void fillHistogram(CoverageArray ca, int max){
+	public final void fillHistogram(long[] ca, int max){
 		if(value<1){return;}
-		ca.increment(Tools.min(value, max));
+		ca[Tools.min(value, max)]++;
 		if(next!=null){next.fillHistogram(ca, max);}
 	}
 	
@@ -248,6 +269,12 @@ public class KmerLink extends AbstractKmerTable {
 	
 	private static KmerLink rebalance(ArrayList<KmerLink> list, int a, int b){
 		throw new RuntimeException("Unsupported.");
+	}
+	
+	@Deprecated
+	@Override
+	public long regenerate(){
+		throw new RuntimeException("TODO - remove zero-value links.");
 	}
 	
 	/*--------------------------------------------------------------*/

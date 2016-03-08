@@ -38,7 +38,6 @@ public class SplitSam4Way {
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
 		Timer t=new Timer();
-		t.start();
 		long reads=0, bases=0;
 		long preads=0, mreads=0, creads=0, ureads=0;
 		

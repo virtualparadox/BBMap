@@ -41,7 +41,6 @@ public class ReformatReads {
 
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		ReformatReads rr=new ReformatReads(args);
 		rr.process(t);
 	}
@@ -49,7 +48,7 @@ public class ReformatReads {
 	public ReformatReads(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -59,13 +58,14 @@ public class ReformatReads {
 		
 		boolean setInterleaved=false; //Whether it was explicitly set.
 
-		FastaReadInputStream.SPLIT_READS=false;
-		stream.FastaReadInputStream.MIN_READ_LEN=1;
+		
+		
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.capBuffers(4);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads();
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
+		
 		SamLine.SET_FROM_OK=true;
 //		SamLine.CONVERT_CIGAR_TO_MATCH=true;
 		
@@ -80,8 +80,6 @@ public class ReformatReads {
 			
 			if(parser.parse(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null") || a.equals(parser.in2)){
-				// do nothing
 			}else if(a.equals("passes")){
 				assert(false) : "'passes' is disabled.";
 //				passes=Integer.parseInt(b);
@@ -161,8 +159,6 @@ public class ReformatReads {
 				}
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
-			}else if(parser.out1==null && i==1 && !arg.contains("=")){
-				parser.out1=arg;
 			}else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
@@ -199,13 +195,14 @@ public class ReformatReads {
 			failIfNoBarcode=parser.failIfNoBarcode;
 			barcodes=parser.barcodes;
 			maxNs=parser.maxNs;
+			minConsecutiveBases=parser.minConsecutiveBases;
 			minReadLength=parser.minReadLength;
 			maxReadLength=parser.maxReadLength;
 			minLenFraction=parser.minLenFraction;
 			requireBothBad=parser.requireBothBad;
 			minGC=parser.minGC;
 			maxGC=parser.maxGC;
-			filterGC=parser.filterGC;
+			filterGC=(minGC>0 || maxGC<1);
 			tossJunk=parser.tossJunk;
 			recalibrateQuality=parser.recalibrateQuality;
 
@@ -224,6 +221,8 @@ public class ReformatReads {
 			
 			extin=parser.extin;
 			extout=parser.extout;
+			
+			loglog=(parser.loglog ? new LogLog(parser) : null);
 		}
 		
 		if(recalibrateQuality){CalcTrueQuality.initializeMatrices();}
@@ -337,7 +336,7 @@ public class ReformatReads {
 		long basesRemaining=0;
 		
 		if(sampleReadsExact || sampleBasesExact){
-			long[] counts=countReads(in1, in2, maxReads);
+			long[] counts=countReads(maxReads);
 			readsRemaining=counts[0];
 			basesRemaining=counts[2];
 			setSampleSeed(sampleseed);
@@ -346,6 +345,7 @@ public class ReformatReads {
 		
 		final ConcurrentReadInputStream cris;
 		{
+			useSharedHeader=(ffin1.samOrBam() && ffout1!=null && ffout1.samOrBam());
 			cris=ConcurrentReadInputStream.getReadInputStream(maxReads, useSharedHeader, ffin1, ffin2, qfin1, qfin2);
 			cris.setSampleRate(samplerate, sampleseed);
 			if(verbose){System.err.println("Started cris");}
@@ -359,27 +359,25 @@ public class ReformatReads {
 		assert(!paired || breakLength<1) : "Paired input cannot be broken with 'breaklength'";
 
 		final ConcurrentReadOutputStream ros;
-		if(out1!=null){
+		if(ffout1!=null){
 			final int buff=4;
 			
-			if(cris.paired() && out2==null && (in1==null || !in1.contains(".sam"))){
+			if(cris.paired() && ffout2==null && ffout1!=null && !ffout1.samOrBam()){
 				outstream.println("Writing interleaved.");
 			}
-			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1)) : "Input file and output file have same name.";
-			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2))) : "out1 and out2 have same name.";
 			
 			ros=ConcurrentReadOutputStream.getStream(ffout1, ffout2, qfout1, qfout2, buff, null, useSharedHeader);
 			ros.start();
 		}else{ros=null;}
 		
 		final ConcurrentReadOutputStream rosb;
-		if(outsingle!=null){
+		if(ffoutsingle!=null){
 			final int buff=4;
 			
 			rosb=ConcurrentReadOutputStream.getStream(ffoutsingle, null, buff, null, useSharedHeader);
 			rosb.start();
 		}else{rosb=null;}
-		final boolean discardTogether=(!paired || (outsingle==null && !requireBothBad));
+		final boolean discardTogether=(!paired || (ffoutsingle==null && !requireBothBad));
 		
 		long readsProcessed=0;
 		long basesProcessed=0;
@@ -488,6 +486,8 @@ public class ReformatReads {
 						if(MAKE_IDHIST){readstats.addToIdentityHistogram(r1);}
 					}
 					
+					if(loglog!=null){loglog.hash(r1);}
+					
 					{
 						readsProcessed++;
 						basesProcessed+=initialLength1;
@@ -567,7 +567,7 @@ public class ReformatReads {
 					
 					if(removeBadBarcodes){
 						if(r1!=null && !r1.discarded() && r1.failsBarcode(barcodes, failIfNoBarcode)){
-							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id);}
+							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id+"\nThis can be disabled with the flag barcodefilter=f");}
 							lowqBasesT+=r1.length()+r1.mateLength();
 							lowqReadsT+=1+r1.mateCount();
 							r1.setDiscarded(true);
@@ -593,6 +593,19 @@ public class ReformatReads {
 								unmappedBasesT+=initialLength1;
 								unmappedReadsT++;
 							}
+						}
+					}
+					
+					if(SamLine.VERSION==1.3f){
+						if(r1!=null && !r1.discarded()){
+							assert(r1.obj!=null && r1.obj.getClass().equals(SamLine.class)) : "filterbits and requiredbits only work on sam/bam input.";
+							SamLine sl=(SamLine)r1.obj;
+							sl.cigar=SamLine.toCigar13(sl.cigar);
+						}
+						if(r2!=null && !r2.discarded()){
+							assert(r2.obj!=null && r2.obj.getClass().equals(SamLine.class)) : "filterbits and requiredbits only work on sam/bam input.";
+							SamLine sl=(SamLine)r2.obj;
+							sl.cigar=SamLine.toCigar13(sl.cigar);
 						}
 					}
 					
@@ -756,6 +769,19 @@ public class ReformatReads {
 							r1.setDiscarded(true);
 						}
 						if(r2!=null && !r2.discarded() && r2.countUndefined()>maxNs){
+							lowqBasesT+=r2.length();
+							lowqReadsT++;
+							r2.setDiscarded(true);
+						}
+					}
+					
+					if(minConsecutiveBases>0){
+						if(r1!=null && !r1.discarded() && !r1.hasMinConsecutiveBases(minConsecutiveBases)){
+							lowqBasesT+=r1.length();
+							lowqReadsT++;
+							r1.setDiscarded(true);
+						}
+						if(r2!=null && !r2.discarded() && !r2.hasMinConsecutiveBases(minConsecutiveBases)){
 							lowqBasesT+=r2.length();
 							lowqReadsT++;
 							r2.setDiscarded(true);
@@ -982,6 +1008,10 @@ public class ReformatReads {
 		outstream.println("Output:                 \t"+ro+" reads ("+String.format("%.2f",ro*rmult)+"%) \t"+
 				bo+" bases ("+String.format("%.2f",bo*bmult)+"%)");
 		
+		if(loglog!=null){
+			outstream.println("Unique "+loglog.k+"-mers:         \t"+loglog.cardinality());
+		}
+		
 		outstream.println("\nTime:                         \t"+t);
 		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
@@ -1102,12 +1132,9 @@ public class ReformatReads {
 	}
 	
 	
-	private long[] countReads(String fname1, String fname2, long maxReads){
-		{
-			String x=fname1.toLowerCase();
-			if((x.equals("stdin") || x.startsWith("stdin.")) && !new File(fname1).exists()){
-				throw new RuntimeException("Can't precount reads from standard in, only from a file.");
-			}
+	private long[] countReads(long maxReads){
+		if(ffin1.stdio()){
+			throw new RuntimeException("Can't precount reads from standard in, only from a file.");
 		}
 		
 		final ConcurrentReadInputStream cris;
@@ -1194,6 +1221,9 @@ public class ReformatReads {
 	
 	/*--------------------------------------------------------------*/
 	
+	/** For calculating kmer cardinality */
+	private final LogLog loglog;
+	
 	/** Tracks names to ensure no duplicate names. */
 	private final HashMap<String,Integer> nameMap1, nameMap2;
 	private boolean uniqueNames=false;
@@ -1254,6 +1284,7 @@ public class ReformatReads {
 	private byte minAvgQuality=0;
 	private int minAvgQualityBases=0;
 	private int maxNs=-1;
+	private int minConsecutiveBases=0;
 	private int breakLength=0;
 	private int maxReadLength=0;
 	private int minReadLength=0;

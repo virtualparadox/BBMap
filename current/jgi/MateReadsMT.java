@@ -76,7 +76,7 @@ public class MateReadsMT {
 		
 		Parser parser=new Parser();
 		ReadWrite.MAX_ZIP_THREADS=Shared.threads()-1;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
@@ -98,8 +98,6 @@ public class MateReadsMT {
 				//do nothing
 			}else if(parser.parseTrim(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1_primary=b;
 			}else if(a.equals("in2")){
@@ -327,7 +325,7 @@ public class MateReadsMT {
 			maxtables++;
 			long cells=totalcells_G/maxtables;
 			if(k_G<32 && cells>(1L<<(2*k_G))){cells=(1L<<(2*k_G));}
-			middleTable=KmerCount7MT.makeKca(in1, in2, extra_G, MIDDLE_TABLE_K, cbits_G, 0, cells, hashes+1, MIN_QUALITY, true, tableReads_G, 1, 4, 2, 2, null);
+			middleTable=KmerCount7MT.makeKca(in1, in2, extra_G, MIDDLE_TABLE_K, cbits_G, 0, cells, hashes+1, MIN_QUALITY, true, tableReads_G, 1, 4, 2, 2, null, 0);
 			middleTable.shutdown();
 			System.err.println("MiddleTable: \tgap = "+middleTable.gap+"   \tmem = "+middleTable.mem()+"   \tused = "+String.format("%.3f%%",middleTable.usedFraction()*100));
 		}
@@ -335,7 +333,7 @@ public class MateReadsMT {
 		final int cmax=(1<<cbits_G)-1;
 		assert(MIN_HITS_FOR_GOOD>MAX_HITS_FOR_BAD && MIN_HITS_FOR_GOOD<=cmax && MAX_HITS_FOR_BAD>0);
 		
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		
 		final int phases=(gap_G==null ? 1 : gap_G.length);
 		
@@ -539,7 +537,7 @@ public class MateReadsMT {
 		
 		KCountArray[] kca=new KCountArray[gap==null ? 0 : gap.length];
 		for(int i=0; i<kca.length; i++){
-			kca[i]=KmerCount7MT.makeKca(in1, in2, extra, k, cbits, gap[i], cells, multihash, MIN_QUALITY, true, tableReads, passes, 4, 2, 2, null);
+			kca[i]=KmerCount7MT.makeKca(in1, in2, extra, k, cbits, gap[i], cells, multihash, MIN_QUALITY, true, tableReads, passes, 4, 2, 2, null, 0);
 		}
 		
 		for(int i=0; i<kca.length; i++){

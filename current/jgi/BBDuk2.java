@@ -58,7 +58,7 @@ public class BBDuk2 {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			printOptions();
 			System.exit(0);
 		}
@@ -74,43 +74,7 @@ public class BBDuk2 {
 	 * Display usage information.
 	 */
 	private static void printOptions(){
-		outstream.println("Syntax:\n");
-		outstream.println("\njava -ea -Xmx20g -cp <path> jgi.BBDuk2 in=<input file> out=<output file> ref=<contaminant files>");
-		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-		outstream.println("out=<file>         \t(outnonmatch) The 'out=' flag is needed if the output file is not the second parameter.  'out=stdout' will pipe to standard out.");
-		outstream.println("out2=<file>        \t(outnonmatch2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("outmatch=<file>    \t(outm or outb) Write 'bad' reads here (containing contaminant kmers).");
-		outstream.println("outmatch2=<file>   \t(outm2 or outb2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
-		outstream.println("duk=<file>         \tWrite duk-like output.");
-		outstream.println("");
-		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
-		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
-		outstream.println("showspeed=t        \t(ss) Set to 'f' to suppress display of processing speed.");
-		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
-		outstream.println("k=31               \tKmer length used for finding contaminants.  Contaminants shorter than k will not be found.");
-		outstream.println("maskmiddle=t       \t(mm) Treat the middle base of a kmer as a wildcard.");
-		outstream.println("maxbadkmers=0      \t(mbk) Reads with more than this many contaminant kmers will be discarded.");
-		outstream.println("minavgquality=0    \t(maq) Reads with average quality (before trimming) below this will be discarded.");
-		outstream.println("touppercase=f      \t(tuc) Change all letters in reads and reference to upper-case.");
-		outstream.println("ktrim=f            \tTrim reads to remove bases matching reference kmers. ");
-		outstream.println("                   \tValues: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming).");
-		outstream.println("useshortkmers=f    \t(usk) Look for shorter kmers at read tips (only for k-trimming).");
-		outstream.println("mink=6             \tMinimum length of short kmers.  Setting this automatically sets useshortkmers=t.");
-		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers. ");
-		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-		outstream.println("trimq=6            \tTrim quality threshold.");
-		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
-		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=70       \tLength of lines in fasta output");
-		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
-		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
-		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
-		outstream.println("forest=t           \tUse HashForest data structure");
-		outstream.println("table=f            \tUse KmerTable data structure");
-		outstream.println("array=f            \tUse HashArray data structure");
+		System.err.println("Please consult the shellscript for usage information.");
 	}
 	
 	
@@ -128,8 +92,8 @@ public class BBDuk2 {
 		ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.USE_PIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		FastaReadInputStream.SPLIT_READS=false;
+		
+		
 		ByteFile.FORCE_MODE_BF2=Shared.threads()>2;
 		
 		/* Initialize local variables with defaults */
@@ -210,6 +174,8 @@ public class BBDuk2 {
 				//do nothing
 			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
+			}else if(parser.parseCardinality(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -239,6 +205,8 @@ public class BBDuk2 {
 				outrefstats=b;
 			}else if(a.equals("rpkm") || a.equals("fpkm") || a.equals("cov") || a.equals("coverage")){
 				outrpkm=b;
+			}else if(a.equals("sam") || a.equals("bam")){
+				samFile=b;
 			}else if(a.equals("duk") || a.equals("outduk")){
 				outduk=b;
 			}else if(a.equals("rqc")){
@@ -332,6 +300,8 @@ public class BBDuk2 {
 				skipreads_=Tools.parseKMG(b);
 			}else if(a.equals("maxbadkmers") || a.equals("mbk")){
 				maxBadKmers_=Integer.parseInt(b);
+			}else if(a.equals("minhits") || a.equals("minkmerhits") || a.equals("mkh")){
+				maxBadKmers_=Integer.parseInt(b)-1;
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -397,14 +367,14 @@ public class BBDuk2 {
 				useQualityForOverlap_=Tools.parseBoolean(b);
 			}else if(a.equals("tpe") || a.equals("tbe") || a.equals("trimpairsevenly")){
 				trimPairsEvenly_=Tools.parseBoolean(b);
-			}else if(a.equals("otm") || a.equals("outputtrimmedtomatch")){
+			}else if(a.equals("ottm") || a.equals("outputtrimmedtomatch")){
 				addTrimmedToBad_=Tools.parseBoolean(b);
 			}else if(a.equals("minoverlap")){
 				minoverlap_=Integer.parseInt(b);
 			}else if(a.equals("mininsert")){
 				mininsert_=Integer.parseInt(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
-				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
+				if(b==null || b.length()<1 || Character.isLetter(b.charAt(0))){
 					prealloc_=Tools.parseBoolean(b);
 				}else{
 					preallocFraction=Tools.max(0, Double.parseDouble(b));
@@ -431,13 +401,13 @@ public class BBDuk2 {
 				entropyK=Integer.parseInt(b);
 			}else if(a.equals("entropywindow") || a.equals("ew")){
 				entropyWindow=Integer.parseInt(b);
-			}else if(a.equals("minentropy") || a.equals("entropy")){
+			}else if(a.equals("minentropy") || a.equals("entropy") || a.equals("entropyfilter")){
 				entropyCutoff=Float.parseFloat(b);
 			}else if(a.equals("verifyentropy")){
 				verifyEntropy=Tools.parseBoolean(b);
 			}else if(a.equals("minbasefrequency")){
 				minBaseFrequency_=Float.parseFloat(b);
-			}else if(a.equals("ecc")){
+			}else if(a.equals("ecco") || a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
 			}else if(a.equals("copyundefined") || a.equals("cu")){
 				REPLICATE_AMBIGUOUS=Tools.parseBoolean(b);
@@ -492,13 +462,17 @@ public class BBDuk2 {
 			minReadLength=parser.minReadLength;
 			maxReadLength=parser.maxReadLength;
 			maxNs=parser.maxNs;
+			minConsecutiveBases=parser.minConsecutiveBases;
 //			untrim=parser.untrim;
-//			minGC=parser.minGC;
-//			maxGC=parser.maxGC;
-//			filterGC=parser.filterGC;
 //			minTrimLength=(parser.minTrimLength>=0 ? parser.minTrimLength : minTrimLength);
 //			requireBothBad=parser.requireBothBad;
 			removePairsIfEitherBad=!parser.requireBothBad;
+
+			minGC=parser.minGC;
+			maxGC=parser.maxGC;
+			filterGC=(minGC>0 || maxGC<1);
+
+			loglog=(parser.loglog ? new LogLog(parser) : null);
 			
 			THREADS=Shared.threads();
 		}
@@ -564,8 +538,6 @@ public class BBDuk2 {
 		}
 		if(literalFilter!=null){refNames.add("literal");}
 		refScafCounts=new int[refNames.size()];
-		
-		if(recalibrateQuality){CalcTrueQuality.initializeMatrices();}
 		
 		/* Set final variables; post-process and validate argument combinations */
 		
@@ -867,6 +839,13 @@ public class BBDuk2 {
 	
 	public void process(){
 		
+		if(recalibrateQuality){
+			if(samFile!=null){
+				CalcTrueQuality.main2(new String[] {"in="+samFile, "showstats=f"});
+			}
+			CalcTrueQuality.initializeMatrices();
+		}
+		
 		/* Check for output file collisions */
 		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outstats, outrpkm, outduk, outrqc, outrefstats)){
 			throw new RuntimeException("One or more output files were duplicate or could not be written to.  Check the names or set the 'overwrite=true' flag.");
@@ -874,7 +853,6 @@ public class BBDuk2 {
 		
 		/* Start overall timer */
 		Timer t=new Timer();
-		t.start();
 		
 //		boolean dq0=FASTQ.DETECT_QUALITY;
 //		boolean ti0=FASTQ.TEST_INTERLEAVED;
@@ -911,7 +889,7 @@ public class BBDuk2 {
 		
 		/* Throw an exception if errors were detected */
 		if(errorState){
-			throw new RuntimeException("BBDuk terminated in an error state; the output may be corrupt.");
+			throw new RuntimeException(getClass().getName()+" terminated in an error state; the output may be corrupt.");
 		}
 	}
 	
@@ -920,11 +898,10 @@ public class BBDuk2 {
 		
 		/* Start phase timer */
 		Timer t=new Timer();
-		t.start();
 
 		if(DISPLAY_PROGRESS){
 			outstream.println("Initial:");
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -977,8 +954,13 @@ public class BBDuk2 {
 			bsw.poisonAndWait();
 		}
 		
+		final boolean vic=Read.VALIDATE_IN_CONSTRUCTOR;
+		Read.VALIDATE_IN_CONSTRUCTOR=THREADS<4;
+		
 		/* Do kmer matching of input reads */
 		spawnProcessThreads(t);
+		
+		Read.VALIDATE_IN_CONSTRUCTOR=vic;
 		
 		/* Write legacy duk statistics (which requires tables) */
 		writeDuk(System.nanoTime()-startTime);
@@ -1018,6 +1000,10 @@ public class BBDuk2 {
 			outstream.println("Trimmed by overlap:     \t"+readsTrimmedByOverlap+" reads ("+String.format("%.2f",readsTrimmedByOverlap*100.0/readsIn)+"%) \t"+
 					basesTrimmedByOverlap+" bases ("+String.format("%.2f",basesTrimmedByOverlap*100.0/basesIn)+"%)");
 		}
+		if(filterGC){
+			outstream.println("Filtered by GC:         \t"+badGcReads+" reads ("+String.format("%.2f",badGcReads*100.0/readsIn)+"%) \t"+
+					badGcBases+" bases ("+String.format("%.2f",badGcBases*100.0/basesIn)+"%)");
+		}
 		if(minAvgQuality>0 || maxNs>=0 || minBaseFrequency>0 || chastityFilter || removeBadBarcodes){
 			outstream.println("Low quality discards:   \t"+readsQFiltered+" reads ("+String.format("%.2f",readsQFiltered*100.0/readsIn)+"%) \t"+
 					basesQFiltered+" bases ("+String.format("%.2f",basesQFiltered*100.0/basesIn)+"%)");
@@ -1029,6 +1015,10 @@ public class BBDuk2 {
 		
 		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
 				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
+		
+		if(loglog!=null){
+			outstream.println("Unique "+loglog.k+"-mers:         \t"+loglog.cardinality());
+		}
 	}
 	
 	/**
@@ -1369,7 +1359,6 @@ public class BBDuk2 {
 	 */
 	private long spawnLoadThreads(String[] ref, String[] literal, AbstractKmerTable[] maps, boolean countRef){
 		Timer t=new Timer();
-		t.start();
 		if((ref==null || ref.length<1) && (literal==null || literal.length<1)){return 0;}
 		long added=0;
 		
@@ -1492,6 +1481,7 @@ public class BBDuk2 {
 		}
 		
 		/* Wait for loaders to die, and gather statistics */
+		boolean success=true;
 		for(LoadThread lt : loaders){
 			while(lt.getState()!=Thread.State.TERMINATED){
 				try {
@@ -1505,7 +1495,10 @@ public class BBDuk2 {
 			refKmers+=lt.refKmersT;
 			refBases+=lt.refBasesT;
 			refReads+=lt.refReadsT;
+			success&=lt.success;
 		}
+		if(!success){KillSwitch.kill("Failed loading ref kmers; aborting.");}
+		
 		//Correct statistics for number of threads, since each thread processes all reference data
 		refKmers/=WAYS;
 		refBases/=WAYS;
@@ -1517,7 +1510,7 @@ public class BBDuk2 {
 		t.stop();
 		if(DISPLAY_PROGRESS){
 			outstream.println("Added "+added+" kmers; time: \t"+t);
-			printMemory();
+			Shared.printMemory();
 			outstream.println();
 		}
 		
@@ -1651,6 +1644,8 @@ public class BBDuk2 {
 			basesKTrimmed+=pt.basesKTrimmedT;
 			readsTrimmedByOverlap+=pt.readsTrimmedByOverlapT;
 			basesTrimmedByOverlap+=pt.basesTrimmedByOverlapT;
+			badGcReads+=pt.badGcReadsT;
+			badGcBases+=pt.badGcBasesT;
 			readsQFiltered+=pt.readsQFilteredT;
 			basesQFiltered+=pt.basesQFilteredT;
 			readsEFiltered+=pt.readsEFilteredT;
@@ -1734,6 +1729,7 @@ public class BBDuk2 {
 			if(map.canRebalance() && map.size()>2L*map.arrayLength()){
 				map.rebalance();
 			}
+			success=true;
 		}
 
 		/**
@@ -1983,6 +1979,9 @@ public class BBDuk2 {
 		/** Destination for storing kmers */
 		private final AbstractKmerTable map;
 		
+		/** Completed successfully */
+		boolean success=false;
+		
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -2056,6 +2055,9 @@ public class BBDuk2 {
 					final Read r1=reads.get(i);
 					final Read r2=r1.mate;
 					
+					if(!r1.validated()){r1.validate(true);}
+					if(r2!=null && !r2.validated()){r2.validate(true);}
+					
 					if(readstats!=null){
 						if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r1);}
 						if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r1);}
@@ -2068,6 +2070,8 @@ public class BBDuk2 {
 						if(MAKE_GCHIST){readstats.addToGCHistogram(r1);}
 						if(MAKE_IDHIST){readstats.addToIdentityHistogram(r1);}
 					}
+
+					if(loglog!=null){loglog.hash(r1);}
 
 					final int initialLength1=r1.length();
 					final int initialLength2=r1.mateLength();
@@ -2093,7 +2097,7 @@ public class BBDuk2 {
 					
 					if(removeBadBarcodes){
 						if(r1!=null && !r1.discarded() && r1.failsBarcode(barcodes, failIfNoBarcode)){
-							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id);}
+							if(failBadBarcodes){KillSwitch.kill("Invalid barcode detected: "+r1.id+"\nThis can be disabled with the flag barcodefilter=f");}
 							r1.setDiscarded(true);
 							if(r2!=null){r2.setDiscarded(true);}
 						}
@@ -2105,6 +2109,27 @@ public class BBDuk2 {
 						}
 						if(r2!=null && !r2.discarded()){
 							CalcTrueQuality.recalibrate(r2);
+						}
+					}
+					
+					if(filterGC && (initialLength1>0 || initialLength2>0)){
+						final float gc;
+						if(r2==null){
+							gc=r1.gc();
+						}else{
+							gc=(r1.gc()*initialLength1+r2.gc()*initialLength2)/(initialLength1+initialLength2);
+						}
+						if(gc<minGC || gc>maxGC){
+							if(r1!=null && !r1.discarded()){
+								r1.setDiscarded(true);
+								badGcBasesT+=initialLength1;
+								badGcReadsT++;
+							}
+							if(r2!=null && !r2.discarded()){
+								r2.setDiscarded(true);
+								badGcBasesT+=initialLength2;
+								badGcReadsT++;
+							}
 						}
 					}
 					
@@ -2307,6 +2332,11 @@ public class BBDuk2 {
 							if(r1!=null && r1.countUndefined()>maxNs){r1.setDiscarded(true);}
 							if(r2!=null && r2.countUndefined()>maxNs){r2.setDiscarded(true);}
 						}
+						//Determine whether to discard the reads based on a lack of useful kmers
+						if(minConsecutiveBases>0){
+							if(r1!=null && !r1.discarded() && !r1.hasMinConsecutiveBases(minConsecutiveBases)){r1.setDiscarded(true);}
+							if(r2!=null && !r2.discarded() && !r2.hasMinConsecutiveBases(minConsecutiveBases)){r2.setDiscarded(true);}
+						}
 						//Determine whether to discard the reads based on minimum base frequency
 						if(minBaseFrequency>0){
 							if(r1!=null && r1.minBaseCount()<minBaseFrequency*r1.length()){r1.setDiscarded(true);}
@@ -2459,7 +2489,7 @@ public class BBDuk2 {
 						final long temp=(kmer&clearMasks[i])|setMasks[j][i];
 						if(temp!=kmer){
 							long rtemp=AminoAcid.reverseComplementBinaryFast(temp, len);
-							id=getValue(temp, rtemp, lengthMask, len, qPos, qHDist2, sets);
+							id=getValue(temp, rtemp, lengthMask, qPos, len, qHDist2, sets);
 						}
 					}
 				}
@@ -3258,6 +3288,9 @@ public class BBDuk2 {
 		private long readsTrimmedByOverlapT=0;
 		private long basesTrimmedByOverlapT=0;
 		
+		private long badGcBasesT=0;
+		private long badGcReadsT=0;
+		
 		private int xsum=0, rktsum=0;
 	}
 	
@@ -3297,20 +3330,6 @@ public class BBDuk2 {
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	/** Print statistics about current memory use and availability */
-	private static final void printMemory(){
-		if(GC_BEFORE_PRINT_MEMORY){
-			System.gc();
-			System.gc();
-		}
-		Runtime rt=Runtime.getRuntime();
-		long mmemory=rt.maxMemory()/1000000;
-		long tmemory=rt.totalMemory()/1000000;
-		long fmemory=rt.freeMemory()/1000000;
-		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
-	}
-	
 	/** Current available memory */
 	private static final long freeMemory(){
 		Runtime rt=Runtime.getRuntime();
@@ -3333,6 +3352,9 @@ public class BBDuk2 {
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
+	
+	/** For calculating kmer cardinality */
+	private final LogLog loglog;
 	
 	/** Has this class encountered errors while processing? */
 	public boolean errorState=false;
@@ -3397,6 +3419,9 @@ public class BBDuk2 {
 	private String outsingle=null;
 	/** Statistics output files */
 	private String outstats=null, outduk=null, outrqc=null, outrpkm=null, outrefstats=null;
+	
+	/** Optional file for quality score recalibration */
+	private String samFile=null;
 	
 	/** Dump kmers here. */
 	private String dump=null;
@@ -3473,6 +3498,9 @@ public class BBDuk2 {
 	long readsKFiltered=0;
 	long basesKFiltered=0;
 	
+	long badGcReads;
+	long badGcBases;
+	
 	long readsTrimmedByOverlap;
 	long basesTrimmedByOverlap;
 	
@@ -3545,6 +3573,8 @@ public class BBDuk2 {
 	private final HashSet<String> barcodes;
 	/** Throw away reads containing more than this many Ns.  Default: -1 (disabled) */
 	private final int maxNs;
+	/** Throw away reads containing without at least this many consecutive called bases. */
+	private int minConsecutiveBases=0;
 	/** Throw away reads containing fewer than this fraction of any particular base. */
 	private final float minBaseFrequency;
 	/** Throw away reads shorter than this after trimming.  Default: 10 */
@@ -3582,6 +3612,13 @@ public class BBDuk2 {
 	/** Trim right bases of the read modulo this value. 
 	 * e.g. forceTrimModulo=50 would trim the last 3bp from a 153bp read. */
 	private final int forceTrimModulo;
+	
+	/** Discard reads with GC below this. */
+	private final float minGC;
+	/** Discard reads with GC above this. */
+	private final float maxGC;
+	/** Discard reads outside of GC bounds. */
+	private final boolean filterGC;
 	
 	/** If positive, only look for kmer matches in the leftmost X bases */
 	private int restrictLeft;
@@ -3679,8 +3716,6 @@ public class BBDuk2 {
 	public static int THREADS=Shared.threads();
 	/** Indicates end of input stream */
 	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
-	/** Do garbage collection prior to printing memory usage */
-	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	/** Number of columns for statistics output, 3 or 5 */
 	public static int STATS_COLUMNS=3;
 	/** Release memory used by kmer storage after processing reads */

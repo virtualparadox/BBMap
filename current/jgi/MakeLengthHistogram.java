@@ -28,7 +28,6 @@ public class MakeLengthHistogram {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		
 		String in1=null, in2=null;
 		String out=null;
@@ -96,7 +95,7 @@ public class MakeLengthHistogram {
 	}
 	
 	public static void calc(String in1, String in2, String out){
-		FastaReadInputStream.SPLIT_READS=false;
+		
 		FastaReadInputStream.MIN_READ_LEN=1;
 		
 		final ConcurrentReadInputStream cris;

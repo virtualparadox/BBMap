@@ -20,7 +20,6 @@ public final class FuseSequence extends BBTool_ST {
 	
 	public static void main(String[] args){
 		Timer t=new Timer();
-		t.start();
 		FuseSequence fs=new FuseSequence(args);
 		fs.process(t);
 	}
@@ -36,9 +35,6 @@ public final class FuseSequence extends BBTool_ST {
 		fusePairs=false;
 	}
 	
-	/* (non-Javadoc)
-	 * @see jgi.BBTool_ST#parseArgument(java.lang.String, java.lang.String, java.lang.String)
-	 */
 	@Override
 	public boolean parseArgument(String arg, String a, String b) {
 		if(a.equals("pad") || a.equals("npad") || a.equals("ns")){
@@ -49,6 +45,9 @@ public final class FuseSequence extends BBTool_ST {
 			return true;
 		}else if(a.equals("fp") || a.equals("fusepairs")){
 			fusePairs=Tools.parseBoolean(b);
+			return true;
+		}else if(a.equals("rename") || a.equals("name")){
+			name=b;
 			return true;
 		}
 		return false;

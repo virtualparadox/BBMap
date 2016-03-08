@@ -64,9 +64,7 @@ public class ChromArrayMaker {
 					//jvm argument; do nothing
 				}else if(Parser.parseZip(arg, a, b)){
 					//do nothing
-				}else if(a.equals("null")){
-					//do nothing
-				}if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
+				}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 					Data.setPath(b);
 				}else if(a.equals("name") || a.equals("organism")){
 					name=b;

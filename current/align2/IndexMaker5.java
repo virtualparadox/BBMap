@@ -23,7 +23,6 @@ public class IndexMaker5 {
 	public static Block[] makeIndex(final int genome, int minChrom, int maxChrom, int k, int CHROMBITS, 
 			int MAX_ALLOWED_CHROM_INDEX, int CHROM_MASK_LOW, int CHROM_MASK_HIGH, int SITE_MASK, int SHIFT_LENGTH, boolean WRITE, boolean DISK_INVALID, Block[] index){
 		Timer t=new Timer();
-		t.start();
 		
 		MAX_CONCURRENT_BLOCKS=(Data.WINDOWS ? 1 : Tools.max(1, Shared.threads()/4));
 		

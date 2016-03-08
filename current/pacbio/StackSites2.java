@@ -40,7 +40,6 @@ public class StackSites2 {
 		System.err.println("Executing "+(new Object() { }.getClass().getEnclosingClass().getName())+" "+Arrays.toString(args)+"\n");
 
 		Timer t=new Timer();
-		t.start();
 		
 		String tempname=null;
 		Data.GENOME_BUILD=-1;

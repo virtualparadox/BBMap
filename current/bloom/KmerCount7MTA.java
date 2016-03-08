@@ -7,11 +7,12 @@ import java.util.BitSet;
 
 import jgi.BBMerge;
 import jgi.ErrorCorrect;
+import kmer.KmerTableSet;
 
-import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
+import ukmer.Kmer;
 
 import align2.ListNum;
 import align2.Tools;
@@ -31,7 +32,6 @@ public class KmerCount7MTA extends KmerCountAbstract {
 	public static void main(String[] args){
 		
 		Timer t=new Timer();
-		t.start();
 		
 		String fname1=args[0];
 		String fname2=(args.length>1 ? args[1] : null);
@@ -51,8 +51,6 @@ public class KmerCount7MTA extends KmerCountAbstract {
 				//jvm argument; do nothing
 			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
-			}else if(a.equals("null")){
-				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
 				k=Integer.parseInt(b);
 			}else if(a.startsWith("cbits") || a.startsWith("cellbits")){
@@ -158,18 +156,18 @@ public class KmerCount7MTA extends KmerCountAbstract {
 			int k, int cbits, int gap, int matrixbits, int hashes, int minqual, boolean rcomp, boolean eccByOverlap, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
 		assert(matrixbits<63);
 		return makeKca(fname1, fname2, extraFiles, 
-				k, cbits, gap, 1L<<matrixbits, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, null);
+				k, cbits, gap, 1L<<matrixbits, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
 	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, boolean eccByOverlap, long maxreads, int passes, int stepsize, int thresh1, int thresh2){
 		return makeKca(fname1, fname2, extraFiles, 
-				k, cbits, gap, cells, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, null);
+				k, cbits, gap, cells, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, null, 0);
 	}
 	
 	public static KCountArray makeKca_als(ArrayList<String> fname1, ArrayList<String> fname2, Iterable<String> extraFiles, 
 			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, boolean eccByOverlap, long maxreads, int passes, int stepsize, int thresh1, int thresh2,
-			KCountArray prefilter){
+			KCountArray prefilter, int prefilterLimit_){
 		String a=null, b=null;
 		ArrayList<String> list=new ArrayList<String>();
 		if(fname1!=null){
@@ -189,18 +187,19 @@ public class KmerCount7MTA extends KmerCountAbstract {
 				list.add(s);
 			}
 		}
-		return makeKca(a, b, list.isEmpty() ? null : list, k, cbits, gap, cells, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, prefilter);
+		return makeKca(a, b, list.isEmpty() ? null : list, k, cbits, gap, cells, hashes, minqual, rcomp, eccByOverlap, maxreads, passes, stepsize, thresh1, thresh2, prefilter, prefilterLimit_);
 	}
 	
 	public static KCountArray makeKca(String fname1, String fname2, Iterable<String> extraFiles, 
-			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp, boolean eccByOverlap, long maxreads, int passes, int stepsize, int thresh1, int thresh2,
-			KCountArray prefilter){
+			int k, int cbits, int gap, long cells, int hashes, int minqual, boolean rcomp,
+			boolean eccByOverlap, long maxreads, int passes, int stepsize, int thresh1, int thresh2,
+			KCountArray prefilter, int prefilterLimit_){
 		final int kbits=Tools.min(2*k, 62);
 //		verbose=true;
 		if(verbose){System.err.println("Making kca from ("+fname1+", "+fname2+")\nk="+k+", gap="+gap+", cells="+Tools.toKMG(cells)+", cbits="+cbits);}
 		
 		if(fname1==null && fname2==null && extraFiles==null){
-			return KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+			return KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter, prefilterLimit_);
 		}
 		
 		boolean oldsplit=FastaReadInputStream.SPLIT_READS;
@@ -209,7 +208,7 @@ public class KmerCount7MTA extends KmerCountAbstract {
 		maxReads=maxreads;
 		minQuality=(byte)minqual;
 		//	System.out.println("kbits="+(kbits)+" -> "+(1L<<kbits)+", matrixbits="+(matrixbits)+" -> "+(1L<<matrixbits)+", cbits="+cbits+", gap="+gap+", hashes="+hashes);
-		KCountArray kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+		KCountArray kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter, prefilterLimit_);
 		
 //		System.out.println("a");
 		{//For processing input lists
@@ -298,7 +297,7 @@ public class KmerCount7MTA extends KmerCountAbstract {
 				
 				System.out.println("Trusted:   \t"+kca.toShortString());
 				trusted=kca;
-				kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+				kca=KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter, prefilterLimit_);
 
 			}
 
@@ -511,6 +510,7 @@ public class KmerCount7MTA extends KmerCountAbstract {
 //			System.out.println("Got list: "+(ln==null ? "null" : ln.id)+", "+(ln==null || ln.list==null ? "null" : ln.list.size()));
 
 			long[] array=null;
+			final Kmer kmer=new Kmer(k);
 			if(counts.gap==0){
 				final int kbits=Tools.min(2*k, 62);
 				final long mask=~((-1L)<<(kbits));
@@ -520,15 +520,15 @@ public class KmerCount7MTA extends KmerCountAbstract {
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r1 : reads){
 						
-						if(readsamplerate<2 || r1.numericID%readsamplerate==0){
-							final Read r2=r1.mate;
-							if(eccByOverlap && r1!=null && r2!=null){BBMerge.findOverlapStrict(r1, r2, true);}
-							readsProcessedLocal++;
-//							addRead(r, count, k, mask, rcomp);
-//							if(r.mate!=null){
-//								addRead(r.mate, count, k, mask, rcomp);
-//							}
+						final Read r2=r1.mate;
+						if(eccByOverlap && r1!=null && r2!=null){BBMerge.findOverlapStrict(r1, r2, true);}
+						readsProcessedLocal++;
+						
+						if(k<32){
 							array=addRead_Advanced(r1, counts, k, mask, array);
+						}else{
+							addReadBig(r1, kmer);
+							addReadBig(r1.mate, kmer);
 						}
 //						System.out.println(r);
 //						System.out.println("kmers hashed: "+keysCountedLocal);
@@ -550,17 +550,13 @@ public class KmerCount7MTA extends KmerCountAbstract {
 				while(reads!=null && reads.size()>0){
 					//System.err.println("reads.size()="+reads.size());
 					for(Read r1 : reads){
-						
-						if(readsamplerate<2 || r1.numericID%readsamplerate==0){
-							final Read r2=r1.mate;
-							if(eccByOverlap && r1!=null && r2!=null){BBMerge.findOverlapStrict(r1, r2, true);}
-							readsProcessedLocal++;
-							addReadSplit(r1, counts, k1, k2, mask1, mask2, gap, rcomp);
-							if(r1.mate!=null){
-								addReadSplit(r1.mate, counts, k1, k2, mask1, mask2, gap, rcomp);
-							}
+						final Read r2=r1.mate;
+						if(eccByOverlap && r1!=null && r2!=null){BBMerge.findOverlapStrict(r1, r2, true);}
+						readsProcessedLocal++;
+						addReadSplit(r1, counts, k1, k2, mask1, mask2, gap, rcomp);
+						if(r1.mate!=null){
+							addReadSplit(r1.mate, counts, k1, k2, mask1, mask2, gap, rcomp);
 						}
-
 					}
 					//System.err.println("returning list");
 					cris.returnList(ln.id, ln.list.isEmpty());
@@ -762,6 +758,49 @@ public class KmerCount7MTA extends KmerCountAbstract {
 			return array;
 		}
 		
+		private final void addReadBig(Read r, Kmer kmer){
+			if(r==null || r.bases==null){return;}
+			final byte[] bases=r.bases;
+			final byte[] quals=r.quality;
+			int len=0;
+			
+			if(bases==null || bases.length<k){return;}
+			kmer.clear();
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			float prob=1;
+			for(int i=0; i<bases.length; i++){
+				final byte b=bases[i];
+				final long x=AminoAcid.baseToNumber[b];
+
+				//Update kmers
+				kmer.addRight(b);
+				
+				if(minProb>0 && quals!=null){//Update probability
+					prob=prob*KmerTableSet.PROB_CORRECT[quals[i]];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*KmerTableSet.PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+
+				//Handle Ns
+				if(x<0){
+					len=0;
+					prob=1;
+				}else{len++;}
+				
+				assert(len==kmer.len);
+				
+				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+"\t"+new String(bases, Tools.max(0, i-k), Tools.min(i+1, k)));}
+				if(len>=k && prob>=minProb){
+//					System.err.println("Incrementing xor()="+kmer.xor());
+					counts.incrementAndReturnUnincremented(kmer.xor(), 1);
+					keysCountedLocal++;
+				}
+			}
+		}
+		
 		private final void fillKmerArray(Read r, final int k, final long mask, final long[] array, final int start, final int stop){
 			if(k>31){
 				fillKmerArrayLong(r, k, array, start, stop);
@@ -778,8 +817,6 @@ public class KmerCount7MTA extends KmerCountAbstract {
 			
 			if(bases==null || bases.length<k+counts.gap){return;}
 			
-			assert(kmersamplerate<2) : "samplerate: TODO";
-			
 			for(int pass=0; pass<2; pass++){
 				int len=0;
 				int idx=(pass==0 ? start-k+1 : stop+k-2);
@@ -805,21 +842,11 @@ public class KmerCount7MTA extends KmerCountAbstract {
 						len=0;
 						kmer=0;
 						prob=1;
-					}else if(prob<minProb){
-						//do nothing
 					}else{
 						kmer=((kmer<<2)|x)&mask;
 						len++;
-						if(len>=k && (kmersamplerate<2 || i%kmersamplerate==0)){
-							//						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));
-							
-//							assert(array[idx]==-1 || array[idx]==AminoAcid.reverseComplementBinaryFast(kmer, k)) : 
-//								"\npass="+pass+", start="+start+", stop="+stop+", i="+i+", idx="+idx+"\n"+
-//								"array[idx]="+array[idx]+", kmer="+kmer+", rcomp="+AminoAcid.reverseComplementBinaryFast(kmer, k)+
-//								"\n"+Arrays.toString(array); //TODO: Remove slow assertion
-//							System.out.println("\npass="+pass+", i="+i+", idx="+idx+"\nComparing "+kmer+"\tto  \t"+array[idx]);
+						if(len>=k && prob>=minProb){
 							array[idx]=Tools.max(array[idx], kmer);
-//							System.out.println("Kept      "+array[idx]+"\trcomp\t"+AminoAcid.reverseComplementBinaryFast(kmer, k));
 						}
 					}
 					if(pass==0){idx++;}else{idx--;}
@@ -835,64 +862,38 @@ public class KmerCount7MTA extends KmerCountAbstract {
 			assert(!PREJOIN || r.mate==null);
 			assert(CANONICAL);
 			assert(array!=null);
+			Kmer kmer=new Kmer(k);
 			
-			final byte[] bases=r.bases;
-			final byte[] quals=r.quality;
-			
-			final int tailshift=k%32;
-			final int tailshiftbits=tailshift*2;
-			final long mask=Long.MAX_VALUE;
-			
-			if(bases==null || bases.length<k+counts.gap){return;}
-			
-			assert(kmersamplerate<2) : "samplerate: TODO";
-			
-			for(int pass=0; pass<2; pass++){
-				int len=0;
-				int idx=(pass==0 ? start-k+1 : stop+k-2);
-				long kmer=0;
-				float prob=1;
-				for(int i=0; i<bases.length; i++){
-					byte b=bases[i];
-					int x=AminoAcid.baseToNumber[b];
-					
-					byte q;
-					if(quals==null){
-						q=50;
-					}else{
-						q=quals[i];
-						prob=prob*align2.QualityTools.PROB_CORRECT[q];
-						if(len>k){
-							byte oldq=quals[i-k];
-							prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
-						}
-					}
+			float prob=1;
+			byte[] bases=r.bases;
+			byte[] quals=r.quality;
 
-					if(x<0 || q<minQuality){
-						len=0;
-						kmer=0;
-						prob=1;
-					}else if(prob<minProb){
-						//do nothing
-					}else{
-						kmer=Long.rotateLeft(kmer, 2);
-						kmer=kmer^x;
-						len++;
-
-						if(len>=k){
-							if(len>k){
-								long x2=AminoAcid.baseToNumber[bases[i-k]];
-								kmer=kmer^(x2<<tailshiftbits);
-							}
-							if((kmersamplerate<2 || i%kmersamplerate==0)){
-								array[idx]=mask&Tools.max(array[idx], kmer);
-							}
-						}
+			assert(k>31) : k;
+			kmer.clear();
+			
+			for(int i=0, idx=start-k+1; i<bases.length; i++, idx++){
+				byte b=bases[i];
+				kmer.addRight(b);
+				
+				byte q;
+				if(quals==null){
+					q=50;
+				}else{
+					q=quals[i];
+					prob=prob*align2.QualityTools.PROB_CORRECT[q];
+					if(kmer.len>k){
+						byte oldq=quals[i-k];
+						prob=prob*align2.QualityTools.PROB_CORRECT_INVERSE[oldq];
 					}
-					if(pass==0){idx++;}else{idx--;}
 				}
-//				System.out.println(Arrays.toString(array));
-				r.reverseComplement();
+				
+				if(!AminoAcid.isFullyDefined(b) || q<minQuality){
+					kmer.clear();
+					prob=1;
+				}
+				if(kmer.len>=k && prob>=minProb){
+					array[idx]=kmer.xor();
+				}
 			}
 		}
 		
@@ -941,13 +942,11 @@ public class KmerCount7MTA extends KmerCountAbstract {
 					kmer1=0;
 					kmer2=0;
 					prob=1;
-				}else if(prob<minProb){
-					//do nothing
 				}else{
 					kmer1=((kmer1<<2)|x1)&mask1;
 					kmer2=((kmer2<<2)|x2)&mask2;
 					len++;
-					if(len>=k1){
+					if(len>=k1 && prob>=minProb){
 						
 						keysCountedLocal++;
 //						System.out.print("Incrementing "+Long.toHexString(kmer)+": "+count.read(kmer));

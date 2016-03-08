@@ -23,7 +23,7 @@ public class SummarizeCoverage {
 	public static void main(String[] args){
 		
 		args=Parser.parseConfig(args);
-		if(Parser.parseHelp(args)){
+		if(Parser.parseHelp(args, true)){
 			assert(false);
 			System.exit(0);
 		}

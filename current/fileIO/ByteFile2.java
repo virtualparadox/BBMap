@@ -43,7 +43,6 @@ public class ByteFile2 extends ByteFile {
 	
 	private static void speedtest(ByteFile2 tf, long first, long last, boolean reprint){
 		Timer t=new Timer();
-		t.start();
 		long lines=0;
 		long bytes=0;
 		for(long i=0; i<first; i++){tf.nextLine();}
@@ -261,9 +260,10 @@ public class ByteFile2 extends ByteFile {
 			int loc=0;
 			long bases=0;
 			
+			//At this point, list is not null
 			for(s=bf1.nextLine(); s!=null; s=bf1.nextLine()){
-//				verbose=cntr>6270700;
 				bases+=s.length;
+				assert(list!=null) : "Somehow the list became null for "+bf1.name()+" at line "+cntr;
 				list[loc]=s;
 				loc++;
 //				numIn++;
@@ -290,6 +290,7 @@ public class ByteFile2 extends ByteFile {
 							e.printStackTrace();
 						}
 					}
+					//At this point, list is null
 					if(shutdown){
 						if(verbose2){System.err.println("Break 1");}
 						break;
@@ -303,11 +304,13 @@ public class ByteFile2 extends ByteFile {
 							e1.printStackTrace();
 						}
 					}
+					//At this point, list is not null
 					bases=0;
 					if(list==poison){
 						if(verbose2){System.err.println("Break 2");}
 						break;
 					}
+					//At this point, list is not null
 				}
 			}
 			if(verbose2){System.err.println("Run loop exit.");}
@@ -328,6 +331,7 @@ public class ByteFile2 extends ByteFile {
 					e.printStackTrace();
 				}
 			}
+			//At this point, list is null
 			shutdown();
 			
 			if(verbose){System.err.println("ByteFile2("+name()+").run() finished");}
