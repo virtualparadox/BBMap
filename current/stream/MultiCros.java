@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 
 import align2.ListNum;
-import align2.LongList;
 import align2.Shared;
 import align2.Tools;
 
@@ -12,6 +11,7 @@ import fileIO.FileFormat;
 import fileIO.ReadWrite;
 
 /**
+ * Allows output of reads to multiple different output streams.
  * @author Brian Bushnell
  * @date Apr 12, 2015
  *

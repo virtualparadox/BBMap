@@ -27,9 +27,9 @@ public class Translator2 {
 		for(int i=3; i<args.length; i++){
 			int loc=Integer.parseInt(args[i]);
 			int[] result=ChainLine.translate(loc, lines[chrom]);
-			System.out.print("(build"+from+", chr"+Gene.chromCodes[chrom]+", +, "+loc+")  ->  ");
+			System.out.print("(build"+from+", chr"+chrom+", +, "+loc+")  ->  ");
 			System.out.println(result==null ? "null" : 
-				"(build"+to+", chr"+Gene.chromCodes[result[0]]+", "+Gene.strandCodes[result[1]]+", "+result[2]+")");
+				"(build"+to+", chr"+result[0]+", "+Gene.strandCodes[result[1]]+", "+result[2]+")");
 		}
 		
 //		Translator2 tr=new Translator2(from, to);

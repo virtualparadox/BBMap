@@ -190,13 +190,13 @@ public class Data {
 		synchronized(CHROMLOCKS[chrom%CHROMLOCKS.length]){
 			if(geneMatrix[chrom]==null){
 
-				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref/chr"+Gene.chromCodes[chrom]+".Ref.Table", Gene.FORMAT_NM);
-				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref2/ccds-chr"+Gene.chromCodes[chrom]+"-genes.txt", Gene.FORMAT_CCDS);
-				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref3/ccds-chr"+Gene.chromCodes[chrom]+"-genes.txt", Gene.FORMAT_CCDS);
+				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref/chr"+chrom+".Ref.Table", Gene.FORMAT_NM);
+				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref2/ccds-chr"+chrom+"-genes.txt", Gene.FORMAT_CCDS);
+				//		Gene[] genes=FindExons.readGenes(ROOT_GENE+"ref3/ccds-chr"+chrom+"-genes.txt", Gene.FORMAT_CCDS);
 
-				//		Gene[] genes=ReadWrite.readArray(Gene.class, ROOT_GENE+"seqGene/chr"+Gene.chromCodes[chrom]+".ga");
+				//		Gene[] genes=ReadWrite.readArray(Gene.class, ROOT_GENE+"seqGene/chr"+chrom+".ga");
 				
-				String fname=ROOT_GENE+"Build"+GENOME_BUILD+"/"+GENE_MAP+"/chr"+Gene.chromCodes[chrom]+".ga";
+				String fname=ROOT_GENE+"Build"+GENOME_BUILD+"/"+GENE_MAP+"/chr"+chrom+".ga";
 				
 				Gene[] genes=ReadWrite.readArray(Gene.class, fname, true);
 

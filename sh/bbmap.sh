@@ -3,9 +3,9 @@
 
 usage(){
 echo "
-BBMap v34.x
+BBMap v35.x
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified May 19, 2015
+Last modified June 3, 2015
 
 Description:  Fast and accurate short-read aligner for DNA and RNA.
 
@@ -102,8 +102,8 @@ killbadpairs=f          (kbp) If a read pair is mapped with an inappropriate
                         mapping quality is marked unmapped.
 pairedonly=f            (po) Treat unpaired reads as unmapped.  Thus they will 
                         be sent to 'outu' but not 'outm'.
-rcompmate=f             Reverse complement second read in each pair prior to 
-                        mapping.
+rcomp=f                 Reverse complement reads prior to mapping.
+rcompmate=f             Reverse complement only read2.
 pairlen=32000           Set max allowed distance between paired reads.  
                         (insert size)=(pairlen)+(read1 length)+(read2 length)
 bandwidthratio=0        (bwr) If above zero, restrict alignment band to this 

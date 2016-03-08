@@ -138,10 +138,12 @@ public final class SplitPairsAndSingles {
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("fixinterleaving") || a.equals("fi") || a.equals("fint") || a.equals("fixint")){
 				fixInterleaving_=Tools.parseBoolean(b);
+				if(fixInterleaving_){repair_=false;}
 			}else if(a.equals("allowidenticalnames") || a.equals("ain")){
 				allowIdenticalPairNames_=Tools.parseBoolean(b);
 			}else if(a.equals("repair") || a.equals("rp")){
 				repair_=Tools.parseBoolean(b);
+				if(repair_){fixInterleaving_=false;}
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
 			}else if(i==1 && out1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
@@ -317,7 +319,11 @@ public final class SplitPairsAndSingles {
 		if(fixInterleaving){
 			process3_fixInterleaving(cris, ros, rosb);
 		}else if(repair){
-			process3_repair((DualCris)cris, ros, rosb);
+			if(cris.getClass()==DualCris.class){
+				process3_repair((DualCris)cris, ros, rosb);
+			}else{
+				process3_repair(cris, ros, rosb);
+			}
 		}else{
 			process3(cris, ros, rosb);
 		}
@@ -571,6 +577,67 @@ public final class SplitPairsAndSingles {
 			}
 		}
 		cris.returnList(ln.id, foundR1, foundR2);
+		
+		if(!pairMap.isEmpty()){
+			final ArrayList<Read> singles=new ArrayList<Read>(pairMap.size());
+			for(String key : pairMap.keySet()){
+				Read r=pairMap.get(key);
+				singles.add(r);
+				singlesOut++;
+				singleBasesOut+=r.length();
+			}
+			pairMap.clear();
+			if(verbose){System.err.println("Adding "+singles.size()+" to single out.");}
+			if(rosb!=null){rosb.add(singles, 0);}
+		}
+		
+		readsOut+=singlesOut+pairsOut;
+		basesOut+=singleBasesOut+pairBasesOut;
+	}
+	
+	private void process3_repair(final ConcurrentReadInputStream cris, final ConcurrentReadOutputStream ros, final ConcurrentReadOutputStream rosb){
+
+		ListNum<Read> ln=cris.nextList();
+		ArrayList<Read> reads=ln.list;
+		
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		
+		boolean foundR1=false, foundR2=false;
+		while(reads!=null && reads.size()>0){
+			for(Read r1 : reads){
+				Read r2=r1.mate;
+				
+				if(r1.pairnum()==0){foundR1=true;}
+				else{foundR2=true;}
+				if(r2!=null){
+					if(r2.pairnum()==0){foundR1=true;}
+					else{foundR2=true;}
+				}
+				
+				{
+					Read pair=repair(r1);
+					if(pair!=null && pairs!=null){pairs.add(pair);}
+				}
+				{
+					Read pair=repair(r2);
+					if(pair!=null && pairs!=null){pairs.add(pair);}
+				}
+			}
+			
+//			if(verbose){System.err.println("X\n"+current+"\n"+prev+"\n");}
+			
+			cris.returnList(ln.id, ln.list.isEmpty());
+			foundR1=foundR2=false;
+			ln=cris.nextList();
+			reads=(ln!=null ? ln.list : null);
+			
+			if(ros!=null){
+				if(verbose){System.err.println("Adding "+pairs.size()+" to pair out.");}
+				ros.add(new ArrayList<Read>(pairs), ln.id);
+				pairs.clear();
+			}
+		}
+		cris.returnList(ln.id, ln.list.isEmpty());
 		
 		if(!pairMap.isEmpty()){
 			final ArrayList<Read> singles=new ArrayList<Read>(pairMap.size());

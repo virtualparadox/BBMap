@@ -408,6 +408,9 @@ public final class BBMap extends AbstractMapper {
 		t.stop();
 		sysout.println("Analyzed Index:   \t"+t);
 		t.start();
+		
+
+//		assert(false) : RefToIndex.chrombits+", "+AbstractIndex.CHROMS_PER_BLOCK;
 	}
 		
 	public void testSpeed(String[] args){

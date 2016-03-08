@@ -16,6 +16,8 @@ public class GiToNcbi {
 	
 	public static void main(String[] args){
 		ReadWrite.USE_UNPIGZ=true;
+		ReadWrite.USE_PIGZ=true;
+		ReadWrite.ZIPLEVEL=8;
 		initialize(args[0]);
 		if(args.length>2){//Write array
 			test(args);
@@ -155,7 +157,7 @@ public class GiToNcbi {
 			synchronized(GiToNcbi.class){
 				if(file==null || !file.equals(fname)){
 					file=fname;
-					if(fname.contains(".int2d")){
+					if(fname.contains(".int1d")){
 						array=ReadWrite.read(int[].class, fname, true);
 					}else{
 						array=makeArray(fname);

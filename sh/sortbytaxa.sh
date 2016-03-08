@@ -14,7 +14,7 @@ Parameters:
 in=<file>           Input sequences; required parameter.
 out=<file>          Destination for sorted sequences.
 tree=<file>         A TaxTree file.
-gi=<file>           2-column tsv with gi and taxid numbers, or gitable.int2d.
+gi=<file>           2-column tsv with gi and taxid numbers, or gitable.int1d.
                     Only needed if sequences have not alread been renamed by taxa.
 fuse=f              Fuse sequences of the same taxa together to save memory.
 promote=-1          Promote to this taxonomic level before comparing or fusing.

@@ -59,8 +59,8 @@ public class ChainBlock implements Comparable<ChainBlock>{
 	}
 	
 	
-	private byte toChromosome(String s){
-		byte result;
+	private int toChromosome(String s){
+		int result;
 		try{
 			result=Gene.toChromosome(s);
 		}catch(Exception e){
@@ -189,14 +189,14 @@ public class ChainBlock implements Comparable<ChainBlock>{
 	
 	public long score;
 	public String tName;
-	public byte tChrom;
+	public int tChrom;
 	public int tSize;
 	public byte tStrand;
 	public int tStart;
 	public int tStop;
 
 	public String qName;
-	public byte qChrom;
+	public int qChrom;
 	public int qSize;
 	public byte qStrand;
 	public int qStart;

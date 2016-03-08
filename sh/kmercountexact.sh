@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified April 10, 2015
+Last modified June 4, 2015
 
 Description:  Counts the number of unique kmers in a file.
 
@@ -31,7 +31,7 @@ prefilter=0         If set to a positive integer, use a countmin sketch to ignor
 prehashes=2         Number of hashes for prefilter.
 prefiltersize=0.2   Fraction of memory to use for prefilter.
 minq=6              Ignore kmers containing bases with quality below this. (TODO)
-minprob=0.5         Ignore kmers with overall probability of correctness below this. (TODO)
+minprob=0.0         Ignore kmers with overall probability of correctness below this.
 threads=X           Spawn X hashing threads (default is number of logical processors).
 onepass=f           If true, prefilter will be generated in same pass as kmer counts.  Much faster but counts will be lower, by up to prefilter's depth limit.
 rcomp=t             Store and count each kmer together and its reverse-complement.
@@ -57,8 +57,10 @@ qtrim=f             Trim read ends to remove bases with quality below minq.
                     Values: t (trim both ends), f (neither end), r (right end only), l (left end only).
 trimq=4             Trim quality threshold.
 minavgquality=0     (maq) Reads with average quality (before trimming) below this will be discarded.
-ecc=f               For overlapping paired reads only.  Performs error-
-                    correction with BBMerge prior to kmer operations.   
+
+Overlap parameters (for overlapping paired-end reads only):
+merge=f             Attempt to merge reads before counting kmers.
+ecc=f               Error correct via overlap, but do not merge reads.   
 
 Java Parameters:
 -Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.

@@ -10,7 +10,7 @@ public class GetSequence {
 	
 	public static void main(String[] args){
 		
-		byte chrom=-1;
+		int chrom=-1;
 		byte strand=Gene.PLUS;
 		
 		/** Change base to zero or one for the coordinates mode */

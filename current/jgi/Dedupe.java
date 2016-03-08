@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerArray;
@@ -3563,7 +3564,7 @@ public final class Dedupe {
 			}
 		}
 		
-		private HashMap<Long, ArrayList<Unit>> codeMapT=new HashMap<Long, ArrayList<Unit>>(threadMaxReadsToBuffer*8);
+		private LinkedHashMap<Long, ArrayList<Unit>> codeMapT=new LinkedHashMap<Long, ArrayList<Unit>>(threadMaxReadsToBuffer*8);
 		private ArrayList<Unit> addedList=new ArrayList<Unit>(threadMaxReadsToBuffer);
 		private ArrayList<ArrayList<Unit>> localConflictList=new ArrayList<ArrayList<Unit>>(threadMaxReadsToBuffer);
 		private ArrayList<ArrayList<Unit>> sharedConflictList=new ArrayList<ArrayList<Unit>>(threadMaxReadsToBuffer);
@@ -5632,7 +5633,7 @@ public final class Dedupe {
 	
 	private static int tcount=0;
 	
-	private HashMap<Long, ArrayList<Unit>> codeMap=new HashMap<Long, ArrayList<Unit>>(4000000);
+	private LinkedHashMap<Long, ArrayList<Unit>> codeMap=new LinkedHashMap<Long, ArrayList<Unit>>(4000000);
 	private HashMap<LongM, ArrayList<Unit>> affixMap1=null;
 	private HashMap<LongM, ArrayList<Unit>> affixMap2=null;
 	private HashMap<LongM, ArrayList<Unit>>[] affixMaps=null;

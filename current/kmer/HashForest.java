@@ -276,6 +276,11 @@ public final class HashForest extends AbstractKmerTable {
 		return n;
 	}
 	
+	public final KmerNode getNode(int cell){
+		KmerNode n=array[cell];
+		return n;
+	}
+	
 	boolean insert(KmerNode n){
 		n.left=null;
 		n.right=null;

@@ -43,10 +43,10 @@ public class ConcatenateFiles {
 		tsw.start();
 		
 		for(int chrom=1; chrom<26; chrom++){
-			String fname=basename.replace("#", Gene.chromCodes[chrom]);
+			String fname=basename.replace("#", ""+chrom);
 			TextFile tf=new TextFile(fname, false, true);
 			
-			tsw.print(">chr"+Gene.chromCodes[chrom]+"\n");
+			tsw.print(">chr"+chrom+"\n");
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
 				char c=s.charAt(0);
 				if(c!='>' && c!=';'){

@@ -287,7 +287,9 @@ public class BBDukF {
 				assert(qHammingDistance>=0 && qHammingDistance<4) : "hamming distance must be between 0 and 3; default is 0.";
 			}else if(a.equals("edits") || a.equals("edist") || a.equals("editdistance")){
 				editDistance=Integer.parseInt(b);
-				assert(editDistance>=0 && editDistance<3) : "edit distance must be between 0 and 2; default is 0.";
+				assert(editDistance>=0 && editDistance<3) : "edit distance must be between 0 and 2; default is 0.\n" +
+						"You can bypass this error message with the -da flag, but edist=3 at K=31" +
+						"requires 15,000,000x the time and memory for indexing compared to edist=0.";
 			}else if(a.equals("hdist2") || a.equals("hammingdistance2")){
 				hammingDistance2=Integer.parseInt(b);
 				assert(hammingDistance2>=0 && hammingDistance2<4) : "hamming distance must be between 0 and 3; default is 0.";
@@ -2536,7 +2538,7 @@ public class BBDukF {
 
 			int bkStart=-1;
 			int bkStop=-1;
-			int id=-1;
+			int id=-1, lastId=-1;
 			
 			final int start=(restrictRight<1 ? 0 : Tools.max(0, bases.length-restrictRight));
 			final int stop=(restrictLeft<1 ? bases.length : Tools.min(bases.length, restrictLeft));
@@ -2552,7 +2554,9 @@ public class BBDukF {
 				if(verbose){System.err.println("Scanning7 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 				if(len>=minlen2 && i>=minlen){
 					id=getValue(kmer, rkmer, kmask, i, k, qHammingDistance, sets);
+					if(verbose){System.err.println("Testing kmer "+kmer+"; id="+id);}
 					if(id>0){
+						lastId=id;
 						if(bkStart==-1){bkStart=i;}
 						bkStop=i;
 					}else{
@@ -2564,11 +2568,11 @@ public class BBDukF {
 								found+=dif;
 								if(found>maxBadKmers && old<=maxBadKmers){
 									if(scaffoldReadCountsT!=null){
-										scaffoldReadCountsT[id]++;
-										scaffoldBaseCountsT[id]+=bases.length;
+										scaffoldReadCountsT[lastId]++;
+										scaffoldBaseCountsT[lastId]+=bases.length;
 									}else{
-										scaffoldReadCounts.addAndGet(id, 1);
-										scaffoldBaseCounts.addAndGet(id, bases.length);
+										scaffoldReadCounts.addAndGet(lastId, 1);
+										scaffoldBaseCounts.addAndGet(lastId, bases.length);
 									}
 									if(hitCounts==null){
 										return found;
@@ -2589,11 +2593,11 @@ public class BBDukF {
 					found+=dif;
 					if(found>maxBadKmers && old<=maxBadKmers){
 						if(scaffoldReadCountsT!=null){
-							scaffoldReadCountsT[id]++;
-							scaffoldBaseCountsT[id]+=bases.length;
+							scaffoldReadCountsT[lastId]++;
+							scaffoldBaseCountsT[lastId]+=bases.length;
 						}else{
-							scaffoldReadCounts.addAndGet(id, 1);
-							scaffoldBaseCounts.addAndGet(id, bases.length);
+							scaffoldReadCounts.addAndGet(lastId, 1);
+							scaffoldBaseCounts.addAndGet(lastId, bases.length);
 						}
 					}
 				}
@@ -3285,7 +3289,7 @@ public class BBDukF {
 	/** Store short reference kmers with up to this many edits (including indels) */
 	private int editDistance2=-1;
 	/** Never skip more than this many consecutive kmers when hashing reference. */
-	private int maxSkip=99;
+	private int maxSkip=1;
 	/** Always skip at least this many consecutive kmers when hashing reference.
 	 * 1 means every kmer is used, 2 means every other, etc. */
 	private int minSkip=1;

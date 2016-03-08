@@ -12,9 +12,9 @@ public class CompareReferenceGenomes {
 	
 	public static void compareGenomes(String pattern1, String pattern2){
 		for(byte chrom=1; chrom<=25; chrom++){
-			System.out.println("Comparing chromosome "+Gene.chromCodes[chrom]);
-			String fname1=pattern1.replace("#", Gene.chromCodes[chrom]);
-			String fname2=pattern2.replace("#", Gene.chromCodes[chrom]);
+			System.out.println("Comparing chromosome "+chrom);
+			String fname1=pattern1.replace("#", ""+chrom);
+			String fname2=pattern2.replace("#", ""+chrom);
 			ChromosomeArray cha=ChromosomeArray.read(fname1);
 			ChromosomeArray chb=ChromosomeArray.read(fname2);
 			boolean result=compare(cha, chb);

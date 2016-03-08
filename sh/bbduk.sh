@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified April 28, 2015
+Last modified May 27, 2015
 
 Description:  Compares reads to the kmers in a reference dataset, optionally 
 allowing an edit distance. Splits the reads into two outputs - those that 
@@ -56,7 +56,7 @@ nzo=t               Only write statistics about ref sequences with nonzero hits.
 overwrite=t         (ow) Grant permission to overwrite files.
 showspeed=t         (ss) 'f' suppresses display of processing speed.
 ziplevel=2          (zl) Compression level; 1 (min) through 9 (max).
-fastawrap=80        Length of lines in fasta output.
+fastawrap=70        Length of lines in fasta output.
 qout=auto           Output quality offset: 33 (Sanger), 64, or auto.
 statscolumns=3      (cols) Number of columns for stats output, 3 or 5.
                     5 includes base counts.
@@ -129,9 +129,9 @@ monitor=f           Kill this process if it crashes.  monitor=600,0.01 would
                     kill after 600 seconds under 1% usage.
 minrskip=1          (mns) Force minimal skip interval when indexing reference 
                     kmers.  1 means use all, 2 means use every other kmer, etc.
-maxrskip=99         (mxs) Restrict maximal skip interval when indexing 
+maxrskip=1          (mxs) Restrict maximal skip interval when indexing 
                     reference kmers. Normally all are used for scaffolds<100kb, 
-                    but with longer scaffolds, up to K-1 are skipped.
+                    but with longer scaffolds, up to maxrskip-1 are skipped.
 rskip=              Set both minrskip and maxrskip to the same value.
                     If not set, rskip will vary based on sequence length.
 qskip=1             Skip query kmers to increase speed.  1 means use all.

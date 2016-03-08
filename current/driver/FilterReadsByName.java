@@ -96,9 +96,9 @@ public class FilterReadsByName {
 				}
 			}else if(a.equals("substrings") || a.equals("substring")){
 				if(b==null){b="t";}
-				if(b=="header"){
+				if(b.equals("header")){
 					headerSubstringOfName=true;
-				}else if(b=="name"){
+				}else if(b.equals("name")){
 					nameSubstringOfHeader=true;
 				}else{
 					nameSubstringOfHeader=headerSubstringOfName=Tools.parseBoolean(b);
@@ -109,6 +109,8 @@ public class FilterReadsByName {
 				exclude=!Tools.parseBoolean(b);
 			}else if(a.equals("exclude") || a.equals("remove")){
 				exclude=Tools.parseBoolean(b);
+			}else if(a.equals("minlen") || a.equals("minlength")){
+				minLength=(int)Tools.parseKMG(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 			}else if(parser.out1==null && i==1 && !arg.contains("=")){
@@ -287,6 +289,8 @@ public class FilterReadsByName {
 					
 					final int initialLength1=r1.length();
 					final int initialLength2=(r1.mateLength());
+					readsProcessed+=1+r1.mateCount();
+					basesProcessed+=initialLength1+initialLength2;
 					
 					final String header=(ignoreCase ? r1.id.toLowerCase() : r1.id);
 					String prefix=null;
@@ -299,34 +303,25 @@ public class FilterReadsByName {
 						}
 					}
 					
-					boolean match=(names.contains(header) || (prefix!=null && names.contains(prefix)));
-					if(!match && (nameSubstringOfHeader || headerSubstringOfName)){
-						for(String name : names){
-							if((headerSubstringOfName && name.contains(header)) || (nameSubstringOfHeader && header.contains(name))){match=true;}
-							else if(prefix!=null && ((headerSubstringOfName && name.contains(prefix)) || (nameSubstringOfHeader && prefix.contains(name)))){match=true;}
+					boolean keepThisRead=(initialLength1>=minLength || initialLength2>=minLength);
+					boolean match=false;
+					if(keepThisRead){
+						match=(names.contains(header) || (prefix!=null && names.contains(prefix)));
+						if(!match && (nameSubstringOfHeader || headerSubstringOfName)){
+							for(String name : names){
+								if((headerSubstringOfName && name.contains(header)) || (nameSubstringOfHeader && header.contains(name))){match=true;}
+								else if(prefix!=null && ((headerSubstringOfName && name.contains(prefix)) || (nameSubstringOfHeader && prefix.contains(name)))){match=true;}
+							}
 						}
+						keepThisRead=(match!=exclude);
 					}
 					
 //					assert(false) : names.contains(name)+", "+name+", "+prefix+", "+exclude;
 					
-					if(match!=exclude){
+					if(keepThisRead){
 						retain.add(r1);
-						{
-							readsOut++;
-							basesOut+=initialLength1;
-						}
-						if(r2!=null){
-							readsOut++;
-							basesOut+=initialLength2;
-						}
-					}
-					{
-						readsProcessed++;
-						basesProcessed+=initialLength1;
-					}
-					if(r2!=null){
-						readsProcessed++;
-						basesProcessed+=initialLength2;
+						readsOut+=1+r1.mateCount();
+						basesOut+=initialLength1+initialLength2;
 					}
 				}
 				
@@ -411,6 +406,8 @@ public class FilterReadsByName {
 	private boolean nameSubstringOfHeader=false;
 	private boolean headerSubstringOfName=false;
 	private boolean ignoreCase=true;
+	
+	private int minLength=0;
 	
 	private LinkedHashSet<String> names=new LinkedHashSet<String>();
 	

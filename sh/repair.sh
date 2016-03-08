@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified April 9, 2015
+Last modified June 2, 2015
 
 Description:  Re-pairs reads that became disordered or had some mates eliminated.
 

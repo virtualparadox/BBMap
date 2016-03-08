@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 26, 2015
+Last modified May 28, 2015
 
 Description:  Filters reads by name.
 
@@ -27,6 +27,7 @@ zl=4                (ziplevel) Set compression level, 1 (low) to 9 (max).
 int=f               (interleaved) Determines whether INPUT file is considered interleaved.
 names=              A list of strings or files.  The files can have one name per line, or
                     be a standard read file (fasta, fastq, or sam).
+minlen=0            Do not output reads shorter than this.
 
 
 Java Parameters:

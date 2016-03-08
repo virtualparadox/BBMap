@@ -154,7 +154,12 @@ public abstract class KmerNode extends AbstractKmerTable {
 	/*--------------------------------------------------------------*/
 	/*----------------      Nonpublic Methods       ----------------*/
 	/*--------------------------------------------------------------*/
+
+	public KmerNode left(){return left;}
+	public KmerNode right(){return right;}
+	public long pivot(){return pivot;}
 	
+	public int count(){return value();}
 	protected abstract int value();
 	protected abstract int[] values(int[] singleton);
 	/** Returns new value */

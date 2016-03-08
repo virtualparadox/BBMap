@@ -302,7 +302,7 @@ public final class KmerTable extends AbstractKmerTable {
 	final static int maxPrime=(int)Primes.primeAtMost(Integer.MAX_VALUE);
 	final static float resizeMult=2f; //Resize by a minimum of this much
 	final static float minLoadFactor=0.5f; //Resize by enough to get the load above this factor
-	final static float maxLoadFactor=1f; //Resize by enough to get the load under this factor
+	final static float maxLoadFactor=0.98f; //Resize by enough to get the load under this factor
 	final static float minLoadMult=1/minLoadFactor;
 	final static float maxLoadMult=1/maxLoadFactor;
 	

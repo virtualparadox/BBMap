@@ -2,10 +2,10 @@
 #calcmem
 
 #function usage(){
-#	echo "CalcMem v1.02"
+#	echo "CalcMem v1.03"
 #	echo "Written by Brian Bushnell, Doug Jacobsen, Alex Copeland"
 #	echo "Calculates available memory in megabytes"
-#	echo "Last modified May 5, 2015"
+#	echo "Last modified June 4, 2015"
 #}
 
 function parseXmx () {
@@ -105,38 +105,24 @@ function freeRam(){
 		#echo $pfree
 		
 		if [ "$x" = "unlimited" ] || (("$x" > $x2)); then x=$x2; fi
+		if [ $x -lt 1 ]; then x=$x2; fi
 		
 	fi
 	
 	#echo "x=$x"
 	local HOSTNAME=`hostname`
 	if [ $x -lt 1 ] || [[ $HOSTNAME == genepool* ]]; then
-		#echo "hello 2"
+		#echo "branch for unknown memory"
 		#echo $x
 		#echo "ram is unlimited"
+		
 		RAM=$((defaultMem/1024))
 		echo "Max memory cannot be determined.  Attempting to use $RAM MB." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
+		echo "If this fails, please add the -Xmx flag (e.g. -Xmx24g) to your command, or set ulimit to an appropriate value." 1>&2
 	else
-		#echo "hello 1"
+		#echo "branch for known memory"
 		#echo $x
 		
-		#if [ $x -ge 1000000000 ]; then
-		#	echo "ram is 1000g+"
-		#elif [ $x -ge 500000000 ]; then
-		#	echo "ram is 500g+"
-		#elif [ $x -ge 250000000 ]; then
-		#	echo "ram is 250g+"
-		#elif [ $x -ge 144000000 ]; then
-		#	echo "ram is 144g+"
-		#elif [ $x -ge 120000000 ]; then
-		#	echo "ram is 120g+"
-		#elif [ $x -ge 40000000 ]; then
-		#	echo "ram is 40g+"
-		#else
-		#	echo "ram is under 40g"
-		#fi
-		#echo $x
 		RAM=$(( ((x-500000)*mult/100)/1024 ))
 		#echo $RAM
 	fi

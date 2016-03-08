@@ -239,6 +239,18 @@ public class ReformatReads {
 			out2=out1.replace("#", "2");
 			out1=out1.replace("#", "1");
 		}
+		
+		if(out1!=null && in1!=null && out1.indexOf('%')>-1){
+			out1=out1.replace("%", ReadWrite.stripExtension(in1));
+		}
+		if(out2!=null && out2.indexOf('%')>-1){
+			if(in2!=null){
+				out2=out2.replace("%", ReadWrite.stripExtension(in2));
+			}else if(in1!=null){
+				out2=out2.replace("%", ReadWrite.stripExtension(in1));
+			}
+		}
+		
 		if(in2!=null){
 			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;

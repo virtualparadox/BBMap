@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function usage(){
-	echo "BBSplit / BBMap v34.x"
+	echo "BBSplit / BBMap v35.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
 	echo "Last modified April 13, 2015"
 	echo ""

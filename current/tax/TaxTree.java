@@ -33,6 +33,9 @@ public class TaxTree implements Serializable{
 	/*--------------------------------------------------------------*/
 
 	public static void main(String[] args){
+		ReadWrite.USE_UNPIGZ=true;
+		ReadWrite.USE_PIGZ=true;
+		ReadWrite.ZIPLEVEL=9;
 		Timer t=new Timer();
 		TaxTree tree=new TaxTree(args[0], args[1]);
 		t.stop();
@@ -343,6 +346,14 @@ public class TaxTree implements Serializable{
 	
 	public static int getID(byte[] s){return GiToNcbi.get(s);}
 	
+	/** Return the ancestor with taxonomic level at least minLevel */
+	public TaxNode getNode(String s, int minLevel){
+		TaxNode tn=getNode(GiToNcbi.get(s));
+		while(tn!=null && tn.level<minLevel && tn.pid!=tn.id){
+			tn=getNode(tn.pid);
+		}
+		return tn;
+	}
 	
 	public TaxNode getNode(String s){
 		return getNode(GiToNcbi.get(s));

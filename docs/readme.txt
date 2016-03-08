@@ -1,5 +1,5 @@
 BBMap readme by Brian Bushnell
-Last updated May 26, 2015.
+Last updated June 4, 2015.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors, or post in the relevant thread on SeqAnswers.
 The BBTools package was written by Brian Bushnell, with the exception of the (optional, but faster) C, JNI, and MPI components, which were written by Jonathan Rood.
 
@@ -14,7 +14,7 @@ For usage information about config files, see readme_config.txt
 Special thanks for help with shellscripts goes to:
 Alex Copeland (JGI), Douglas Jacobsen (JGI/NERSC), sdriscoll (SeqAnswers), and Jon Rood (JGI/NERSC).
 
-This is the official release of BBMap, version 34.x
+This is the official release of BBMap, version 35.x
 
 
 Basic Syntax:
@@ -254,6 +254,39 @@ File types are autodetected by parsing the filename.  So you can name files, say
 
 
 Change Log:
+
+V35.
+35.00
+Changed Gene.toChromosome to return an int rather than a byte.
+Changed gitable.int2d name to gitable.int1d since it is a 1D array.
+Added taxa support for ArrayListSet.
+Added % support for output in Reformat.  Requested by Alex Copeland.
+Added gitable.sh script for generating gitable.int1d.gz tax translator.
+35.01
+Fixed BBDuk crash when K>31 and stats output was enabled.  Noted by Alex Spunde.
+Fixed repair.sh failure on fint flag.
+Fixed SplitPairsAndSingles not working on interleaved input anymore.
+Split Tadpole's mincount flag into mincountseed and mincountextend (mcs and mce).
+Added rcomp flag to BBMap.  Requested by Bryce Foster.
+Added merge flag to KmerCountExact.
+35.02
+maq flag now accepts 2 arguments: maq=Q,B.  If second argument is specified, only the initial B bases will be used to calculate the quality.
+Added minprob and maq flags to Tadpole and KmerCountExact.
+Fixed memory detection in calcmem.sh not working when ulimit=unlimited.  Thanks for the debugging help from Jason S!
+Added some getters to KmerForest and KmerNode.
+Enabled Tadpole kmer harvesting from victim buffer.
+Greatly accelerated Tadpole by allowing threads to compete for tables, rather than using fixed allocation.
+Accelerated Tadpole by increasing default number of tables per thread.
+
+TODO: Tadpole/KCE double-lock and double-buffer with LongLists for loading.
+TODO: threads=auto
+TODO: xmx=auto or percentage
+TODO: reformat: multithread?
+TODO: bbduk: move read validation to per-thread
+TODO: (write scaffolder)
+TODO: (write polishing/consensus tool)
+TODO: (write breaker)
+
 
 V34.
 34.00
@@ -801,9 +834,23 @@ Added directional substrings for filterbyname.  Requested by Esther Singer.
 Disabled module lines in reformat.sh.  Noted by Xiaoli D.
 Renamed summarizecoverage to summarizescafstats.
 Added ambig and kfilter flags to CrossBlock.  Requested by Ken H.
+34.98
+BBDuk/BBDuk2 default maxrskip set to 1 (disabled), to reduce confusion.
+Fixed Seal generating ArrayListSets even when pattern output was not specified.
+Fixed Seal bug classifying both read1 and read2 as matched when only one matched in kpt=f mode (this IS the intended behavior in default kpt=t mode).  Noted by Alex Spunde.
+Fixed string compare bug in FilterReadsByName making substring=header and substring=name fail.  Noted by Esther Singer.
+34.99
+Fixed BBMap not printing coverage statistics when machineout=t.  Noted by Vasanth Singan.
+Added minlen flag to filterbyname.
+Changed Dedupe primary structure from HashMap to LinkedHashMap to (somewhat) preserve input order.
 
 
 
+TODO: BBDuk crashes with K>31 (Alex Spunde).
+TODO: Memory autodetection does not work on Amazon.
+TODO: BBMap machineout to file (Vasanth).
+TODO: chrombits and CHROMS_PER_BLOCK may be obsolete and ready to remove.
+TODO: out=stdout.bam does not work.
 TODO: Include deletions toggle for Pileup.
 TODO: Soft-clipping coverage flag.
 TODO: Add match/cigar/SamLine trimming to TrimRead.

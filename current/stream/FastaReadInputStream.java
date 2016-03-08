@@ -271,7 +271,7 @@ public class FastaReadInputStream extends ReadInputStream {
 
 				if(answer.length>=5){
 					try {
-						byte trueChrom=Gene.toChromosome(answer[1]);
+						int trueChrom=Gene.toChromosome(answer[1]);
 						byte trueStrand=Byte.parseByte(answer[2]);
 						int trueLoc=Integer.parseInt(answer[3]);
 						int trueStop=Integer.parseInt(answer[4]);

@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified April 28, 2015
+Last modified May 27, 2015
 
 BBDuk2 is like BBDuk but can kfilter, kmask, and ktrim in a single pass.
 
@@ -137,9 +137,9 @@ monitor=f           Kill this process if it crashes.  monitor=600,0.01 would
                     kill after 600 seconds under 1% usage.
 minrskip=1          (mns) Force minimal skip interval when indexing reference 
                     kmers.  1 means use all, 2 means use every other kmer, etc.
-maxrskip=99         (mxs) Restrict maximal skip interval when indexing 
+maxrskip=1          (mxs) Restrict maximal skip interval when indexing 
                     reference kmers. Normally all are used for scaffolds<100kb, 
-                    but with longer scaffolds, up to K-1 are skipped.
+                    but with longer scaffolds, up to maxrskip-1 are skipped.
 rskip=              Set both minrskip and maxrskip to the same value.
                     If not set, rskip will vary based on sequence length.
 qskip=1             Skip query kmers to increase speed.  1 means use all.

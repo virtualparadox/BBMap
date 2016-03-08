@@ -34,9 +34,9 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		int slash=args[1].lastIndexOf('/');
 		String outfile;
 		if(slash<1){
-			outfile="coverage-chr"+Gene.chromCodes[ca.chromosome]+"-build"+Data.GENOME_BUILD+".ca";
+			outfile="coverage-chr"+ca.chromosome+"-build"+Data.GENOME_BUILD+".ca";
 		}else{
-			outfile=args[1].substring(0,slash+1)+"coverage-chr"+Gene.chromCodes[ca.chromosome]+"-build"+Data.GENOME_BUILD+".ca";
+			outfile=args[1].substring(0,slash+1)+"coverage-chr"+ca.chromosome+"-build"+Data.GENOME_BUILD+".ca";
 		}
 		
 		System.out.println("minIndex="+ca.minIndex+", maxIndex="+ca.maxIndex+", length="+ca.array.length+
@@ -88,7 +88,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		final byte PLUS=Gene.PLUS;
 		
 		for(int chrom=1; chrom<=25; chrom++){
-			String infile=root+"coverage-chr"+Gene.chromCodes[chrom]+"-build"+inBuild+".ca.zip";
+			String infile=root+"coverage-chr"+chrom+"-build"+inBuild+".ca.zip";
 			CoverageArray2 ca1=ReadWrite.read(CoverageArray2.class, infile, true);
 			for(int loc1=ca1.minIndex; loc1<=ca1.maxIndex; loc1++){
 				char cov=(char)ca1.get(loc1);
@@ -104,7 +104,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		}
 		
 		for(int chrom=1; chrom<=25; chrom++){
-			String outfile=root+"coverage-chr"+Gene.chromCodes[chrom]+"-build"+outBuild+".ca.zip";
+			String outfile=root+"coverage-chr"+chrom+"-build"+outBuild+".ca.zip";
 			out[chrom].resize(out[chrom].maxIndex+1);
 			ReadWrite.write(out[chrom], outfile, false);
 			out[chrom]=null;

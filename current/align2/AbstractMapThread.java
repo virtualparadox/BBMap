@@ -387,6 +387,8 @@ public abstract class AbstractMapThread extends Thread {
 					TrimRead.trim(r2, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_MIN_LENGTH);
 				}
 				
+				if(RCOMP){r.reverseComplement();}
+				
 				if(r2==null){
 					final byte[] basesP=r.bases;
 					final byte[] basesM=AminoAcid.reverseComplementBases(basesP);
@@ -395,6 +397,7 @@ public abstract class AbstractMapThread extends Thread {
 					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
 					assert(Read.CHECKSITES(r, basesM));
 				}else{
+					if(RCOMP_MATE!=RCOMP){r2.reverseComplement();}
 					final byte[] basesP1=r.bases;
 					final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1);
 					final byte[] basesP2=r2.bases;
@@ -404,7 +407,6 @@ public abstract class AbstractMapThread extends Thread {
 					assert(r2.bases==null || r2.length()<maxReadLength()) : 
 						"Read "+r2.numericID+", length "+r2.length()+", exceeds the limit of "+maxReadLength()+"\n"+
 						"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
-					if(RCOMP_MATE){r2.reverseComplement();}
 					processReadPair(r, basesM1, basesM2);
 					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
 					capSiteList(r2, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
@@ -2736,6 +2738,7 @@ public abstract class AbstractMapThread extends Thread {
 	protected final boolean SEMIPERFECTMODE; //Only look for perfect and semiperfect matches
 	protected final boolean FORBID_SELF_MAPPING; //Do not allow reads to map to their official origin.  Allows you to find next-best matches (when supported)
 	protected final boolean RCOMP_MATE; //Reverse-complement mate prior to mapping
+	protected static boolean RCOMP=false;
 	/** True if this thread should generate a match string for the best match */
 	protected final boolean MAKE_MATCH_STRING;
 	

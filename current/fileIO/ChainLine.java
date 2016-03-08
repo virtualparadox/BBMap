@@ -8,21 +8,21 @@ public class ChainLine implements Comparable<ChainLine> {
 	
 	public static void main(String[] args){
 
-		byte chrom=Gene.toChromosome(args[0]);
+		int chrom=Gene.toChromosome(args[0]);
 
 		ChainLine[][] lines=ChainBlock.loadChainLines(Data.ROOT_CHAIN+"hg18ToHg19.over.chain");
 
 		for(int i=1; i<args.length; i++){
 			int loc=Integer.parseInt(args[i]);
 			int[] result=translate(loc, lines[chrom]);
-			System.out.print(Gene.chromCodes[chrom]+"\t+\t"+loc+"\t->\t");
-			System.out.println(result==null ? "null" : Gene.chromCodes[result[0]]+"\t"+Gene.strandCodes[result[1]]+"\t"+result[2]);
+			System.out.print(chrom+"\t+\t"+loc+"\t->\t");
+			System.out.println(result==null ? "null" : result[0]+"\t"+Gene.strandCodes[result[1]]+"\t"+result[2]);
 		}
 		
 	}
 	
 	
-	public ChainLine(byte chromT, byte strandT, int startT, int stopT, byte chromQ, byte strandQ, int startQ, int stopQ){
+	public ChainLine(int chromT, byte strandT, int startT, int stopT, int chromQ, byte strandQ, int startQ, int stopQ){
 		tChrom=chromT;
 		tStrand=strandT;
 		tStart=startT;
@@ -36,8 +36,8 @@ public class ChainLine implements Comparable<ChainLine> {
 	
 	
 	public String toString(){
-		return Gene.chromCodes[tChrom]+"\t"+Gene.strandCodes[tStrand]+"\t"+tStart+"\t"+tStop+"\t"+
-		Gene.chromCodes[qChrom]+"\t"+Gene.strandCodes[qStrand]+"\t"+qStart+"\t"+qStop;
+		return tChrom+"\t"+Gene.strandCodes[tStrand]+"\t"+tStart+"\t"+tStop+"\t"+
+		qChrom+"\t"+Gene.strandCodes[qStrand]+"\t"+qStart+"\t"+qStop;
 	}
 	
 	
@@ -110,12 +110,12 @@ public class ChainLine implements Comparable<ChainLine> {
 		return temp;
 	}
 	
-	public byte tChrom;
+	public int tChrom;
 	public byte tStrand;
 	public int tStart;
 	public int tStop;
 	
-	public byte qChrom;
+	public int qChrom;
 	public byte qStrand;
 	public int qStart;
 	public int qStop;

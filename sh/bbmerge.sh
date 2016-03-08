@@ -5,7 +5,7 @@ function usage(){
 echo "
 BBMerge v7.3
 Written by Brian Bushnell and Jonathan Rood
-Last modified April 27, 2015
+Last modified May 27, 2015
 
 Description:  Merges paired reads into single reads by overlap detection.
 With sufficient coverage, can also merge nonoverlapping reads using gapped kmers.
@@ -29,6 +29,7 @@ reads=-1             Quit after this many read pairs (-1 means all).
 Output parameters:
 out=<file>           File for merged reads. 'out2' will specify a second file.
 outu=<file>          File for unmerged reads. 'outu2' will specify a second file.
+outadapter=<file>    (outa) File to write consensus adapter sequences.
 outinsert=<file>     File list of read names and their insert sizes.
 hist=null            Insert length histogram output file.
 nzo=t                Only print histogram bins with nonzero values.

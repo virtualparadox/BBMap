@@ -221,7 +221,14 @@ public class RQCFilter {
 			}else if(a.equals("trimhdist2")){
 				hdist2_trim=Integer.parseInt(b);
 			}else if(a.equals("maq")){
-				maq=Byte.parseByte(b);
+				if(b.indexOf(',')>-1){
+					String[] x=b.split(",");
+					assert(x.length==2) : "maq should be length 1 or 2 (at most 1 comma).\nFormat: maq=quality,bases; e.g. maq=10 or maq=10,20";
+					minAvgQuality=Byte.parseByte(x[0]);
+					minAvgQualityBases=Integer.parseInt(x[1]);
+				}else{
+					minAvgQuality=Byte.parseByte(b);
+				}
 			}else if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
 				forceTrimModulo=Integer.parseInt(b);
 			}else if(a.equals("trimq")){
@@ -820,7 +827,7 @@ public class RQCFilter {
 //		System.err.println("inPre="+inPre+", outPre="+outPre+", outDir="+outDir+", tmpDir="+tmpDir); //123
 		
 		{//Fill list with BBDuk arguments
-			if(maq>-1){argList.add("maq="+maq);}
+			if(minAvgQuality>-1){argList.add("maq="+minAvgQuality+","+minAvgQualityBases);}
 			if(qtrim!=null){
 				argList.add("trimq="+trimq);
 				argList.add("qtrim="+qtrim);
@@ -1296,8 +1303,8 @@ public class RQCFilter {
 		
 		if(maxNs>=0){sb.append("n");}
 //		if(qtrim!=null && !qtrim.equalsIgnoreCase("f") && !qtrim.equalsIgnoreCase("false")){sb.append("q");}
-		if(maq>0){sb.append("q");}
-
+		if(minAvgQuality>0){sb.append("q");}
+		
 		if(rnaArtifactFlag){sb.append("r");}
 		if(dnaArtifactFlag){sb.append("d");}
 		
@@ -1438,7 +1445,9 @@ public class RQCFilter {
 	/** Trim bases at this quality or below */
 	private byte trimq=10;
 	/** Throw away reads below this average quality before trimming.  Default: 5 */
-	private byte maq=5;
+	private byte minAvgQuality=5;
+	/** If positive, calculate the average quality from the first X bases. */
+	private int minAvgQualityBases=0;
 	/** Trim reads to be equal to 0 modulo this value.  Mainly for 151, 251, and 301bp runs. */
 	private int forceTrimModulo=5;
 	/** Quality-trimming mode */

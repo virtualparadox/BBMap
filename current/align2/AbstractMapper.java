@@ -364,6 +364,9 @@ public abstract class AbstractMapper {
 			}else if(a.equals("rcompmate") || a.equals("reversecomplementmate")){
 				rcompMate=Tools.parseBoolean(b);
 				sysout.println("Set RCOMP_MATE to "+rcompMate);
+			}else if(a.equals("rcomp") || a.equals("reversecomplement")){
+				AbstractMapThread.RCOMP=Tools.parseBoolean(b);
+				sysout.println("Set RCOMP to "+rcompMate);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				TranslateColorspaceRead.verbose=verbose;
@@ -954,7 +957,7 @@ public abstract class AbstractMapper {
 	static void printOutput(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER, final CoveragePileup pile,
 			boolean nzoStats, boolean sortStats){
 		if(MACHINE_OUTPUT){
-			printOutput_Machine(mtts, t, keylen, paired, false, nzoStats, sortStats);
+			printOutput_Machine(mtts, t, keylen, paired, SKIMMER, pile, nzoStats, sortStats);
 			return;
 		}
 		
@@ -1817,7 +1820,7 @@ public abstract class AbstractMapper {
 	
 	
 	static void printOutput_Machine(final AbstractMapThread[] mtts, final Timer t, final int keylen, final boolean paired, final boolean SKIMMER,
-			boolean nzoStats, boolean sortStats){
+			final CoveragePileup pile, boolean nzoStats, boolean sortStats){
 		
 		long readsUsed1=0;
 		long readsUsed2=0;
@@ -2420,6 +2423,12 @@ public abstract class AbstractMapper {
 		}
 		
 		errorState|=ReadStats.writeAll();
+		
+		if(pile!=null){
+			CoveragePileup.overwrite=overwrite;
+			CoveragePileup.append=append;
+			pile.printOutput();
+		}
 		
 		assert(!CALC_STATISTICS || truePositiveP1+truePositiveM1+falsePositive1+noHit1+lowQualityReadsDiscarded1==maxReads) : 
 			"\nThe number of reads out does not add up to the number of reads in.\nThis may indicate that a mapping thread crashed.\n"+

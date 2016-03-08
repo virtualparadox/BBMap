@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 22, 2015
+Last modified June 4, 2015
 
 Description:  Assembles contigs, or extends reads, using short kmers.
 
@@ -35,15 +35,16 @@ prefilter=0         If set to a positive integer, use a countmin sketch to ignor
 prehashes=2         Number of hashes for prefilter.
 prefiltersize=0.2   Fraction of memory to use for prefilter.
 minq=6              Ignore kmers containing bases with quality below this. (TODO)
-minprob=0.5         Ignore kmers with overall probability of correctness below this. (TODO)
+minprob=0.0         Ignore kmers with overall probability of correctness below this.
 threads=X           Spawn X hashing threads (default is number of logical processors).
 onepass=f           If true, prefilter will be generated in same pass as kmer counts.  Much faster but counts will be lower, by up to prefilter's depth limit.
 rcomp=t             Store and count each kmer together and its reverse-complement.
 
 Assembly parameters:
-mincount=3          Minimum kmer depth to assemble.
-branchmult1=60      Min ratio of 1st to 2nd-greatest path depth at high depth.
-branchmult2=8       Min ratio of 1st to 2nd-greatest path depth at low depth.
+mindepthseed=3      (mds) Minimum kmer depth to seed a new contig or begin extension.
+mindepthextend=2    (mde) Minimum kmer depth continue extension of a read or contig.
+branchmult1=20      Min ratio of 1st to 2nd-greatest path depth at high depth.
+branchmult2=3       Min ratio of 1st to 2nd-greatest path depth at low depth.
 branchlower=3       Max value of 2nd-greatest path depth to be considered low.
 minextension=2      Do not keep contigs that did not extend at least this much.
 mincontig=1         Do not write contigs shorter than this.
@@ -58,9 +59,9 @@ extendleft=100      (el) Extend to the left by at most this many bases.
 extendright=100     (er) Extend to the right by at most this many bases.
 ibb=t               (ignorebackbranches) Do not stop at backward branches.
 
-Quality parameters:
-ecc=f               For overlapping paired reads only.  Performs error-
-                    correction with BBMerge prior to kmer operations.   
+Overlap parameters (for overlapping paired-end reads only):
+merge=f             Attempt to merge reads before counting kmers.
+ecc=f               Error correct via overlap, but do not merge reads.
 
 Java Parameters:
 -Xmx                This will be passed to Java to set memory usage, overriding the program's automatic memory detection.

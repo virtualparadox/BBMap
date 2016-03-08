@@ -41,11 +41,11 @@ public class Evaluate {
 		String[] line=s.split("\t");
 		
 		String[] answer=line[0].split("_");
-		byte trueChrom=Gene.toChromosome(answer[1]);
+		int trueChrom=Gene.toChromosome(answer[1]);
 		byte trueStrand=Byte.parseByte(answer[2]);
 		int trueLoc=Integer.parseInt(answer[3]);
 
-		byte calledChrom=Gene.toChromosome(line[2]);
+		int calledChrom=Gene.toChromosome(line[2]);
 		byte calledStrand=Gene.toStrand(line[1]);
 		int calledLoc=Integer.parseInt(line[3]);
 		

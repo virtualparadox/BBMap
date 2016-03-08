@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell and Jonathan Rood"
-Last modified February 17, 2015"
+Last modified May 28, 2015"
 
 Dedupe2 is identical to Dedupe except it supports hashing unlimited kmer
 prefixes and suffixes per sequence.  Dedupe supports at most 2 of each,

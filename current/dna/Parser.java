@@ -205,14 +205,14 @@ public class Parser {
 		}else if(a.equals("maxns")){
 			maxNs=Integer.parseInt(b);
 		}else if(a.equals("minavgquality") || a.equals("maq")){
-			minAvgQuality=Byte.parseByte(b);
-			//Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
-		}else if(a.equals("minavgquality2") || a.equals("maq2")){
-			minAvgQuality=Byte.parseByte(b);
-			Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
-		}else if(a.equals("minavgquality1") || a.equals("maq1")){
-			minAvgQuality=Byte.parseByte(b);
-			Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
+			if(b.indexOf(',')>-1){
+				String[] split=b.split(",");
+				assert(split.length==2) : "maq should be length 1 or 2 (at most 1 comma).\nFormat: maq=quality,bases; e.g. maq=10 or maq=10,20";
+				minAvgQuality=Byte.parseByte(split[0]);
+				minAvgQualityBases=Integer.parseInt(split[1]);
+			}else{
+				minAvgQuality=Byte.parseByte(b);
+			}
 		}else if(a.equals("minavgqualitybases") || a.equals("maqb")){
 			minAvgQualityBases=Integer.parseInt(b);
 		}else if(a.equals("averagequalitybyprobability") || a.equals("aqbp")){

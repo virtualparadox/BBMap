@@ -231,30 +231,36 @@ public class Gene implements Comparable<Gene>, Serializable{
 		return r;
 	}
 	
-	public static byte toChromosome(final String s){
-//		assert(false) : s;
-		String s2=s;
-		if(s2.endsWith("random")){s2="U";}
-		if(s2.startsWith("chr")){s2=s2.substring(3);}
-		if(s2.equals("MT")){s2="M";}
-//		int loc=find2(s2.toUpperCase(), chromCodes);
-		int loc=find3(s2.toUpperCase(), chromCodes);
+	public static int toChromosome(final String s){
+////		assert(false) : s;
+//		String s2=s;
+//		if(s2.endsWith("random")){s2="U";}
+//		if(s2.startsWith("chr")){s2=s2.substring(3);}
+//		if(s2.equals("MT")){s2="M";}
+////		int loc=find2(s2.toUpperCase(), chromCodes);
+//		int loc=find3(s2.toUpperCase(), chromCodes);
+//		
+//		if(loc<0){
+//			if(!Character.isDigit(s2.charAt(0))){
+//				loc=find3("U", chromCodes);
+//			}else{
+//				try {
+//					loc=Integer.parseInt(s2);
+//				} catch (NumberFormatException e) {
+//					throw new RuntimeException(e);
+//				}
+//				assert(loc>=23 && loc<=26) : loc+", "+s;
+//			}
+//		}
+//		assert(loc>=0) : s;
+//		return loc;
 		
-		if(loc<0){
-			if(!Character.isDigit(s2.charAt(0))){
-				loc=find3("U", chromCodes);
-			}else{
-				try {
-					loc=Integer.parseInt(s2);
-				} catch (NumberFormatException e) {
-					throw new RuntimeException(e);
-				}
-				assert(loc>=23 && loc<=26) : loc+", "+s;
-			}
-		}
+		String s2=s;
+		if(s2.startsWith("chr")){s2=s2.substring(3);}
+		int loc=Integer.parseInt(s2);
 		
 		assert(loc>=0) : s;
-		return (byte)loc;
+		return loc;
 	}
 	
 	public static int toBuild(final String s){
@@ -701,7 +707,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 		StringBuilder sb=new StringBuilder(256);
 
-		sb.append(chromCodes[chromosome]+"\t");
+		sb.append(chromosome+"\t");
 		sb.append(symbol+"\t");
 		sb.append(id+"\t");
 		sb.append(mrnaAcc+"\t");
@@ -742,7 +748,7 @@ public class Gene implements Comparable<Gene>, Serializable{
 		
 		StringBuilder sb=new StringBuilder(256);
 
-		sb.append("chr"+chromCodes[chromosome]+"\t");
+		sb.append("chr"+chromosome+"\t");
 		sb.append(symbol+"\t");
 		sb.append(mrnaAcc+"\t");
 		sb.append(strandCodes[strand]+"\t");

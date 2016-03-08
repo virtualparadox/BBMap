@@ -1428,7 +1428,7 @@ public class SamLine implements Serializable {
 		try {
 			String[] answer=qname.split("_");
 			long id=Long.parseLong(answer[0]);
-			byte trueChrom=Gene.toChromosome(answer[1]);
+			int trueChrom=Gene.toChromosome(answer[1]);
 			byte trueStrand=Byte.parseByte(answer[2]);
 			int trueLoc=Integer.parseInt(answer[3]);
 			int trueStop=Integer.parseInt(answer[4]);
@@ -1461,7 +1461,7 @@ public class SamLine implements Serializable {
 			try {
 				String[] answer=qname.split("_");
 				numericId_=Long.parseLong(answer[0]);
-				byte trueChrom=Gene.toChromosome(answer[1]);
+				int trueChrom=Gene.toChromosome(answer[1]);
 				byte trueStrand=Byte.parseByte(answer[2]);
 				int trueLoc=Integer.parseInt(answer[3]);
 				int trueStop=Integer.parseInt(answer[4]);

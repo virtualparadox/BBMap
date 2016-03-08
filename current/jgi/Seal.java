@@ -1821,9 +1821,9 @@ public class Seal {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
-			ArrayList<Read> mlist=(rosm==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-			ArrayList<Read> ulist=(rosu==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
-			ArrayListSet als=new ArrayListSet(ORDERED);
+			final ArrayList<Read> mlist=(rosm==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+			final ArrayList<Read> ulist=(rosu==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+			final ArrayListSet als=(outpattern==null ? null : new ArrayListSet(ORDERED));
 			
 			//While there are more reads lists...
 			while(reads!=null && reads.size()>0){
@@ -2071,30 +2071,10 @@ public class Seal {
 					
 					if(remove || assigned<1){
 						if(ulist!=null){ulist.add(r1);}
-						
-						//Track statistics
-						if(r1!=null){
-							readsUnmatchedT++;
-							basesUnmatchedT+=r1.length();
-						}
-						if(r2!=null){
-							readsUnmatchedT++;
-							basesUnmatchedT+=r2.length();
-						}
 					}else{
-						
 						if(mlist!=null){mlist.add(r1);}
-						
-						//Track statistics
-						if(r1!=null){
-							readsMatchedT++;
-							basesMatchedT+=r1.length();
-						}
-						if(r2!=null){
-							readsMatchedT++;
-							basesMatchedT+=r2.length();
-						}
 					}
+					
 				}
 				
 				//Send matched list to matched output stream
@@ -2200,6 +2180,15 @@ public class Seal {
 					scaffoldFragCounts.addAndGet(id, 1);
 				}
 			}
+
+			if(start<stop){
+				readsMatchedT+=1+r1.mateCount();
+				basesMatchedT+=r1.length()+r1.mateLength();
+			}else{
+				readsUnmatchedT+=1+r1.mateCount();
+				basesUnmatchedT+=r1.length()+r1.mateLength();
+			}
+			
 			return stop-start;
 		}
 		
@@ -2211,13 +2200,13 @@ public class Seal {
 		 * @return Number of sites assigned
 		 */
 		private int assignIndependently(Read r1, Read r2, int max1, int max2, ArrayListSet als){
-			assert(als==null) : "Pattern output does not currently work with keepPairsTogether=false";
+			assert(als==null || r2==null) : "Pattern output does not work with keepPairsTogether=false and paired reads\n"+als;
 			int assigned=0;
 			if(max1>=Tools.max(minKmerHits, (int)(minKmerFraction*numKmers(r1, null, k)))){
 				final int sites=finalList1.size;
 				final int lenSum=r1.length();
 				final int start, stop;
-
+				
 				if(sites<2 || ambigMode==AMBIG_ALL){
 					start=0;
 					stop=sites;
@@ -2236,6 +2225,10 @@ public class Seal {
 				
 				for(int j=start; j<stop; j++){
 					int id=finalList1.get(j);
+					
+					if(als!=null){
+						als.add(r1, scaffoldNames.get(id));
+					}
 					
 					if(parsecustom && j==start){
 						String scafName=scaffoldNames.get(id);
@@ -2261,7 +2254,14 @@ public class Seal {
 						}
 					}
 				}
-				assigned+=(stop-start);
+				if(start<stop){
+					readsMatchedT++;
+					basesMatchedT+=r1.length();
+					assigned+=(stop-start);
+				}else{
+					readsUnmatchedT++;
+					basesUnmatchedT+=r1.length();
+				}
 			}
 			
 			if(max2>=Tools.max(minKmerHits, (int)(minKmerFraction*numKmers(r2, null, k)))){
@@ -2288,6 +2288,11 @@ public class Seal {
 				for(int j=start; j<stop; j++){
 					int id=finalList2.get(j);
 					
+					if(als!=null){
+						als.add(r2, scaffoldNames.get(id));
+						throw new RuntimeException("Pattern output does not currently work with keepPairsTogether=false");
+					}
+					
 					if(parsecustom && j==start){
 						String scafName=scaffoldNames.get(id);
 						String rname=r2.parseCustomRname();
@@ -2312,8 +2317,16 @@ public class Seal {
 						}
 					}
 				}
-				assigned+=(stop-start);
+				if(start<stop){
+					readsMatchedT++;
+					basesMatchedT+=r2.length();
+					assigned+=(stop-start);
+				}else{
+					readsUnmatchedT++;
+					basesUnmatchedT+=r2.length();
+				}
 			}
+			
 			return assigned;
 		}
 		

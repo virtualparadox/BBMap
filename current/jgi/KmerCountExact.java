@@ -121,7 +121,8 @@ public class KmerCountExact {
 		int k_=31;
 		int ways_=-1;
 		int filterMax_=2;
-		boolean ecc_=false;
+		boolean ecc_=false, merge_=false;
+		double minProb_=0;
 		
 		{
 			boolean b=false;
@@ -194,11 +195,15 @@ public class KmerCountExact {
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
+			}else if(a.equals("merge")){
+				merge_=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				assert(false) : "Verbose flag is currently static final; must be recompiled to change.";
 //				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("rcomp")){
 				rcomp_=Tools.parseBoolean(b);
+			}else if(a.equals("minprob")){
+				minProb_=Double.parseDouble(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
@@ -299,6 +304,9 @@ public class KmerCountExact {
 		WAYS=ways_;
 		filterMax=Tools.min(filterMax_, 0x7FFFFFFF);
 		ecc=ecc_;
+		merge=merge_;
+		minProb=(float)minProb_;
+		KmerCountAbstract.minProb=minProb;
 		
 		k=k_;
 		k2=k-1;
@@ -624,8 +632,8 @@ public class KmerCountExact {
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
-					final Read r1=reads.get(i);
-					final Read r2=r1.mate;
+					Read r1=reads.get(i);
+					Read r2=r1.mate;
 					
 					if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
 					
@@ -662,7 +670,18 @@ public class KmerCountExact {
 						if(rlen2<k){r2.setDiscarded(true);}
 					}
 					
-					if(ecc && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){BBMerge.findOverlapStrict(r1, r2, true);}
+					if((ecc || merge) && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){
+						if(merge){
+							final int insert=BBMerge.findOverlapStrict(r1, r2, false);
+							if(insert>0){
+								r2.reverseComplement();
+								r1=r1.joinRead(insert);
+								r2=null;
+							}
+						}else if(ecc){
+							BBMerge.findOverlapStrict(r1, r2, true);
+						}
+					}
 
 					if(r1!=null){
 						if(r1.discarded()){
@@ -708,6 +727,7 @@ public class KmerCountExact {
 			if(onePass){return addKmersToTable_onePass(r);}
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
+			final byte[] quals=r.quality;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -719,18 +739,33 @@ public class KmerCountExact {
 			if(bases==null || bases.length<k){return -1;}
 			
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			float prob=1;
 			for(int i=0; i<bases.length; i++){
 				final byte b=bases[i];
 				final long x=AminoAcid.baseToNumber[b];
 				final long x2=AminoAcid.baseToComplementNumber[b];
+
+				//Update kmers
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+
+				if(minProb>0 && quals!=null){//Update probability
+					prob=prob*PROB_CORRECT[quals[i]];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+
+				//Handle Ns
 				if(x<0){
 					len=0;
 					kmer=rkmer=0;
+					prob=1;
 				}else{len++;}
+
 				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-				if(len>=k){
+				if(len>=k && prob>=minProb){
 					final long key=toValue(kmer, rkmer);
 					if(!prefilter || prefilterArray.read(key)>filterMax){
 						int temp=table.incrementAndReturnNumCreated(key);
@@ -739,10 +774,9 @@ public class KmerCountExact {
 					}
 				}
 			}
+			
 			return created;
 		}
-		
-		
 
 		
 		/**
@@ -755,6 +789,7 @@ public class KmerCountExact {
 			assert(prefilter);
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
+			final byte[] quals=r.quality;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -766,16 +801,31 @@ public class KmerCountExact {
 			if(bases==null || bases.length<k){return -1;}
 			
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			float prob=1;
 			for(int i=0; i<bases.length; i++){
 				final byte b=bases[i];
 				final long x=AminoAcid.baseToNumber[b];
 				final long x2=AminoAcid.baseToComplementNumber[b];
+
+				//Update kmers
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+
+				if(minProb>0 && quals!=null){//Update probability
+					prob=prob*PROB_CORRECT[quals[i]];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+
+				//Handle Ns
 				if(x<0){
 					len=0;
 					kmer=rkmer=0;
+					prob=1;
 				}else{len++;}
+
 				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 				if(len>=k){
 					final long key=toValue(kmer, rkmer);
@@ -1063,8 +1113,15 @@ public class KmerCountExact {
 	private final byte minAvgQuality;
 	/** If positive, calculate average quality from the first X bases only.  Default: 0 */
 	private final int minAvgQualityBases;
-	/** Quality-trim the left side */
+	
+	/** Ignore kmers with probability of correctness less than this */
+	private final float minProb;
+	
+	/** Correct via overlap */
 	private final boolean ecc;
+	
+	/** Attempt to merge via overlap prior to counting kmers */
+	private final boolean merge;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
@@ -1092,6 +1149,9 @@ public class KmerCountExact {
 	public static int THREADS=Shared.threads();
 	/** Do garbage collection prior to printing memory usage */
 	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
+
+	private static final float[] PROB_CORRECT=Arrays.copyOf(align2.QualityTools.PROB_CORRECT, 127);
+	private static final float[] PROB_CORRECT_INVERSE=Arrays.copyOf(align2.QualityTools.PROB_CORRECT_INVERSE, 127);
 	
 	/*--------------------------------------------------------------*/
 	/*----------------      Static Initializers     ----------------*/

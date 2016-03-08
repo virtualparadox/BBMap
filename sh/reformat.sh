@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified May 1, 2015
+Last modified May 29, 2015
 
 Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format.
 Optionally performs additional functions such as quality trimming, subsetting, and subsampling.
@@ -14,6 +14,7 @@ Usage:  reformat.sh in=<file> in2=<file2> out=<outfile> out2=<outfile2>
 
 in2 and out2 are for paired reads and are optional.
 If input is paired and there is only one output file, it will be written interleaved.
+
 
 Other parameters and their defaults:
 
@@ -124,6 +125,13 @@ primaryonly=f           Toss secondary alignments.  Set this to true for sam to 
 requiredbits=0          (rbits) Toss sam lines with any of these flag bits unset.  Similar to samtools -f.
 filterbits=0            (fbits) Toss sam lines with any of these flag bits set.  Similar to samtools -F.
 stoptag=f               Set to true to write a tag indicating read stop location, prefixed by YS:i:
+
+Shortcuts: 
+The # symbol will be substituted for 1 and 2.  The % symbol in out will be substituted for input name minus extensions.
+For example:
+reformat.sh in=read#.fq out=%.fa
+...is equivalent to:
+reformat.sh in1=read1.fq in2=read2.fq out1=read1.fa out2=read2.fa
 
 Java Parameters:
 -Xmx                    This will be passed to Java to set memory usage, overriding the program's automatic memory detection.

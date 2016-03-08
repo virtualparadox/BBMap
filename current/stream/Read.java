@@ -874,7 +874,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		String[] split=line.split("\t");
 		
 		if(split.length<17){
-			throw new RuntimeException("Error parsing read from text.\n" +
+			throw new RuntimeException("Error parsing read from text.\n\n" +
 					"This may be caused be attempting to parse the wrong format.\n" +
 					"Please ensure that the file extension is correct:\n" +
 					"\tFASTQ should end in .fastq or .fq\n" +
@@ -884,7 +884,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 					"If a file is compressed, there must be a compression extension after the format extension:\n" +
 					"\tgzipped files should end in .gz or .gzip\n" +
 					"\tzipped files should end in .zip and have only 1 file per archive\n" +
-					"\tbz2 files should end in .bz2");
+					"\tbz2 files should end in .bz2\n");
 		}
 		
 		final String id=new String(split[0]);

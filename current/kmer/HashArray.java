@@ -390,6 +390,10 @@ public abstract class HashArray extends AbstractKmerTable {
 		}
 	}
 	
+	public HashForest victims(){
+		return victims;
+	}
+	
 	/*--------------------------------------------------------------*/
 	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/

@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell and Jonathan Rood"
-	echo "Last modified February 17, 2015"
+	echo "Last modified May 28, 2015"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."

@@ -81,7 +81,7 @@ public final class SiteScoreR implements Comparable<SiteScoreR>{
 //		sb.append('\t');
 //		sb.append(score);
 //		
-//		return "chr"+Gene.chromCodes[chrom]+"\t"+Gene.strandCodes[strand]+sb;
+//		return "chr"+chrom+"\t"+Gene.strandCodes[strand]+sb;
 		return toText().toString();
 	}
 	

@@ -122,7 +122,6 @@ public class FASTQ {
 	}
 	
 	public static boolean isInterleaved(final String fname, final boolean allowIdentical){
-		
 		if(!DETECT_QUALITY && !TEST_INTERLEAVED){return FORCE_INTERLEAVED;}
 		final ArrayList<String> oct=fileIO.FileFormat.getFirstOctet(fname);
 		if(oct==null){return FORCE_INTERLEAVED;}
@@ -562,7 +561,7 @@ public class FASTQ {
 					String[] answer=quad[0].split("_");
 					if(answer.length>=5){
 						try {
-							byte trueChrom=Gene.toChromosome(answer[1]);
+							int trueChrom=Gene.toChromosome(answer[1]);
 							byte trueStrand=Byte.parseByte(answer[2]);
 							int trueLoc=Integer.parseInt(answer[3]);
 							int trueStop=Integer.parseInt(answer[4]);
@@ -756,7 +755,7 @@ public class FASTQ {
 
 				if(answer.length>=5){
 					try {
-						byte trueChrom=Gene.toChromosome(answer[1]);
+						int trueChrom=Gene.toChromosome(answer[1]);
 						byte trueStrand=Byte.parseByte(answer[2]);
 						int trueLoc=Integer.parseInt(answer[3]);
 						int trueStop=Integer.parseInt(answer[4]);

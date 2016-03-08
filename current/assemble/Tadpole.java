@@ -5,6 +5,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import jgi.BBMerge;
@@ -16,6 +17,8 @@ import bloom.KmerCountAbstract;
 import kmer.AbstractKmerTable;
 import kmer.HashArray1D;
 import kmer.HashBuffer;
+import kmer.HashForest;
+import kmer.KmerNode;
 import kmer.Primes;
 
 import stream.ByteBuilder;
@@ -26,7 +29,6 @@ import stream.Read;
 
 import align2.ListNum;
 import align2.LongList;
-import align2.ReadComparatorID;
 import align2.ReadLengthComparator;
 import align2.ReadStats;
 import align2.Shared;
@@ -130,7 +132,8 @@ public class Tadpole {
 		int k_=31;
 		int ways_=-1;
 		int filterMax_=2;
-		boolean ecc_=false;
+		boolean ecc_=false, merge_=false;
+		double minProb_=0;
 		boolean useOwnership_=true;
 		
 		{
@@ -161,8 +164,8 @@ public class Tadpole {
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
-//			}else if(parser.parseTrim(arg, a, b)){
-//				//do nothing
+			}else if(parser.parseTrim(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1.clear();
 				if(b!=null){
@@ -262,8 +265,12 @@ public class Tadpole {
 				branchMult2=(int)Tools.parseKMG(b);
 			}else if(a.equals("branchmult1")){
 				branchMult1=(int)Tools.parseKMG(b);
-			}else if(a.equals("mincount") || a.equals("mincov") || a.equals("mindepth")){
-				minCount=(int)Tools.parseKMG(b);
+			}else if(a.equals("mincount") || a.equals("mincov") || a.equals("mindepth") || a.equals("min")){
+				minCountSeed=minCountExtend=(int)Tools.parseKMG(b);
+			}else if(a.equals("mindepthseed") || a.equals("mds") || a.equals("mincountseed") || a.equals("mcs")){
+				minCountSeed=(int)Tools.parseKMG(b);
+			}else if(a.equals("mindepthextend") || a.equals("mde") || a.equals("mincountextend") || a.equals("mce")){
+				minCountExtend=(int)Tools.parseKMG(b);
 			}else if(a.equals("forest")){
 				useForest_=Tools.parseBoolean(b);
 				if(useForest_){useTable_=useArray_=false;}
@@ -288,11 +295,15 @@ public class Tadpole {
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
+			}else if(a.equals("merge")){
+				merge_=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				assert(false) : "Verbose flag is currently static final; must be recompiled to change.";
 //				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("rcomp")){
 				rcomp_=Tools.parseBoolean(b);
+			}else if(a.equals("minprob")){
+				minProb_=Double.parseDouble(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("prealloc") || a.equals("preallocate")){
@@ -347,8 +358,8 @@ public class Tadpole {
 //			qtrimRight=parser.qtrimRight;
 //			trimq=parser.trimq;
 //			
-//			minAvgQuality=parser.minAvgQuality;
-//			minAvgQualityBases=parser.minAvgQualityBases;
+			minAvgQuality=parser.minAvgQuality;
+			minAvgQualityBases=parser.minAvgQualityBases;
 		}
 		
 		{
@@ -360,13 +371,23 @@ public class Tadpole {
 			tableMemory=(long)(usableMemory*.95-filterMemory);
 		}
 		
+		useOwnership=useOwnership_;
+		final int bytesPerKmer;
+		{
+			int mult=12;
+			if(useOwnership){mult+=4;}
+			if(processingMode==extendMode){mult+=1;}
+			else if(processingMode==contigMode){mult+=1;}
+			bytesPerKmer=mult;
+		}
+		
 		if(ways_<1){
-			long maxKmers=(2*tableMemory)/12;
+			long maxKmers=(2*tableMemory)/bytesPerKmer;
 			long minWays=Tools.min(10000, maxKmers/Integer.MAX_VALUE);
-			ways_=(int)Tools.max(31, THREADS*2, minWays);
+			ways_=(int)Tools.max(31, (int)(THREADS*2.5), minWays);
 			ways_=(int)Primes.primeAtLeast(ways_);
 			assert(ways_>0);
-			System.err.println("ways="+ways_);
+//			System.err.println("ways="+ways_);
 		}
 		
 		/* Set final variables; post-process and validate argument combinations */
@@ -380,7 +401,9 @@ public class Tadpole {
 		WAYS=ways_;
 		filterMax=Tools.min(filterMax_, 0x7FFFFFFF);
 		ecc=ecc_;
-		useOwnership=useOwnership_;
+		merge=merge_;
+		minProb=(float)minProb_;
+		KmerCountAbstract.minProb=minProb;
 		
 		k=k_;
 		k2=k-1;
@@ -388,14 +411,9 @@ public class Tadpole {
 		if(k<1 || k>31){throw new RuntimeException("\nk needs an integer value from 1 to 31, such as k=27.  Default is 31.\n");}
 		
 		if(initialSize<1){
-			int mult=12;
-			if(useOwnership){mult+=4;}
-			if(processingMode==extendMode){mult+=1;}
-			else if(processingMode==contigMode){mult+=1;}
-			
-			final long memOverWays=tableMemory/(mult*WAYS);
+			final long memOverWays=tableMemory/(bytesPerKmer*WAYS);
 			final double mem2=(prealloc ? preallocFraction : 1)*tableMemory;
-			initialSize=(prealloc || memOverWays<initialSizeDefault ? (int)Tools.min(2142000000, (long)(mem2/(mult*WAYS))) : initialSizeDefault);
+			initialSize=(prealloc || memOverWays<initialSizeDefault ? (int)Tools.min(2142000000, (long)(mem2/(bytesPerKmer*WAYS))) : initialSizeDefault);
 			if(initialSize!=initialSizeDefault){
 				System.err.println("Initial size set to "+initialSize);
 			}
@@ -464,6 +482,7 @@ public class Tadpole {
 		
 		if(DISPLAY_PROGRESS){
 			outstream.println("Initial:");
+			outstream.println("Ways="+WAYS+", initialSize="+initialSize+", prefilter="+(prefilter ? "t" : "f")+", prealloc="+(prealloc ? (""+preallocFraction) : "f"));
 			printMemory();
 			outstream.println();
 		}
@@ -948,8 +967,8 @@ public class Tadpole {
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
-					final Read r1=reads.get(i);
-					final Read r2=r1.mate;
+					Read r1=reads.get(i);
+					Read r2=r1.mate;
 					
 					if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
 					
@@ -960,7 +979,24 @@ public class Tadpole {
 						basesInT+=r2.length();
 					}
 					
-					if(ecc && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){BBMerge.findOverlapStrict(r1, r2, true);}
+					//Determine whether to discard the reads based on average quality
+					if(minAvgQuality>0){
+						if(r1!=null && r1.quality!=null && r1.avgQuality(false, minAvgQualityBases)<minAvgQuality){r1.setDiscarded(true);}
+						if(r2!=null && r2.quality!=null && r2.avgQuality(false, minAvgQualityBases)<minAvgQuality){r2.setDiscarded(true);}
+					}
+					
+					if((ecc || merge) && r1!=null && r2!=null && !r1.discarded() && !r2.discarded()){
+						if(merge){
+							final int insert=BBMerge.findOverlapStrict(r1, r2, false);
+							if(insert>0){
+								r2.reverseComplement();
+								r1=r1.joinRead(insert);
+								r2=null;
+							}
+						}else if(ecc){
+							BBMerge.findOverlapStrict(r1, r2, true);
+						}
+					}
 
 					if(r1!=null){
 						if(r1.discarded()){
@@ -998,6 +1034,7 @@ public class Tadpole {
 			if(onePass){return addKmersToTable_onePass(r);}
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
+			final byte[] quals=r.quality;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -1009,18 +1046,33 @@ public class Tadpole {
 			if(bases==null || bases.length<k){return -1;}
 			
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			float prob=1;
 			for(int i=0; i<bases.length; i++){
 				final byte b=bases[i];
 				final long x=AminoAcid.baseToNumber[b];
 				final long x2=AminoAcid.baseToComplementNumber[b];
+
+				//Update kmers
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+
+				if(minProb>0 && quals!=null){//Update probability
+					prob=prob*PROB_CORRECT[quals[i]];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+
+				//Handle Ns
 				if(x<0){
 					len=0;
 					kmer=rkmer=0;
+					prob=1;
 				}else{len++;}
+
 				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-				if(len>=k){
+				if(len>=k && prob>=minProb){
 					final long key=toValue(kmer, rkmer);
 					if(!prefilter || prefilterArray.read(key)>filterMax){
 						int temp=table.incrementAndReturnNumCreated(key);
@@ -1029,6 +1081,7 @@ public class Tadpole {
 					}
 				}
 			}
+			
 			return created;
 		}
 		
@@ -1037,6 +1090,7 @@ public class Tadpole {
 			assert(prefilter);
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
+			final byte[] quals=r.quality;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -1048,16 +1102,31 @@ public class Tadpole {
 			if(bases==null || bases.length<k){return -1;}
 			
 			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			float prob=1;
 			for(int i=0; i<bases.length; i++){
 				final byte b=bases[i];
 				final long x=AminoAcid.baseToNumber[b];
 				final long x2=AminoAcid.baseToComplementNumber[b];
+
+				//Update kmers
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+
+				if(minProb>0 && quals!=null){//Update probability
+					prob=prob*PROB_CORRECT[quals[i]];
+					if(len>k){
+						byte oldq=quals[i-k];
+						prob=prob*PROB_CORRECT_INVERSE[oldq];
+					}
+				}
+
+				//Handle Ns
 				if(x<0){
 					len=0;
 					kmer=rkmer=0;
+					prob=1;
 				}else{len++;}
+
 				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
 				if(len>=k){
 					final long key=toValue(kmer, rkmer);
@@ -1111,14 +1180,8 @@ public class Tadpole {
 		public void run(){
 			if(crisa==null || crisa.length==0){
 				//Build from kmers
-				for(int tnum=id; tnum<tables.length; tnum+=THREADS){
-//					System.err.println("id="+id+" processing table "+tnum);
-					final HashArray1D table=(HashArray1D)tables[tnum];
-					final int max=table.arrayLength();
-					for(int cell=0; cell<max; cell++){
-						int x=processCell(table, cell);
-					}
-				}
+				while(processNextTable()){}
+				while(processNextVictims()){}
 			}else{
 				//Extend reads
 				for(ConcurrentReadInputStream cris : crisa){
@@ -1132,9 +1195,33 @@ public class Tadpole {
 			}
 		}
 		
+		private boolean processNextTable(){
+			final int tnum=nextTable.getAndAdd(1);
+			if(tnum>=tables.length){return false;}
+			final HashArray1D table=(HashArray1D)tables[tnum];
+			final int max=table.arrayLength();
+			for(int cell=0; cell<max; cell++){
+				int x=processCell(table, cell);
+			}
+			return true;
+		}
+		
+		private boolean processNextVictims(){
+			final int tnum=nextVictims.getAndAdd(1);
+			if(tnum>=tables.length){return false;}
+			final HashArray1D table=(HashArray1D)tables[tnum];
+			final HashForest forest=table.victims();
+			final int max=forest.arrayLength();
+			for(int cell=0; cell<max; cell++){
+				KmerNode kn=forest.getNode(cell);
+				int x=traverseKmerNode(kn);
+			}
+			return true;
+		}
+		
 		private int processCell(HashArray1D table, int cell){
 			int count=table.readCellValue(cell);
-			if(count<minCount){return 0;}
+			if(count<minCountSeed){return 0;}
 			
 			long key=table.getKmer(cell);
 
@@ -1147,6 +1234,41 @@ public class Tadpole {
 				if(verbose){outstream.println("Owner is now "+owner);}
 				if(owner!=id){return 0;}
 			}
+			return processKmer(key);
+		}
+		
+		private int traverseKmerNode(KmerNode kn){
+			int sum=0;
+			if(kn!=null){
+				sum+=processKmerNode(kn);
+				if(kn.left()!=null){
+					sum+=traverseKmerNode(kn.left());
+				}
+				if(kn.right()!=null){
+					sum+=traverseKmerNode(kn.right());
+				}
+			}
+			return sum;
+		}
+		
+		private int processKmerNode(KmerNode kn){
+			final long key=kn.pivot();
+			final int count=kn.getValue(key);
+			if(count<minCountSeed){return 0;}
+
+			if(verbose){outstream.println("id="+id+" processing KmerNode; \tkmer="+key+"\t"+AminoAcid.kmerToString(key, k));}
+			if(useOwnership){
+				int owner=kn.getOwner(key);
+				if(verbose){outstream.println("Owner is initially "+owner);}
+				if(owner>-1){return 0;}
+				owner=kn.setOwner(key, id);
+				if(verbose){outstream.println("Owner is now "+owner);}
+				if(owner!=id){return 0;}
+			}
+			return processKmer(key);
+		}
+		
+		private int processKmer(long key){
 			builderT.setLength(0);
 			builderT.appendKmer(key, k);
 			if(verbose){outstream.println("Filled builder: "+builderT);}
@@ -1549,13 +1671,13 @@ public class Tadpole {
 		{
 			int way=(int)(key2%WAYS);
 			int count=tables[way].getValue(key2);
-			if(count<minCount){return -1;}
+			if(count<minCountSeed){return -1;}
 		}
 		
 		long key=toValue(kmer, rkmer);
 		int way=(int)(key%WAYS);
 		int count=tables[way].getValue(key);
-		if(count<minCount){
+		if(count<minCountSeed){
 			if(verbose){outstream.println("Returning because count was too low: "+count);}
 			return -1;
 		}
@@ -1565,7 +1687,7 @@ public class Tadpole {
 //		int rightSecondPos=Tools.secondHighestPosition(rightCounts);
 //		int rightSecond=rightCounts[rightSecondPos];
 		
-		if(rightMax<minCount){return -1;}
+		if(rightMax<minCountExtend){return -1;}
 //		if(isJunction(rightMax, rightSecond)){return -1;}
 		
 		while(key!=key2 && len<maxlen){
@@ -1585,7 +1707,7 @@ public class Tadpole {
 			assert(tables[way].getValue(key)==rightMax);
 			count=rightMax;
 			
-			assert(count>=minCount) : count;
+			assert(count>=minCountExtend) : count;
 			
 			rightMaxPos=fillRightCounts(kmer, rkmer, rightCounts, mask, shift2);
 			rightMax=rightCounts[rightMaxPos];
@@ -1601,7 +1723,7 @@ public class Tadpole {
 //				outstream.println("rightSecond="+rightSecond);
 			}
 			
-			if(rightMax<minCount){
+			if(rightMax<minCountExtend){
 				if(verbose){outstream.println("Breaking because highest right was too low:"+rightMax);}
 				break;
 			}
@@ -1655,7 +1777,7 @@ public class Tadpole {
 		long key=toValue(kmer, rkmer);
 		int way=(int)(key%WAYS);
 		int count=tables[way].getValue(key);
-		if(count<minCount){
+		if(count<minCountSeed){
 			if(verbose){outstream.println("Returning because count was too low: "+count);}
 			return false;
 		}
@@ -1665,7 +1787,7 @@ public class Tadpole {
 		if(owner>id){return false;}
 		
 		int leftMaxPos=0;
-		int leftMax=minCount;
+		int leftMax=minCountExtend;
 		int leftSecondPos=1;
 		int leftSecond=0;
 		
@@ -1694,7 +1816,7 @@ public class Tadpole {
 			outstream.println("rightSecond="+rightSecond);
 		}
 		
-		if(rightMax<minCount){return false;}
+		if(rightMax<minCountExtend){return false;}
 		if(isJunction(rightMax, rightSecond, leftMax, leftSecond)){return false;}
 		
 		if(useOwnership){
@@ -1725,7 +1847,7 @@ public class Tadpole {
 			assert(tables[way].getValue(key)==rightMax);
 			count=rightMax;
 			
-			assert(count>=minCount) : count;
+			assert(count>=minCountExtend) : count;
 
 			if(leftCounts!=null){
 				leftMaxPos=fillLeftCounts(kmer, rkmer, leftCounts, mask, shift2);
@@ -1752,7 +1874,7 @@ public class Tadpole {
 				outstream.println("rightSecond="+rightSecond);
 			}
 			
-			if(rightMax<minCount){
+			if(rightMax<minCountExtend){
 				if(verbose){outstream.println("Breaking because highest right was too low:"+rightMax);}
 				break;
 			}
@@ -1824,13 +1946,13 @@ public class Tadpole {
 		long key=toValue(kmer, rkmer);
 		int way=(int)(key%WAYS);
 		int count=tables[way].getValue(key);
-		if(count<minCount){
+		if(count<minCountSeed){
 			if(verbose){outstream.println("Returning because count was too low: "+count);}
 			return 0;
 		}
 		
 		int leftMaxPos=0;
-		int leftMax=minCount;
+		int leftMax=minCountExtend;
 		int leftSecondPos=1;
 		int leftSecond=0;
 		
@@ -1855,7 +1977,7 @@ public class Tadpole {
 			outstream.println("rightSecond="+rightSecond);
 		}
 		
-		if(rightMax<minCount){return 0;}
+		if(rightMax<minCountExtend){return 0;}
 		if(isJunction(rightMax, rightSecond, leftMax, leftSecond)){return 0;}
 		
 		final int maxLen=Tools.min(bb.length()+distance, maxContigLen);
@@ -1877,7 +1999,7 @@ public class Tadpole {
 			assert(tables[way].getValue(key)==rightMax);
 			count=rightMax;
 			
-			assert(count>=minCount) : count;
+			assert(count>=minCountExtend) : count;
 			
 			if(leftCounts!=null){
 				leftMaxPos=fillLeftCounts(kmer, rkmer, leftCounts, mask, shift2);
@@ -1900,7 +2022,7 @@ public class Tadpole {
 				outstream.println("rightSecond="+rightSecond);
 			}
 			
-			if(rightMax<minCount){
+			if(rightMax<minCountExtend){
 				if(verbose){outstream.println("Breaking because highest right was too low:"+rightMax);}
 				break;
 			}
@@ -1962,11 +2084,11 @@ public class Tadpole {
 	}
 	
 	private boolean isJunction(int max, int second){
-		if(second*branchMult1<max || (second<=branchLowerConst && max>=Tools.max(minCount, second*branchMult2))){
+		if(second*branchMult1<max || (second<=branchLowerConst && max>=Tools.max(minCountExtend, second*branchMult2))){
 			return false;
 		}
 		if(verbose){outstream.println("Breaking because second-highest was too high:" +
-				(second*branchMult1<max)+", "+(second<=branchLowerConst)+", "+(max>=Tools.max(minCount, second*branchMult2)));}
+				(second*branchMult1<max)+", "+(second<=branchLowerConst)+", "+(max>=Tools.max(minCountExtend, second*branchMult2)));}
 		return true;
 	}
 	
@@ -2353,9 +2475,9 @@ public class Tadpole {
 	public int minExtension=2;
 	public int minContigLen=100;
 
-	private int minCount=3;
-	private float branchMult1=60;
-	private float branchMult2=8;
+	private int minCountSeed=3, minCountExtend=2;
+	private float branchMult1=20;
+	private float branchMult2=3;
 	private int branchLowerConst=3;
 	
 	public boolean showStats=true;
@@ -2458,13 +2580,31 @@ public class Tadpole {
 	/** min kmer count to dump to text */
 	private int minToDump=1;
 	
-	/** Quality-trim the left side */
+	/** Throw away reads below this average quality before trimming.  Default: 0 */
+	private final byte minAvgQuality;
+	/** If positive, calculate average quality from the first X bases only.  Default: 0 */
+	private final int minAvgQualityBases;
+	
+	/** Ignore kmers with probability of correctness less than this */
+	private final float minProb;
+	
+	/** Correct via overlap */
 	private final boolean ecc;
+	
+	/** Attempt to merge via overlap prior to counting kmers */
+	private final boolean merge;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
 	
-	private AtomicLong contigNum=new AtomicLong(0);
+	/** For numbering contigs */
+	private final AtomicLong contigNum=new AtomicLong(0);
+	
+	/** For controlling access to tables for contig-building */
+	private final AtomicInteger nextTable=new AtomicInteger(0);
+	
+	/** For controlling access to victim buffers for contig-building */
+	private final AtomicInteger nextVictims=new AtomicInteger(0);
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/
@@ -2488,6 +2628,9 @@ public class Tadpole {
 	public static int THREADS=Shared.threads();
 	/** Do garbage collection prior to printing memory usage */
 	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
+	
+	private static final float[] PROB_CORRECT=Arrays.copyOf(align2.QualityTools.PROB_CORRECT, 127);
+	private static final float[] PROB_CORRECT_INVERSE=Arrays.copyOf(align2.QualityTools.PROB_CORRECT_INVERSE, 127);
 
 	private static final int contigMode=0;
 	private static final int extendMode=1;
