@@ -14,35 +14,67 @@ public class BandedAlignerConcrete extends BandedAligner{
 	
 	public static void main(String[] args){
 		byte[] query=args[0].getBytes();
-		byte[] ref=args[1].getBytes();
+		byte[] ref=(args[1].equals(".") ? args[0].getBytes() : args[1].getBytes());
 		int qstart=-1;
 		int rstart=-1;
-		int maxedits=big;
+		int maxedits=big-1;
 		int width=5;
 		if(args.length>2){qstart=Integer.parseInt(args[2]);}
 		if(args.length>3){rstart=Integer.parseInt(args[3]);}
 		if(args.length>4){maxedits=Integer.parseInt(args[4]);}
-		if(args.length>4){width=Integer.parseInt(args[5]);}
+		if(args.length>5){width=Integer.parseInt(args[5]);}
 		
 		BandedAlignerConcrete ba=new BandedAlignerConcrete(width);
 		
 		int edits;
 		
+		penalizeOffCenter=true;
 		edits=ba.alignForward(query, ref, (qstart==-1 ? 0 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 		System.out.println("Forward:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
+
+		penalizeOffCenter=false;
+		edits=ba.alignForward(query, ref, (qstart==-1 ? 0 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
+		System.out.println("Forward2:   \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 		System.out.println("***********************\n");
 //		
 //		edits=ba.alignForwardRC(query, ref, (qstart==-1 ? query.length-1 : qstart), (rstart==-1 ? 0 : rstart), maxedits, true);
 //		System.out.println("ForwardRC:  \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 //		System.out.println("***********************\n");
-		
+
+		penalizeOffCenter=true;
 		edits=ba.alignReverse(query, ref, (qstart==-1 ? query.length-1 : qstart), (rstart==-1 ? ref.length-1 : rstart), maxedits, true);
 		System.out.println("Reverse:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
+
+		penalizeOffCenter=false;
+		edits=ba.alignReverse(query, ref, (qstart==-1 ? query.length-1 : qstart), (rstart==-1 ? ref.length-1 : rstart), maxedits, true);
+		System.out.println("Reverse2:   \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 		System.out.println("***********************\n");
 		
 //		edits=ba.alignReverseRC(query, ref, (qstart==-1 ? 0 : qstart), (rstart==-1 ? ref.length-1 : rstart), maxedits, true);
 //		System.out.println("ReverseRC:  \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
 //		System.out.println("***********************\n");
+
+		penalizeOffCenter=true;
+		edits=ba.alignQuadruple(query, ref, maxedits, true);
+		System.out.println("Quadruple:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
+
+		penalizeOffCenter=false;
+		edits=ba.alignQuadruple(query, ref, maxedits, true);
+		System.out.println("Quadruple2:   \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
+
+		penalizeOffCenter=true;
+		edits=ba.alignDouble(query, ref, maxedits, true);
+		System.out.println("Double:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
+
+		penalizeOffCenter=false;
+		edits=ba.alignDouble(query, ref, maxedits, true);
+		System.out.println("Double2:    \tedits="+edits+", lastRow="+ba.lastRow+", score="+ba.score());
+		System.out.println("***********************\n");
 	}
 	
 	
@@ -85,7 +117,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 		lastEdits=0;
 		lastOffset=0;
 		
-		final int width=Tools.min(maxWidth, (maxEdits*2)+1);
+		final int width=Tools.min(maxWidth, (maxEdits*2)+1, Tools.max(query.length, ref.length)*2+2)|1;
 		final int halfWidth=width/2;
 		final boolean inexact=!exact;
 		
@@ -103,11 +135,10 @@ public class BandedAlignerConcrete extends BandedAligner{
 			return 0;
 		}
 
-		Arrays.fill(array1, big);
-		Arrays.fill(array2, big);
+		Arrays.fill(array1, 0, Tools.min(width, maxWidth)+1, big);
+		Arrays.fill(array2, 0, Tools.min(width, maxWidth)+1, big);
 		arrayCurrent=array1;
 		arrayPrev=array2;
-		
 		{
 			if(verbose){System.err.println("\nFirst row.");}
 			final byte q=query[qloc];
@@ -199,7 +230,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 		lastEdits=0;
 		lastOffset=0;
 		
-		final int width=Tools.min(maxWidth, (maxEdits*2)+1);
+		final int width=Tools.min(maxWidth, (maxEdits*2)+1, Tools.max(query.length, ref.length)*2+2)|1;
 		final int halfWidth=width/2;
 		final boolean inexact=!exact;
 		
@@ -217,8 +248,8 @@ public class BandedAlignerConcrete extends BandedAligner{
 			return 0;
 		}
 
-		Arrays.fill(array1, big);
-		Arrays.fill(array2, big);
+		Arrays.fill(array1, 0, Tools.min(width, maxWidth)+1, big);
+		Arrays.fill(array2, 0, Tools.min(width, maxWidth)+1, big);
 		arrayCurrent=array1;
 		arrayPrev=array2;
 		
@@ -313,7 +344,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 		lastEdits=0;
 		lastOffset=0;
 		
-		final int width=Tools.min(maxWidth, (maxEdits*2)+1);
+		final int width=Tools.min(maxWidth, (maxEdits*2)+1, Tools.max(query.length, ref.length)*2+2)|1;
 		final int halfWidth=width/2;
 		final boolean inexact=!exact;
 		
@@ -331,8 +362,8 @@ public class BandedAlignerConcrete extends BandedAligner{
 			return 0;
 		}
 
-		Arrays.fill(array1, big);
-		Arrays.fill(array2, big);
+		Arrays.fill(array1, 0, Tools.min(width, maxWidth)+1, big);
+		Arrays.fill(array2, 0, Tools.min(width, maxWidth)+1, big);
 		arrayCurrent=array1;
 		arrayPrev=array2;
 		
@@ -343,6 +374,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 			final int colLimit=Tools.min(rsloc+width, ref.length);
 			edits=big;
 			int mloc=1+width-(colLimit-rsloc);
+//			assert(false) : width+", "+maxEdits+", "+colLimit+", "+rsloc;
 			if(verbose){System.err.println("q="+(char)q+", qloc="+qloc+", rsloc="+rsloc+", colStart="+colStart+", colLimit="+colLimit+", mloc="+mloc);}
 			for(int col=colLimit-1; col>=colStart; mloc++, col--){
 				if(verbose){System.err.println("col="+col+", mloc="+mloc);}
@@ -426,7 +458,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 		lastEdits=0;
 		lastOffset=0;
 		
-		final int width=Tools.min(maxWidth, (maxEdits*2)+1);
+		final int width=Tools.min(maxWidth, (maxEdits*2)+1, Tools.max(query.length, ref.length)*2+2)|1;
 		final int halfWidth=width/2;
 		final boolean inexact=!exact;
 		
@@ -443,9 +475,9 @@ public class BandedAlignerConcrete extends BandedAligner{
 			assert(false) : ("No overlap: qstart="+qstart+", rstart="+rstart+", qlen="+query.length+", rlen="+ref.length);
 			return 0;
 		}
-
-		Arrays.fill(array1, big);
-		Arrays.fill(array2, big);
+		
+		Arrays.fill(array1, 0, Tools.min(width, maxWidth)+1, big);
+		Arrays.fill(array2, 0, Tools.min(width, maxWidth)+1, big);
 		arrayCurrent=array1;
 		arrayPrev=array2;
 		
@@ -498,7 +530,7 @@ public class BandedAlignerConcrete extends BandedAligner{
 			if(edits>maxEdits){row++; break;}
 		}
 		if(penalizeOffCenter){edits=penalizeOffCenter(arrayCurrent, halfWidth);}
-
+		
 		lastRow=row-1;
 		lastEdits=edits;
 		lastOffset=lastOffset(arrayCurrent, halfWidth);

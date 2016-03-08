@@ -1,6 +1,12 @@
 BBDuk readme by Brian Bushnell
-Last updated November 21, 2014.
+Last updated November 24, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
+
+Version 29:
+Fixed a slowdown in caused by sorting list of ID hits.
+Fixed a crash when not processing kmers.
+Fixed an unnecessary warning message.
+Added jni path flags to shellscript command line.
 
 Version 28:
 Added qskip flag.  Allows skipping query kmers to increase speed.

@@ -141,6 +141,8 @@ public class ByteFile2 extends ByteFile {
 				return null;
 			}
 		}
+		
+		//TODO: This is a race condition; currentList can be changed to null.  A defensive copy could be created.
 		assert(currentList!=null && currentList!=poison);
 		assert(currentLoc<currentList.length);
 		assert(currentList[currentLoc]!=null);

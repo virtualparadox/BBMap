@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 21, 2014
+Last modified November 24, 2014
 
 Description:  Performs high-speed alignment-free sequence quantification,
 by counting the number of long kmers that match between a read and

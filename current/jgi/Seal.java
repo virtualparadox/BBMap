@@ -59,11 +59,11 @@ public class Seal {
 			System.exit(0);
 		}
 		
-		//Create a new BBDuk instance
-		Seal bbd=new Seal(args);
+		//Create a new Seal instance
+		Seal pup=new Seal(args);
 		
 		///And run it
-		bbd.process();
+		pup.process();
 	}
 	
 	/**
@@ -101,8 +101,6 @@ public class Seal {
 		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
-		outstream.println("forest=t           \tUse HashForestA data structure");
-		outstream.println("array=f            \tUse HashArrayA data structure");
 	}
 	
 	
@@ -127,6 +125,7 @@ public class Seal {
 		boolean rcomp_=true;
 		boolean forbidNs_=false;
 		boolean prealloc_=false;
+		boolean useCountvector_=false;
 		int tableType_=AbstractKmerTable.ARRAYH;
 		int k_=31;
 		int ways_=-1; //Currently disabled
@@ -390,6 +389,8 @@ public class Seal {
 				initialSize=(int)Tools.parseKMG(b);
 			}else if(a.equals("dump")){
 				dump=b;
+			}else if(a.equals("countvector")){
+				useCountvector_=Tools.parseBoolean(b);
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
 			}else if(i==1 && outu1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
@@ -446,6 +447,7 @@ public class Seal {
 		qSkip=qSkip_;
 		noAccel=(speed<1 && qSkip<2);
 		
+		USE_COUNTVECTOR=useCountvector_;
 		MAKE_QUALITY_HISTOGRAM=ReadStats.COLLECT_QUALITY_STATS;
 		MAKE_QUALITY_ACCURACY=ReadStats.COLLECT_QUALITY_ACCURACY;
 		MAKE_MATCH_HISTOGRAM=ReadStats.COLLECT_MATCH_STATS;
@@ -456,7 +458,7 @@ public class Seal {
 		MAKE_GCHIST=ReadStats.COLLECT_GC_STATS;
 		MAKE_IDHIST=ReadStats.COLLECT_IDENTITY_STATS;
 		
-		if((speed>0 && qSkip>1) || (qSkip>0 && refSkip>1) || (speed>0 && refSkip>1)){
+		if((speed>0 && qSkip>1) || (qSkip>1 && refSkip>1) || (speed>0 && refSkip>1)){
 			System.err.println("WARNING: It is not recommended to use more than one of qskip, speed, and rskip together.");
 			System.err.println("qskip="+qSkip+", speed="+speed+", rskip="+refSkip);
 		}
@@ -652,7 +654,7 @@ public class Seal {
 		
 		/* Throw an exception if errors were detected */
 		if(errorState){
-			throw new RuntimeException("BBDuk terminated in an error state; the output may be corrupt.");
+			throw new RuntimeException("Seal terminated in an error state; the output may be corrupt.");
 		}
 	}
 	
@@ -1508,6 +1510,13 @@ public class Seal {
 				scaffoldReadCountsT=scaffoldBaseCountsT=scaffoldFragCountsT=null;
 			}
 			
+			if(USE_COUNTVECTOR){
+				countVector=new IntList(1000);
+				countArray=null;
+			}else{
+				countVector=null;
+				countArray=new int[alen];
+			}
 		}
 		
 		@Override
@@ -1658,15 +1667,22 @@ public class Seal {
 						//Do kmer matching
 						
 						if(keepPairsTogether){
-							countVector.size=0;
-							final int a=findBestMatch(r1, keySets, countVector);
-							final int b=findBestMatch(r2, keySets, countVector);
 							
-							if(verbose){
-								System.err.println("countVector: "+countVector);
+							final int a, b, max;
+							if(countArray==null){
+								countVector.size=0;
+								a=findBestMatch(r1, keySets, countVector);
+								b=findBestMatch(r2, keySets, countVector);
+								if(verbose){System.err.println("countVector: "+countVector);}
+								max=condenseLoose(countVector, idList1, countList1);
+							}else{
+								idList1.size=0;
+								a=findBestMatch(r1, keySets, countArray, idList1);
+								b=findBestMatch(r2, keySets, countArray, idList1);
+
+								max=condenseLoose(countArray, idList1, countList1);
 							}
-							
-							final int max=condenseLoose(countVector, idList1, countList1);
+
 							if(verbose){
 								System.err.println("idList1: "+idList1);
 								System.err.println("countList1: "+countList1);
@@ -1690,19 +1706,31 @@ public class Seal {
 							if(hitCountsT!=null){hitCountsT[Tools.min(max, HITCOUNT_LEN)]++;}
 							
 						}else{
-							final int max1, max2;
+							final int max1, max2, a, b;
 							{
-								countVector.size=0;
-								final int a=findBestMatch(r1, keySets, countVector);
-								max1=condenseLoose(countVector, idList1, countList1);
+								if(countArray==null){
+									countVector.size=0;
+									a=findBestMatch(r1, keySets, countVector);
+									max1=condenseLoose(countVector, idList1, countList1);
+								}else{
+									idList1.size=0;
+									a=findBestMatch(r1, keySets, countArray, idList1);
+									max1=condenseLoose(countArray, idList1, countList1);
+								}
 								if(rename){rename(r1, idList1, countList1);}
 								filterTopScaffolds(idList1, countList1, finalList1, max1);
 								if(hitCountsT!=null){hitCountsT[Tools.min(max1, HITCOUNT_LEN)]++;}
 							}
 							if(r2!=null){
-								countVector.size=0;
-								final int b=findBestMatch(r2, keySets, countVector);
-								max2=condenseLoose(countVector, idList2, countList2);
+								if(countArray==null){
+									countVector.size=0;
+									b=findBestMatch(r2, keySets, countVector);
+									max2=condenseLoose(countVector, idList2, countList1);
+								}else{
+									idList2.size=0;
+									b=findBestMatch(r2, keySets, countArray, idList2);
+									max2=condenseLoose(countArray, idList2, countList2);
+								}
 								filterTopScaffolds(idList2, countList2, finalList2, max2);
 								if(rename){rename(r2, idList2, countList2);}
 								if(hitCountsT!=null){hitCountsT[Tools.min(max2, HITCOUNT_LEN)]++;}
@@ -1964,6 +1992,28 @@ public class Seal {
 			return max;
 		}
 		
+		/**
+		 * Pack a list of counts from an array to an IntList.
+		 * @param loose Counter array
+		 * @param packed Unique values
+		 * @param counts Counts of values
+		 * @return
+		 */
+		private int condenseLoose(int[] loose, IntList packed, IntList counts){
+			counts.size=0;
+			if(packed.size<1){return 0;}
+
+			int max=0;
+			for(int i=0; i<packed.size; i++){
+				final int p=packed.get(i);
+				final int c=loose[p];
+				counts.add(c);
+				loose[p]=0;
+				max=Tools.max(max, c);
+			}
+			return max;
+		}
+		
 		private void filterTopScaffolds(IntList packed, IntList counts, IntList out, int thresh){
 			out.size=0;
 			if(packed.size<1){return;}
@@ -2031,6 +2081,62 @@ public class Seal {
 			return found;
 		}
 		
+		/**
+		 * Returns number of matching kmers.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return number of total kmer matches
+		 */
+		private final int findBestMatch(final Read r, final AbstractKmerTable sets[], int[] hits, IntList idList){
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			final byte[] bases=r.bases;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+			
+			if(bases==null || bases.length<k){return -1;}
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long key=toValue(kmer, rkmer, kmask);
+					if(noAccel || ((key/WAYS)&15)>=speed && (qSkip<1 || i%qSkip==0)){
+						if(verbose){System.err.println("Testing key "+key);}
+						AbstractKmerTable set=sets[(int)(key%WAYS)];
+						if(verbose){System.err.println("Found set "+set.arrayLength()+", "+set.size());}
+						final int[] ids=set.getValues(key, singleton);
+						if(verbose){System.err.println("Found array "+(ids==null ? "null" : Arrays.toString(ids)));}
+						if(ids!=null && ids[0]>-1){
+							for(int id : ids){
+								if(id==-1){break;}
+								hits[id]++;
+								if(hits[id]==1){idList.add(id);}
+							}
+							if(verbose){System.err.println("Found = "+(found+1)+"/"+minKmerHits);}
+							found++;
+//							assert(false) : (matchMode==MATCH_FIRST)+", "+(matchMode==MATCH_UNIQUE)+", "+ (ids.length==1 || ids[1]==-1);
+							if(matchMode==MATCH_FIRST || (matchMode==MATCH_UNIQUE && (ids.length==1 || ids[1]==-1))){break;}
+						}
+					}
+				}
+			}
+			return found;
+		}
+		
 		/*--------------------------------------------------------------*/
 		
 		/** Input read stream */
@@ -2039,7 +2145,8 @@ public class Seal {
 		private final RTextOutputStream3 rosm, rosu, ross;
 		
 		private final ReadStats readstats;
-		private final IntList countVector=new IntList(1000);
+		private final IntList countVector;
+		private final int[] countArray;
 		
 		private final IntList idList1=new IntList(), idList2=new IntList();
 		private final IntList countList1=new IntList(), countList2=new IntList();
@@ -2312,6 +2419,9 @@ public class Seal {
 	/** Pick a single scaffold per read pair, rather than per read */
 	private final boolean keepPairsTogether;
 	
+	/** Store match IDs in an IntList rather than int array */ 
+	private final boolean USE_COUNTVECTOR;
+	
 	private final boolean MAKE_QUALITY_ACCURACY;
 	private final boolean MAKE_QUALITY_HISTOGRAM;
 	private final boolean MAKE_MATCH_HISTOGRAM;
@@ -2327,7 +2437,7 @@ public class Seal {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static int VERSION=3;
+	public static int VERSION=4;
 	
 	/** Number of tables (and threads, during loading) */ 
 	private static final int WAYS=7; //123

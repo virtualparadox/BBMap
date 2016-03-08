@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 21, 2014
+Last modified November 24, 2014
 
 Description:  Compares reads to the kmers in a reference dataset, optionally 
 allowing an edit distance. Splits the reads into two outputs - those that 
@@ -190,6 +190,7 @@ Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+NATIVELIBDIR="$DIR""jni/"
 
 z="-Xmx1g"
 z2="-Xms1g"
@@ -219,7 +220,7 @@ bbduk2() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java $EA $z $z2 -cp $CP jgi.BBDuk2 $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.BBDuk2 $@"
 	echo $CMD >&2
 	$CMD
 }

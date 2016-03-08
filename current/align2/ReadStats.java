@@ -7,6 +7,7 @@ import dna.AminoAcid;
 
 import stream.Read;
 
+import fileIO.FileFormat;
 import fileIO.TextStreamWriter;
 
 
@@ -523,9 +524,16 @@ public class ReadStats {
 		}
 	}
 	
+	public static boolean testFiles(boolean allowDuplicates){
+		return Tools.testOutputFiles(overwrite, append, allowDuplicates, AVG_QUAL_HIST_FILE, QUAL_HIST_FILE, BQUAL_HIST_FILE, BQUAL_HIST_OVERALL_FILE, 
+				MATCH_HIST_FILE, INSERT_HIST_FILE, BASE_HIST_FILE, QUAL_ACCURACY_FILE, INDEL_HIST_FILE, ERROR_HIST_FILE, LENGTH_HIST_FILE, 
+				GC_HIST_FILE, IDENTITY_HIST_FILE);
+	}
+	
 	public static boolean writeAll(boolean paired){
 		if(collectingStats()){
 			ReadStats rs=mergeAll();
+			
 			if(AVG_QUAL_HIST_FILE!=null){rs.writeAverageQualityToFile(AVG_QUAL_HIST_FILE, paired);}
 			if(QUAL_HIST_FILE!=null){rs.writeQualityToFile(QUAL_HIST_FILE, paired);}
 			if(BQUAL_HIST_FILE!=null){rs.writeBQualityToFile(BQUAL_HIST_FILE, paired);}
@@ -615,7 +623,6 @@ public class ReadStats {
 	}
 	
 	public void writeBQualityOverallToFile(String fname){
-		
 		final long[] cp30=Arrays.copyOf(bqualHistOverall, bqualHistOverall.length);
 		for(int i=0; i<30; i++){cp30[i]=0;}
 		
@@ -657,7 +664,7 @@ public class ReadStats {
 		tsw.print("\n");
 
 		for(int i=0; i<MAXLEN; i++){
-			final long[] a1=bqualHist[0][i], a2=bqualHist[0][i];
+			final long[] a1=bqualHist[0][i], a2=bqualHist[1][i];
 			final long sum1=Tools.sum(a1), sum2=Tools.sum(a2);
 			if(sum1<1 && sum2<1){break;}
 			

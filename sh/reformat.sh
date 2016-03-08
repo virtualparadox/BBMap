@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified October 23, 2014"
+	echo "Last modified November 24, 2014"
 	echo ""
 	echo "Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format."
 	echo "Optionally performs additional functions such as quality trimming, subsetting, and subsampling."

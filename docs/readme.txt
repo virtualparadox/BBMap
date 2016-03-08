@@ -1,5 +1,5 @@
 BBMap readme by Brian Bushnell
-Last updated November 21, 2014.
+Last updated November 24, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 BBMap and all other BBTools are free to use for noncommercial purposes, and investigators are free to publish results derived from them, as long as the source code is not published without explicit permission.
 The BBTools package was written by Brian Bushnell, with the exception of the (optional, but faster) C and JNI components, which were written by Jonathan Rood.
@@ -7,7 +7,7 @@ The BBTools package was written by Brian Bushnell, with the exception of the (op
 Special thanks for help with shellscripts goes to:
 Alex Copeland (JGI), Douglas Jacobsen (JGI/NERSC), and sdriscoll (SeqAnswers).
 
-This is the official release of BBMap, version 33.x
+This is the official release of BBMap, version 34.x
 
 
 Basic Syntax:
@@ -239,6 +239,13 @@ File types are autodetected by parsing the filename.  So you can name files, say
 
 
 Change Log:
+
+V34.
+34.00
+Fixed a bug in BandedAlignerConcrete related to width being allowed to be even.
+
+TODO: Update BandedAlignerJNI for quicker width reset.
+
 
 v33.
 Added "usemodulo" flag to BBMap.  Allows throwing away 80% of reference kmers to save memory.  Slight reduction in sensitivity.  Requested by Rob Egan.
@@ -588,49 +595,27 @@ Added -Xms flag to BBDuk and Seal.
 Added qskip flag to BBDuk and Seal (for skipping query kmers).
 v33.95
 Seal now defaults to HashArrayHybrid rather than HashArrayArray2D
+v33.96
+Fixed a slowdown in Seal and BBDuk caused by sorting list of ID hits.
+v33.97
+Wrote driver.CorrelateIdentity and matrixtocolumns.sh for identity correlations between 16S and V4.
+Wrote jgi.IdentityMatrix and idmatrix.sh for all-to-all alignment.
+Added BandedAligner.alignQuadruple() to check all orientations.
+BandedAligner now does not clear the full arrays, only the used portion, which can vary depending on read length.
+v33.98
+No change - build failure.
+v33.99
+Changed BandedAligner.PenalizeOffCenter().  Indels were getting double-penalized when they led to length mismatches between query and ref.
+Added AlignDouble(), but it looks like AlignQuadruple is the only viable method for calculating full identity when the sequences do not start or stop at the same place.
+Added test method to ReadStats to ensure the files are safe to write (ReadStats.testFiles()).
+Fixed a bug bqhist output giving read 1 and read 2 same values. Noted by Shoudan/Bryce
+Fixed a bug in BBDuk initialization when no kmer input supplied. Noted by Bill A.
+Fixed a bug in BBDuk/Seal giving a spurious warning.
+Detected race condition in ByteFile2 triggered by closing early.  Not very important.
+Added jni path flags to BBDuk shellscript command line.
+Wrote FindPrimers and msa.sh to locate primer sites.  Uses MultiStateAligner; outputs in sam format.
+Wrote CutPrimers and cutprimers.sh to cut regions flanked by mapped primer locations from sequences, e.g. V4.
 
-
-TODO: Benchmark Seal.  Speed seems inconsistent.
-TODO: Locking version of Seal.
-TODO: HashArray resize - grow fast up to a limit, then resize to exactly the max allowable.
-TODO: Alicia BBMap PacBio slowdown (try an older version...)
-TODO: BBMerge rename mode with insert sizes.
-TODO: Dump info about Seal kmer copy histogram.
-TODO: rpkm for pileup / BBMap.
-TODO: qskip (query skip for bbduk/seal)
-TODO: Dedupe crash bug. (Kurt)
-TODO: CallPeaks minwidth should be a subsumption threshold, not creation threshold.
-TODO: CallPeaks should not subsume peaks with valleys in between that are very low.
-*TODO: Make TextStreamWriter an abstract superclass.
-TODO: BBDuk split mode
-TODO: Add option for BBMap to convert U to T. (Asaf Levy)
-TODO: Add dedupe support for graphing containments and matches.
-TODO: Log normalization.
-TODO: Prefilterpasses (prepasses)
-TODO: Test forcing msa.scoreNoIndels to always run bidirectionally.
-TODO: Message for BBNorm indicating pairing (this is nontrivial)
-TODO: Cat and Dog filtering
-TODO: Average quality for pileup.sh
-TODO: Fix ChromArrayMaker which may skip every other scaffold (for now I have reverted to old, correct version). ***Possibly fixed by disabling interleaving; TODO: Test.
-TODO: Modify BBDuk to allow trimming of degenerate bases (with the "cd" or "clonedegenerate" flag).
-TODO: Consider changing ConcurrentGenericReadInputStream to put read/base statistics into incrementGenerated(), or at least in a function.
-TODO: BBSplit produces alignments to the wrong reference in the output for a specific reference. (Shoudan)
-TODO: Change the way Ns are handled in cigar strings, both input and output.
-TODO: Add #clipped reads/bases to BBMap output.
-TODO: Add method for counting number of clipped bases in a read and unclipped length.
-TODO: Orientation statistics for BBMap ihist.
-TODO: Clarify documentation of 'reads' flag to note that it means reads OR pairs.
-TODO: bs flag does not work with BBWrap (Shoudan).
-TODO: Make human removal optional in BBQC, and allow aribtrary reference (such as e.coli) for unit testing.
-TODO: Fasta input tries to sometimes keep reading from the file when a limited number of reads is specified.  Gives error message but output is fine.
-TODO: 'saa' flag sometimes does not work (Shoudan).
-TODO: Kmer transition probabilities for binning.
-TODO: One coverage file per scaffold; abort if over X scaffolds. (Andrew Tritt)
-TODO: Enable JNI by default for BBMap and Dedupe on Genepool.
-TODO: Disable cigar string generation when dumping coverage only (?).  This will disable stats, though.
-TODO: Pipethread spawned when decompressing from standard in with an external process.
-TODO: FileFormat should test interleaving and quality individually on files rather than relying on a static field.
-TODO: Refstats (BBSplit) still reports inflated rates for pairs that don't map to the same reference.  This behavior is difficult to change because it is conflated with BBSPlit's output streams.
 
 
 v32.

@@ -268,6 +268,9 @@ public class ReformatReads {
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 
+		assert(ReadStats.testFiles(true)) : "Existing output files specified, but overwrite==false";
+		assert(ReadStats.testFiles(false)) : "Duplicate or output files specified";
+
 //		System.err.println("\n"+ReadWrite.USE_PIGZ+", "+ReadWrite.USE_UNPIGZ+", "+Data.PIGZ()+", "+Data.UNPIGZ()+", "+ffin1+"\n");
 //		assert(false) : ReadWrite.USE_PIGZ+", "+ReadWrite.USE_UNPIGZ+", "+Data.PIGZ()+", "+Data.UNPIGZ()+", "+ffin1;
 

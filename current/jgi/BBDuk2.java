@@ -631,7 +631,7 @@ public class BBDuk2 {
 			kbig_=k_;
 		}
 		
-		if((speed>0 && qSkip>1) || (qSkip>0 && maxSkip>1) || (speed>0 && maxSkip>1)){
+		if((speed>0 && qSkip>1) || (qSkip>1 && maxSkip>1) || (speed>0 && maxSkip>1)){
 			System.err.println("WARNING: It is not recommended to use more than one of 'qskip', 'speed', and 'rskip/maxskip' together.");
 			System.err.println("qskip="+qSkip+", speed="+speed+", maxskip="+maxSkip);
 		}
@@ -1924,19 +1924,21 @@ public class BBDuk2 {
 			readstats=(MAKE_QUALITY_HISTOGRAM || MAKE_MATCH_HISTOGRAM || MAKE_BASE_HISTOGRAM || MAKE_EHIST || MAKE_INDELHIST || MAKE_LHIST || MAKE_GCHIST || MAKE_IDHIST) ? 
 					new ReadStats() : null;
 			
+			final int alen=(scaffoldNames==null ? 0 : scaffoldNames.size());
+			
 			if(findBestMatch){
-				countVector=new IntList(1000);
+				countArray=new int[alen];
 				idList=new IntList();
 				countList=new IntList();
 			}else{
-				countVector=idList=countList=null;
+				countArray=null;
+				idList=countList=null;
 			}
 			
 			overlapVector=(trimByOverlap ? new int[5] : null);
 			
 			hitCountsT=(hitCounts==null ? null : new long[hitCounts.length]);
 			
-			final int alen=(scaffoldNames==null ? 0 : scaffoldNames.size());
 			if(localArrays && alen>0 && alen<10000){
 				scaffoldReadCountsT=new long[alen];
 				scaffoldBaseCountsT=new long[alen];
@@ -2319,7 +2321,7 @@ public class BBDuk2 {
 		 * @return id of best match
 		 */
 		private final int findBestMatch(final Read r, final AbstractKmerTable sets[]){
-			countVector.size=0;
+			idList.size=0;
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
 			final int minlen=k-1;
@@ -2331,6 +2333,7 @@ public class BBDuk2 {
 			long kmer=0;
 			long rkmer=0;
 			int len=0;
+			int found=0;
 			
 			if(bases==null || bases.length<k){return -1;}
 			
@@ -2350,16 +2353,18 @@ public class BBDuk2 {
 						AbstractKmerTable set=sets[(int)(key%WAYS)];
 						final int id=set.getValue(key);
 						if(id>0){
-							countVector.add(id);
-							if(verbose){System.err.println("Found = "+(countVector.size)+"/"+maxBadKmers);}
+							countArray[id]++;
+							if(countArray[id]==1){idList.add(id);}
+							found++;
+							if(verbose){System.err.println("Found = "+found+"/"+maxBadKmers);}
 						}
 					}
 				}
 			}
 			
-			final int id, max, found=countVector.size;
+			final int id, max;
 			if(found>0){
-				max=condenseLoose(countVector, idList, countList);
+				max=condenseLoose(countArray, idList, countList);
 				int id0=-1;
 				for(int i=0; i<countList.size; i++){
 					if(countList.get(i)==max){
@@ -2841,42 +2846,26 @@ public class BBDuk2 {
 		}
 		
 		/**
-		 * Pack a list of nonunique values into a list of unique values and a list of their counts.
-		 * @param loose Nonunique values
+		 * Pack a list of counts from an array to an IntList.
+		 * @param loose Counter array
 		 * @param packed Unique values
 		 * @param counts Counts of values
 		 * @return
 		 */
-		private int condenseLoose(IntList loose, IntList packed, IntList counts){
-			packed.size=0;
+		private int condenseLoose(int[] loose, IntList packed, IntList counts){
 			counts.size=0;
-			if(loose.size<1){return 0;}
-			loose.sort();
-			int prev=-1;
+			if(packed.size<1){return 0;}
+
 			int max=0;
-			int count=0;
-			for(int i=0; i<loose.size; i++){
-				int id=loose.get(i);
-				if(id==prev){
-					count++;
-				}else{
-					if(count>0){
-						packed.add(prev);
-						counts.add(count);
-						max=Tools.max(count, max);
-					}
-					prev=id;
-					count=1;
-				}
-			}
-			if(count>0){
-				packed.add(prev);
-				counts.add(count);
-				max=Tools.max(count, max);
+			for(int i=0; i<packed.size; i++){
+				final int p=packed.get(i);
+				final int c=loose[p];
+				counts.add(c);
+				loose[p]=0;
+				max=Tools.max(max, c);
 			}
 			return max;
 		}
-		
 		
 		/*--------------------------------------------------------------*/
 		
@@ -2887,8 +2876,7 @@ public class BBDuk2 {
 		
 		private final ReadStats readstats;
 		private final int[] overlapVector;
-		
-		private final IntList countVector;
+		private final int[] countArray;
 		
 		private final IntList idList;
 		private final IntList countList;

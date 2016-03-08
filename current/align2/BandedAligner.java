@@ -1,5 +1,7 @@
 package align2;
 
+import java.util.Arrays;
+
 /**
  * @author Brian Bushnell
  * @date Aug 5, 2013
@@ -16,6 +18,24 @@ public abstract class BandedAligner {
 	public static final BandedAligner makeBandedAligner(int width_){
 		BandedAligner ba=(Shared.USE_JNI ? new BandedAlignerJNI(width_) : new BandedAlignerConcrete(width_));
 		return ba;
+	}
+	
+	public final int alignQuadruple(final byte[] query, final byte[] ref, final int maxEdits, final boolean exact){
+		final int a=alignForward(query, ref, 0, 0, maxEdits, exact);
+		final int b=alignReverse(query, ref, query.length-1, ref.length-1, maxEdits, exact);
+		final int me2=Tools.min(maxEdits, Tools.max(a, b));
+		if(me2==0){return 0;}
+		final int c=alignForwardRC(query, ref, query.length-1, 0, me2, exact);
+		final int d=alignReverseRC(query, ref, 0, ref.length-1, me2, exact);
+//		System.err.println("a="+a+", b="+b+", c="+c+", d="+d);
+		return Tools.min(Tools.max(a, b), Tools.max(c, d));
+	}
+	
+	public final int alignDouble(final byte[] query, final byte[] ref, final int maxEdits, final boolean exact){
+		final int a=alignForward(query, ref, 0, 0, maxEdits, exact);
+		if(a==0){return 0;}
+		final int c=alignForwardRC(query, ref, query.length-1, 0, a, exact);
+		return Tools.min(a, c);
 	}
 	
 	/**
@@ -75,7 +95,10 @@ public abstract class BandedAligner {
 		return center-minLoc;
 	}
 	
-	protected int penalizeOffCenter(int[] array, int halfWidth){
+	protected int penalizeOffCenter_old(int[] array, int halfWidth){
+		if(verbose){
+			System.err.println("penalizeOffCenter_old("+Arrays.toString(array)+", "+halfWidth);
+		}
 		final int center=halfWidth+1;
 		int edits=array[center];
 		for(int i=1; i<=halfWidth; i++){
@@ -83,6 +106,27 @@ public abstract class BandedAligner {
 			edits=Tools.min(edits, array[center+i]);
 			array[center-i]=Tools.min(big, array[center-i]+i);
 			edits=Tools.min(edits, array[center-i]);
+		}
+		if(verbose){
+			System.err.println("returned "+edits);
+		}
+		return edits;
+	}
+	
+	protected int penalizeOffCenter(int[] array, int halfWidth){
+		if(verbose){
+			System.err.println("penalizeOffCenter("+Arrays.toString(array)+", "+halfWidth);
+		}
+		final int center=halfWidth+1;
+		int edits=array[center];
+		for(int i=1; i<=halfWidth; i++){
+			array[center+i]=Tools.min(big, Tools.max(i, array[center+i]));
+			edits=Tools.min(edits, array[center+i]);
+			array[center-i]=Tools.min(big, Tools.max(i, array[center-i]));
+			edits=Tools.min(edits, array[center-i]);
+		}
+		if(verbose){
+			System.err.println("returned "+edits);
 		}
 		return edits;
 	}
@@ -101,10 +145,10 @@ public abstract class BandedAligner {
 	
 	public final int maxWidth;
 	
-	protected static final int big=999;
+	public static final int big=99999999;
 	public static boolean verbose=false;
 	/** Penalizes non-length-neutral alignments.  
-	 * This Causes query-to-ref alignment to yield same score as ref-to-query alignment, which is useful for assertions.  */ 
+	 * This causes query-to-ref alignment to yield same score as ref-to-query alignment, which is useful for assertions.  */ 
 	public static boolean penalizeOffCenter=true;
 	
 }

@@ -708,6 +708,7 @@ public abstract class AbstractMapper {
 			else{
 				final String arg=args[i];
 				final String[] split=arg.split("=");
+				assert(split.length>0) : "\n= symbol must be adjacent to 2 terms, with no spaces.  E.g. 'out=mapped.sam'";
 				String a=split[0].toLowerCase();
 				String b=split.length>1 ? split[1].toLowerCase() : null;
 				if("null".equalsIgnoreCase(b)){b=null;}

@@ -470,7 +470,7 @@ public class SamLine implements Serializable {
 		mapq=Character.isDigit(s[4].charAt(0)) ? Integer.parseInt(s[4]) : 99; //Added for non-compliant mappers that put * here
 		cigar=s[5];
 		rnext=s[6].getBytes();
-		pnext=Integer.parseInt(s[7]);
+		pnext=(s[7].charAt(0)=='*' ? 0 : Integer.parseInt(s[7]));
 		tlen=Character.isDigit(s[8].charAt(0)) ? Integer.parseInt(s[8]) : 0; //Added for non-compliant mappers that put * here
 //		seq=s[9];
 //		qual=s[10];
