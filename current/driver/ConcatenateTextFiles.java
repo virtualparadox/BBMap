@@ -10,6 +10,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 
 import align2.Tools;
 
+import dna.Parser;
 import dna.Timer;
 
 import fileIO.ReadWrite;
@@ -31,13 +32,12 @@ public class ConcatenateTextFiles {
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
-				System.out.println("Set ziplevel to "+b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				OVERWRITE=Tools.parseBoolean(b);
 			}else{

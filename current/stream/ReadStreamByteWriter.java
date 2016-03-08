@@ -283,12 +283,14 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 						for(final Read r1 : job.list){
 							if(r1!=null){
 								final Read r2=r1.mate;
-								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
-								r2.toFastq(bb).append('\n');
-								readsWritten++;
-								basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
-								validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								assert(ignorePairAssertions || (r2!=null && r2.mate==r1 && r2!=r1)) : "\n"+r1.toText(false)+"\n\n"+(r2==null ? "null" : r2.toText(false)+"\n");
+								if(r2!=null){
+									r2.toFastq(bb).append('\n');
+									readsWritten++;
+									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								}
 							}
 							if(bb.length>=32768){
 								abd.write(bb.array, 0, bb.length);
@@ -323,12 +325,14 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 						for(final Read r1 : job.list){
 							if(r1!=null){
 								final Read r2=r1.mate;
-								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
-								r2.toFasta(bb).append('\n');
-								readsWritten++;
-								basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
-								validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
-								validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								assert(ignorePairAssertions || (r2!=null && r2.mate==r1 && r2!=r1)) : "\n"+r1.toText(false)+"\n\n"+(r2==null ? "null" : r2.toText(false)+"\n");
+								if(r2!=null){
+									r2.toFasta(bb).append('\n');
+									readsWritten++;
+									basesWritten+=(r2.bases!=null ? r2.bases.length : 0);
+									validReadsWritten+=(r2.valid() && r2.mapped() ? 1 : 0);
+									validBasesWritten+=(r2.valid() && r2.mapped() && r2.bases!=null ? r2.bases.length : 0);
+								}
 							}
 							if(bb.length>=32768){
 								abd.write(bb.array, 0, bb.length);
@@ -463,5 +467,6 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	private static final boolean buffered=true;
 	private static final boolean ASSERT_CIGAR=false;
 	private static final boolean verbose=false;
+	public static boolean ignorePairAssertions=false;
 	
 }

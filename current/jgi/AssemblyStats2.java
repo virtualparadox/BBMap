@@ -12,6 +12,7 @@ import align2.LongList;
 import align2.Tools;
 
 import dna.FastaToChromArrays;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -113,8 +114,10 @@ public final class AssemblyStats2 {
 				if("null".equalsIgnoreCase(b)){b=null;}
 				if(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>0)){a=a.substring(1);}
 
-				if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseZip(arg, a, b)){
+					//do nothing
 				}else if(arg.contains("=") && (a.equals("in") || a.equals("ref"))){
 					in=b;
 				}else if(a.equals("gc")){
@@ -172,26 +175,6 @@ public final class AssemblyStats2 {
 					N_UNDERSCORE=Tools.parseBoolean(b);
 				}else if(a.equals("bf2")){
 					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
-				}else if(a.equals("usegzip") || a.equals("gzip")){
-					ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-				}else if(a.equals("usepigz") || a.equals("pigz")){
-					if(b!=null && Character.isDigit(b.charAt(0))){
-						int zt=Integer.parseInt(b);
-						if(zt<1){ReadWrite.USE_PIGZ=false;}
-						else{
-							ReadWrite.USE_PIGZ=true;
-							if(zt>1){
-								ReadWrite.MAX_ZIP_THREADS=zt;
-								ReadWrite.ZIP_THREAD_DIVISOR=1;
-							}
-						}
-					}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-				}else if(a.equals("usegunzip") || a.equals("gunzip")){
-					ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-				}else if(a.equals("useunpigz") || a.equals("unpigz")){
-					ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
-				}else if(a.equals("ziplevel") || a.equals("zl")){
-					ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 				}else if(a.equals("header") || a.equals("useheader")){
 					useheader=Tools.parseBoolean(b);
 				}else if(a.equals("addfilename") || a.equals("addname")){

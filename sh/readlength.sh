@@ -1,21 +1,10 @@
-#!/bin/bash -l
+#!/bin/bash
 #stats in=<infile>
-
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-stats() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	local CMD="java -ea -Xmx120m -cp $CP jgi.MakeLengthHistogram $@"
-#	echo $CMD >&2
-	$CMD
-}
 
 usage(){
 	echo "Generates a length histogram of input reads."
 	echo "Written by Brian Bushnell"
-	echo "Last modified December 11, 2013"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Usage:	readlength.sh in=<input file>"
 	echo ""
@@ -26,6 +15,17 @@ usage(){
 	echo "max=4000         	Set the histogram's max readlength bin.  Default is 4000."
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+stats() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	local CMD="java -ea -Xmx120m -cp $CP jgi.MakeLengthHistogram $@"
+#	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

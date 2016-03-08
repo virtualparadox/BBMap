@@ -17,6 +17,7 @@ import stream.SiteScoreR;
 
 import dna.CoverageArray;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 
 import fileIO.ReadWrite;
@@ -60,7 +61,7 @@ public class GenerateVarlets3 {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("condense")){
 				CONDENSE=Tools.parseBoolean(b);

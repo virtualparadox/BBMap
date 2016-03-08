@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import align2.Tools;
 
 import dna.Data;
+import dna.Parser;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 
@@ -127,7 +128,7 @@ public class MakePacBioScript {
 			String b=split[1];
 			if(b.equalsIgnoreCase("null")){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("null")){
 				// do nothing

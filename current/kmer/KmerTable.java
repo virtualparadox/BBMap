@@ -76,7 +76,7 @@ public final class KmerTable extends AbstractKmerTable {
 	}
 	
 	
-	int set(long kmer, int value){
+	public int set(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerLink n=array[cell];
 		if(n==null){

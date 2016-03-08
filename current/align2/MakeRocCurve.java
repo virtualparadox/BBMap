@@ -8,6 +8,7 @@ import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
 
+import dna.Parser;
 import dna.Timer;
 
 import fileIO.TextFile;
@@ -29,7 +30,7 @@ public class MakeRocCurve {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in=b;
@@ -201,61 +202,60 @@ public class MakeRocCurve {
 			ambiguousA[q]++;
 		}else if(r.mapScore<1){
 			unmappedA[q]++;
+		}else if(!r.mapped()){
+			unmappedA[q]++;
 		}
 //		else if(r.mapScore<=minQuality){
 //			if(r.mapped()){mappedA[q]++;}
 //			ambiguousA[q]++;
 //		}
 		else{
-			if(!r.mapped()){
-				unmappedA[q]++;
-			}else{
-				mappedA[q]++;
-				mappedRetainedA[q]++;
-				
-				if(parsecustom){
-					SiteScore os=r.originalSite;
-					assert(os!=null);
-					if(os!=null){
-						int trueChrom=os.chrom;
-						byte trueStrand=os.strand;
-						int trueStart=os.start;
-						int trueStop=os.stop;
-						SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
-						byte[] originalContig=sl.originalContig();
-						if(BLASR){
-							originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig : 
-								Arrays.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
-						}
-						int cstart=sl.originalContigStart();
 
-						boolean strict=isCorrectHit(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH, originalContig, sl.rname(), cstart);
-						boolean loose=isCorrectHitLoose(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH+THRESH2, originalContig, sl.rname(), cstart);
+			mappedA[q]++;
+			mappedRetainedA[q]++;
 
-						//				if(!strict){
-						//					System.out.println(ss+", "+new String(originalContig)+", "+new String(sl.rname()));
-						//					assert(false);
-						//				}
+			if(parsecustom){
+				SiteScore os=r.originalSite;
+				assert(os!=null);
+				if(os!=null){
+					int trueChrom=os.chrom;
+					byte trueStrand=os.strand;
+					int trueStart=os.start;
+					int trueStop=os.stop;
+					SiteScore ss=new SiteScore(r.chrom, r.strand(), r.start, r.stop, 0, 0);
+					byte[] originalContig=sl.originalContig();
+					if(BLASR){
+						originalContig=(originalContig==null || Tools.indexOf(originalContig, (byte)'/')<0 ? originalContig : 
+							Arrays.copyOfRange(originalContig, 0, Tools.lastIndexOf(originalContig, (byte)'/')));
+					}
+					int cstart=sl.originalContigStart();
 
-						//				System.out.println("loose = "+loose+" for "+r.toText());
+					boolean strict=isCorrectHit(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH, originalContig, sl.rname(), cstart);
+					boolean loose=isCorrectHitLoose(ss, trueChrom, trueStrand, trueStart, trueStop, THRESH+THRESH2, originalContig, sl.rname(), cstart);
 
-						if(loose){
-							//					System.err.println("TPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
-							//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
-							truePositiveLooseA[q]++;
-						}else{
-							//					System.err.println("FPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
-							//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
-							falsePositiveLooseA[q]++;
-						}
+					//				if(!strict){
+					//					System.out.println(ss+", "+new String(originalContig)+", "+new String(sl.rname()));
+					//					assert(false);
+					//				}
 
-						if(strict){
-							//					System.err.println("TPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
-							truePositiveStrictA[q]++;
-						}else{
-							//					System.err.println("FPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
-							falsePositiveStrictA[q]++;
-						}
+					//				System.out.println("loose = "+loose+" for "+r.toText());
+
+					if(loose){
+						//					System.err.println("TPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
+						//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
+						truePositiveLooseA[q]++;
+					}else{
+						//					System.err.println("FPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
+						//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
+						falsePositiveLooseA[q]++;
+					}
+
+					if(strict){
+						//					System.err.println("TPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
+						truePositiveStrictA[q]++;
+					}else{
+						//					System.err.println("FPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
+						falsePositiveStrictA[q]++;
 					}
 				}
 			}

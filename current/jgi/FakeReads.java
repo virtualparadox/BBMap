@@ -13,6 +13,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -63,8 +64,10 @@ public class FakeReads {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("passes")){
@@ -79,24 +82,6 @@ public class FakeReads {
 //				align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("addspacer") || a.equals("addspace") || a.equals("usespacer")){
 				addSpacer=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
@@ -169,8 +154,6 @@ public class FakeReads {
 				boolean x=Tools.parseBoolean(b);
 				Read.NULLIFY_BROKEN_QUALITY=x;
 				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
 				int x=Integer.parseInt(b);
 				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
@@ -386,7 +369,7 @@ public class FakeReads {
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=5       \tSet compression level, 1 (low) to 9 (max)");
 		outstream.println("interleaved=false\tDetermines whether input file is considered interleaved");
-		outstream.println("fastawrap=100    \tLength of lines in fasta output");
+		outstream.println("fastawrap=80     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}

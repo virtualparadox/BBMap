@@ -6,7 +6,6 @@ import java.util.Arrays;
 import align2.Shared;
 import align2.Tools;
 
-import dna.Data;
 import fileIO.TextFile;
 
 public class FastaStream {

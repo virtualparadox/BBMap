@@ -17,6 +17,7 @@ import dna.CoverageArray;
 import dna.CoverageArray2;
 import dna.Data;
 import dna.Gene;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
@@ -43,7 +44,7 @@ public class StackSites {
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("genome") || a.equals("build")){
 				Data.setGenome(Integer.parseInt(b));

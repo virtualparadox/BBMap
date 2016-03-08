@@ -1,4 +1,4 @@
-package jgi;
+package cluster;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -15,6 +15,7 @@ import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -63,8 +64,10 @@ public class MergeReadHeaders {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
 			}else if(a.equals("passes")){
@@ -79,24 +82,6 @@ public class MergeReadHeaders {
 //				align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("t") || a.equals("threads")){
@@ -176,8 +161,6 @@ public class MergeReadHeaders {
 					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 					setInterleaved=true;
 				}
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){

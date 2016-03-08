@@ -68,7 +68,7 @@ public class HashBuffer extends AbstractKmerTable {
 	 * @see jgi.AbstractKmerTable#set(long, int)
 	 */
 	@Override
-	int set(long kmer, int value) {
+	public int set(long kmer, int value) {
 		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
 	}
 

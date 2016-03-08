@@ -1,32 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #splitpairs in=<infile> out=<outfile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx120m"
-calcXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-splitpairs() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	local CMD="java -ea $z -cp $CP jgi.SplitPairsAndSingles $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified December 11, 2013"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Separates paired reads into files of 'good' pairs and 'good' singletons by removing 'bad' reads that are shorter than a min length."
 	echo "Designed to handle situations where reads become too short to be useful after trimming.  This program also optionally performs quality trimming."
@@ -60,6 +37,42 @@ usage(){
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx120m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+}
+calcXmx "$@"
+
+splitpairs() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	local CMD="java $EA $z -cp $CP jgi.SplitPairsAndSingles $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
+import jgi.ReformatReads;
+
 import stream.ConcurrentReadStreamInterface;
 import stream.RTextOutputStream3;
 import stream.Read;
@@ -214,6 +216,10 @@ public abstract class AbstractMapThread extends Thread {
 		}
 		
 		while(!readlist.isEmpty()){
+			
+			if(MAX_READ_LENGTH>0){
+				ReformatReads.breakReads(readlist, MAX_READ_LENGTH, MIN_READ_LENGTH);
+			}
 
 			//System.err.println("Got a list of size "+readlist.size());
 			for(int i=0; i<readlist.size(); i++){
@@ -593,257 +599,6 @@ public abstract class AbstractMapThread extends Thread {
 		return (forceSlow ? -numNearPerfectScores : numNearPerfectScores);
 	}
 	
-//	@Deprecated
-//	/** Assumes list is sorted */
-//	public final void genMatchString_old(final Read r, final byte[] basesP, final byte[] basesM, final int maxImperfectSwScore, final int maxSwScore, boolean setSSScore, final boolean recur){
-//		assert(Read.CHECKSITES(r, basesM));
-//		assert(checkTopSite(r));
-//		assert(r.mate!=null || r.list==null || r.list.size()==0 || r.list.get(0).score==r.mapScore) : "\n"+r.toText(false)+"\n"; //Came from BBMapAcc; not sure if it is correct
-//		assert(msa!=null);
-//		if(r.list==null || r.list.isEmpty()){
-//			r.chrom=-1;
-//			assert(r.mate!=null || r.list==null || r.list.size()==0 || r.list.get(0).score==r.mapScore) : "\n"+r.toText(false)+"\n";
-//			return;
-//		}
-//		
-//		final SiteScore ss=r.list.get(0);
-//		assert(r.start==ss.start);
-//		assert(r.stop==ss.stop);
-//		assert(r.chrom==ss.chrom);
-//		assert(r.strand()==ss.strand);
-//		
-//		final int minMsaLimit;
-//		if(PAIRED){
-////			minMsaLimit=-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE*maxSwScore);
-//			minMsaLimit=-1+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore);
-////			minMsaLimit=0;
-//		}else{
-//			minMsaLimit=-1+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO*maxSwScore);
-////			minMsaLimit=0;
-//		}
-//		
-//		if(GEN_MATCH_FAST){
-////			r.start=ss.start;
-////			r.stop=ss.stop;
-////			r.chrom=ss.chrom;
-////			r.strand=ss.strand;
-//			
-//			assert(!(SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE) || AbstractIndex.GENERATE_BASE_SCORES_FROM_QUALITY || 
-//					(ss.slowScore==maxSwScore) == r.perfect()) : 
-//				r.bases.length+", "+ss.toText()+", "+maxSwScore+", "+ss.slowScore+", "+r.perfect();
-//			
-//			//TODO: This WAS disabled because I saw a read marked perfect with a sub in it, probably with quality 0 at that point.
-//			if((SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE) && r.perfect()){
-//				assert(r.stop-r.start==(r.bases.length-1));
-//				r.match=ss.match=makePerfectMatchString(r.bases.length);
-//				assert(ss.isPerfect(ss.plus() ? basesP : basesM)) : r; //TODO: Slow assertion
-//				assert(Read.CHECKSITES(r, basesM));
-//				assert(checkTopSite(r)); // TODO remove this
-//			}else
-//			{
-//				int oldScore=ss.slowScore;
-//				assert(r.start==ss.start && r.stop==ss.stop);
-//				assert(r.gaps==null || r.gaps[0]==r.start && r.gaps[r.gaps.length-1]==r.stop);
-//				int padding=(ss.perfect || ss.semiperfect ? 0 : Tools.max(SLOW_ALIGN_PADDING, 6));
-//				
-//				if(verbose){System.err.println("Attempting to realign read:\n"+r+"\npadding="+padding+"\nrescued="+r.rescued());}
-//				
-//				TranslateColorspaceRead.realign_new(r, msa, padding, true, minMsaLimit, MAX_INDEL<1); //Also generates the match string
-//				r.gaps=ss.gaps=GapTools.fixGaps(r.start, r.stop, r.gaps, Shared.MINGAP);
-//				
-//				if(verbose){System.err.println("Realigned read:\n"+r+"\npadding="+padding+"\nrescued="+r.rescued());}
-//				assert(Read.CHECKSITES(r, basesM)); //***123
-//				assert(ss==r.list.get(0)) : "Site order changed";
-//				
-//				if(r.mapScore<ss.slowScore){
-//					if(verbose){System.err.println("---- A ----");}
-//					if(verbose){
-//						System.err.print("Read "+r.numericID+": "+r.start+","+r.stop+": "+r.mapScore+"<"+ss.slowScore);
-//					}
-//					
-//					int extra=(MAX_INDEL>0 ? 80 : 20)+SLOW_ALIGN_PADDING;
-//					int expectedLen=GapTools.calcGrefLen(r.start, r.stop, r.gaps); //TODO Gaps should be correct here!!!
-//					int remaining=(msa.maxColumns-expectedLen-2);
-//					extra=Tools.max(0, Tools.min(remaining/2, extra));
-//					TranslateColorspaceRead.realign_new(r, msa, extra, true, minMsaLimit, false);
-//					r.gaps=ss.gaps=GapTools.fixGaps(r.start, r.stop, r.gaps, Shared.MINGAP);
-//					assert(Read.CHECKSITES(r, basesM));
-//					
-//					if(verbose){
-//						System.err.println(" -> "+r.start+","+r.stop+","+r.mapScore+
-//								(r.originalSite==null ? "" : "\t*"+r.originalSite)+"\t(extra = "+extra+")");
-//					}
-//				}
-//				if(verbose){System.err.println("---- B ----");}
-//				assert(ss==r.list.get(0)) : "Site order changed";
-//				ss.match=r.match;
-//				
-//				//TODO: This is new, make sure it does not break anything (Note: It did, but should be fixed now)
-//				assert(Read.CHECKSITES(r, basesM));
-//				{
-//					ss.slowScore=r.mapScore;
-//					if(setSSScore){ss.score=r.mapScore;}
-//					assert(r.mate!=null || r.list==null || r.list.size()==0 || r.list.get(0).score==r.mapScore) : "\n"+r.toText(false)+"\n";
-//					if(ss.start!=r.start || ss.stop!=r.stop){
-//						if(verbose){
-//							System.err.println("---- C ----");
-//							System.err.println(ss);
-//							System.err.println(r.list.get(0));
-//							System.err.println(r.start+","+r.stop+","+r.mapScore);
-//						}
-//						ss.start=r.start;
-//						ss.stop=r.stop;
-//						ss.match=r.match;
-//						if(!AMBIGUOUS_RANDOM || !r.ambiguous()){
-//							if(verbose){
-//								System.err.println("---- D ----");
-//								System.err.println(ss);
-//								System.err.println(r.list.get(0));
-//								System.err.println(r.start+","+r.stop+","+r.mapScore);
-//							}
-//							assert(ss==r.list.get(0)) : "Site order changed\n"+ss+"\n"+r.list.get(0)+"\n"; assert(checkTopSite(r)); // TODO remove this
-//							if(!r.paired()){
-//								Tools.mergeDuplicateSites(r.list, false, false);
-//								Collections.sort(r.list);
-//								final SiteScore ss2=r.list.get(0);
-//								if(ss!=ss2){//Fixes a super rare case
-//									ss.setPerfect(ss.plus() ? basesP : basesM, false);
-////									System.err.println("**********************\n\nCalled setPerfect on "+ss+"\tp="+ss.perfect+", sp="+ss.semiperfect);
-////									assert(Read.CHECKSITE(ss, ss.plus() ? basesP : basesM, r.numericID));
-////									System.err.println("INDEX = "+r.list.indexOf(ss));
-////									ss2.setPerfect(r.bases, false);
-////									assert(Read.CHECKSITE(ss2, ss2.plus() ? basesP : basesM, r.numericID));
-//									r.setFromSite(ss2);
-////									System.err.println("**********************\n\nCalled setPerfect on "+ss+"\tp="+ss.perfect+", sp="+ss.semiperfect);
-////									assert(Read.CHECKSITE(ss, ss.plus() ? basesP : basesM, r.numericID));
-////									assert(Read.CHECKSITES(r, basesM));
-//									genMatchString(r, basesP, basesM, maxImperfectSwScore, maxSwScore, setSSScore, recur);
-////									r.setPerfectFlag(maxSwScore);
-//									assert(checkTopSite(r));//124
-//									assert(Read.CHECKSITES(r, basesM));//124
-//									return;
-//								}
-//							}else{
-//								for(int i=r.list.size()-1; i>0; i--){
-//									if(ss.positionalMatch(r.list.get(i), true)){r.list.remove(i);}
-//								}
-//							}
-//						}
-//						assert(ss==r.list.get(0)) : "Site order changed\n"+ss+"\n"+r.list.get(0)+"\n";
-//						assert(checkTopSite(r)); // TODO remove this
-//					}
-//					assert(ss==r.list.get(0)) : "Site order changed\n"+ss+"\n"+r.list.get(0)+"\n";
-//					assert(checkTopSite(r)); // TODO remove this
-//					if(verbose){
-//						System.err.println("---- D2 ----");
-//						System.err.println(ss);
-//						System.err.println(r.list.get(0));
-//						System.err.println(r.start+","+r.stop+","+r.mapScore);
-//					}
-//				}
-//				assert(ss==r.list.get(0)) : "Site order changed";
-//				assert(checkTopSite(r)); // TODO remove this
-//				if(verbose){
-//					System.err.println("---- D3 ----");
-//					System.err.println(ss);
-//					System.err.println(r.list.get(0));
-//					System.err.println(r.start+","+r.stop+","+r.mapScore);
-//					System.err.println("Checking perfect status: r.perfect="+r.perfect()+", ss.perfect="+ss.perfect+", ss.semi="+ss.semiperfect+
-//							", maxSwScore="+maxSwScore+", r.score="+r.mapScore+", ss.slowScore="+ss.slowScore+"\n"+r);
-//				}
-//				r.setPerfectFlag(maxSwScore);
-//				if(verbose){
-//					System.err.println("---- E ----");
-//					System.err.println("Checking perfect status: r.perfect="+r.perfect()+", ss.perfect="+ss.perfect+", ss.semi="+ss.semiperfect+
-//							", maxSwScore="+maxSwScore+", r.score="+r.mapScore+", ss.slowScore="+ss.slowScore+"\n"+r);
-//				}
-//				assert(r.match==ss.match) : r.perfect()+", "+ss.perfect+", "+ss.semiperfect+"\n"+new String(r.match)+"\n"+new String(ss.match);
-//				if(r.perfect()){
-//					ss.perfect=ss.semiperfect=true;
-//					assert(Read.CHECKSITES(r, basesM)) : r.perfect()+", "+ss.perfect+", "+ss.semiperfect+"\n"+new String(r.match)+"\n"+new String(ss.match); //***123
-//				}else{
-//					final byte[] bases=(ss.plus() ? basesP : basesM);
-////					if(r.match!=null && r.containsNonNM()){
-////						ss.perfect=ss.semiperfect=false; //This should be fine, but failed when a match string contained X.
-//					if(r.match!=null && r.containsSDI()){
-//						ss.perfect=ss.semiperfect=false;
-////						ss.setPerfect(bases, false);
-////						r.setPerfect(ss.perfect);
-//						assert(Read.CHECKSITES(r, basesM)) : r.perfect()+", "+ss.perfect+", "+ss.semiperfect+"\n"+new String(r.match)+"\n"+new String(ss.match); //***123
-//					}else{
-//						//rare
-//						ss.setPerfect(bases, false);
-//						r.setPerfect(ss.perfect);
-//						assert(Read.CHECKSITES(r, basesM)) : r.perfect()+", "+ss.perfect+", "+ss.semiperfect+"\n"+new String(r.match)+"\n"+new String(ss.match); //***123
-//					}
-//				}
-////				assert(Read.CHECKSITES(r, basesM)) : r.perfect()+", "+ss.perfect+", "+ss.semiperfect; //***123
-//				assert(checkTopSite(r)); // TODO remove this
-//				assert(r.perfect()==ss.perfect);
-//				assert(!r.perfect() || r.stop-r.start==(r.bases.length-1));
-//				if(verbose){
-//					System.err.println("Checking perfect status: r.perfect="+r.perfect()+", ss.perfect="+ss.perfect+", ss.semi="+ss.semiperfect+
-//							", maxSwScore="+maxSwScore+", r.score="+r.mapScore+", ss.slowScore="+ss.slowScore+"\n"+r);
-//				}
-//			}
-//		}else{
-//			if(verbose){System.err.println("---- F ----");}
-//			byte[] bases=(ss.plus() ? basesP : basesM);
-//			//				int[] swscoreArray=msa.fillAndScore(bases, ss, 0);
-//			
-//			if(r.perfect()){
-//				r.match=makePerfectMatchString(r.bases.length);
-//			}else{
-//				ChromosomeArray cha=Data.getChromosome(ss.chrom);
-//				assert(false) : "TODO: This does not take strand into account";
-//				if(ss.slowScore>=maxImperfectSwScore){
-//					//TODO
-//				}
-//
-//				if(msa!=null){
-//					assert(false) : "0 is not good here; try a non-indel match string.";
-//					int[] max=msa.fillLimited(bases, cha.array, ss.start, ss.stop, 0, ss.gaps);
-//					//					System.err.print("*");
-//					r.match=msa.traceback(bases, cha.array, ss.start, ss.stop, max[0], max[1], max[2], ss.gaps!=null);
-//				}
-//			}
-//		}
-//		if(verbose){System.err.println("---- G ----");}
-//
-//		assert(Read.CHECKSITES(r, basesM)); //***123
-//		assert(checkTopSite(r)); // TODO remove this
-//		if((!AMBIGUOUS_RANDOM || !r.ambiguous()) && recur && r.list.get(0)!=ss){
-//			r.setFromTopSite();
-//			genMatchString(r, basesP, basesM, maxImperfectSwScore, maxSwScore, setSSScore, recur);
-//			assert(checkTopSite(r)); // TODO remove this
-//		}else{
-//			
-//			//Corrects a mysterious bug encountered with paired reads, in which semiperfect reads are not flagged semiperfect.
-//			//TODO: Find out reason for this and correct it, then disable this block.
-//			if(verbose){
-//				System.err.println("Checking perfect status: r.perfect="+r.perfect()+", ss.perfect="+ss.perfect+", ss.semi="+ss.semiperfect+
-//						", maxSwScore="+maxSwScore+", r.score="+r.mapScore+", ss.slowScore="+ss.slowScore+"\n"+r);
-//			}
-//			assert(Read.CHECKSITES(r, basesM));//***123
-//			assert(checkTopSite(r)); // TODO remove this
-//			if(!r.perfect()){
-//				if(verbose){System.err.println("Correcting perfect status");}
-//				if(r.mate!=null && r.list!=null && r.list.size()>0){
-//					SiteScore ss2=r.list.get(0);
-//					if(verbose){System.err.println("Checking perfect status2: ss2.perfect="+ss2.perfect+", ss2.semi="+ss2.semiperfect+"\nss="+ss+"\nss2="+ss2);}
-//					byte[] bases=(ss2.plus() ? basesP : basesM);
-//					ss2.setPerfect(bases, false);
-//					r.setPerfect(ss2.perfect);
-//					if(verbose){System.err.println("New perfect status: r.perfect="+r.perfect()+", ss2.perfect="+ss2.perfect+", ss2.semi="+ss2.semiperfect);}
-//					assert(Read.CHECKSITE(ss2, bases, r.numericID));
-//					assert(checkTopSite(r)); // TODO remove this
-//				}
-//			}
-//			assert(Read.CHECKSITES(r, basesM));
-//			assert(checkTopSite(r)); // TODO remove this
-//		}
-//		assert(checkTopSite(r)); // TODO remove this
-//	}
 	
 	/** Assumes list is sorted */
 	public final void genMatchString(final Read r, final byte[] basesP, final byte[] basesM, final int maxImperfectSwScore, final int maxSwScore, boolean setSSScore, final boolean recur){
@@ -2648,6 +2403,9 @@ public abstract class AbstractMapThread extends Thread {
 	protected static long SKIP_INITIAL=0;
 	
 	protected static boolean OUTPUT_PAIRED_ONLY=false;
+
+	protected static int MAX_READ_LENGTH=0;
+	protected static int MIN_READ_LENGTH=0;
 	
 //	static{if(OUTER_DIST_MULT2<1){throw new RuntimeException();}}
 	

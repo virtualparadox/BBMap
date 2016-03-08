@@ -4,18 +4,22 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.BitSet;
 
+import dna.Parser;
+
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
 
+import fileIO.FileFormat;
 import fileIO.TextFile;
+import fileIO.TextStreamWriter;
 
 public class GradeSamFile {
 	
 	
 	public static void main(String[] args){
 		
-		String in=null;
+		String in=null, outl=null, outs=null;
 		long reads=-1;
 		
 		for(int i=0; i<args.length; i++){
@@ -25,7 +29,7 @@ public class GradeSamFile {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in=b;
@@ -45,11 +49,29 @@ public class GradeSamFile {
 				minQuality=Integer.parseInt(b);
 			}else if(a.equals("bitset")){
 				USE_BITSET=Tools.parseBoolean(b);
+			}else if(a.equals("outloose") || a.equals("outl")){
+				outl=b;
+			}else if(a.equals("outstrict") || a.equals("outs")){
+				outs=b;
 			}else if(i==0 && args[i].indexOf('=')<0 && (a.startsWith("stdin") || new File(args[0]).exists())){
 				in=args[0];
 			}else if(i==1 && args[i].indexOf('=')<0 && Character.isDigit(a.charAt(0))){
 				reads=Long.parseLong(a);
+			}else{
+				throw new RuntimeException("Unknown parameter "+arg);
 			}
+		}
+		
+		if(outl!=null){
+			ffLoose=FileFormat.testOutput(outl, FileFormat.SAM, null, false, true, true);
+			tswLoose=new TextStreamWriter(ffLoose, false);
+			tswLoose.start();
+		}
+		
+		if(outs!=null){
+			ffStrict=FileFormat.testOutput(outs, FileFormat.SAM, null, false, true, true);
+			tswStrict=new TextStreamWriter(ffStrict, false);
+			tswStrict.start();
 		}
 		
 		if(USE_BITSET){
@@ -57,8 +79,8 @@ public class GradeSamFile {
 			if(reads>0 && reads<=Integer.MAX_VALUE){x=(int)reads;}
 			try {
 				seen=new BitSet(x);
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
+			} catch (Throwable e) {
+				seen=null;
 				e.printStackTrace();
 				System.out.println("Did not have enough memory to allocate bitset; duplicate mappings will not be detected.");
 			}
@@ -80,7 +102,8 @@ public class GradeSamFile {
 			if(c!='@'/* && c!=' ' && c!='\t'*/){
 				SamLine sl=new SamLine(s);
 				lines++;
-				int id=((((int)sl.parseNumericId())<<1)|sl.pairnum());
+				
+				int id=(parsecustom && seen!=null ? ((((int)sl.parseNumericId())<<1)|sl.pairnum()) : (int)lines);
 //				System.out.println(sl.parseNumericId()+", "+sl.pairnum()+", "+id+"");
 //				if(id%500==10){assert(false);}
 				if(sl.primary() && (!parsecustom || seen==null || !seen.get(id))){
@@ -98,6 +121,10 @@ public class GradeSamFile {
 				}
 			}
 		}
+
+		if(tswLoose!=null){tswLoose.poisonAndWait();}
+		if(tswStrict!=null){tswStrict.poisonAndWait();}
+		
 		if(reads<-1){reads=primary;}
 		
 		double tmult=100d/reads;
@@ -225,6 +252,13 @@ public class GradeSamFile {
 							//					System.err.println("FPL\t"+trueChrom+", "+trueStrand+", "+trueStart+", "+trueStop+"\tvs\t"
 							//							+ss.chrom+", "+ss.strand+", "+ss.start+", "+ss.stop);
 							falsePositiveLoose++;
+							if(tswLoose!=null){
+								if(ffLoose.samOrBam()){
+									tswLoose.println(sl.toText());
+								}else{
+									tswLoose.println(r);
+								}
+							}
 						}
 
 						if(strict){
@@ -233,6 +267,13 @@ public class GradeSamFile {
 						}else{
 							//					System.err.println("FPS\t"+trueStart+", "+trueStop+"\tvs\t"+ss.start+", "+ss.stop);
 							falsePositiveStrict++;
+							if(tswStrict!=null){
+								if(ffStrict.samOrBam()){
+									tswStrict.println(sl.toText());
+								}else{
+									tswStrict.println(r);
+								}
+							}
 						}
 					}
 				}
@@ -287,6 +328,11 @@ public class GradeSamFile {
 	private static final int absdif(int a, int b){
 		return a>b ? a-b : b-a;
 	}
+
+	public static FileFormat ffLoose=null;
+	public static FileFormat ffStrict=null;
+	public static TextStreamWriter tswLoose=null; 
+	public static TextStreamWriter tswStrict=null; 
 
 	public static int truePositiveStrict=0;
 	public static int falsePositiveStrict=0;

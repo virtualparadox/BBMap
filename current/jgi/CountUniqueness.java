@@ -7,8 +7,6 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
 import stream.Read;
 import align2.ListNum;
-import align2.Tools;
-import dna.AminoAcid;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;

@@ -5,6 +5,7 @@ import java.io.File;
 import align2.Tools;
 
 import dna.Data;
+import dna.Parser;
 
 /**
  * Tests to see if a summary file matches a reference fasta file, based on date, size, and name
@@ -31,7 +32,7 @@ public class SummaryFile {
 				String b=split.length>1 ? split[1] : null;
 				if("null".equalsIgnoreCase(b)){b=null;}
 
-				if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
 				}else if(a.equals("summary")){
 					summary=b;

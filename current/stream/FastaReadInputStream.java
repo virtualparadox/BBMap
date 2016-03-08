@@ -267,6 +267,12 @@ public class FastaReadInputStream extends ReadInputStream {
 		int x=bstart;
 		assert(bstart>=bstop || buffer[x]=='>') : bstart+", "+bstop+", '"+(char)buffer[x]+"'";
 		while(x<bstop && buffer[x]>slashr){x++;}
+		if(x<bstop && buffer[x]==0x1){ //Handle deprecated 'SOH' symbol
+			while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1)){
+				if(buffer[x]==0x1){buffer[x]=carrot;}
+				x++;
+			}
+		}
 		if(x>=bstop){
 			int fb=fillBuffer();
 			if(fb<1){
@@ -276,6 +282,12 @@ public class FastaReadInputStream extends ReadInputStream {
 			x=0;
 			assert(bstart==0 && bstart<bstop && buffer[x]=='>'); //Note: This assertion will fire if a fasta file starts with a newline.
 			while(x<bstop && buffer[x]>slashr){x++;}
+			if(x<bstop && buffer[x]==0x1){ //Handle deprecated 'SOH' symbol
+				while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1)){
+					if(buffer[x]==0x1){buffer[x]=carrot;}
+					x++;
+				}
+			}
 		}
 		assert(x>=bstop || buffer[x]<=slashr);
 		
@@ -490,7 +502,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	
 	
 	public static boolean verbose=false;
-	private final static byte slashr='\r', slashn='\n', carrot='>';
+	private final static byte slashr='\r', slashn='\n', carrot='>', space=' ';
 	
 	public static boolean SPLIT_READS=true;
 	public static int TARGET_READ_LEN=500;

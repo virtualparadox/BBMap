@@ -16,6 +16,7 @@ import align2.MultiStateAligner9PacBioAdapter2;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
@@ -57,8 +58,10 @@ public class RemoveAdapters2 {
 			if("null".equalsIgnoreCase(b)){b=null;}
 //			System.err.println("Processing "+args[i]);
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 				Data.setPath(b);
 			}else if(a.equals("fasta") || a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
@@ -89,8 +92,6 @@ public class RemoveAdapters2 {
 			}else if(a.equals("minusonly")){
 				boolean x=Tools.parseBoolean(b);
 				if(x){TRY_PLUS=false; TRY_MINUS=true;}
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.startsWith("mincontig")){
 				minContig=Integer.parseInt(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){

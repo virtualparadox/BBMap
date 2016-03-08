@@ -16,7 +16,7 @@ public abstract class AbstractKmerTable {
 	/** Returns number of entries created */
 	abstract int incrementAndReturnNumCreated(final long kmer);
 
-	abstract int set(long kmer, int value);
+	public abstract int set(long kmer, int value);
 	
 	/** Returns number of kmers added */
 	public abstract int setIfNotPresent(long kmer, int value);

@@ -13,6 +13,7 @@ import stream.Read;
 import align2.ListNum;
 import align2.Tools;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
@@ -52,7 +53,7 @@ public class PartitionReads {
 			if("null".equalsIgnoreCase(b)){b=null;}
 //			System.err.println("Processing "+args[i]);
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("path") || a.equals("root") || a.equals("tempdir")){
 				Data.setPath(b);

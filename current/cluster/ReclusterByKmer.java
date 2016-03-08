@@ -1,4 +1,4 @@
-package jgi;
+package cluster;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -7,6 +7,8 @@ import java.util.Arrays;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
+
+import jgi.Dedupe;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -19,6 +21,7 @@ import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -60,6 +63,7 @@ public class ReclusterByKmer {
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		int k1_=12;
 		int k2_=3;
+		Parser parser=new Parser();
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -68,13 +72,24 @@ public class ReclusterByKmer {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
+			}else if(parser.parseFiles(arg, a, b)){
+				//do nothing
+			}else if(parser.parseCommon(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
-			}else if(a.equals("passes")){
-				assert(false) : "'passes' is disabled.";
-//				passes=Integer.parseInt(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -84,103 +99,10 @@ public class ReclusterByKmer {
 //				align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
-			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
-			}else if(a.equals("t") || a.equals("threads")){
-				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){
-				in1=b;
-			}else if(a.equals("in2") || a.equals("input2")){
-				in2=b;
-			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
-				out1=b;
-			}else if(a.equals("out2") || a.equals("output2")){
-				out2=b;
-			}else if(a.equals("extin")){
-				extin=b;
-			}else if(a.equals("extout")){
-				extout=b;
-			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
-				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
-			}else if(a.equals("overwrite") || a.equals("ow")){
-				overwrite=Tools.parseBoolean(b);
-			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
-				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
-				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
-				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
-			}else if(a.equals("fastawrap")){
-				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
-			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
-				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
-			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
-			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
-			}else if(a.equals("qauto")){
-				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("testinterleaved")){
-				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
-				setInterleaved=true;
-			}else if(a.equals("forceinterleaved")){
-				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
-				outstream.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				setInterleaved=true;
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-					setInterleaved=true;
-				}
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -194,6 +116,27 @@ public class ReclusterByKmer {
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		{//Download parser fields
+			
+			maxReads=parser.maxReads;
+			overwrite=parser.overwrite;
+			
+			setInterleaved=parser.setInterleaved;
+			
+			in1=parser.in1;
+			in2=parser.in2;
+//			qfin1=parser.qfin1;
+//			qfin2=parser.qfin2;
+
+			out1=parser.out1;
+			out2=parser.out2;
+//			qfout1=parser.qfout1;
+//			qfout2=parser.qfout2;
+			
+			extin=parser.extin;
+			extout=parser.extout;
 		}
 		
 		
@@ -252,15 +195,15 @@ public class ReclusterByKmer {
 		}
 		
 		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
+		if(parser.qin!=-1 && parser.qout!=-1){
+			FASTQ.ASCII_OFFSET=parser.qin;
+			FASTQ.ASCII_OFFSET_OUT=parser.qout;
 			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
-			FASTQ.ASCII_OFFSET=qin;
+		}else if(parser.qin!=-1){
+			FASTQ.ASCII_OFFSET=parser.qin;
 			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
+		}else if(parser.qout!=-1){
+			FASTQ.ASCII_OFFSET_OUT=parser.qout;
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
@@ -278,8 +221,8 @@ public class ReclusterByKmer {
 		k2=k2_;
 		assert(k2>=-1 && k2<=6) : "k2 must lie between 1 and 6, inclusive (0 to disable)";
 
-		arraylen1=(k1>0 ? maxCanonicalKmer(k1)+1 : 0);
-		arraylen2=(k2>0 ? maxCanonicalKmer(k2)+1 : 0);
+		arraylen1=(k1>0 ? ClusterTools.maxCanonicalKmer(k1)+1 : 0);
+		arraylen2=(k2>0 ? ClusterTools.maxCanonicalKmer(k2)+1 : 0);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -393,7 +336,7 @@ public class ReclusterByKmer {
 			synchronized(clusterList){
 				clusterList.ensureCapacity(2*x);
 				for(int i=clusterList.size(); i<x; i++){
-					clusterList.add(new Cluster(i));
+					clusterList.add(new Cluster(i, k1, k2, arraylen1, arraylen2));
 				}
 				clusterList.notifyAll();
 			}
@@ -409,7 +352,7 @@ public class ReclusterByKmer {
 	}
 	
 	/**
-	 * Generate kmer spectra for clusters
+	 * Creates clusters; Generates kmer spectra for clusters
 	 * @param t
 	 */
 	private void findKmerSpectra(Timer t){
@@ -487,165 +430,6 @@ public class ReclusterByKmer {
 		
 		/* Shut down I/O streams; capture error status */
 		errorState|=ReadWrite.closeStreams(cris);
-	}
-	
-	/**
-	 * @param bases
-	 * @param object
-	 * @param k
-	 * @return
-	 */
-	public static int[] toKmerCounts(byte[] bases, Object object, int k) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	public static int[] toKmers(final byte[] bases, int[] array_, final int k){
-		if(bases==null || bases.length<k){return null;}
-		final int alen=bases.length-k+1;
-		final int[] array=(array_!=null && array_.length==alen ? array_ : new int[alen]);
-		
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final int mask=~((-1)<<shift);
-		
-		int kmer=0;
-		int rkmer=0;
-		int len=0;
-		
-		for(int i=0, j=0; i<bases.length; i++){
-			byte b=bases[i];
-			int x=Dedupe.baseToNumber[b];
-			int x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-//			if(b=='N'){len=0;}else{len++;} //This version will transform 'N' into 'A'
-			if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k), Tools.min(i+1, k)));}
-			if(len>=k){
-				array[j]=Tools.min(kmer, rkmer);
-				j++;
-			}
-		}
-		
-		Arrays.sort(array);
-		return array;
-	}
-	
-	public static int[] toKmerCounts(final byte[] bases, int[] array_, final int k, final int alen){
-		if(bases==null || bases.length<k){return null;}
-		final int[] array=(array_!=null && array_.length==alen ? array_ : new int[alen]);
-		
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final int mask=~((-1)<<shift);
-		
-		int kmer=0;
-		int rkmer=0;
-		int len=0;
-		
-		for(int i=0, j=0; i<bases.length; i++){
-			byte b=bases[i];
-			int x=Dedupe.baseToNumber[b];
-			int x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-//			if(b=='N'){len=0;}else{len++;} //This version will transform 'N' into 'A'
-			if(verbose){System.err.println("Scanning2 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k), Tools.min(i+1, k)));}
-			if(len>=k){
-				array[Tools.min(kmer, rkmer)]++;
-			}
-		}
-		
-		Arrays.sort(array);
-		return array;
-	}
-	
-	public static int maxCanonicalKmer(int k){
-		final int bits=2*k;
-		final int max=(int)((1L<<bits)-1);
-		int high=0;
-		for(int kmer=0; kmer<=max; kmer++){
-			int canon=Tools.min(kmer, AminoAcid.reverseComplementBinaryFast(kmer, k));
-			high=Tools.max(canon, high);
-		}
-		return high;
-	}
-	
-	/**
-	 * @param kmers Read kmers
-	 * @param counts Cluster kmer counts
-	 * @return Score
-	 */
-	private static final float andCount(int[] kmers, AtomicLongArray counts){
-		int sum=0;
-		for(int i=0; i<kmers.length; i++){
-			int kmer=kmers[i];
-			long count=counts.get(kmer);
-			if(count>0){sum++;}
-		}
-		return sum/(float)kmers.length;
-	}
-	
-	/**
-	 * @param kmers Read kmers
-	 * @param probs Cluster kmer frequencies
-	 * @return Score
-	 */
-	private static final float innerProduct(int[] kmers, float[] probs){
-		float sum=0;
-		for(int kmer : kmers){
-			if(kmer>=0){
-				sum+=probs[kmer];
-			}
-		}
-		return sum;
-	}
-	
-	/**
-	 * @param a Read kmer frequencies
-	 * @param b Cluster kmer frequencies
-	 * @return Score
-	 */
-	private static final float absDif(float[] a, float[] b){
-		assert(a.length==b.length);
-		double sum=0;
-		for(int i=0; i<a.length; i++){
-			sum+=Tools.absdif((double)a[i], (double)b[i]);
-		}
-
-		return (float)sum;
-	}
-	
-	/**
-	 * @param a Read kmer frequencies
-	 * @param b Cluster kmer frequencies
-	 * @return Score
-	 */
-	private static final float rmsDif(float[] a, float[] b){
-		assert(a.length==b.length);
-		double sum=0;
-		for(int i=0; i<a.length; i++){
-			double d=Tools.absdif((double)a[i], (double)b[i]);
-			sum+=d*d;
-		}
-
-		return (float)Math.sqrt(sum/a.length);
-	}
-	
-	/**
-	 * @param a Read kmer frequencies
-	 * @param b Cluster kmer frequencies
-	 * @return Score
-	 */
-	private static final float ksFunction(float[] a, float[] b){
-		assert(a.length==b.length);
-		double sum=0;
-		for(int i=0; i<a.length; i++){
-			double d=(double)a[i]*Math.log(a[i]/b[i]);
-			sum+=d;
-		}
-		
-		return (float)sum;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -805,327 +589,7 @@ public class ReclusterByKmer {
 	
 	/*--------------------------------------------------------------*/
 	
-	private class ReadTag{
-		
-		public ReadTag(Read r_){
-			r=r_;
-			strand=r.strand();
-
-			int gcCount_=0;
-			for(byte b : r.bases){
-				if(b=='G' || b=='C'){
-					gcCount_++;
-				}
-			}
-			gcCount=gcCount_;
-			
-			processHeader(r.id);
-		}
-		
-		private void processHeader(String s){
-			assert(false) : "TODO";
-			gc=-1;
-			depth=-1;
-			cluster0=-1;
-		}
-
-		Read r1(){
-			return strand==0 ? r : r.mate;
-		}
-		
-		Read r2(){
-			return strand==1 ? r : r.mate;
-		}
-		
-		ReadTag tag1(){
-			return (ReadTag)r1().obj;
-		}
-		
-		ReadTag tag2(){
-			Read r2=r2();
-			return r2==null ? null : (ReadTag)r2.obj;
-		}
-		
-//		private int[] toKmers(final int k){
-//			return ReclusterByKmer.toKmers(r.bases, null, k);
-//		}
-		
-		int[] kmerArray1(){
-			if(kmerArray1==null){kmerArray1=ReclusterByKmer.toKmers(r.bases, null, k1);}
-			return kmerArray1;
-		}
-		
-		int[] kmerArray2(){
-			if(kmerArray2==null){kmerArray2=ReclusterByKmer.toKmerCounts(r.bases, null, k2);}
-			return kmerArray2;
-		}
-		
-		float[] kmerFreq2(){
-			if(kmerFreq2==null){
-				int[] counts=kmerArray2();
-				if(counts!=null){
-					long sum=Tools.sum(counts);
-					kmerFreq2=new float[counts.length];
-					float extra=(0.05f/counts.length);
-					float mult=0.95f/sum;
-					for(int i=0; i<counts.length; i++){
-						kmerFreq2[i]=counts[i]*mult+extra;
-					}
-				}
-			}
-			return kmerFreq2;
-		}
-		
-		/** Sorted long kmers */
-		private int[] kmerArray1;
-		
-		/** Canonically-ordered short kmer counts */ 
-		private int[] kmerArray2;
-		
-		private float[] kmerFreq2;
-		
-		final Read r;
-		final byte strand;
-		final int gcCount;
-		
-		int depth;
-		int cluster0=-1; //initial cluster
-		int cluster1=-1; //final cluster
-
-		float gc;
-		
-	}
-	
 	/*--------------------------------------------------------------*/
-	
-	private class Cluster{
-		
-		public Cluster(int id_){
-			id=id_;
-			
-			kmerArray1=new AtomicLongArray(arraylen1);
-			kmerProbArray1=new float[arraylen1];
-
-			kmerArray2=new AtomicLongArray(arraylen2);
-			kmerProbArray2=new float[arraylen2];
-		}
-
-		public void recalculate(){
-			gc=(float)(gcCount.doubleValue()/baseCount.doubleValue());
-
-			if(k1>0){
-				long kmerCount=0;
-				for(int i=0; i<arraylen1; i++){
-					kmerCount+=kmerArray1.get(i);
-				}
-				double extra=(0.05/arraylen1);
-				double mult=(0.95/kmerCount);
-				for(int i=0; i<arraylen1; i++){
-					kmerProbArray1[i]=(float)(kmerArray1.get(i)*mult+extra);
-				}
-			}
-			if(k2>0){
-				long kmerCount=0;
-				for(int i=0; i<arraylen2; i++){
-					kmerCount+=kmerArray2.get(i);
-				}
-				double extra=(0.05/arraylen2);
-				double mult=(0.95/kmerCount);
-				for(int i=0; i<arraylen2; i++){
-					kmerProbArray2[i]=(float)(kmerArray2.get(i)*mult+extra);
-				}
-			}
-		}
-		
-		public void resetAtomics(){
-			for(int i=0; i<arraylen1; i++){
-				kmerArray1.set(i, 0);
-			}
-			for(int i=0; i<arraylen2; i++){
-				kmerArray2.set(i, 0);
-			}
-			depthsum1.set(0);
-			depthsum2.set(0);
-			readCount.set(0);
-			baseCount.set(0);
-			gcCount.set(0);
-		}
-		
-		public void add(Read r){
-			if(r==null){return;}
-			ReadTag rt=(ReadTag)r.obj;
-			assert(rt!=null);
-			final byte[] bases=r.bases;
-			
-			readCount.incrementAndGet();
-			baseCount.addAndGet(bases.length);
-			gcCount.addAndGet(rt.gcCount);
-			
-			if(rt.strand==0){
-				depthsum1.addAndGet(rt.depth);
-			}else{
-				depthsum2.addAndGet(rt.depth);
-			}
-			
-			if(k1>0){
-				int[] kmers=rt.kmerArray1();
-				int kmer=-1, run=0;
-				for(int i=0; i<kmers.length; i++){
-					int x=kmers[i];
-					if(x==kmer){
-						run++;
-					}else{
-						if(run>0){kmerArray1.addAndGet(kmer, run);}
-						kmer=x;
-						run=1;
-					}
-				}
-				if(run>0){kmerArray1.addAndGet(kmer, run);}
-			}
-
-			if(k2>0){
-				int[] kmers=rt.kmerArray2();
-				for(int kmer=0; kmer<kmers.length; kmer++){
-					int x=kmers[kmer];
-					if(x>0){kmerArray2.addAndGet(kmer, x);}
-				}
-			}
-		}
-		
-		/**
-		 * @param r1
-		 * @return
-		 */
-		public float score(Read r) {
-			if(r==null){return 0;}
-			return r.mate==null ? scoreSingle(r) : scorePaired(r);
-		}
-		
-		/**
-		 * @param r1
-		 * @return
-		 */
-		public float scoreSingle(Read r) {
-			if(r==null){return 0;}
-			ReadTag rt=(ReadTag)r.obj;
-			
-			assert(false) : "TODO";
-			float depthScore=scoreDepthSingle(rt);
-			float gcScore=scoreGcSingle(rt);
-			float kmerScore=scoreKmer1(rt);
-			assert(false);
-			float depthWeight=.2f;
-			float gcWeight=.2f;
-			float kmerWeight=.6f;
-			
-			return depthWeight*depthScore+gcWeight*gcScore+kmerWeight*kmerScore;
-		}
-		
-		/**
-		 * @param rt
-		 * @return
-		 */
-		private float scoreKmer1(ReadTag rt) {
-			int[] kmers=rt.kmerArray1();
-			
-			float score=0;
-			if(scoreMode1==SCORE_MODE_AND){
-				float f=andCount(kmers, kmerArray1);
-				assert(false);
-			}else if(scoreMode1==SCORE_MODE_MULT){
-				float f=innerProduct(kmers, kmerProbArray1);
-				assert(false);
-			}else{
-				throw new RuntimeException(""+scoreMode1);
-			}
-			
-			return score;
-		}
-		
-		/**
-		 * @param rt
-		 * @return
-		 */
-		private float scoreKmer2(ReadTag rt) {
-			int[] kmers=rt.kmerArray2();
-			float[] probs=rt.kmerFreq2();
-			
-			float score=0;
-			if(scoreMode2==SCORE_MODE_AND){
-				float f=andCount(kmers, kmerArray2);
-				assert(false);
-			}else if(scoreMode2==SCORE_MODE_MULT){
-				float f=innerProduct(kmers, kmerProbArray2);
-				assert(false);
-			}if(scoreMode2==SCORE_MODE_DIF){
-				float f=absDif(probs, kmerProbArray2);
-				assert(false);
-			}else if(scoreMode2==SCORE_MODE_RMS){
-				float f=rmsDif(probs, kmerProbArray2);
-				assert(false);
-			}else if(scoreMode2==SCORE_MODE_KS){
-				float f=ksFunction(probs, kmerProbArray2);
-				assert(false);
-			}else{
-				throw new RuntimeException(""+scoreMode2);
-			}
-			
-			return score;
-		}
-
-		/**
-		 * @param rt
-		 * @return
-		 */
-		private float scoreGcSingle(ReadTag rt) {
-			assert(false) : "TODO";
-			// TODO Auto-generated method stub
-			return 0;
-		}
-
-		/**
-		 * @param rt
-		 * @return
-		 */
-		private float scoreDepthSingle(ReadTag rt) {
-			assert(false) : "TODO";
-			// TODO Auto-generated method stub
-			return 0;
-		}
-
-		/**
-		 * @param r1
-		 * @return
-		 */
-		public float scorePaired(Read r) {
-			assert(false) : "TODO";
-			if(r==null){return 0;}
-			ReadTag rt=(ReadTag)r.obj;
-			
-//			ReadTag rt1=rt.r
-			
-			return 0;
-		}
-		
-		public final int id;
-		
-		public float gc;
-		public int depth1, depth2;
-		
-		final AtomicLongArray kmerArray1;
-		final float[] kmerProbArray1;
-		
-		final AtomicLongArray kmerArray2;
-		final float[] kmerProbArray2;
-		
-		final AtomicLong depthsum1=new AtomicLong(0);
-		final AtomicLong depthsum2=new AtomicLong(0);
-		
-		final AtomicLong readCount=new AtomicLong(0);
-		final AtomicLong baseCount=new AtomicLong(0);
-//		final AtomicLong kmerCount=new AtomicLong(0);
-		final AtomicLong gcCount=new AtomicLong(0);
-	}
 	
 	/*--------------------------------------------------------------*/
 	
@@ -1157,11 +621,9 @@ public class ReclusterByKmer {
 	
 	private long maxReads=-1;
 	
-	private byte qin=-1;
-	private byte qout=-1;
-
-	private int scoreMode1=SCORE_MODE_MULT;
-	private int scoreMode2=SCORE_MODE_RMS;
+//	private byte qin=-1;
+//	private byte qout=-1;
+	
 	private int ambigMode=AMBIG_MODE_RAND;
 	
 	private final FileFormat ffin1;
@@ -1181,12 +643,6 @@ public class ReclusterByKmer {
 	public static final int CLUSTER_MODE_CREATE=0;
 	public static final int CLUSTER_MODE_RECLUSTER=1;
 	public static final int CLUSTER_MODE_REFINE=2;
-
-	public static final int SCORE_MODE_DIF=0;
-	public static final int SCORE_MODE_RMS=1;
-	public static final int SCORE_MODE_AND=2;
-	public static final int SCORE_MODE_MULT=3;
-	public static final int SCORE_MODE_KS=4;
 	
 	public static final int AMBIG_MODE_BEST=0;
 	public static final int AMBIG_MODE_BOTH=1;

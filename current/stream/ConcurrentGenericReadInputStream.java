@@ -10,6 +10,7 @@ import align2.Shared;
 import align2.Tools;
 
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 
 import fileIO.ReadWrite;
@@ -35,14 +36,14 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || (split.length==1 && i==1)){
 				// do nothing
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Long.parseLong(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.startsWith("fastareadlen")){
 				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
 				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);

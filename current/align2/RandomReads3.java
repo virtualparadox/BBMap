@@ -17,6 +17,7 @@ import dna.ChromosomeArray;
 import dna.Data;
 import dna.FastaToChromArrays;
 import dna.Gene;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.SummaryFile;
@@ -104,8 +105,10 @@ public final class RandomReads3 {
 				x=Integer.parseInt(b);
 			} catch (NumberFormatException e) {}
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("reads")){
 				number=x;
 			}else if(a.equals("len") || a.equals("length") || a.equals("readlen")){
@@ -251,24 +254,6 @@ public final class RandomReads3 {
 				FORCE_SINGLE_SCAFFOLD=Tools.parseBoolean(b);
 			}else if(a.equals("minoverlap") || a.equals("overlap")){
 				MIN_SCAFFOLD_OVERLAP=Integer.parseInt(b);
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else{throw new RuntimeException("Unknown parameter "+args[i]);}
 
 		}
@@ -315,7 +300,7 @@ public final class RandomReads3 {
 				ChromosomeArray cha=Data.getChromosome(chrom);
 				final byte[] array=cha.array;
 				final byte n='N';
-				for(int i=0; i<array.length; i++){
+				for(int i=1; i<array.length; i++){
 					if(array[i]==n){
 						array[i]=AminoAcid.numberToBase[rr.randyNoref.nextInt()&3];
 					}
@@ -1293,7 +1278,6 @@ public final class RandomReads3 {
 	public static String fileExt=".fq.gz";
 	public static boolean verbose=false;
 	
-//	public static int mateLen=35;
 	public static boolean mateSameStrand=false;
 	public static int mateMiddleMin=-100; //default -25
 	public static int mateMiddleMax=100; //default 475

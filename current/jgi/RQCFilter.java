@@ -7,6 +7,7 @@ import java.util.Date;
 import java.util.TimeZone;
 
 import dna.Data;
+import dna.Parser;
 
 import stream.FASTQ;
 import stream.Read;
@@ -20,7 +21,7 @@ import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 
 /**
- * Wrapper for BBDukF to implement Rolling QC's filter stage.
+ * Wrapper for BBDukF and BBMap to implement Rolling QC's filter stage.
  * @author Brian Bushnell
  * @date Nov 26, 2013
  *
@@ -67,8 +68,10 @@ public class RQCFilter {
 			
 //			System.out.println("Processing '"+arg+"' a='"+a+"', b='"+b+"'");
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
 			}else if(a.equals("verbose")){
@@ -165,13 +168,17 @@ public class RQCFilter {
 				trimq=Byte.parseByte(b);
 			}else if(a.equals("qtrim")){
 				if(b==null){qtrim="rl";}
-				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrim="l";}
-				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrim="r";}
-				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){qtrim="lr";}
+				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrim="l";qtrimFlag=true;}
+				else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrim="r";qtrimFlag=true;}
+				else if(b.equalsIgnoreCase("both") || b.equalsIgnoreCase("rl") || b.equalsIgnoreCase("lr")){qtrim="lr";qtrimFlag=true;}
 				else if(Character.isDigit(b.charAt(0))){
 					trimq=Byte.parseByte(b);
-					qtrim=(trimq>=0 ? "lr" : "f");
-				}else{qtrim=""+Tools.parseBoolean(b);}
+					qtrimFlag=(trimq>=0);
+					qtrim=(qtrimFlag ? "lr" : "f");
+				}else{
+					qtrimFlag=Tools.parseBoolean(b);
+					qtrim=""+qtrimFlag;
+				}
 			}else if(a.equals("optitrim") || a.equals("otf") || a.equals("otm")){
 				if(b!=null && (b.charAt(0)=='.' || Character.isDigit(b.charAt(0)))){
 					TrimRead.optimalMode=true;
@@ -184,24 +191,6 @@ public class RQCFilter {
 				maxNs=Integer.parseInt(b);
 			}else if(a.equals("usetmpdir")){
 				writeTempToTmpdir=Tools.parseBoolean(b);
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("interleaved") || a.equals("int")){
 				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
 				else{
@@ -210,8 +199,6 @@ public class RQCFilter {
 				}
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -352,9 +339,9 @@ public class RQCFilter {
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? trimPrefix : null);
 				if(step==1){
-					trim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix);
+					ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix);
 				}else{
-					trim(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix);
+					ktrim(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix);
 				}
 				if(inPrefix!=null){
 					delete(inPrefix, out1, out2, qfout1, qfout2);
@@ -448,11 +435,17 @@ public class RQCFilter {
 		
 		{
 //			argList.add("kfilter="+47);
-			argList.add("minratio=.75");
-			argList.add("maxindel=20");
-			argList.add("bw=20");
-			argList.add("bwr=0.18");
+			argList.add("minratio=.9");
+			argList.add("maxindel=4");
+			argList.add("bw=12");
+			argList.add("bwr=0.16");
 			argList.add("minhits=2");
+			argList.add("path="+humanPath);
+//			argList.add("quickmatch");
+//			argList.add("k="+map_k);
+			argList.add("fast=t");
+			argList.add("idtag=t");
+			argList.add("sam=1.4");
 			if(humanRefIndexedFlag){
 				argList.add("path="+humanPath);
 			}else{
@@ -619,9 +612,10 @@ public class RQCFilter {
 	 * @param qfout2 Secondary output qual file
 	 * @param outPrefix Append this prefix to output filenames
 	 */
-	private void trim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix){
+	private void ktrim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix){
 		
 		log("ktrim start", true);
+		ktrimFlag=true;
 		
 		ArrayList<String> argList=new ArrayList<String>();
 
@@ -779,8 +773,11 @@ public class RQCFilter {
 		if(libType==CLIP){sb.append("c");}
 		else if(libType==LFPE){sb.append("l");}
 		else if(libType==CLRS){sb.append("s");}
-		
+
 		if(phixFlag){sb.append("p");}
+		if(humanFlag){sb.append("h");}
+//		if(ktrimFlag){sb.append("k");}
+		if(qtrimFlag){sb.append("t");}
 		
 		return sb.toString();
 	}
@@ -886,7 +883,11 @@ public class RQCFilter {
 	
 	/** Trim fragment adapters from right side of reads */
 	private boolean fragAdapterFlag=false;
-	
+
+	/** Performed quality-trimming on reads */
+	private boolean qtrimFlag=false;
+	/** Performed kmer-trimming on reads */
+	private boolean ktrimFlag=false;
 	/** Remove reads mapping to human with high identity */
 	private boolean humanFlag=false;
 	/** Use indexed version of human reference, rather than regenerating from fasta */

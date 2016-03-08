@@ -2152,6 +2152,7 @@ public class SamLine {
 	
 	/** Turn this off for RNAseq */
 	public static boolean MAKE_MD_TAG=false;
+	
 	public static boolean MAKE_SM_TAG=false;
 	public static boolean MAKE_XM_TAG=false;
 	public static boolean MAKE_XS_TAG=false;
@@ -2173,6 +2174,9 @@ public class SamLine {
 	public static float VERSION=1.3f;
 	/** Tells program when to use 'N' rather than 'D' in cigar strings */
 	public static int INTRON_LIMIT=Integer.MAX_VALUE;
+	
+	public static boolean setxs=false;
+	public static boolean setintron=false;
 
 	private static boolean warning=System.getProperty("user.dir").contains("/bushnell/");
 	

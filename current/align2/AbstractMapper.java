@@ -25,6 +25,7 @@ import stream.SamReadInputStream;
 import stream.SequentialReadInputStream;
 
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -53,6 +54,7 @@ public abstract class AbstractMapper {
 		parse(args2);
 		postparse(args2);
 		setup();
+		checkFiles();
 	}
 	
 	void printOptions(){
@@ -110,7 +112,7 @@ public abstract class AbstractMapper {
 		sysout.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		sysout.println("BBMap version "+Shared.BBMAP_VERSION_STRING);
 		
-		if(Tools.parseHelp(args)){
+		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
 		}
@@ -127,8 +129,10 @@ public abstract class AbstractMapper {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 //			System.err.println("Processing "+arg);
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("printtoerr")){
 				if(Tools.parseBoolean(b)){
 					sysout=System.err; 
@@ -250,25 +254,6 @@ public abstract class AbstractMapper {
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				gzip=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){pigz=false;}
-					else{
-						pigz=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{pigz=Tools.parseBoolean(b);}
-				
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				gunzip=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				unpigz=Tools.parseBoolean(b);
 			}else if(a.equals("kfilter")){
 				KFILTER=Integer.parseInt(b);
 			}else if(a.equals("msa")){
@@ -302,26 +287,6 @@ public abstract class AbstractMapper {
 				TRIM_QUALITY=Byte.parseByte(b);
 			}else if(a.equals("mintl") || a.equals("mintrimlen") || a.equals("mintrimlength")){
 				MIN_TRIM_LENGTH=Integer.parseInt(b);
-			}else if(a.equals("q102matrix") || a.equals("q102m")){
-				CalcTrueQuality.q102matrix=b;
-			}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
-				CalcTrueQuality.qbpmatrix=b;
-			}else if(a.equals("loadq102")){
-				CalcTrueQuality.q102=Tools.parseBoolean(b);
-			}else if(a.equals("loadqbp")){
-				CalcTrueQuality.qbp=Tools.parseBoolean(b);
-			}else if(a.equals("loadq10")){
-				CalcTrueQuality.q10=Tools.parseBoolean(b);
-			}else if(a.equals("loadq12")){
-				CalcTrueQuality.q12=Tools.parseBoolean(b);
-			}else if(a.equals("loadqb012")){
-				CalcTrueQuality.qb012=Tools.parseBoolean(b);
-			}else if(a.equals("loadqb234")){
-				CalcTrueQuality.qb234=Tools.parseBoolean(b);
-			}else if(a.equals("loadqp")){
-				CalcTrueQuality.qp=Tools.parseBoolean(b);
-			}else if(a.equals("adjustquality") || a.equals("adjq")){
-				TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("untrim") || a.equals("outputuntrimmed")){
 				UNTRIM=Tools.parseBoolean(b);
 			}else if(a.equals("eono") || a.equals("erroronnooutput")){
@@ -434,6 +399,8 @@ public abstract class AbstractMapper {
 			}else if(a.equals("outputblacklisted")){
 				DONT_OUTPUT_BLACKLISTED_READS=!Tools.parseBoolean(b);
 				sysout.println("Set DONT_OUTPUT_BLACKLISTED_READS to "+DONT_OUTPUT_BLACKLISTED_READS);
+			}else if(a.equals("indexloaded")){
+				INDEX_LOADED=Tools.parseBoolean(b);
 			}else if(a.equals("build") || a.equals("genome") || a.equals("index")){
 				build=Integer.parseInt(b);
 			}else if(a.equals("minchrom")){
@@ -496,10 +463,14 @@ public abstract class AbstractMapper {
 				maxInsLen=Integer.parseInt(b);
 			}else if(a.equals("maxsublen")){
 				maxSubLen=Integer.parseInt(b);
-			}else if(a.equals("fastareadlen")){
+			}else if(a.equals("maxlen") || a.equals("maxlength") || a.equals("maxreadlen") || a.equals("maxreadlength")){
+				AbstractMapThread.MAX_READ_LENGTH=Integer.parseInt(b);
+			}else if(a.equals("minlen") || a.equals("minlength") || a.equals("minreadlen") || a.equals("minreadlength")){
+				AbstractMapThread.MIN_READ_LENGTH=Integer.parseInt(b);
+			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
 				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
 				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
-			}else if(a.equals("fastaminread") || a.equals("fastaminlen")){
+			}else if(a.equals("fastaminread") || a.equals("fastaminlen") || a.equals("fastaminlength")){
 				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
@@ -688,6 +659,29 @@ public abstract class AbstractMapper {
 		}
 		
 		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
+	}
+	
+	private final void checkFiles(){
+		if(in1!=null && in1.contains("#") && !new File(in1).exists()){
+			int pound=in1.lastIndexOf('#');
+			String a=in1.substring(0, pound);
+			String b=in1.substring(pound+1);
+			in1=a+1+b;
+			in2=a+2+b;
+		}
+		if(in2!=null && (in2.contains("=") || in2.equalsIgnoreCase("null"))){in2=null;}
+		if(in2!=null){
+			if(FASTQ.FORCE_INTERLEAVED){sysout.println("Reset INTERLEAVED to false because paired input files were specified.");}
+			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+		}
+		
+		if(OUTPUT_READS && !Tools.testOutputFiles(OVERWRITE, false, outFile, outFile2)){
+			throw new RuntimeException("\n\nOVERWRITE="+OVERWRITE+"; Can't write to output files "+outFile+", "+outFile2+"\n");
+		}
+		
+		if(reads>0 && reads<Long.MAX_VALUE){sysout.println("Max reads: "+reads);}
+		
+		assert(readlen<0 || readlen>=keylen);
 	}
 	
 	private final void preparse0(String[] args){
@@ -2294,6 +2288,27 @@ public abstract class AbstractMapper {
 		return a>b ? a-b : b-a;
 	}
 	
+	protected static void clearStatics(){
+		reads=-1;
+		readsUsed=0;
+		readsUsed2=0;
+		lowQualityReadsDiscarded1=0;
+		lowQualityReadsDiscarded2=0;
+		
+		outputBaseName="readsOut_"+(System.nanoTime()&0x1FFFF);
+		outFile=null;
+		outFile2=null;
+		outFileM=null;
+		outFileM2=null;
+		outFileU=null;
+		outFileU2=null;
+		outFileB=null;
+		outFileB2=null;
+		ArrayList<String> blacklist=null;
+		
+		errorState=false;
+	}
+	
 	/* ------------ Non-static fields ----------- */
 	
 
@@ -2401,6 +2416,7 @@ public abstract class AbstractMapper {
 	static boolean SAME_STRAND_PAIRS=false;
 	static boolean KILL_BAD_PAIRS=false;
 	
+	static boolean INDEX_LOADED=false;
 	static final boolean SLOW_ALIGN=true; //Do a more accurate scoring pass with MSA
 	static boolean MAKE_MATCH_STRING=SLOW_ALIGN;
 	

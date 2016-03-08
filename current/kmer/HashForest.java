@@ -81,7 +81,7 @@ public final class HashForest extends AbstractKmerTable {
 		}
 	}
 	
-	int set(long kmer, int value){
+	public int set(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerNode n=array[cell];
 		if(n==null){

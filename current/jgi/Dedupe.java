@@ -27,6 +27,7 @@ import align2.ReadLengthComparator;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -143,8 +144,10 @@ public final class Dedupe {
 			if("null".equalsIgnoreCase(b)){b=null;}
 			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in")){
 				if(b.indexOf(',')>=0 && !new File(b).exists()){
 					in=b.split(",");
@@ -154,6 +157,8 @@ public final class Dedupe {
 			}else if(a.equals("out")){
 				out=b;
 				setOut=true;
+			}else if(a.equals("outd") || a.equals("outduplicate")){
+				outd=b;
 			}else if(a.equals("csf") || a.equals("clusterstatsfile")){
 				csfOut=b;
 			}else if(a.equals("mcsfs") || a.equals("minclustersizeforstats")){
@@ -168,24 +173,6 @@ public final class Dedupe {
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("sort")){
 				if(b==null){sort=true;}
 				else if(b.equalsIgnoreCase("a")){
@@ -230,12 +217,12 @@ public final class Dedupe {
 				if(renameClusters){storeName=false;}
 			}else if(a.equals("rc") || a.equals("removecycles") || a.equals("removecycle")){
 				removeCycles=Tools.parseBoolean(b);
-//			}else if(a.equals("tuc") || a.equals("touppercase")){
-//				toUpperCase=Tools.parseBoolean(b);
+			}else if(a.equals("uo") || a.equals("uniqueonly")){
+				UNIQUE_ONLY=Tools.parseBoolean(b);
+			}else if(a.equals("pn") || a.equals("prefixname")){
+//				PREFIX_NAME=Tools.parseBoolean(b);
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("k")){
 				k_=Integer.parseInt(b);
 				assert(k_>0 && k_<32) : "k must be between 1 and 31; default is 31, and lower values are slower.";
@@ -257,9 +244,9 @@ public final class Dedupe {
 				minOverlapMerge=Integer.parseInt(b);
 			}else if(a.equals("rt") || a.equals("rigoroustransitive")){
 				rigorousTransitive=Tools.parseBoolean(b);
-			}else if(a.equals("e") || a.equals("maxedits")){
+			}else if(a.equals("e") || a.equals("maxedits") || a.equals("edits") || a.equals("edist")){
 				maxEdits=Integer.parseInt(b);
-			}else if(a.equals("s") || a.equals("maxsubs") || a.equals("maxsubstitutions")){
+			}else if(a.equals("s") || a.equals("maxsubs") || a.equals("maxsubstitutions") || a.equals("hdist")){
 				maxSubs=Integer.parseInt(b);
 			}else if(a.equals("bw") || a.equals("bandwidth")){
 				bandwidth_=Integer.parseInt(b);
@@ -383,6 +370,13 @@ public final class Dedupe {
 			if(affixMaps.length>1){affixMap2=affixMaps[1];}
 		}
 //		assert(false) : absorbContainment+", "+(affixMap==null);
+		
+		if(outd==null){
+			dupeWriter=null;
+		}else{
+			FileFormat ff=FileFormat.testOutput(outd, FileFormat.FASTA, null, true, overwrite, false);
+			dupeWriter=new TextStreamWriter(ff, false);
+		}
 	}
 	
 	public void process(){
@@ -436,6 +430,7 @@ public final class Dedupe {
 	public void process2(){
 		
 		final TextStreamWriter tsw=(out==null ? null : new TextStreamWriter(out, overwrite, false, true));
+		if(dupeWriter!=null){dupeWriter.start();}
 //		assert(false) : out;
 		Timer t=new Timer();
 		t.start();
@@ -451,6 +446,8 @@ public final class Dedupe {
 		if(absorbContainment){
 			processContainments(t);
 		}
+		
+		if(dupeWriter!=null){dupeWriter.poisonAndWait();}
 		
 		if(findOverlaps){
 			findOverlaps(t);
@@ -485,6 +482,7 @@ public final class Dedupe {
 //		outstream.println("Result:                 \t"+(addedToMain-containments)+" reads \t\t"+(basesProcessed-baseMatches-baseContainments)+" bases.");
 		
 		long outReads=(addedToMain-containments);
+		if(UNIQUE_ONLY){outReads=readsProcessed-matches-containments;}
 		long outBases=(basesProcessed-baseMatches-baseContainments);
 		outstream.println("Result:                 \t"+outReads+" reads ("+String.format("%.2f",outReads*100.0/readsProcessed)+"%) \t"+
 				outBases+" bases ("+String.format("%.2f",outBases*100.0/basesProcessed)+"%)");
@@ -1193,7 +1191,7 @@ public final class Dedupe {
 					list.get(0).bases.length+", "+list.get(list.size()-1).bases.length;
 			}
 		}
-		assert(list.size()==outNum) : list.size()+", "+outNum;
+		assert(list.size()==outNum || UNIQUE_ONLY) : list.size()+", "+outNum;
 		return list;
 	}
 	
@@ -1450,6 +1448,13 @@ public final class Dedupe {
 			r[Character.toLowerCase(c)]=r[c];
 		}
 		return r;
+	}
+	
+	private void addDupe(Read r){
+		if(dupeWriter==null){return;}
+		synchronized(dupeWriter){
+			dupeWriter.println(r);
+		}
 	}
 	
 	
@@ -2479,7 +2484,7 @@ public final class Dedupe {
 		public void run(){
 			
 			ConcurrentReadStreamInterface cris=crisq.poll();
-
+			
 			while(cris!=null){
 				ListNum<Read> ln=cris.nextList();
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
@@ -2613,11 +2618,22 @@ public final class Dedupe {
 									//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.bases.length)));}
 									match=true;
 									u2.absorbMatch(u);
+									if(UNIQUE_ONLY){
+										synchronized(u2){
+											if(u2.valid()){
+												matchesT++;
+												baseMatchesT+=u2.length();
+												u2.setValid(false);
+												addDupe(u2.r);
+											}
+										}
+									}
 									break;
 								}
 							}
 						}
 						if(match){
+							addDupe(r);
 							matchesT++;
 							baseMatchesT+=r.bases.length;
 							//							if(verbose){System.err.println("matchesT="+matchesT+", baseMatchesT="+baseMatchesT);}
@@ -2682,6 +2698,17 @@ public final class Dedupe {
 													currentContainments++;
 													baseContainmentsT+=u2.length();
 													u2.setValid(false);
+													addDupe(u2.r);
+												}
+											}
+											if(UNIQUE_ONLY){
+												synchronized(u){
+													if(u.valid()){
+														currentContainments++;
+														baseContainmentsT+=u.length();
+														u.setValid(false);
+														addDupe(u.r);
+													}
 												}
 											}
 
@@ -2894,12 +2921,23 @@ public final class Dedupe {
 								if(pairedEqualsRC(u, u2)){
 									//								if(verbose){System.err.println("Matches "+new String(r2.bases, 0, Tools.min(40, r2.bases.length)));}
 									u2.absorbMatch(u);
+									if(UNIQUE_ONLY){
+										synchronized(u2){
+											if(u2.valid()){
+												mergedReads++;
+												baseMatchesT+=u2.length();
+												u2.setValid(false);
+												addDupe(u2.r);
+											}
+										}
+									}
 									match=true;
 									break;
 								}
 							}
 						}
 						if(match){
+							addDupe(u.r);
 							mergedReads++;
 							baseMatchesT+=u.length();
 							if(verbose){System.err.println("matchesT="+matchesT+", baseMatchesT="+baseMatchesT);}
@@ -4848,8 +4886,12 @@ public final class Dedupe {
 	
 	private ConcurrentReadStreamInterface crisa[];
 	
+	private final TextStreamWriter dupeWriter;
+	
+	
 	private String[] in=null;
 	private String out=null;
+	private String outd=null;
 	private String csfOut=null;
 	private int maxNs=-1;
 	private long maxReads=-1;
@@ -4948,6 +4990,7 @@ public final class Dedupe {
 	public static int threadMaxReadsToBuffer=4000;
 	public static int threadMaxBasesToBuffer=32000000;
 	public static boolean DISPLAY_PROGRESS=true;
+	public static boolean UNIQUE_ONLY=false;
 	
 	private static int reverseType(int type){return (type+2)%4;}
 	public static final int FORWARD=0;

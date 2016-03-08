@@ -14,6 +14,7 @@ import stream.SequentialReadInputStream;
 
 
 import dna.Data;
+import dna.Parser;
 
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
@@ -50,7 +51,7 @@ public class MergeReadsAndGenome {
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("null")){
 				// do nothing

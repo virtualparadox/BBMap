@@ -28,32 +28,14 @@ public final class MultiStateAligner11ts extends MSA{
 		MultiStateAligner11ts msa=new MultiStateAligner11ts(read.length, ref.length, colorspace);
 		
 		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		int[] max=msa.fillLimited(read, ref, 0, ref.length-1, 0, null);
 		
 		System.out.println("Max: "+Arrays.toString(max));
 		
-		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		System.out.println("Final: ");
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		byte[] out=msa.traceback(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
@@ -137,6 +119,11 @@ public final class MultiStateAligner11ts extends MSA{
 		if(gaps==null){return fillLimitedX(read, ref, refStartLoc, refEndLoc, minScore);}
 		else{
 			byte[] gref=makeGref(ref, gaps, refStartLoc, refEndLoc);
+			
+			if(verbose && greflimit>0 && greflimit<500){
+				System.err.println(new String(gref, 0, greflimit));
+			}
+			
 			assert(gref!=null) : "Excessively long read:\n"+new String(read);
 			return fillLimitedX(read, gref, 0, greflimit, minScore);
 		}
@@ -146,6 +133,7 @@ public final class MultiStateAligner11ts extends MSA{
 	/** return new int[] {rows, maxC, maxS, max}; 
 	 * Will not fill areas that cannot match minScore */
 	private final int[] fillLimitedX(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore){
+		if(verbose){System.err.println("fillLimitedX");}
 //		minScore=0;
 //		assert(minScore>0);
 		rows=read.length;
@@ -162,7 +150,7 @@ public final class MultiStateAligner11ts extends MSA{
 		}
 
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=120; //Increases quality trivially
@@ -176,12 +164,16 @@ public final class MultiStateAligner11ts extends MSA{
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";
 		assert(refEndLoc<ref.length) : "Check that values are in-bounds before calling this function: "+refEndLoc+", "+ref.length+"\n"+
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";
-
-//		for(int x=0; x<packed.length; x++){
-//			for(int y=1; y<rows+1; y++){
-//				Arrays.fill(packed[x][y], 1, columns+1, BADoff);
-//			}
-//		}
+		
+		if(verbose){
+			System.err.println("Clearing matrix due to verbose mode.");
+			for(int x=0; x<packed.length; x++){
+				for(int y=1; y<rows+1; y++){
+					Arrays.fill(packed[x][y], 1, columns+1, BADoff);
+				}
+			}
+		}
+		
 		for(int x=0; x<packed.length; x++){
 
 //			Arrays.fill(packed[x][1], 1, columns+1, BADoff);
@@ -282,7 +274,7 @@ public final class MultiStateAligner11ts extends MSA{
 
 				
 				if(verbose2){
-					System.out.println("\ncol "+col);
+					System.err.println("\ncol "+col);
 				}
 
 				final byte call0=(row<2 ? (byte)'?' : read[row-2]);
@@ -505,7 +497,7 @@ public final class MultiStateAligner11ts extends MSA{
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -601,13 +593,22 @@ public final class MultiStateAligner11ts extends MSA{
 //		if(maxScore<floor){
 //			return null;
 //		}
+		
+		if(verbose){
+			System.out.println("Filled matrix.");
+			printMatrix(packed, rows, columns, TIMEMASK, SCOREOFFSET);
+		}
+		if(verbose){System.err.println("maxscore="+(maxScore>>SCOREOFFSET)+", minscore="+(minScore_off>>SCOREOFFSET));}
+		
 		if(maxScore<minScore_off){
 			return null;
 		}
 		
 		maxScore>>=SCOREOFFSET;
-
-//		System.err.println("Returning "+rows+", "+maxCol+", "+maxState+", "+maxScore);
+		
+		if(verbose){
+			System.err.println("Returning "+rows+", "+maxCol+", "+maxState+", "+maxScore);
+		}
 		return new int[] {rows, maxCol, maxState, maxScore};
 	}
 	
@@ -633,7 +634,7 @@ public final class MultiStateAligner11ts extends MSA{
 		assert(subfloor>BADoff && subfloor*2>BADoff) : (read.length-1)+", "+maxGain+", "+subfloor+", "+(subfloor*2)+", "+BADoff+"\n"
 				+rows+", "+columns+", "+POINTSoff_MATCH2+", "+SCOREOFFSET+"\n"+new String(read)+"\n"; //TODO: Actually, it needs to be substantially more.
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		//temporary, for finding a bug
@@ -809,7 +810,7 @@ public final class MultiStateAligner11ts extends MSA{
 				
 				//Calculate INS score
 //				if(gap || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -1311,12 +1312,13 @@ public final class MultiStateAligner11ts extends MSA{
 		
 		final int bestRefStop=refStartLoc+col-1;
 		
-		while(row>0 && col>0){
-//			System.err.println("state="+state+", row="+row+", col="+col);
-			
+		if(verbose){System.err.println("Scoring.");}
 
+		int stateTime=0;
+		
+		while(row>0 && col>0){
 			
-//			byte prev0=(byte)(packed[state][row][col]&MODEMASK);
+			if(verbose){System.err.println("state="+state+", row="+row+", col="+col);}
 
 			final int time=packed[state][row][col]&TIMEMASK;
 			final byte prev;
@@ -1355,15 +1357,17 @@ public final class MultiStateAligner11ts extends MSA{
 			}
 			
 			if(col<0){
-				System.err.println(row);
+				if(verbose){
+					System.err.println("Warning, column went below 0 at row="+row);
+				}
 				break; //prevents an out of bounds access
-			
 			}
 
 //			assert(prev==prev0);
+			if(state==prev){stateTime++;}else{stateTime=0;}
 			state=prev;
-
-//			System.err.println("state2="+state+", row2="+row+", col2="+col+"\n");
+			
+			if(verbose){System.err.println("state2="+state+", time="+time+", stateTime="+stateTime+", row2="+row+", col2="+col+"\n");}
 		}
 //		assert(false) : row+", "+col;
 		if(row>col){
@@ -1373,10 +1377,27 @@ public final class MultiStateAligner11ts extends MSA{
 		final int bestRefStart=refStartLoc+col;
 		
 		score>>=SCOREOFFSET;
+		
+		if(verbose){
+			System.err.println("bestRefStart="+bestRefStart+", refStartLoc="+refStartLoc);
+			System.err.println("bestRefStop="+bestRefStop+", refEndLoc="+refEndLoc);
+		}
+		
+		int padLeft=0;
+		int padRight=0;
+		if(bestRefStart<refStartLoc){
+			padLeft=Tools.max(0, refStartLoc-bestRefStart);
+		}else if(bestRefStart==refStartLoc && state==MODE_INS){
+			padLeft=stateTime;
+		}
+		if(bestRefStop>refEndLoc){
+			padRight=Tools.max(0, bestRefStop-refEndLoc);
+		}else if(bestRefStop==refEndLoc && maxState==MODE_INS){
+			padRight=packed[maxState][maxRow][maxCol]&TIMEMASK;
+		}
+		
 		int[] rvec;
-		if(bestRefStart<refStartLoc || bestRefStop>refEndLoc){ //Suggest extra padding in cases of overflow
-			int padLeft=Tools.max(0, refStartLoc-bestRefStart);
-			int padRight=Tools.max(0, bestRefStop-refEndLoc);
+		if(padLeft>0 || padRight>0){ //Suggest extra padding in cases of overflow
 			rvec=new int[] {score, bestRefStart, bestRefStop, maxRow, maxCol, maxState, padLeft, padRight};
 		}else{
 			rvec=new int[] {score, bestRefStart, bestRefStop, maxRow, maxCol, maxState};
@@ -1439,7 +1460,12 @@ public final class MultiStateAligner11ts extends MSA{
 			
 			for(int r=x; r<=y; r++, gpos++){
 				//TODO: if out of bounds, use an 'N'
-//				assert(gpos<gref.length) : refStartLoc+", "+refEndLoc+", "+greflimit+", "+GREFLIMIT2_CUSHION+"\n"+new String(gref);
+				assert(gpos<gref.length) : 
+					"\ngpos="+gpos+", gref.length="+gref.length+/*", read.length="+read.length+*/", gaps2="+Arrays.toString(gaps)+
+					"\ni="+i+", r="+r+", x="+x+", y="+y+
+					"\nGapTools.calcGrefLen("+gaps[0]+", "+gaps[gaps.length-1]+", gaps)="+GapTools.calcGrefLen(gaps[0], gaps[gaps.length-1], gaps)+
+					"\nGapTools.calcGrefLen("+gaps[0]+", "+gaps[gaps.length-1]+", gaps)="+GapTools.calcGrefLen(gaps[0], gaps[gaps.length-1], gaps)+
+					"\n"+refStartLoc+", "+refEndLoc+", "+greflimit+", "+GREFLIMIT2_CUSHION+"\n"+new String(gref)+"\n"/*+new String(read)+"\n"*/;
 				gref[gpos]=ref[r];
 			}
 			

@@ -53,7 +53,7 @@ public class FastaToChromArrays {
 				String b=split.length>1 ? split[1] : null;
 				if("null".equalsIgnoreCase(b)){b=null;}
 
-				if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
 				}else if(a.equals("null")){
 					//do nothing
@@ -352,7 +352,8 @@ public class FastaToChromArrays {
 				}else{
 					ReadWrite.writeObjectInThread(ca, x, false);
 				}
-				System.err.println("Writing "+x);
+//				System.err.println("Writing "+x);
+				System.err.println("Writing chunk "+chrom);
 			}
 			chrom++;
 		}

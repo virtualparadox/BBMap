@@ -140,8 +140,8 @@ public class ReadStats {
 			int rpos=0;
 			byte lastm='A';
 			for(int mpos=0; mpos<match.length && rpos<limit; mpos++){
-				byte b=bases[plus ? rpos : bases.length-rpos-1];
-				byte m=match[mpos];
+				byte b=bases[rpos];//bases[plus ? rpos : bases.length-rpos-1];
+				byte m=match[plus ? mpos : match.length-mpos-1];//match[mpos];
 				if(b=='N'){
 					if(m=='D'){
 						if(lastm!=m){ds[rpos]++;}

@@ -26,6 +26,7 @@ import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -45,7 +46,7 @@ public class CountKmersExact {
 	 */
 	public static void main(String[] args){
 		
-		if(Tools.parseHelp(args)){
+		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
 		}
@@ -82,7 +83,7 @@ public class CountKmersExact {
 		outstream.println("minq=4             \tTrim quality threshold.");
 		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
 		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=100      \tLength of lines in fasta output");
+		outstream.println("fastawrap=80       \tLength of lines in fasta output");
 		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
@@ -138,8 +139,10 @@ public class CountKmersExact {
 			if("null".equalsIgnoreCase(b)){b=null;}
 			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -175,24 +178,6 @@ public class CountKmersExact {
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("interleaved") || a.equals("int")){
 				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
 				else{
@@ -203,8 +188,6 @@ public class CountKmersExact {
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(a.equals("buflen") || a.equals("bufflen") || a.equals("bufferlength")){
 				buflen=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("k")){
 				assert(b!=null) : "\nThe k key needs an integer value from 1 to 31, such as k=28\n";
 				k_=Integer.parseInt(b);

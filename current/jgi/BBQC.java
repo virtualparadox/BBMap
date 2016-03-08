@@ -10,6 +10,7 @@ import stream.FASTQ;
 import stream.Read;
 
 import dna.Data;
+import dna.Parser;
 
 import align2.BBMap;
 import align2.Shared;
@@ -20,9 +21,9 @@ import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 
 /**
- * Wrapper for BBDukF to implement Rolling QC's filter stage.
+ * Wrapper for BBDukF, BBMap, and BBNorm to perform quality-control and artifact removal.
  * @author Brian Bushnell
- * @date Nov 26, 2013
+ * @date Jan 20, 2013
  *
  */
 public class BBQC {
@@ -69,8 +70,10 @@ public class BBQC {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
 			}else if(a.equals("verbose")){
@@ -205,34 +208,8 @@ public class BBQC {
 				}
 			}else if(a.equals("maxns")){
 				maxNs=Integer.parseInt(b);
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
-			}else if(a.equals("interleaved") || a.equals("int")){
-				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
-				else{
-					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
-					System.err.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-				}
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -294,7 +271,7 @@ public class BBQC {
 
 	
 	/*--------------------------------------------------------------*/
-	/*----------------     Processing Methods      ----------------*/
+	/*----------------      Processing Methods      ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	
@@ -493,14 +470,17 @@ public class BBQC {
 		{
 			
 //			argList.add("kfilter="+47);
-			argList.add("minratio=.75");
-			argList.add("maxindel=20");
-			argList.add("bw=20");
+			argList.add("minratio=0.84");
+			argList.add("maxindel=6");
+			argList.add("bw=18");
 			argList.add("bwr=0.18");
 			argList.add("minhits=2");
 			argList.add("path="+humanPath);
-			argList.add("quickmatch");
+//			argList.add("quickmatch");
 			argList.add("k="+map_k);
+			argList.add("fast=t");
+			argList.add("idtag=t");
+			argList.add("sam=1.4");
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}

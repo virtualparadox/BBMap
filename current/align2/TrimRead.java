@@ -7,6 +7,7 @@ import jgi.CalcTrueQuality;
 import stream.Read;
 import stream.SiteScore;
 
+import dna.AminoAcid;
 import dna.Gene;
 
 /**
@@ -150,6 +151,26 @@ public final class TrimRead {
 	public static int trimToPosition(Read r, int leftLoc, int rightLoc, int minResultingLength){
 		final int len=r.bases==null ? 0 : r.bases.length;
 		return trimByAmount(r, leftLoc, len-rightLoc-1, minResultingLength);
+	}
+	
+	/** Remove non-genetic-code from reads */
+	public static int trimBadSequence(Read r){
+		final byte[] bases=r.bases, quals=r.quality;
+		if(bases==null){return 0;}
+		final int minGenetic=20;
+		int lastNon=-1;
+		for(int i=0; i<bases.length; i++){
+			byte b=bases[i];
+			if(!AminoAcid.isACGTN(b)){lastNon=i;}
+			if(i-lastNon>minGenetic){break;}
+		}
+		if(lastNon>=0){
+			r.bases=Arrays.copyOfRange(bases, lastNon+1, bases.length);
+			if(quals!=null){
+				r.quality=Arrays.copyOfRange(quals, lastNon+1, quals.length);
+			}
+		}
+		return lastNon+1;
 	}
 	
 	/** Trim this many bases from each end */
@@ -470,7 +491,7 @@ public final class TrimRead {
 	public static boolean optimalMode=true;
 	public static float optimalBias=-1f;
 	
-	private static final float NPROB=0.1f;
+	private static final float NPROB=0.75f;
 	public static float PROB1=QualityTools.PROB_ERROR[1];
 	public static boolean ADJUST_QUALITY=false;
 	

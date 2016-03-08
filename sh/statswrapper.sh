@@ -1,30 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #stats in=<infile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx200m"
-calcXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-stats() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	local CMD="java -ea $z -cp $CP jgi.AssemblyStatsWrapper $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "Last modified December 11, 2013."
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Runs stats.sh on multiple assemblies to produce one ouput line per file."
 	echo ""
@@ -54,6 +33,41 @@ usage(){
 	echo "	gcformat=2:	name	GC"
 	echo "	Note that in gcformat 1, A+C+G+T=1 even when N is nonzero."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx200m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+}
+calcXmx "$@"
+
+stats() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	local CMD="java $EA $z -cp $CP jgi.AssemblyStatsWrapper $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

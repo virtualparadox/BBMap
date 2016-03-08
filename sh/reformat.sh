@@ -1,34 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #reformat in=<infile> out=<outfile>
-
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx200m"
-calcXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-function reformat() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
-	local CMD="java -ea $z -cp $CP jgi.ReformatReads $@"
-	echo $CMD >&2
-	$CMD
-}
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified December 11, 2013"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format."
 	echo "Optionally performs additional functions such as quality trimming, subsetting, and subsampling."
@@ -50,6 +25,7 @@ function usage(){
 	echo "rcm=f    		(rcompmate) Reverse-complement read 2 in pairs."
 	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
 	echo "qout=auto        	ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input)."
+	echo "qfake=30        	Quality value used for fasta to fastq reformatting."
 	echo "qfin=<.qual file>	Read qualities from this qual file, for the reads coming from 'in=<fasta file>'"
 	echo "qfin2=<.qual file>	Read qualities from this qual file, for the reads coming from 'in2=<fasta file>'"
 	echo "qfout=<.qual file>	Write qualities from this qual file, for the reads going to 'out=<fasta file>'"
@@ -72,6 +48,7 @@ function usage(){
 	echo "                 	Values: t (trim both ends), f (neither end), r (right end only), l (left end only)."
 	echo "trimq=4           	Trim quality threshold."
 	echo "minlength=20     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
+	echo "requirebothbad=t 	(rbb) Only discard pairs if both reads are shorter than minlen."
 	echo "minavgquality=0     	(maq) Reads with average quality (before trimming) below this will be discarded."
 	echo "forcetrimleft=0     	(ftl) If nonzero, trim left bases of the read to this position (exclusive, 0-based)."
 	echo "forcetrimright=0    	(ftr) If nonzero, trim right bases of the read after this position (exclusive, 0-based)."
@@ -96,6 +73,44 @@ function usage(){
 	echo "To write to stdout, set 'out=stdout'.  The format should be specified with an extension, like 'out=stdout.fasta'"
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx200m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+}
+calcXmx "$@"
+
+function reformat() {
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
+	local CMD="java $EA $z -cp $CP jgi.ReformatReads $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

@@ -3,7 +3,6 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 
-import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ReadStreamWriter;
 import stream.SamLine;
@@ -27,12 +26,13 @@ public final class BBMap extends AbstractMapper {
 		Timer t=new Timer();
 		t.start();
 		BBMap mapper=new BBMap(args);
-		mapper.loadIndex();
+		if(!INDEX_LOADED){mapper.loadIndex();}
 		if(Data.scaffoldPrefixes){mapper.processAmbig2();}
 		mapper.testSpeed(args);
 		ReadWrite.waitForWritingToFinish();
 		t.stop();
 		sysout.println("\nTotal time:     \t"+t);
+		clearStatics();
 	}
 	
 	public BBMap(String[] args){
@@ -293,26 +293,6 @@ public final class BBMap extends AbstractMapper {
 			}
 		}
 		
-		if(in1!=null && in1.contains("#") && !new File(in1).exists()){
-			int pound=in1.lastIndexOf('#');
-			String a=in1.substring(0, pound);
-			String b=in1.substring(pound+1);
-			in1=a+1+b;
-			in2=a+2+b;
-		}
-		if(in2!=null && (in2.contains("=") || in2.equalsIgnoreCase("null"))){in2=null;}
-		if(in2!=null){
-			if(FASTQ.FORCE_INTERLEAVED){sysout.println("Reset INTERLEAVED to false because paired input files were specified.");}
-			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
-		}
-		
-		if(OUTPUT_READS && !Tools.testOutputFiles(OVERWRITE, false, outFile, outFile2)){
-			throw new RuntimeException("\n\nOVERWRITE="+OVERWRITE+"; Can't write to output files "+outFile+", "+outFile2+"\n");
-		}
-		
-		if(reads>0 && reads<Long.MAX_VALUE){sysout.println("Max reads: "+reads);}
-		
-		assert(readlen<0 || readlen>=keylen);
 		assert(minChrom>=AbstractIndex.MINCHROM && maxChrom<=AbstractIndex.MAXCHROM) :
 			minChrom+", "+maxChrom+", "+AbstractIndex.MINCHROM+", "+AbstractIndex.MAXCHROM;
 		AbstractIndex.MINCHROM=minChrom;
@@ -332,7 +312,9 @@ public final class BBMap extends AbstractMapper {
 		//Optional section for discrete timing of chrom array loading
 		if(SLOW_ALIGN || AbstractIndex.USE_EXTENDED_SCORE || useRandomReads || MAKE_MATCH_STRING){
 			sysout.println();
-			if(RefToIndex.chromlist==null){
+			if(INDEX_LOADED){
+				//do nothing
+			}else if(RefToIndex.chromlist==null){
 				Data.loadChromosomes(minChrom, maxChrom);
 			}else{
 				assert(RefToIndex.chromlist.size()==maxChrom-minChrom+1) : RefToIndex.chromlist.size();

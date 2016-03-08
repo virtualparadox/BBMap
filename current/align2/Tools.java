@@ -14,15 +14,6 @@ import dna.Data;
 
 public final class Tools {
 	
-	/** Return true if the user seems confused */
-	public static boolean parseHelp(String[] args){
-		if(args==null || args.length==0 || (args.length==1 && args[0]==null)){return true;}
-		if(args.length>1){return false;}
-		final String s=args[0].toLowerCase();
-		return s.equals("-h") || s.equals("-help") || s.equals("--help") 
-				|| s.equals("-version") || s.equals("--version") || s.equals("?") || s.equals("-?") || (s.equals("help") && !new File(s).exists());
-	}
-	
 	/** Checks for permission to overwrite files, and output name collisions. */
 	public static boolean testOutputFiles(boolean overwrite, boolean allowDuplicates, String...args){
 		if(args==null || args.length==0){return true;}

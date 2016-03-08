@@ -61,7 +61,7 @@ public final class BBIndex5 extends AbstractIndex {
 		int first=(NUM_CHROM_BITS==0 ? 1 : 0);
 //		first=24;
 		
-		Data.sysout.println("Loading index for chrom "+first+"-"+MAXCHROM+", genome "+Data.GENOME_BUILD);
+		Data.sysout.println("Loading index for chunk "+first+"-"+MAXCHROM+", build "+Data.GENOME_BUILD);
 		index=IndexMaker5.makeIndex(Data.GENOME_BUILD, first, MAXCHROM, 
 				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, true, false, index);
 
@@ -93,7 +93,7 @@ public final class BBIndex5 extends AbstractIndex {
 		if(minChrom<1){minChrom=1;}
 		if(maxChrom>Data.numChroms){maxChrom=Data.numChroms;}
 		assert(minChrom<=maxChrom);
-		Data.sysout.println("Loading index for chrom "+minChrom+"-"+maxChrom+", genome "+Data.GENOME_BUILD);
+		Data.sysout.println("Loading index for chunk "+minChrom+"-"+maxChrom+", build "+Data.GENOME_BUILD);
 		index=IndexMaker5.makeIndex(Data.GENOME_BUILD, minChrom, maxChrom, 
 				k, NUM_CHROM_BITS, MAX_ALLOWED_CHROM_INDEX, CHROM_MASK_LOW, CHROM_MASK_HIGH, SITE_MASK, SHIFT_LENGTH, COLORSPACE, writeToDisk, diskInvalid, index);
 

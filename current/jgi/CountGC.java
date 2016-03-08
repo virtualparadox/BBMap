@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 import align2.Tools;
 
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -49,8 +50,10 @@ public class CountGC {
 				String b=split.length>1 ? split[1] : null;
 				if("null".equalsIgnoreCase(b)){b=null;}
 
-				if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+				if(Parser.isJavaFlag(arg)){
 					//jvm argument; do nothing
+				}else if(Parser.parseZip(arg, a, b)){
+					//do nothing
 				}else if(a.equals("in")){
 					in=b;
 				}else if(a.equals("out")){
@@ -76,26 +79,6 @@ public class CountGC {
 					}
 				}else if(a.equals("bf2")){
 					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
-				}else if(a.equals("usegzip") || a.equals("gzip")){
-					ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-				}else if(a.equals("usepigz") || a.equals("pigz")){
-					if(b!=null && Character.isDigit(b.charAt(0))){
-						int zt=Integer.parseInt(b);
-						if(zt<1){ReadWrite.USE_PIGZ=false;}
-						else{
-							ReadWrite.USE_PIGZ=true;
-							if(zt>1){
-								ReadWrite.MAX_ZIP_THREADS=zt;
-								ReadWrite.ZIP_THREAD_DIVISOR=1;
-							}
-						}
-					}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-				}else if(a.equals("usegunzip") || a.equals("gunzip")){
-					ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-				}else if(a.equals("useunpigz") || a.equals("unpigz")){
-					ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
-				}else if(a.equals("ziplevel") || a.equals("zl")){
-					ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 				}else if(in==null && i==0 && !args[i].contains("=")){
 					in=args[i];
 				}else if(out==null && i==1 && !args[i].contains("=")){

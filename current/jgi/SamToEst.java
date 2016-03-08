@@ -12,6 +12,7 @@ import stream.Read;
 import stream.SamLine;
 
 import dna.Data;
+import dna.Parser;
 import dna.Scaffold;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -52,8 +53,10 @@ public class SamToEst {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("bf1")){
@@ -78,8 +81,6 @@ public class SamToEst {
 				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(sam==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				sam=arg;
 			}else if(stats==null && i==1 && !arg.contains("=")){

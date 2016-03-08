@@ -1,58 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #bbduk in=<infile> out=<outfile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx1g"
-calcXmx () {
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 2G." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=2000
-	fi
-	
-	mult=42;
-
-	y=$(( ((x-20000)*mult/100)/1000 ))
-
-	if [ $y -ge 15000 ]; then
-		y=15000
-	elif [ 100 -ge $y ]; then
-		y=100
-	fi
-	
-	#echo "y=$y"
-	z="-Xmx${y}m"
-	
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-bbduk() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
-	local CMD="java -ea $z -cp $CP jgi.BBDukF $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified December 11, 2013"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Compares reads to the kmers in a reference dataset, optionally allowing an edit distance."
 	echo "Splits the reads into two outputs - those that match the reference, and those that don't."
@@ -67,13 +18,13 @@ usage(){
 	echo "Optional parameters (and their defaults)"
 	echo ""
 	echo "Input parameters:"
-	echo "in=<file>        	The 'in=' flag is needed only if the input file is not the first parameter.  'in=stdin.fq' will pipe from standard in."
-	echo "in2=<file>       	Use this if 2nd read of pairs are in a different file."
+	echo "in=<file>        	Main input. in=stdin.fq will pipe from stdin."
+	echo "in2=<file>       	Input for 2nd read of pairs in a different file."
 	echo "ref=<file,file>  	Comma-delimited list of reference files."
-	echo "touppercase=f    	(tuc) Change all letters in reads and reference to upper-case."
-	echo "interleaved=auto 	(int) If true, forces fastq input to be paired and interleaved."
-	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
-	echo "reads=-1         	If set to a positive number, only process this many reads (or pairs), then quit."
+	echo "touppercase=f    	(tuc) Change all bases upper-case."
+	echo "interleaved=auto 	(int) t/f overrides interleaved autodetection."
+	echo "qin=auto         	Input quality offset: 33 (Sanger), 64, or auto."
+	echo "reads=-1         	If positive, quit after processing X reads or pairs."
 #	echo "skipreads=0      	Ignore this many initial reads (or pairs) and process the rest."
 	echo ""
 	echo "Output parameters:"
@@ -83,11 +34,11 @@ usage(){
 	echo "outmatch2=<file>   	(outm2 or outb2) Use this to write 2nd read of pairs to a different file."
 	echo "stats=<file>     	Write statistics about which contamininants were detected."
 	echo "duk=<file>       	Write statistics in duk's format."
-	echo "overwrite=t      	(ow) Set to false to force the program to abort rather than overwrite an existing file."
-	echo "showspeed=t      	(ss) Set to 'f' to suppress display of processing speed."
-	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
+	echo "overwrite=t      	(ow) Grant permission to overwrite files."
+	echo "showspeed=t      	(ss) 'f' suppresses display of processing speed."
+	echo "ziplevel=2       	(zl) Compression level; 1 (min) through 9 (max)."
 	echo "fastawrap=80     	Length of lines in fasta output."
-	echo "qout=auto        	ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input)."
+	echo "qout=auto        	Output quality offset: 33 (Sanger), 64, or auto."
 	echo ""
 	echo "Processing parameters:"
 	echo "threads=auto     	(t) Set number of threads to use; default is number of logical processors."
@@ -106,7 +57,7 @@ usage(){
 	echo "Trimming parameters:"
 	echo "ktrim=f          	Trim reads to remove bases matching reference kmers."
 	echo "                 	Values: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming)."
-	echo "                 	Any single non-whitespace character other than t, f, r, l, n: convert to that symbol rather than trimming."
+	echo "                 	Any non-whitespace character other than t, f, r, l, n: convert to that symbol rather than trimming, and process short kmers on both ends."
 	echo "useshortkmers=f  	(usk) Look for shorter kmers at read tips (only for k-trimming).  Enabling this will disable maskmiddle."
 	echo "mink=4           	Minimum length of short kmers.  Setting this automatically sets useshortkmers=t."
 	echo "qtrim=f          	Trim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers."
@@ -128,6 +79,78 @@ usage(){
 	echo "There is a changelog at /global/projectb/sandbox/gaag/bbtools/docs/changelog_bbduk.txt"
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx1g"
+z2="-Xms1g"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -Xms* ]]; then
+			z2="$arg"
+			set=1
+		elif [[ "$arg" == Xms* ]]; then
+			z2="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	
+	x=$(ulimit -v)
+	#echo "x=$x"
+	HOSTNAME=`hostname`
+	y=1
+	if [[ $x == unlimited ]]; then
+		#echo "ram is unlimited"
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 2G." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		y=2000
+	fi
+	
+	mult=42;
+
+	y=$(( ((x-20000)*mult/100)/1000 ))
+
+	if [ $y -ge 15000 ]; then
+		y=15000
+	elif [ 200 -ge $y ]; then
+		y=200
+	fi
+	
+	#echo "y=$y"
+	z="-Xmx${y}m"
+}
+calcXmx "$@"
+
+bbduk() {
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
+	local CMD="java $EA $z -cp $CP jgi.BBDukF $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

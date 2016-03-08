@@ -107,10 +107,11 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 		}
 		
 		if(match!=null){
+			if(gaps==null){sb.append(',');}
 			sb.append(',');
 			final char[] buffer=Shared.getTLCB(match.length);
 			for(int i=0; i<match.length; i++){buffer[i]=(char)match[i];}
-			sb.append(buffer);
+			sb.append(buffer, 0, match.length);
 		}
 		
 		return sb;
@@ -153,6 +154,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 		}
 		
 		if(match!=null){
+			if(gaps==null){sb.append(',');}
 			sb.append(',');
 			sb.append(match);
 		}
@@ -263,7 +265,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 			final byte r=ref[refloc];
 			assert(Character.isUpperCase(r) && Character.isUpperCase(c)) :
 				"\nAn input read appears to contain a non-upper-case base.  Please rerun with the 'touppercase' flag.\n"+
-				r+", "+c+"\n";
+				"ref base = "+r+", read base = "+c+", TO_UPPER_CASE = "+Read.TO_UPPER_CASE+"\n"+(bases.length<=500 ? new String(bases) : "")+"\n";
 			if(c!=r || c==bn){
 				perfect=false;
 				if(c==bn){semiperfect=false;}
@@ -325,10 +327,12 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 		ss.semiperfect=semiperfect;
 		
 		if(line.length>11){
-			String[] gstring=line[11].split("~");
-			ss.gaps=new int[gstring.length];
-			for(int i=0; i<gstring.length; i++){
-				ss.gaps[i]=Integer.parseInt(gstring[i]);
+			if(line[11]!=null && line[11].length()>0){
+				String[] gstring=line[11].split("~");
+				ss.gaps=new int[gstring.length];
+				for(int i=0; i<gstring.length; i++){
+					ss.gaps[i]=Integer.parseInt(gstring[i]);
+				}
 			}
 		}
 		

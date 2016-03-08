@@ -260,9 +260,11 @@ public final class BBMapThread extends AbstractMapThread{
 		assert(Read.CHECKSITES(list, basesP, basesM, -1));
 		
 		int minMatch=Tools.max(-300, minMsaLimit-CLEARZONE3); //Score must exceed this to generate quick match string
+		if(verbose){
+			System.err.println("Slow-scoring.  minMsaLimit="+minMsaLimit+", minMatch="+minMatch);
+		}
 		for(int i=0; i<list.size(); i++){
 			final SiteScore ss=list.get(i);
-			
 			final byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
 			
 			if(SEMIPERFECTMODE){
@@ -270,7 +272,7 @@ public final class BBMapThread extends AbstractMapThread{
 				assert(ss.semiperfect);
 			}
 			
-			if(verbose){System.err.println("Slow-scoring "+ss);}
+			if(verbose){System.err.println("\nSlow-scoring "+ss);}
 			if(ss.stop-ss.start!=bases.length-1){
 				assert(ss.stop-ss.start>bases.length-1) : bases.length+", "+ss.toText();
 				assert(!ss.semiperfect) : "\n"+bases.length+", "+ss.toText()+", "+ss.perfect+", "+ss.semiperfect+", "+maxSwScore+"\n"+new String(basesP)+"\n";
@@ -290,10 +292,12 @@ public final class BBMapThread extends AbstractMapThread{
 				}
 				
 				int expectedLen=GapTools.calcGrefLen(ss);
+				if(verbose){System.err.println("expectedLen="+expectedLen);}
 				if(expectedLen>=EXPECTED_LEN_LIMIT){
 					 //TODO: Alternately, I could kill the site.
 					ss.stop=ss.start+Tools.min(basesP.length+40, EXPECTED_LEN_LIMIT);
 					if(ss.gaps!=null){GapTools.fixGaps(ss);}
+					if(verbose){System.err.println("expectedLen="+expectedLen+"; ss="+ss);}
 				}
 				
 				int pad=SLOW_ALIGN_PADDING;
@@ -330,6 +334,7 @@ public final class BBMapThread extends AbstractMapThread{
 
 //				if(swscoreArray!=null){
 //					System.err.println(i+": "+QUICK_MATCH_STRINGS+", "+swscoreArray.length+"==6, "+swscoreArray[0]+">="+minscore+", "+PRINT_SECONDARY_ALIGNMENTS+", "+USE_SS_MATCH_FOR_PRIMARY+", "+minMatch);
+//					assert(false);
 //				}
 				if(QUICK_MATCH_STRINGS && swscoreArray!=null && swscoreArray.length==6 && swscoreArray[0]>=minscore && (PRINT_SECONDARY_ALIGNMENTS || (USE_SS_MATCH_FOR_PRIMARY && swscoreArray[0]>minMatch))){
 					assert(swscoreArray.length==6) : swscoreArray.length;
@@ -932,10 +937,10 @@ public final class BBMapThread extends AbstractMapThread{
 		int penalty=calcTipScorePenalty(r, maxSwScore, 7);
 		applyScorePenalty(r, penalty);
 		
-//		if(r.ambiguous() && r.list!=null){
+//		if(r.ambiguous() && r.sites!=null){
 //			r.setAmbiguous(false);
 //			r.mapScore/=3;
-//			for(SiteScore ss : r.list){
+//			for(SiteScore ss : r.sites){
 //				ss.slowScore/=3;
 //				ss.score/=3;
 //			}

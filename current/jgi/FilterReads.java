@@ -13,6 +13,7 @@ import stream.FASTQ;
 import stream.Read;
 
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
@@ -55,7 +56,7 @@ public class FilterReads {
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("reads")){
 				readsOut=Long.parseLong(b);

@@ -32,32 +32,14 @@ public final class MultiStateAligner9ts extends MSA{
 		MultiStateAligner9ts msa=new MultiStateAligner9ts(read.length, ref.length, colorspace);
 		
 		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		int[] max=msa.fillLimited(read, ref, 0, ref.length-1, 0, null);
 		
 		System.out.println("Max: "+Arrays.toString(max));
 		
-		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		System.out.println("Final: ");
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		byte[] out=msa.traceback(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
@@ -165,7 +147,7 @@ public final class MultiStateAligner9ts extends MSA{
 		}
 
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=120; //Increases quality trivially
@@ -506,7 +488,7 @@ public final class MultiStateAligner9ts extends MSA{
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -634,7 +616,7 @@ public final class MultiStateAligner9ts extends MSA{
 		assert(subfloor>BADoff && subfloor*2>BADoff) : (read.length-1)+", "+maxGain+", "+subfloor+", "+(subfloor*2)+", "+BADoff+"\n"
 				+rows+", "+columns+", "+POINTSoff_MATCH2+", "+SCOREOFFSET+"\n"+new String(read)+"\n"; //TODO: Actually, it needs to be substantially more.
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		//temporary, for finding a bug
@@ -808,7 +790,7 @@ public final class MultiStateAligner9ts extends MSA{
 				
 				//Calculate INS score
 //				if(gap || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					

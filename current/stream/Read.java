@@ -62,6 +62,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 				qualityOriginal=null;
 			}
 		}
+		final boolean aa=aminoacid();
 		
 		if(NULLIFY_BROKEN_QUALITY && qualityOriginal!=null && qualityOriginal.length!=s_.length){
 			qualityOriginal=null;
@@ -72,7 +73,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 					"# qualities="+qualityOriginal.length+", # bases="+s_.length+"\n\n"+
 					FASTQ.qualToString(qualityOriginal)+"\n"+new String(s_)+"\n";
 		
-		assert(basesOriginal==null || basesOriginal.length<2 || basesOriginal[1]=='N' || basesOriginal[1]=='.' || basesOriginal[1]=='-' || colorspace()!=Character.isLetter(basesOriginal[1])) : 
+		assert(basesOriginal==null || basesOriginal.length<2 || basesOriginal[1]=='N' || basesOriginal[1]=='.' || basesOriginal[1]=='-' || 
+				colorspace()!=Character.isLetter(basesOriginal[1]) || (aa && basesOriginal[1]=='*')) : 
 			"\nAn input file appears to be misformatted.  The character with ASCII code "+basesOriginal[1]+" appeared where a base was expected.\n" +
 					colorspace()+", "+Arrays.toString(basesOriginal);
 		
@@ -139,33 +141,56 @@ public final class Read implements Comparable<Read>, Cloneable{
 			
 			bases=basesOriginal;
 			quality=qualityOriginal;
+			byte nocall=(aa ? (byte)'.' : (byte)'N');
 
 			if(bases!=null){
 				if(quality!=null){
-					for(int i=0; i<quality.length; i++){
-						byte b=bases[i];
-						byte q=quality[i];
-						if(AminoAcid.isFullyDefined(b)){
-							if(q<MIN_CALLED_QUALITY){
-								//							assert(false) : (char)b+", "+q;
-								quality[i]=MIN_CALLED_QUALITY;
+					if(!aa){
+						for(int i=0; i<quality.length; i++){
+							byte b=bases[i];
+							byte q=quality[i];
+							if(AminoAcid.isFullyDefined(b)){
+								if(q<MIN_CALLED_QUALITY){
+									quality[i]=MIN_CALLED_QUALITY;
+								}
+							}else{
+								quality[i]=0;
+								if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]=nocall;}
 							}
-						}else{
-							//						assert(false) : (char)b+", "+q;
-							quality[i]=0;
-							if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]='N';}
+							if(TO_UPPER_CASE && b>90){bases[i]-=32;}
+							else if(LOWER_CASE_TO_N && b>90){bases[i]=nocall;}
 						}
-						if(TO_UPPER_CASE && b>90){bases[i]-=32;}
-						else if(LOWER_CASE_TO_N && b>90){bases[i]='N';}
 					}
 				}else if(TO_UPPER_CASE){
-					for(int i=0; i<bases.length; i++){if(bases[i]>90){bases[i]-=32;}}
+					for(int i=0; i<bases.length; i++){
+						byte b=bases[i];
+						if(b>90){
+//							assert(Character.isLowerCase(bases[i])) : new String(bases);
+							bases[i]-=32;
+//							assert(Character.isUpperCase(bases[i])) : new String(bases);
+						}
+						if(OTHER_SYMBOLS_TO_N && (b=='-' || b=='.' || b=='X') && !aa){bases[i]=nocall;}
+					}
 				}else if(LOWER_CASE_TO_N){
-					for(int i=0; i<bases.length; i++){if(bases[i]>90){bases[i]='N';}}
+					for(int i=0; i<bases.length; i++){
+						byte b=bases[i];
+						if(b>90){bases[i]=nocall;}
+						else if(b=='-' || b=='.' || b=='X'){bases[i]=nocall;}
+					}
+				}else if(OTHER_SYMBOLS_TO_N && !aminoacid()){
+					for(int i=0; i<bases.length; i++){
+						byte b=bases[i];
+						if(b=='-' || b=='.' || b=='X'){bases[i]=nocall;}
+					}
 				}
 			}
+			
+//			for(byte b : bases){assert(Character.isUpperCase(b)) : "\n"+TO_UPPER_CASE+"\n"+new String(bases)+"\n";}
+			
 //			for(int i=0; i<bases.length; i++){assert(bases[i]<=90) : (char)bases[i];}
 		}
+		
+//		for(byte b : bases){assert(Character.isUpperCase(b)) : "\n"+TO_UPPER_CASE+"\n"+new String(bases)+"\n";}
 		
 		chrom=chrom_;
 		start=start_;
@@ -999,6 +1024,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 		for(int i=firstScore; i<split.length; i++){
 			if(split[i].charAt(0)!='*'){mSites++;}
 		}
+		
+		//This can be disabled to handle very old text format.
 		if(mSites>0){r.sites=new ArrayList<SiteScore>(mSites);}
 		for(int i=firstScore; i<split.length; i++){
 			SiteScore ss=SiteScore.fromText(split[i]);
@@ -1844,6 +1871,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	public boolean insertvalid(){return (flags&INSERTMASK)==INSERTMASK;}
 	public boolean hasadapter(){return (flags&ADAPTERMASK)==ADAPTERMASK;}
 	public boolean secondary(){return (flags&SECONDARYMASK)==SECONDARYMASK;}
+	public boolean aminoacid(){return (flags&AAMASK)==AAMASK;}
 	/** For paired ends: 0 for read1, 1 for read2 */
 	public int pairnum(){return (flags&PAIRNUMMASK)>>PAIRNUMSHIFT;}
 	public boolean valid(){return !invalid();}
@@ -2429,6 +2457,11 @@ public final class Read implements Comparable<Read>, Cloneable{
 		if(b){flags|=SECONDARYMASK;}
 	}
 	
+	public void setAminoAcid(boolean b){
+		flags=(flags&~AAMASK);
+		if(b){flags|=AAMASK;}
+	}
+	
 	public void setInsert(int x){
 		if(x<1){x=-1;}
 		assert(x==-1 || x>9 || bases.length<20);
@@ -2512,14 +2545,16 @@ public final class Read implements Comparable<Read>, Cloneable{
 	public static final int INSERTMASK=(1<<13);
 	public static final int ADAPTERMASK=(1<<14);
 	public static final int SECONDARYMASK=(1<<15);
+	public static final int AAMASK=(1<<16);
 	
-	private static final int[] maskArray=makeMaskArray(15); //Be sure this is big enough for all flags!
+	private static final int[] maskArray=makeMaskArray(16); //Be sure this is big enough for all flags!
 
 //	public static byte ASCII_OFFSET=33;
 	private static final byte ASCII_OFFSET=33;
 	public static byte MIN_CALLED_QUALITY=2;
 	public static boolean TO_UPPER_CASE=false;
 	public static boolean LOWER_CASE_TO_N=false;
+	public static final boolean OTHER_SYMBOLS_TO_N=true;
 	
 	public static boolean COMPRESS_MATCH_BEFORE_WRITING=true;
 	public static boolean DECOMPRESS_MATCH_ON_LOAD=true; //Set to false for some applications, like sorting, perhaps

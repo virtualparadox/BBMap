@@ -1,70 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #khist in=<infile> out=<outfile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx1g"
-calcXmx () {
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=4
-	else
-		mult=75;
-		if [ $x -ge 1000000000 ]; then
-			mult=85
-			#echo "ram is 1000g+"
-		elif [ $x -ge 500000000 ]; then
-			mult=85
-			#echo "ram is 500g+"
-		elif [ $x -ge 250000000 ]; then
-			mult=85
-			#echo "ram is 250g+"
-		elif [ $x -ge 144000000 ]; then
-			mult=85
-			#echo "ram is 144g+"
-		elif [ $x -ge 120000000 ]; then
-			mult=85
-			#echo "ram is 120g+"
-		elif [ $x -ge 40000000 ]; then
-			mult=80
-			#echo "ram is 40g+"
-		else
-			mult=85
-			#echo "ram is under 40g"
-		fi
-		y=$(( ((x-500000)*mult/100)/1000000 ))
-	fi
-	#echo "y=$y"
-	z="-Xmx${y}g"
-	
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-khist() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	local CMD="java -ea $z -cp $CP jgi.KmerNormalize bits=32 ecc=f passes=1 keepall dr=f prefilter hist=stdout minprob=0 minqual=0 mindepth=0 minkmers=1 hashes=3 $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified February 12, 2014"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Generates a histogram of kmer counts for the input reads or assemblies."
 	echo "Can also normalize, error-correct, and/or bin reads by kmer depth."
@@ -159,6 +98,91 @@ usage(){
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx1g"
+z2="-Xms1g"
+EA="-da"
+set=0
+
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -Xms* ]]; then
+			z2="$arg"
+			set=1
+		elif [[ "$arg" == Xms* ]]; then
+			z2="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	
+	x=$(ulimit -v)
+	#echo "x=$x"
+	HOSTNAME=`hostname`
+	y=1
+	if [[ $x == unlimited ]]; then
+		#echo "ram is unlimited"
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		y=4
+	else
+		mult=75;
+		if [ $x -ge 1000000000 ]; then
+			mult=85
+			#echo "ram is 1000g+"
+		elif [ $x -ge 500000000 ]; then
+			mult=85
+			#echo "ram is 500g+"
+		elif [ $x -ge 250000000 ]; then
+			mult=85
+			#echo "ram is 250g+"
+		elif [ $x -ge 144000000 ]; then
+			mult=85
+			#echo "ram is 144g+"
+		elif [ $x -ge 120000000 ]; then
+			mult=85
+			#echo "ram is 120g+"
+		elif [ $x -ge 40000000 ]; then
+			mult=80
+			#echo "ram is 40g+"
+		else
+			mult=85
+			#echo "ram is under 40g"
+		fi
+		y=$(( ((x-500000)*mult/100)/1000000 ))
+	fi
+	#echo "y=$y"
+	z="-Xmx${y}g"
+}
+calcXmx "$@"
+
+khist() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	local CMD="java $EA $z -cp $CP jgi.KmerNormalize bits=32 ecc=f passes=1 keepall dr=f prefilter hist=stdout minprob=0 minqual=0 mindepth=0 minkmers=1 hashes=3 $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

@@ -1,74 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #khist in=<infile> out=<outfile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx1g"
-z2="-Xms1g"
-calcXmx () {
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=4
-	else
-		mult=75;
-		if [ $x -ge 1000000000 ]; then
-			mult=85
-			#echo "ram is 1000g+"
-		elif [ $x -ge 500000000 ]; then
-			mult=85
-			#echo "ram is 500g+"
-		elif [ $x -ge 250000000 ]; then
-			mult=85
-			#echo "ram is 250g+"
-		elif [ $x -ge 144000000 ]; then
-			mult=85
-			#echo "ram is 144g+"
-		elif [ $x -ge 120000000 ]; then
-			mult=85
-			#echo "ram is 120g+"
-		elif [ $x -ge 40000000 ]; then
-			mult=80
-			#echo "ram is 40g+"
-		else
-			mult=85
-			#echo "ram is under 40g"
-		fi
-		y=$(( ((x-500000)*mult/100)/1000000 ))
-	fi
-	#echo "y=$y"
-	z="-Xmx${y}g"
-	z2="-Xms${y}g"
-	
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-dedupe() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	local CMD="java -ea $z $z2 -cp $CP jgi.Dedupe $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified December 11, 2013"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."
@@ -85,6 +20,7 @@ usage(){
 	echo ""
 	echo "in=<file,file>   	A single file or a comma-delimited list of files."
 	echo "out=<file>       	Destination for all output contigs."
+	echo "outd=<file>      	Optional; removed duplicates will go here."
 	echo "threads=auto          (t) Set number of threads to use; default is number of logical processors."
 	echo "overwrite=t           (ow) Set to false to force the program to abort rather than overwrite an existing file."
 	echo "showspeed=t           (ss) Set to 'f' to suppress display of processing speed."
@@ -104,6 +40,7 @@ usage(){
 	echo "absorbcontainment=t   (ac) Absorb full containments of contigs."
 #	echo "absorboverlap=f       (ao) Absorb (merge) non-contained overlaps of contigs (TODO)."
 	echo "findoverlap=f         (fo) Find overlaps between contigs (containments and non-containments).  Necessary for clustering."
+	echo "uniqueonly=f          (uo) If true, all copies of duplicate reads will be discarded, rather than keeping 1."
 	echo "cluster=f             (c) Group overlapping contigs into clusters."
 	echo ""
 	echo "fixmultijoins=t       (fmj) Remove redundant overlaps between the same two contigs."
@@ -139,6 +76,94 @@ usage(){
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx1g"
+z2="-Xms1g"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]] || [[ "$arg" == "-?" ]]; then
+			usage
+			exit
+		elif [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -Xms* ]]; then
+			z2="$arg"
+			set=1
+		elif [[ "$arg" == Xms* ]]; then
+			z2="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	
+	x=$(ulimit -v)
+	#echo "x=$x"
+	HOSTNAME=`hostname`
+	y=1
+	if [[ $x == unlimited ]]; then
+		#echo "ram is unlimited"
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		y=4
+	else
+		mult=75;
+		if [ $x -ge 1000000000 ]; then
+			mult=85
+			#echo "ram is 1000g+"
+		elif [ $x -ge 500000000 ]; then
+			mult=85
+			#echo "ram is 500g+"
+		elif [ $x -ge 250000000 ]; then
+			mult=85
+			#echo "ram is 250g+"
+		elif [ $x -ge 144000000 ]; then
+			mult=85
+			#echo "ram is 144g+"
+		elif [ $x -ge 120000000 ]; then
+			mult=85
+			#echo "ram is 120g+"
+		elif [ $x -ge 40000000 ]; then
+			mult=80
+			#echo "ram is 40g+"
+		else
+			mult=85
+			#echo "ram is under 40g"
+		fi
+		y=$(( ((x-500000)*mult/100)/1000000 ))
+	fi
+	#echo "y=$y"
+	z="-Xmx${y}g"
+	z2="-Xms${y}g"
+}
+calcXmx "$@"
+
+dedupe() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	local CMD="java $EA $z $z2 -cp $CP jgi.Dedupe $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

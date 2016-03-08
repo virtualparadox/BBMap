@@ -10,6 +10,7 @@ import stream.FastaReadInputStream;
 import stream.Read;
 
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
@@ -43,7 +44,7 @@ public class MakeLengthHistogram {
 			if("null".equalsIgnoreCase(b)){b=null;}
 			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;

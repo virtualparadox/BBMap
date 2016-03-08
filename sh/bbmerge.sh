@@ -1,35 +1,10 @@
-#!/bin/bash -l
+#!/bin/bash
 #merge in=<infile> out=<outfile>
-
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx200m"
-calcXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-function merge() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
-	local CMD="java -ea $z -cp $CP jgi.MateReadsMT $@"
-	echo $CMD >&2
-	$CMD
-}
 
 function usage(){
 	echo "BBMerge v1.4"
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified February 12, 2014"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Merges paired reads into single reads by overlap detection."
 	echo "With sufficient coverage, can also merge nonoverlapping reads using gapped kmers."
@@ -76,6 +51,44 @@ function usage(){
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx200m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+}
+calcXmx "$@"
+
+function merge() {
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
+	local CMD="java $EA $z -cp $CP jgi.MateReadsMT $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

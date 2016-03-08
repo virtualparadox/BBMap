@@ -4,6 +4,7 @@ Please contact me at bbushnell@lbl.gov if you have any questions or encounter an
 
 Verison 9:
 All program message information now defaults to stderr.
+Fixed broken left-trim function.
 
 Version 8:
 Fixed bug in which the program would exit immediately if the first batch of reads were all discarded.  Found by Bryce Foster.

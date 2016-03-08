@@ -1,60 +1,13 @@
-#!/bin/bash -l
-#bbduk in=<infile> out=<outfile>
-
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx1g"
-calcXmx () {
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 1G." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=1000
-	fi
-	
-	mult=30;
-
-	y=$(( ((x-20000)*mult/100)/1000 ))
-
-	if [ $y -ge 2500 ]; then
-		y=2500 
-	elif [ 200 -ge $y ]; then
-		y=200 
-	fi
-	
-	#echo "y=$y"
-	z="-Xmx${y}m"
-	
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-bbduk() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	local CMD="java -ea $z -cp $CP jgi.BBDukF k=23 mink=12 ktrim=r qtrim=rl trimq=10 mm=f $@"
-	echo $CMD >&2
-	$CMD
-}
+#!/bin/bash
+#bbtrim in=<infile> out=<outfile>
 
 usage(){
-	echo "This script is designed for Genepool nodes."
-	echo "Last modified February 21, 2014"
+	echo "Written by Brian Bushnell"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Performs quality-trimming and/or kmer-trimming on reads."
 	echo ""
-	echo "Usage:	bbduk.sh in=<input file> out=<output file> ref=<adapter files> trimq=10"
+	echo "Usage:	bbtrim.sh in=<input file> out=<output file> ref=<adapter files> trimq=10 qtrim=rl"
 	echo ""
 	echo "Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed."
 	echo "Output may be stdout or a file."
@@ -64,25 +17,25 @@ usage(){
 	echo "Optional parameters (and their defaults)"
 	echo ""
 	echo "Input parameters:"
-	echo "in=<file>        	The 'in=' flag is needed only if the input file is not the first parameter.  'in=stdin.fq' will pipe from standard in."
-	echo "in2=<file>       	Use this if 2nd read of pairs are in a different file."
+	echo "in=<file>        	Main input. in=stdin.fq will pipe from stdin."
+	echo "in2=<file>       	Input for 2nd read of pairs in a different file."
 	echo "ref=<file,file>  	Comma-delimited list of reference files."
-	echo "touppercase=f    	(tuc) Change all letters in reads and reference to upper-case."
-	echo "interleaved=auto 	(int) If true, forces fastq input to be paired and interleaved."
-	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
-	echo "reads=-1         	If set to a positive number, only process this many reads (or pairs), then quit."
+	echo "touppercase=f    	(tuc) Change all bases upper-case."
+	echo "interleaved=auto 	(int) t/f overrides interleaved autodetection."
+	echo "qin=auto         	Input quality offset: 33 (Sanger), 64, or auto."
+	echo "reads=-1         	If positive, quit after processing X reads or pairs."
 #	echo "skipreads=0      	Ignore this many initial reads (or pairs) and process the rest."
 	echo ""
 	echo "Output parameters:"
-	echo "out=<file>       	Write good reads here.  'out=stdout.fq' will pipe to standard out."
-	echo "out2=<file>      	Use this to write 2nd read of pairs to a different file."
-	echo "outbad=<file>    	(outb) Write reads here that were trimmed to shorter than minlen."
-	echo "outbad2=<file>   	(outb2) Use this to write 2nd read of pairs to a different file."
-	echo "overwrite=t      	(ow) Set to false to force the program to abort rather than overwrite an existing file."
-	echo "showspeed=t      	(ss) Set to 'f' to suppress display of processing speed."
-	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
+	echo "out=<file>       	Output file.  out=stdout.fq will pipe to stdout."
+	echo "out2=<file>      	Output for 2nd read of pairs."
+	echo "outbad=<file>    	(outb) Output for reads shorter than minlen."
+	echo "outbad2=<file>   	(outb2) Output for 2nd read of pairs."
+	echo "overwrite=t      	(ow) Grant permission to overwrite files."
+	echo "showspeed=t      	(ss) 'f' suppresses display of processing speed."
+	echo "ziplevel=2       	(zl) Compression level; 1 (min) through 9 (max)."
 	echo "fastawrap=80     	Length of lines in fasta output."
-	echo "qout=auto        	ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input)."
+	echo "qout=auto        	Output quality offset: 33 (Sanger), 64, or auto."
 	echo ""
 	echo "Processing parameters:"
 	echo "threads=auto     	(t) Set number of threads to use; default is number of logical processors."
@@ -121,6 +74,76 @@ usage(){
 	echo "There is a changelog at /global/projectb/sandbox/gaag/bbtools/docs/changelog_bbduk.txt"
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
 	echo ""
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx200m"
+z2="-Xms200m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -Xms* ]]; then
+			z2="$arg"
+			set=1
+		elif [[ "$arg" == Xms* ]]; then
+			z2="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	
+	x=$(ulimit -v)
+	#echo "x=$x"
+	HOSTNAME=`hostname`
+	y=1
+	if [[ $x == unlimited ]]; then
+		#echo "ram is unlimited"
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 1G." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		y=1000
+	fi
+	
+	mult=30;
+
+	y=$(( ((x-20000)*mult/100)/1000 ))
+
+	if [ $y -ge 1500 ]; then
+		y=1500 
+	elif [ 200 -ge $y ]; then
+		y=200 
+	fi
+	
+	#echo "y=$y"
+	z="-Xmx${y}m"
+}
+calcXmx "$@"
+
+bbduk() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	local CMD="java $EA $z -cp $CP jgi.BBDukF k=23 mink=12 ktrim=r qtrim=rl trimq=10 mm=f $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

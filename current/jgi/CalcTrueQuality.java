@@ -18,6 +18,7 @@ import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
 import dna.Gene;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -75,8 +76,10 @@ public class CalcTrueQuality {
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("verbose")){
@@ -88,26 +91,6 @@ public class CalcTrueQuality {
 //				align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("t") || a.equals("threads")){

@@ -1,33 +1,26 @@
 BBMap readme by Brian Bushnell
-Last updated February 18, 2014.
+Last updated April 3, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 BBMap is free to use for noncommercial purposes, and investigators are free to publish results derived from the program, as long as the source code is not published or modified.
 
 This is the official release of BBMAP, version 31.x
 
 
-NOTE:
-Don't recompile unless you run into version problems (such as trying to run with java 1.6).  But if you must, then -
-To recompile, run this:
-javac -J-Xmx128m align2/*.java jgi/*.java driver/*.java fileIO/*.java dna/*.java org/apache/tools/bzip2/*.java
-(*** NOTE - due to email file size limits, I may have omitted the .java files if you received this via email, in which case you can't recompile. ***)
-
-
 Basic Syntax:
 
-(using shellscript, on Genepool, which autodetects RAM to set -Xmx parameter)
+(Using shellscript, on Genepool, which autodetects RAM to set -Xmx parameter.  You can also include a flag like '-Xmx31g' in the shellscript arguments to set RAM usage.)
 To index:
-bbmap.sh build=1 ref=<reference.fa>
+bbmap.sh ref=<reference.fa>
 To map:
-bbmap.sh build=1 in=<reads.fq> out=<mapped.sam>
+bbmap.sh in=<reads.fq> out=<mapped.sam>
 
 (without shellscript)
 To index:
-java -ea -Xmx31g -cp <PATH> align2.BBMap build=1 ref=<reference.fa>
+java -ea -Xmx31g -cp <PATH> align2.BBMap ref=<reference.fa>
 To map:
-java -ea -Xmx31g -cp <PATH> align2.BBMap build=1 in=<reads.fq> out=<mapped.sam>
+java -ea -Xmx31g -cp <PATH> align2.BBMap in=<reads.fq> out=<mapped.sam>
 
-...where "<PATH>" should indicate the path to the directory containing all the source code directories; e.g. "/global/projectb/sandbox/gaag/bbtools/current"
+...where "<PATH>" should indicate the path to the directory containing all the source code directories; e.g. "/usr/bin/bbtools/current"
 
 Please note, the reference is only needed for building the index the first time; subsequently, just specify the build number which corresponds to that reference.
 So for example the first time you map to e.coli you might specify "ref=ecoli_reference.fa build=3"; after that, just specify "build=3".
@@ -59,6 +52,8 @@ interleaved=<auto>	Or "int". Set to "true" to run mapping paired, forcing the re
 qin=<auto>       	Set to 33 or 64 to specify input quality value ASCII offset.
 fastareadlen=<500>	If fasta is used for input, breaks the fasta file up into reads of about this length.  Useful if you want to map one reference against another, since BBMap currently has internal buffers limited to 500bp.  I can change this easily if desired.
 fastaminread=<1>	Ignore fasta reads shorter than this.  Useful if, say, you set fastareadlen=500, and get a length 518 read; this will be broken into a 500bp read and an 18bp read.  But it's not usually worth mapping the 18bp read, which will often be ambiguous.
+maxlen=<0>        	Break long fastq reads into pieces of this length.
+minlen=<0>       	Throw away remainder of read that is shorter than this.
 fakequality=<-1>	Set to a positive number 1-50 to generate fake quality strings for fasta input reads.  Less than one turns this function off.
 blacklist=<a.fa,b.fa>	Set a list of comma-delimited fasta files.  Any read mapped to a scaffold name in these files will be considered "blacklisted" and can be handled differently by using the "outm", "outb", and "outputblacklisted" flags.  The blacklist fasta files should also be merged with other fasta files to make a single combined fasta file; this combined file should be specified with the "ref=" flag when indexing.
 touppercase=<f>		Set true to convert lowercase read bases to upper case.  This is required if any reads have lowercase letters (which real reads should never have).
@@ -207,6 +202,22 @@ Made 'tuc' (to uppercase) default to true for bbmap, to prevent assertion errors
 Added new tool, BBMask.
 Reads and SamLines can now be created with null bases.  
 SamLines to Read is now faster, skipping colorspace check.
+Added deprecated 'SOH' symbol support to FastaInputStream.  This will be replaced with a '>'.  Needed to process NCBI's NT database.
+Added "sampad" or "sp" flag to BBMask, to allow masking beyond bounds of mapped reads.
+TODO: %reads with ins, del, splice
+TODO: #bases mapped/unmapped, avg read length mapped/unmapped
+Dedupe now tracks and prints scaffolds that were duplicates with "outd=".  (request by Andrew Tritt)
+Updated all shellscripts to support the -h and --help flags. (suggested by Westerman)
+RAM detection is now skipped if user supplies -Xmx flag, preventing a false warning. (noted by Westerman)
+Created AddAdapters.java.  Capable of adding adapter sequence to a fastq file, and grading the trimmed file for correctness.
+Removed some debug code from FileFormat causing a crash on "stdin" with no extension.  Noted by Matt Nolan.
+Added BBWrap and bbwrap.sh.  Wraps BBMap to allow multiple input/output files without reloading the reference.
+Added support for breaking long fastq reads into shorter reads (maxlength and minlength flags).  Requested by James Han.
+Added Pileup support for residual bins smaller than binsize. Flag "ksb", "keepshortbins".  Requested by Kurt LaButti.
+Fixed support for breaking long reads; was failing on the last read in the set.  Noted by James Han.
+Improved accuracy slightly by better detecting when padding is needed.
+Improved verbose output from MSA.
+Created TranslateSixFrames, first step toward amino acid mapping.
 
 v30.
 Disabled compression/decompression subprocesses when total system threads allowed is less than 3.

@@ -17,6 +17,7 @@ import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
@@ -48,7 +49,7 @@ public static void main(String[] args){
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("null")){
 				// do nothing

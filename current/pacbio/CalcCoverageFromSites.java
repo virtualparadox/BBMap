@@ -13,6 +13,7 @@ import dna.ChromosomeArray;
 import dna.CoverageArray;
 import dna.CoverageArray2;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
@@ -40,7 +41,7 @@ public class CalcCoverageFromSites {
 			String a=split[0].toLowerCase();
 			String b=split[1];
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("mincoverage")){
 				mincoverage=Integer.parseInt(b);

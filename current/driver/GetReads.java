@@ -16,6 +16,7 @@ import stream.Read;
 import align2.ListNum;
 import align2.Tools;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -86,8 +87,10 @@ public class GetReads {
 			String b=(split.length>1 ? split[1] : "true");
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
 			}else if(a.equals("id") || a.equals("number")){
@@ -120,14 +123,6 @@ public class GetReads {
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				ReadWrite.USE_PIGZ=Tools.parseBoolean(b);
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("build") || a.equals("genome")){
@@ -207,8 +202,6 @@ public class GetReads {
 					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 					setInterleaved=true;
 				}
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("samplerate")){
 				samplerate=Float.parseFloat(b);
 				assert(samplerate<=1f && samplerate>=0f) : "samplerate="+samplerate+"; should be between 0 and 1";

@@ -378,10 +378,13 @@ public class ReadWrite {
 				out=gos;
 			}else if(bzipped){
 				throw new RuntimeException("bz2 compression not supported in this version.");
-//				out.write('B'); //comment to disable BZip2
-//				out.write('Z'); //comment to disable BZip2
-//				CBZip2OutputStream zos=new CBZip2OutputStream(out, 8192); //comment to disable BZip2
-//				out=zos; //comment to disable BZip2
+				
+//				{//comment to disable BZip2
+//					out.write('B');
+//					out.write('Z');
+//					CBZip2OutputStream zos=new CBZip2OutputStream(out, 8192);
+//					out=zos;
+//				}
 			}
 			//				else if(PROCESS_XZ && xz){
 			//					org.tukaani.xz.LZMA2Options options = new org.tukaani.xz.LZMA2Options();
@@ -491,18 +494,20 @@ public class ReadWrite {
 		final OutputStream raw=getRawOutputStream(fname, false, RAWMODE);
 		if(RAWMODE){return raw;}
 		throw new RuntimeException("bz2 compression not supported in this version.");
-		//comment to disable BZip2
-//		try {
-//			raw.write('B');
-//			raw.write('Z');
-//			CBZip2OutputStream out=new CBZip2OutputStream(raw, 8192);
-//			return out;
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
+		
+//		{//comment to disable BZip2
+//			try {
+//				raw.write('B');
+//				raw.write('Z');
+//				CBZip2OutputStream out=new CBZip2OutputStream(raw, 8192);
+//				return out;
+//			} catch (IOException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//			assert(false);
+//			return null;
 //		}
-//		assert(false);
-//		return null;
 	}
 	
 	public static OutputStream getZipOutputStream(String fname, boolean buffered, boolean allowSubprocess){
@@ -1032,27 +1037,27 @@ public class ReadWrite {
 	private static InputStream getBZipInputStream(String fname, boolean stripBZ) throws IOException{
 		if(verbose){System.err.println("getBZipInputStream("+fname+", "+stripBZ+")");}
 		throw new RuntimeException("bz2 compression not supported in this version.");
-		
-		//comment to disable BZip2
-//		InputStream raw=getRawInputStream(fname, true);
-//		InputStream in=null;
-//		
-//		if(stripBZ){
-////			System.err.println("Attempting to strip BZ");
-//			byte[] header=new byte[2];
-//			try {raw.read(header);} 
-//			catch (IOException e) {throw new RuntimeException(e);}
-//			
-//			if(header[0]!='B' || header[1]!='Z'){
-//				throw new IOException("Found BZ2 file that does not start with BZ: "+"("+header[0]+", "+header[1]+")");
+
+//		{//comment to disable BZip2
+//			InputStream raw=getRawInputStream(fname, true);
+//			InputStream in=null;
+//
+//			if(stripBZ){
+//				//			System.err.println("Attempting to strip BZ");
+//				byte[] header=new byte[2];
+//				try {raw.read(header);} 
+//				catch (IOException e) {throw new RuntimeException(e);}
+//
+//				if(header[0]!='B' || header[1]!='Z'){
+//					throw new IOException("Found BZ2 file that does not start with BZ: "+"("+header[0]+", "+header[1]+")");
+//				}
 //			}
-//		}
-//		
-//		try {
-//			
-//			in=new CBZip2InputStream(raw);
-//			
-//			/*
+//
+//			try {
+//
+//				in=new CBZip2InputStream(raw);
+//
+//				/*
 //				From http://www.kohsuke.org/bzip2/:
 //
 //				Note
@@ -1060,23 +1065,24 @@ public class ReadWrite {
 //				Jacek Bilski told me that he had to read two bytes from the stream 
 //				before he uses CBZip2InputStream. Those two bytes ('B' and 'Z')
 //				 are used by the command line bzip program to mark the stream.
-//			 */ 
-//			
-//		} catch (Exception e) {
-//			
-//			try {
-//				in=null;
-//				raw.close();
-//				raw=null;
-//			} catch (IOException e1) {
-//				System.err.println("Error when attempting to read "+fname);
-//				e.printStackTrace();
-//				e1.printStackTrace();
-//				throw new RuntimeException(e1);
-//			}
-//		}
+//				 */ 
 //
-//		return in;
+//			} catch (Exception e) {
+//
+//				try {
+//					in=null;
+//					raw.close();
+//					raw=null;
+//				} catch (IOException e1) {
+//					System.err.println("Error when attempting to read "+fname);
+//					e.printStackTrace();
+//					e1.printStackTrace();
+//					throw new RuntimeException(e1);
+//				}
+//			}
+//
+//			return in;
+//		}
 	}
 	
 	public static InputStream getXZInputStream(String fname){

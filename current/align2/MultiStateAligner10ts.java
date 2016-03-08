@@ -2,6 +2,8 @@ package align2;
 
 import java.util.Arrays;
 
+import stream.SiteScore;
+
 import dna.AminoAcid;
 
 /** 
@@ -30,32 +32,14 @@ public final class MultiStateAligner10ts extends MSA{
 		MultiStateAligner10ts msa=new MultiStateAligner10ts(read.length, ref.length, colorspace);
 		
 		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		int[] max=msa.fillLimited(read, ref, 0, ref.length-1, 0, null);
 		
 		System.out.println("Max: "+Arrays.toString(max));
 		
-		System.out.println("Initial: ");
-		for(int mode=0; mode<msa.packed.length; mode++){
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toScorePacked(msa.packed[mode][row], SCOREOFFSET));
-			}
-			System.out.println();
-			for(int row=0; row<msa.packed[mode].length; row++){
-				System.out.println(toTimePacked(msa.packed[mode][row], TIMEMASK));
-			}
-			System.out.println();
-		}
+		System.out.println("Final: ");
+		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
 		
 		byte[] out=msa.traceback(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 		
@@ -131,6 +115,11 @@ public final class MultiStateAligner10ts extends MSA{
 		if(gaps==null){return fillLimitedX(read, ref, refStartLoc, refEndLoc, minScore);}
 		else{
 			byte[] gref=makeGref(ref, gaps, refStartLoc, refEndLoc);
+			
+			if(verbose && greflimit>0 && greflimit<500){
+				System.err.println(new String(gref, 0, greflimit));
+			}
+			
 			assert(gref!=null) : "Excessively long read:\n"+new String(read);
 			return fillLimitedX(read, gref, 0, greflimit, minScore);
 		}
@@ -140,6 +129,7 @@ public final class MultiStateAligner10ts extends MSA{
 	/** return new int[] {rows, maxC, maxS, max}; 
 	 * Will not fill areas that cannot match minScore */
 	private final int[] fillLimitedX(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore){
+		if(verbose){System.err.println("fillLimitedX");}
 		if(bandwidth>0 && bandwidth<read.length){return fillBanded1(read, ref, refStartLoc, refEndLoc, minScore);}
 //		minScore=0;
 //		assert(minScore>0);
@@ -154,7 +144,7 @@ public final class MultiStateAligner10ts extends MSA{
 		}
 
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=120; //Increases quality trivially
@@ -495,7 +485,7 @@ public final class MultiStateAligner10ts extends MSA{
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -591,6 +581,13 @@ public final class MultiStateAligner10ts extends MSA{
 //		if(maxScore<floor){
 //			return null;
 //		}
+		
+		if(verbose){
+			System.out.println("Filled matrix.");
+			printMatrix(packed, rows, columns, TIMEMASK, SCOREOFFSET);
+		}
+		if(verbose){System.err.println("maxscore="+(maxScore>>SCOREOFFSET)+", minscore="+(minScore_off>>SCOREOFFSET));}
+		
 		if(maxScore<minScore_off){
 			return null;
 		}
@@ -607,6 +604,7 @@ public final class MultiStateAligner10ts extends MSA{
 	 * return new int[] {rows, maxC, maxS, max}; 
 	 * Will not fill areas that cannot match minScore */
 	private final int[] fillBanded1(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore){
+		if(verbose){System.err.println("fillBanded1()");}
 //		minScore=0;
 //		assert(minScore>0);
 		rows=read.length;
@@ -621,7 +619,7 @@ public final class MultiStateAligner10ts extends MSA{
 		}
 
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=120; //Increases quality trivially
@@ -962,7 +960,7 @@ public final class MultiStateAligner10ts extends MSA{
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -1078,7 +1076,7 @@ public final class MultiStateAligner10ts extends MSA{
 		rows=read.length;
 		columns=refEndLoc-refStartLoc+1;
 		
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=120; //Increases quality trivially
@@ -1426,7 +1424,7 @@ public final class MultiStateAligner10ts extends MSA{
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					bpacked[MODE_INS][row][col]=subfloor;
 					startmatrix[MODE_MS][row][col]=-1;
 				}else{//Calculate INS score
@@ -1558,6 +1556,7 @@ public final class MultiStateAligner10ts extends MSA{
 	/** return new int[] {rows, maxC, maxS, max}; 
 	 * Does not require a min score (ie, same as old method) */
 	private final int[] fillUnlimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc){
+		if(verbose){System.err.println("fillUnlimited()");}
 		rows=read.length;
 		columns=refEndLoc-refStartLoc+1;
 		
@@ -1565,7 +1564,7 @@ public final class MultiStateAligner10ts extends MSA{
 		final int subfloor=0-2*maxGain;
 		assert(subfloor>BADoff && subfloor*2>BADoff); //TODO: Actually, it needs to be substantially more.
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		//temporary, for finding a bug
@@ -1739,7 +1738,7 @@ public final class MultiStateAligner10ts extends MSA{
 				
 				//Calculate INS score
 //				if(gap || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -3149,6 +3148,140 @@ public final class MultiStateAligner10ts extends MSA{
 				mode=MODE_SUB;
 			}
 		}
+		
+		return score;
+	}
+	
+	@Override
+	public final int scoreNoIndels(byte[] read, byte[] ref, final int refStart, final SiteScore ss){
+		
+		int score=0;
+		int mode=-1;
+		int timeInMode=0;
+		
+		//This block handles cases where the read runs outside the reference
+		//Of course, padding the reference with 'N' would be better, but...
+		int readStart=0;
+		int readStop=read.length;
+		final int refStop=refStart+read.length;
+		boolean semiperfect=true;
+		int norefs=0;
+		
+		if(refStart<0){
+			readStart=0-refStart;
+			score+=POINTS_NOREF*readStart;
+			norefs+=readStart;
+		}
+		if(refStop>ref.length){
+			int dif=(refStop-ref.length);
+			readStop-=dif;
+			score+=POINTS_NOREF*dif;
+			norefs+=dif;
+		}
+		
+//		if(refStart<0 || refStart+read.length>ref.length){return -99999;} //No longer needed.
+		
+		for(int i=readStart; i<readStop; i++){
+			byte c=read[i];
+			byte r=ref[refStart+i];
+			
+			if(c==r && c!='N'){
+				if(mode==MODE_MS){
+					timeInMode++;
+					score+=POINTS_MATCH2;
+				}else{
+					timeInMode=0;
+					score+=POINTS_MATCH;
+				}
+				mode=MODE_MS;
+			}else if(c<0 || c=='N'){
+				score+=POINTS_NOCALL;
+				semiperfect=false;
+			}else if(r<0 || r=='N'){
+				score+=POINTS_NOREF;
+				norefs++;
+			}else{
+				if(mode==MODE_SUB){timeInMode++;}
+				else{timeInMode=0;}
+				
+				if(timeInMode==0){score+=POINTS_SUB;}
+				else if(timeInMode<LIMIT_FOR_COST_3){score+=POINTS_SUB2;}
+				else{score+=POINTS_SUB3;}
+				mode=MODE_SUB;
+				semiperfect=false;
+			}
+		}
+		
+		//TODO: Verify this; it's in the PacBio version
+		//if(semiperfect && ss!=null){ss.semiperfect=((ss.stop==ss.start+read.length-1) && (norefs<=read.length/2));}
+		
+		return score;
+	}
+	
+	@Override
+	public final int scoreNoIndels(byte[] read, byte[] ref, byte[] baseScores, final int refStart, SiteScore ss){
+		
+		int score=0;
+		int mode=-1;
+		int timeInMode=0;
+		int norefs=0;
+		
+		//This block handles cases where the read runs outside the reference
+		//Of course, padding the reference with 'N' would be better, but...
+		int readStart=0;
+		int readStop=read.length;
+		final int refStop=refStart+read.length;
+		boolean semiperfect=true;
+		
+		if(refStart<0){
+			readStart=0-refStart;
+			score+=POINTS_NOREF*readStart;
+			norefs+=readStart;
+		}
+		if(refStop>ref.length){
+			int dif=(refStop-ref.length);
+			readStop-=dif;
+			score+=POINTS_NOREF*dif;
+			norefs+=dif;
+		}
+		
+//		if(refStart<0 || refStart+read.length>ref.length){return -99999;} //No longer needed.
+		
+		for(int i=readStart; i<readStop; i++){
+			byte c=read[i];
+			byte r=ref[refStart+i];
+			
+			if(c==r && c!='N'){
+				if(mode==MODE_MS){
+					timeInMode++;
+					score+=POINTS_MATCH2;
+				}else{
+					timeInMode=0;
+					score+=POINTS_MATCH;
+				}
+				score+=baseScores[i];
+				mode=MODE_MS;
+			}else if(c<0 || c=='N'){
+				score+=POINTS_NOCALL;
+				semiperfect=false;
+			}else if(r<0 || r=='N'){
+				score+=POINTS_NOREF;
+				norefs++;
+			}else{
+				if(mode==MODE_SUB){timeInMode++;}
+				else{timeInMode=0;}
+				
+				if(timeInMode==0){score+=POINTS_SUB;}
+				else if(timeInMode<LIMIT_FOR_COST_3){score+=POINTS_SUB2;}
+				else{score+=POINTS_SUB3;}
+				mode=MODE_SUB;
+				semiperfect=false;
+			}
+		}
+		
+		//TODO: Verify.  This is in the PacBio version.
+//		if(semiperfect && ss!=null){ss.semiperfect=((ss.stop==ss.start+read.length-1) && (norefs<=read.length/2));}
+//		assert(Read.CHECKSITE(ss, read, -1));
 		
 		return score;
 	}

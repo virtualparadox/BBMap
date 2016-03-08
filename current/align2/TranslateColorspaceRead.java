@@ -346,7 +346,7 @@ public final class TranslateColorspaceRead {
 		if(verbose){
 			System.err.println("Realigning.");
 			System.err.println("Original: "+r.start+", "+r.stop+", "+Gene.strandCodes[r.strand()]);
-			if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
+			if(verbose){System.err.println("A. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
 		}
 		
 		{
@@ -406,7 +406,7 @@ public final class TranslateColorspaceRead {
 			assert(chacs.maxIndex>=r.stop) : "\nchr"+r.chrom+": r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
 				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
 			
-			if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
+			if(verbose){System.err.println("B. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
 			
 			if(scoreNoIndel>=maxI || forbidIndels){
 				if(verbose){System.err.println("Quick match.");}
@@ -423,8 +423,8 @@ public final class TranslateColorspaceRead {
 				int maxLoc=Tools.min(r.stop+padding, chacs.maxIndex);
 				
 				if(verbose){System.err.println("minLoc = "+minLoc+", maxLoc = "+maxLoc);}
-				if(verbose){System.err.println("A. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-				if(verbose){System.err.println("A. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
+				if(verbose){System.err.println("C. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
+				if(verbose){System.err.println("C. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
 				
 				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
 				assert(minLoc<=r.start) : "\nchr"+r.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
@@ -443,7 +443,7 @@ public final class TranslateColorspaceRead {
 					}
 					max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
 					score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-					if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
+					if(verbose){System.err.println("D. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
 					
 					if(score!=null && score.length>6){
 						int[] oldArray=score.clone();
@@ -454,12 +454,12 @@ public final class TranslateColorspaceRead {
 						if(r.gaps==null){
 							assert(maxLoc-minLoc+1<=msa.maxColumns);
 							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -467,12 +467,12 @@ public final class TranslateColorspaceRead {
 							//TODO: In this case the alignment will probably be wrong.
 							int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
 							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -482,8 +482,8 @@ public final class TranslateColorspaceRead {
 						minLoc=Tools.max(0, minLoc-extraPadLeft);
 						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
 
-						if(verbose){System.err.println("B. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-						if(verbose){System.err.println("B. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
+						if(verbose){System.err.println("E. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
+						if(verbose){System.err.println("E. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
 						max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
 						score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
 						
@@ -493,12 +493,12 @@ public final class TranslateColorspaceRead {
 							if(r.gaps==null){
 								assert(maxLoc-minLoc+1<=msa.maxColumns);
 								int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns){
-									while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+								if(newlen>=msa.maxColumns-80){
+									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 								}else{
-									int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 									extraPadLeft=Tools.max(x, extraPadLeft);
 									extraPadRight=Tools.max(x, extraPadRight);
 								}
@@ -506,12 +506,12 @@ public final class TranslateColorspaceRead {
 								//TODO: In this case the alignment will probably be wrong.
 								int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
 								int newlen=(greflen+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns){
-									while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+								if(newlen>=msa.maxColumns-80){
+									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 								}else{
-									int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 									extraPadLeft=Tools.max(x, extraPadLeft);
 									extraPadRight=Tools.max(x, extraPadRight);
 								}
@@ -614,21 +614,21 @@ public final class TranslateColorspaceRead {
 					if(r.gaps==null){
 						assert(maxLoc-minLoc+1<=msa.maxColumns);
 						int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns){
-							while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+						if(newlen>=msa.maxColumns-80){
+							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 						}
 					}else{
 						//TODO: In this case the alignment will probably be wrong.
 						int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
 						int newlen=(greflen+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns){
-							while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+						if(newlen>=msa.maxColumns-80){
+							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 						}else{
-							int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+							int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 							extraPadLeft=Tools.max(x, extraPadLeft);
 							extraPadRight=Tools.max(x, extraPadRight);
 						}
@@ -648,12 +648,12 @@ public final class TranslateColorspaceRead {
 						if(r.gaps==null){
 							assert(maxLoc-minLoc+1<=msa.maxColumns);
 							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -661,12 +661,12 @@ public final class TranslateColorspaceRead {
 							//TODO: In this case the alignment will probably be wrong.
 							int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
 							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -742,7 +742,7 @@ public final class TranslateColorspaceRead {
 		if(verbose){
 			System.err.println("Realigning.");
 			System.err.println("Original: "+ss.start+", "+ss.stop+", "+Gene.strandCodes[ss.strand()]);
-			if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+			if(verbose){System.err.println("F. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
 		}
 		
 		{
@@ -752,6 +752,7 @@ public final class TranslateColorspaceRead {
 				ss.stop=ss.start+Tools.min(bases.length+40, msa.maxColumns-20);
 				if(ss.gaps!=null){ss.gaps=GapTools.fixGaps(ss.start, ss.stop, ss.gaps, Shared.MINGAP);}
 			}
+			if(verbose){System.err.println("F. Estimated greflen2: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
 		}
 		
 		if(ss.start<0){ss.start=0;} //Prevents assertion errors.  This change should be reset by the realignment so it shouldn't mattess.
@@ -775,11 +776,23 @@ public final class TranslateColorspaceRead {
 		
 		if(verbose){System.err.println("Padding = "+padding);}
 		
-		padding=Tools.min(padding, (msa.maxColumns-Tools.max(bases.length, GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps)))/2-1);
-		if(forbidIndels){padding=0;}
-		if(verbose){System.err.println("Padding = "+padding);}
-		assert(padding>=0) : id+", "+padding;
-		
+		{
+			int oldPadding=padding;
+			padding=Tools.max(0, Tools.min(padding, (msa.maxColumns-Tools.max(bases.length, GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps)))/2-100));
+			if(forbidIndels){padding=0;}
+			if(verbose){
+				System.err.println("oldPadding="+oldPadding+", padding="+padding);
+				System.err.println("L. calcGrefLen1 = "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));
+				System.err.println("L. calcGrefLen2 = "+GapTools.calcGrefLen(ss.start-oldPadding, ss.stop+oldPadding, ss.gaps));
+				System.err.println("L. calcGrefLen3 = "+GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps));
+			}
+
+
+			assert(padding>=0) : id+", "+padding;
+
+//			assert(GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps)<msa.maxColumns) : 
+//				oldPadding+", "+padding+", "+bases.length+", "+GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps)+", "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps);
+		}
 		
 		final int maxQ=msa.maxQuality(bases.length);
 		final int maxI=msa.maxImperfectScore(bases.length);
@@ -802,7 +815,7 @@ public final class TranslateColorspaceRead {
 			assert(chacs.maxIndex>=ss.stop) : "\nchr"+ss.chrom+": ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
 				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
 			
-			if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+			if(verbose){System.err.println("G. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
 			
 			if(scoreNoIndel>=maxI || forbidIndels){
 				if(verbose){System.err.println("Quick match.");}
@@ -819,8 +832,8 @@ public final class TranslateColorspaceRead {
 				int maxLoc=Tools.min(ss.stop+padding, chacs.maxIndex);
 				
 				if(verbose){System.err.println("minLoc = "+minLoc+", maxLoc = "+maxLoc);}
-				if(verbose){System.err.println("A. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
-				if(verbose){System.err.println("A. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
+				if(verbose){System.err.println("H. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+				if(verbose){System.err.println("H. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 				
 				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
 				assert(minLoc<=ss.start) : "\nchr"+ss.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
@@ -839,7 +852,7 @@ public final class TranslateColorspaceRead {
 					}
 					max=msa.fillLimited(bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), ss.gaps);
 					score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
-					if(verbose){System.err.println("Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+					if(verbose){System.err.println("I. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
 					
 					if(score!=null && score.length>6){
 						int[] oldArray=score.clone();
@@ -850,12 +863,12 @@ public final class TranslateColorspaceRead {
 						if(ss.gaps==null){
 							assert(maxLoc-minLoc+1<=msa.maxColumns);
 							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -863,12 +876,12 @@ public final class TranslateColorspaceRead {
 							//TODO: In this case the alignment will probably be wrong.
 							int greflen=Tools.max(bases.length, GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));
 							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -878,8 +891,8 @@ public final class TranslateColorspaceRead {
 						minLoc=Tools.max(0, minLoc-extraPadLeft);
 						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
 
-						if(verbose){System.err.println("B. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
-						if(verbose){System.err.println("B. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
+						if(verbose){System.err.println("J. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+						if(verbose){System.err.println("J. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 						max=msa.fillLimited(bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), ss.gaps);
 						score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
 						
@@ -889,12 +902,12 @@ public final class TranslateColorspaceRead {
 							if(ss.gaps==null){
 								assert(maxLoc-minLoc+1<=msa.maxColumns);
 								int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns){
-									while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+								if(newlen>=msa.maxColumns-80){
+									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 								}else{
-									int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 									extraPadLeft=Tools.max(x, extraPadLeft);
 									extraPadRight=Tools.max(x, extraPadRight);
 								}
@@ -902,12 +915,12 @@ public final class TranslateColorspaceRead {
 								//TODO: In this case the alignment will probably be wrong.
 								int greflen=Tools.max(bases.length, GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));
 								int newlen=(greflen+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns){
-									while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+								if(newlen>=msa.maxColumns-80){
+									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 								}else{
-									int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 									extraPadLeft=Tools.max(x, extraPadLeft);
 									extraPadRight=Tools.max(x, extraPadRight);
 								}
@@ -971,6 +984,8 @@ public final class TranslateColorspaceRead {
 				int minLoc=Tools.max(ss.start-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
 				int maxLoc=Tools.min(ss.stop+padding, chacs.maxIndex);
 				if(verbose){System.err.println("Slow match "+minLoc+" ~ "+maxLoc);}
+				if(verbose){System.err.println("K. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+				if(verbose){System.err.println("K. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 
 				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
 				assert(minLoc<=ss.start) : "\nchr"+ss.chrom+": "+minLoc+", "+maxLoc+", "+ss.start+", "+ss.stop+
@@ -994,21 +1009,21 @@ public final class TranslateColorspaceRead {
 					if(ss.gaps==null){
 						assert(maxLoc-minLoc+1<=msa.maxColumns);
 						int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns){
-							while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+						if(newlen>=msa.maxColumns-80){
+							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 						}
 					}else{
 						//TODO: In this case the alignment will probably be wrong.
 						int greflen=Tools.max(bases.length, GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));
 						int newlen=(greflen+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns){
-							while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+						if(newlen>=msa.maxColumns-80){
+							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 						}else{
-							int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+							int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 							extraPadLeft=Tools.max(x, extraPadLeft);
 							extraPadRight=Tools.max(x, extraPadRight);
 						}
@@ -1028,12 +1043,12 @@ public final class TranslateColorspaceRead {
 						if(ss.gaps==null){
 							assert(maxLoc-minLoc+1<=msa.maxColumns);
 							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}
@@ -1041,12 +1056,12 @@ public final class TranslateColorspaceRead {
 							//TODO: In this case the alignment will probably be wrong.
 							int greflen=Tools.max(bases.length, GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));
 							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns){
-								while(newlen>=msa.maxColumns && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns){newlen-=2;extraPadLeft--;extraPadRight--;}
+							if(newlen>=msa.maxColumns-80){
+								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
+								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
+								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
 							}else{
-								int x=Tools.min(20, ((msa.maxColumns-newlen)/2)-1);
+								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
 								extraPadLeft=Tools.max(x, extraPadLeft);
 								extraPadRight=Tools.max(x, extraPadRight);
 							}

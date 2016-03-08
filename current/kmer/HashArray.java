@@ -74,7 +74,7 @@ public final class HashArray extends AbstractKmerTable {
 	}
 	
 	
-	int set(long kmer, int value){
+	public int set(long kmer, int value){
 		int cell=(int)(kmer%prime);
 		
 		for(final int max=cell+extra; cell<max; cell++){

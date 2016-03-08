@@ -313,7 +313,7 @@ public class FASTQ {
 			bb.append('\n').append('+').append('\n');
 			if(verbose){System.err.println("B:\n"+bb);}
 			if(quals==null){
-				final byte q=(byte)(30+ASCII_OFFSET_OUT);
+				final byte q=(byte)(FAKE_QUAL+ASCII_OFFSET_OUT);
 				final int blen=bases.length;
 				bb.ensureExtra(blen);
 				for(int i=0, j=bb.length; i<blen; i++, j++){bb.array[j]=q;}
@@ -542,10 +542,13 @@ public class FASTQ {
 		byte[] s=null;
 		ArrayList<Read> list=new ArrayList<Read>(Data.min(16384, maxReadsToReturn));
 		
+//		long numericID=numericID0;
 		byte[][] quad=new byte[4][];
 		
 		int cntr=0;
 		int added=0;
+		
+//		int longest=0;
 		
 		Read prev=null;
 		
@@ -553,98 +556,11 @@ public class FASTQ {
 			quad[cntr]=s;
 			cntr++;
 			if(cntr==4){
-//				
-//				if(verbose){
-//					System.err.println("\nASCII offset is "+ASCII_OFFSET);
-//					System.err.println("quad:");
-//					System.err.println(new String(quad[0]));
-//					System.err.println(new String(quad[1]));
-//					System.err.println(new String(quad[2]));
-//					System.err.println(new String(quad[3]));
-//				}
-//				
-//				assert(quad[0][0]==(byte)'@') : "\nError in "+tf.name+", line "+tf.lineNum()+"\n"+
-//					new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
-//				assert(quad[2][0]==(byte)'+') : "\nError in "+tf.name+", line "+tf.lineNum()+"\n"+
-//					new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n";
-//
-////				if(quad[0].startsWith("@HW") || quad[0].startsWith("@FC")){ascii_offset=66;} //TODO: clumsy
-//				
-//				final String id=makeId(quad[0]);
-//				
-//				Read r=null;
-//				
-//				byte[] bases=quad[1];
-//				byte[] quals=quad[3];
-////				assert(false) : Arrays.toString(quals);
-//				for(int i=0; i<quals.length; i++){
-//					quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
-//					if(DETECT_QUALITY && ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
-//						if(numericID<1){
-//							System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-//						}else{
-//							System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-//							System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
-//							System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
-//							errorState=true;
-//						}
-//						ASCII_OFFSET=64;
-//						for(int j=0; j<=i; j++){
-//							quals[j]=(byte)(quals[j]-31);
-//						}
-//					}
-//					if(quals[i]<-5){
-//						if(!negativeFive){
-//							for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)33);}
-//							System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly; quality value below -5.\n" +
-//									"Please re-run with the flag 'qin=33'.\nProblematic read number "+numericID+":\n" +
-//						
-//							"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n");
-//						}
-//						errorState=true;
-//						negativeFive=true;
-//						return null;
-//					}
-//					assert(quals[i]>=-5);
-////					assert(quals[i]>=-5) : "The ASCII quality encoding level is not set correctly.  Quality value below -5:" +
-////							"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3]);
-//				}
-////				assert(false) : Arrays.toString(quals);
-////				assert(false) : PARSE_CUSTOM+"\n"+new String(quad[0]);
-//				if(PARSE_CUSTOM){
-//					if(quad[0]!=null && Tools.indexOf(quad[0], (byte)'_')>0){
-//						String temp=new String(quad[0]);
-//						if(temp.endsWith(" /1") || temp.endsWith(" /2")){temp=temp.substring(0, temp.length()-3);}
-//						String[] answer=temp.split("_");
-//
-//						if(answer.length>=5){
-//							try {
-//								byte trueChrom=Gene.toChromosome(answer[1]);
-//								byte trueStrand=Byte.parseByte(answer[2]);
-//								int trueLoc=Integer.parseInt(answer[3]);
-//								int trueStop=Integer.parseInt(answer[4]);
-//								r=new Read(bases, trueChrom, trueStrand, trueLoc, trueStop, id, quals, colorspace, numericID);
-//								r.setSynthetic(true);
-//							} catch (NumberFormatException e) {
-//								PARSE_CUSTOM=false;
-//								System.err.println("Turned off PARSE_CUSTOM because could not parse "+new String(quad[0]));
-//							}
-//						}else{
-//							PARSE_CUSTOM=false;
-//							System.err.println("Turned off PARSE_CUSTOM because answer="+Arrays.toString(answer));
-//						}
-//					}else{
-//						PARSE_CUSTOM=false;
-//						System.err.println("Turned off PARSE_CUSTOM because quad[0]="+new String(quad[0])+", index="+Tools.indexOf(quad[0], (byte)'_'));
-//					}
-//				}
-//				if(r==null){
-//					r=new Read(bases, 0, (byte)0, 0, 0, id, quals, colorspace, numericID);
-//				}
-				
 				
 				Read r=quadToRead(quad, true, false, colorspace, tf, numericID);
 				cntr=0;
+				
+//				longest=Tools.max(longest, (r.bases==null ? 0 : r.bases.length));
 				
 				if(interleaved){
 					if(prev==null){prev=r;}
@@ -854,6 +770,7 @@ public class FASTQ {
 	public static boolean PARSE_CUSTOM=false;
 	public static byte ASCII_OFFSET=33;
 	public static byte ASCII_OFFSET_OUT=33;
+	public static byte FAKE_QUAL=30;
 	public static boolean TEST_INTERLEAVED=true;
 	public static boolean FORCE_INTERLEAVED=false;
 	public static boolean DETECT_QUALITY=true;
@@ -863,5 +780,8 @@ public class FASTQ {
 	public static final int QUAL_THRESH=54;
 	public static boolean IGNORE_BAD_QUALITY=false;
 	public static boolean verbose=false;
+
+//	public static int minLength=0;
+//	public static int maxLength=0;
 	
 }

@@ -145,7 +145,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 		}
 
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		minScore-=100; //Increases quality trivially
@@ -460,7 +460,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 				}
 
 //				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (scoreFromDiag_INS<=limit && scoreFromIns_INS<=limit) || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					
@@ -589,7 +589,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 		final int subfloor=0-2*maxGain;
 		assert(subfloor>BADoff && subfloor*2>BADoff); //TODO: Actually, it needs to be substantially more.
 //		final int BARRIER_I2=columns-BARRIER_I1;
-		final int BARRIER_I2=rows-BARRIER_I1;
+		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
 		//temporary, for finding a bug
@@ -763,7 +763,7 @@ public final class MultiStateAligner9PacBioAdapter_WithBarriers {
 				
 				//Calculate INS score
 //				if(gap || col<BARRIER_I1 || col>BARRIER_I2){
-				if(gap || row<BARRIER_I1 || row>BARRIER_I2){
+				if(gap || (row<BARRIER_I1 && col>1) || (row>BARRIER_I2 && col<BARRIER_I2b)){
 					packed[MODE_INS][row][col]=subfloor;
 				}else{//Calculate INS score
 					

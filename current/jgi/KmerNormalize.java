@@ -29,6 +29,7 @@ import align2.Tools;
 import align2.TrimRead;
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
@@ -97,8 +98,10 @@ public class KmerNormalize {
 		String outLow=null, outMid=null, outHigh=null, outUnc=null;
 		int prehashes=-1;
 		long precells=-1;
-		String histFile=null;
-		String histFileOut=null;
+		String khistFile=null;
+		String rhistFile=null;
+		String khistFileOut=null;
+		String rhistFileOut=null;
 		int threads=-1;
 		ReadWrite.ZIPLEVEL=2;
 		
@@ -149,8 +152,10 @@ public class KmerNormalize {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("keepall")){
@@ -238,8 +243,6 @@ public class KmerNormalize {
 				buildpasses=Integer.parseInt(b);
 			}else if(a.equals("printcoverage")){
 				assert(false) : "This is not the program you are looking for.  Try KmerCoverage.  Move along.";
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("rn") || a.equals("rename") || a.equals("renamereads")){
@@ -266,10 +269,14 @@ public class KmerNormalize {
 				LOW_BIN_DEPTH=Integer.parseInt(b);
 			}else if(a.equals("hbd") || a.equals("highbindepth") || a.equals("upperlimit")){
 				HIGH_BIN_DEPTH=Integer.parseInt(b);
-			}else if(a.equals("hist") || a.equals("histin") || a.equals("inhist")){
-				histFile=b;
-			}else if(a.equals("histout") || a.equals("outhist") || a.equals("hist2")){
-				histFileOut=b;
+			}else if(a.equals("hist") || a.equals("histin") || a.equals("inhist") || a.equals("khist")){
+				khistFile=b;
+			}else if(a.equals("rhist")){
+				rhistFile=b;
+			}else if(a.equals("histout") || a.equals("outhist") || a.equals("hist2") || a.equals("khistout")){
+				khistFileOut=b;
+			}else if(a.equals("rhistout")){
+				rhistFileOut=b;
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
@@ -458,22 +465,6 @@ public class KmerNormalize {
 					if(b.length()==0){b=null;}
 					else{b=(b.replace('\\', '/')+"/").replaceAll("//", "/");}
 				}
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("extra")){
 				if(b!=null && !b.equalsIgnoreCase("null")){
 					if(new File(b).exists()){
@@ -529,18 +520,21 @@ public class KmerNormalize {
 		
 		if(DETERMINISTIC){ordered=true;}
 		
-		assert(Tools.canWrite(outKeep, overwrite)) : outKeep+" already exists, and overwrite="+overwrite;
-		assert(Tools.canWrite(outToss, overwrite)) : outToss+" already exists, and overwrite="+overwrite;
-		assert(Tools.canWrite(histFile, overwrite)) : histFile+" already exists, and overwrite="+overwrite;
-		assert(Tools.canWrite(histFileOut, overwrite)) : histFileOut+" already exists, and overwrite="+overwrite;
-		assert(outKeep==null || outKeep.startsWith("stdout") || !(outKeep.equals(outToss) || outKeep.equals(histFile) || outKeep.equals(histFileOut))) : 
-			"Duplicate output file: "+outKeep;
-		assert(outToss==null || outToss.startsWith("stdout") || !(outToss.equals(outKeep) || outToss.equals(histFile) || outToss.equals(histFileOut))) : 
-			"Duplicate output file: "+outToss;
-		assert(histFile==null || histFile.startsWith("stdout") || !(histFile.equals(outToss) || histFile.equals(outKeep) || histFile.equals(histFileOut))) : 
-			"Duplicate output file: "+histFile;
-		assert(histFileOut==null || histFileOut.startsWith("stdout") || !(histFileOut.equals(outToss) || histFileOut.equals(histFile) || histFileOut.equals(outKeep))) : 
-			"Duplicate output file: "+histFileOut;
+		boolean ok=Tools.testOutputFiles(overwrite, false, outKeep, outToss, khistFile, khistFileOut, rhistFile, rhistFileOut);
+		
+//		assert(Tools.canWrite(outKeep, overwrite)) : outKeep+" already exists, and overwrite="+overwrite;
+//		assert(Tools.canWrite(outToss, overwrite)) : outToss+" already exists, and overwrite="+overwrite;
+//		assert(Tools.canWrite(khistFile, overwrite)) : khistFile+" already exists, and overwrite="+overwrite;
+//		assert(Tools.canWrite(khistFileOut, overwrite)) : khistFileOut+" already exists, and overwrite="+overwrite;
+//		assert(Tools.canWrite(khistFileOut, overwrite)) : khistFileOut+" already exists, and overwrite="+overwrite;
+//		assert(outKeep==null || outKeep.startsWith("stdout") || !(outKeep.equals(outToss) || outKeep.equals(khistFile) || outKeep.equals(khistFileOut))) : 
+//			"Duplicate output file: "+outKeep;
+//		assert(outToss==null || outToss.startsWith("stdout") || !(outToss.equals(outKeep) || outToss.equals(khistFile) || outToss.equals(khistFileOut))) : 
+//			"Duplicate output file: "+outToss;
+//		assert(khistFile==null || khistFile.startsWith("stdout") || !(khistFile.equals(outToss) || khistFile.equals(outKeep) || khistFile.equals(khistFileOut))) : 
+//			"Duplicate output file: "+khistFile;
+//		assert(khistFileOut==null || khistFileOut.startsWith("stdout") || !(khistFileOut.equals(outToss) || khistFileOut.equals(khistFile) || khistFileOut.equals(outKeep))) : 
+//			"Duplicate output file: "+khistFileOut;
 		
 		if(cbits>16 && passes>1){cbits=16;}
 		
@@ -616,7 +610,7 @@ public class KmerNormalize {
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
-							(pass==1 ? histFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 2), Tools.min(minKmersOverMinDepth, 5), 
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), false, rbb, true,
 							highPercentile, 0, (errorDetectRatio>100 ? 100+(errorDetectRatio-100)/2 : errorDetectRatio), hthresh, lthresh, false, false, false);
@@ -652,7 +646,7 @@ public class KmerNormalize {
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
-							(pass==1 ? histFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
@@ -681,7 +675,7 @@ public class KmerNormalize {
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
-							(pass==1 ? histFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
@@ -699,7 +693,7 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=false;
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					lastTemp, null, outKeep, outToss, outLow, outMid, outHigh, outUnc, null, null,
+					lastTemp, null, outKeep, outToss, outLow, outMid, outHigh, outUnc, null, null, null,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF,
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}else{
@@ -708,12 +702,12 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=(TRIM_RIGHT);
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					in1, in2, outKeep, outToss, outLow, outMid, outHigh, outUnc, histFile, extra,
+					in1, in2, outKeep, outToss, outLow, outMid, outHigh, outUnc, khistFile, rhistFile, extra,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF, 
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}
 		
-		if(outKeep!=null && histFileOut!=null){
+		if(outKeep!=null && (khistFileOut!=null || rhistFileOut!=null)){
 			outstream.println("\n   ***********   Output Histogram Generation   **********   \n");
 			FASTQ.TEST_INTERLEAVED=true;
 			FASTQ.FORCE_INTERLEAVED=paired;
@@ -722,7 +716,7 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=false;
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					outKeep, null, null, null, null, null, null, null, histFileOut, extra,
+					outKeep, null, null, null, null, null, null, null, khistFileOut, rhistFileOut, extra,
 					99999999, 99999999, 99999999, 99999999, 0, 0, .5f, false, rbb, false, 
 					1, 0, 100, 10, 3, fixSpikes, false, false);
 		}
@@ -828,7 +822,8 @@ public class KmerNormalize {
 	
 	private static long runPass(boolean auto, long memory, int cbits, long cells, long precells, int buildpasses, int hashes, int prehashes, int k,
 			long maxReads, long tablereads, int minq, int buildStepsize,
-			String in1, String in2, String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, String histFile, List<String> extra,
+			String in1, String in2, String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
+			String khistFile, String rhistFile, List<String> extra,
 			int targetDepth, int targetDepthBadLow, int targetDepthBadHigh, int maxDepth, int minDepth, 
 			int minKmersOverMinDepth, float depthPercentile, boolean tossErrorReads, boolean rbb, boolean discardBadOnly, 
 			float highPercentile, float lowPercentile, int errorDetectRatio, int hthresh, int lthresh, boolean fixSpikes, boolean countup,
@@ -860,12 +855,8 @@ public class KmerNormalize {
 		FIX_SPIKES=fixSpikes;
 		
 		{
-			if(histFile==null){
-//				HIST_LEN=Tools.min(20000, HIST_LEN);
-//				HIST_LEN_PRINT=Tools.min(20000, HIST_LEN_PRINT);
-			}else{
-				USE_HISTOGRAM=true;
-			}
+			if(khistFile!=null){USE_KHISTOGRAM=true;}
+			if(rhistFile!=null){USE_RHISTOGRAM=true;}
 			
 			final int maxCount=(int)(cbits>16 ? Integer.MAX_VALUE : (1L<<cbits)-1);
 			assert(maxCount>0);
@@ -874,12 +865,19 @@ public class KmerNormalize {
 			HIST_LEN=(int)Tools.min(maxCount, Tools.max(HIST_LEN_PRINT, HIST_LEN));
 			THREAD_HIST_LEN=Tools.min(THREAD_HIST_LEN, HIST_LEN);
 
-			histogram_total=new AtomicLongArray(HIST_LEN);
+			khistogram=new AtomicLongArray(HIST_LEN);
+			if(USE_RHISTOGRAM && rhistFile!=null){
+				rhistogram=new AtomicLongArray(HIST_LEN);
+				bhistogram=new AtomicLongArray(HIST_LEN);
+			}else{
+				rhistogram=null;
+				bhistogram=null;
+			}
 		}
 		
 		if(auto && cells==-1){
 			final long usable=(long)Tools.max(((memory-96000000)*.73), memory*0.45);
-			long mem=usable-(USE_HISTOGRAM ? (HIST_LEN*8*(1)) : 0);
+			long mem=usable-(khistogram!=null ? (HIST_LEN*8*(1)) : 0)-(rhistogram!=null ? (HIST_LEN*8*(1)) : 0)-(bhistogram!=null ? (HIST_LEN*8*(1)) : 0);
 			if(buildpasses>1){mem/=2;}
 			
 			FILTERBYTES=(COUNTUP ? mem/2 : mem);
@@ -934,10 +932,10 @@ public class KmerNormalize {
 			outstream.println("depth percentile: \t"+String.format("%.1f", 100*DEPTH_PERCENTILE));
 			outstream.println("ignore dupe kmers:\t"+!KmerCount7MTA.KEEP_DUPLICATE_KMERS);
 			outstream.println("fix spikes:       \t"+FIX_SPIKES);
-			if(USE_HISTOGRAM && HIST_LEN>0){
-				outstream.println("histogram length: \t"+(USE_HISTOGRAM ? HIST_LEN : 0));
+			if((USE_KHISTOGRAM || USE_RHISTOGRAM) && HIST_LEN>0){
+				outstream.println("histogram length: \t"+HIST_LEN);
 			}
-			if(histFile!=null){
+			if(khistFile!=null || rhistFile!=null){
 				outstream.println("print zero cov:   \t"+PRINT_ZERO_COVERAGE);
 			}
 			
@@ -1041,9 +1039,9 @@ public class KmerNormalize {
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, estUnique, storage);
+				bases+=count(list1, list2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, estUnique, storage);
+				bases+=count(in1, in2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
 			}
 			inMemorySort(storage, tempOut1, false);
 			storage=null;
@@ -1061,9 +1059,9 @@ public class KmerNormalize {
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, histFile, estUnique, null);
+				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, histFile, estUnique, null);
+				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}
 			
 		}else{
@@ -1072,9 +1070,9 @@ public class KmerNormalize {
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, histFile, estUnique, null);
+				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, histFile, estUnique, null);
+				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}
 		}
 		
@@ -1112,7 +1110,7 @@ public class KmerNormalize {
 
 	public static long count(String in1, String in2, KCountArray kca, int k, long maxReads, 
 			String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
-			boolean ordered, boolean overwrite, String histFile, long estUnique, ArrayList<Read> storage) {
+			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
 		final ConcurrentReadStreamInterface cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
@@ -1280,7 +1278,7 @@ public class KmerNormalize {
 			outstream.println("Started output threads.");
 		}
 		
-		long bases=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, histFile, overwrite, estUnique, storage);
+		long bases=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, overwrite, estUnique, storage);
 		
 		errorState|=ReadWrite.closeStreams(cris, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc);
 		if(verbose){System.err.println("Closed streams");}
@@ -1291,7 +1289,7 @@ public class KmerNormalize {
 	
 	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads, 
 			String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
-			boolean ordered, boolean overwrite, String histFile, long estUnique, ArrayList<Read> storage) {
+			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
 		
 		RTextOutputStream3 rosKeep=null, rosToss=null, rosLow=null, rosMid=null, rosHigh=null, rosUnc=null;
 		String[] outKeep1=null, outKeep2=null;
@@ -1515,7 +1513,7 @@ public class KmerNormalize {
 			boolean paired=cris.paired();
 			if(verbose){System.err.println("Paired: "+paired);}
 
-			bases+=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, histFile, overwrite, estUnique, storage);
+			bases+=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, overwrite, estUnique, storage);
 
 			errorState|=ReadWrite.closeStream(cris);
 			if(verbose){System.err.println("Closed stream");}
@@ -1531,7 +1529,7 @@ public class KmerNormalize {
 	
 	public static long downsample(ConcurrentReadStreamInterface cris, KCountArray kca, int k, long maxReads, 
 			RTextOutputStream3 rosKeep, RTextOutputStream3 rosToss, RTextOutputStream3 rosLow, RTextOutputStream3 rosMid, RTextOutputStream3 rosHigh, RTextOutputStream3 rosUnc, 
-			String histFile, boolean overwrite, long estUnique, ArrayList<Read> storage) {
+			String khistFile, String rhistFile, boolean overwrite, long estUnique, ArrayList<Read> storage) {
 		Timer tdetect=new Timer();
 		tdetect.start();
 
@@ -1625,7 +1623,7 @@ public class KmerNormalize {
 				basesTrimmed+=ct.basesTrimmed;
 
 				for(int j=0; j<ct.hist.length; j++){
-					histogram_total.addAndGet(j, ct.hist[j]);
+					khistogram.addAndGet(j, ct.hist[j]);
 				}
 				for(int j=0; j<ct.qhist.length; j++){
 					qhist_total[j]+=ct.qhist[j];
@@ -1633,9 +1631,9 @@ public class KmerNormalize {
 			}
 		}
 		
-		if(!ZERO_BIN && histogram_total!=null && histogram_total.length()>1){
-			histogram_total.addAndGet(1, histogram_total.get(0));
-			histogram_total.set(0, 0);
+		if(!ZERO_BIN && khistogram!=null && khistogram.length()>1){
+			khistogram.addAndGet(1, khistogram.get(0));
+			khistogram.set(0, 0);
 		}
 		
 //		outstream.println();
@@ -1719,23 +1717,23 @@ public class KmerNormalize {
 		}
 		
 //		outstream.println();
-		if(histogram_total!=null){
+		if(khistogram!=null){
 			TextStreamWriter tswh=null;
 			StringBuilder sb=new StringBuilder(100);
-			if(USE_HISTOGRAM && histFile!=null){
-				tswh=new TextStreamWriter(histFile, overwrite, false, false);
+			if(USE_KHISTOGRAM && khistFile!=null){
+				tswh=new TextStreamWriter(khistFile, overwrite, false, false);
 				tswh.start();
 				tswh.print("#Depth\tRaw_Count\tUnique_Kmers\n");
 			}
 			int lim=(int)(HIST_LEN_PRINT-1);
-			long remaining=Tools.sum(histogram_total);
+			long remaining=Tools.sum(khistogram);
 			long sumRaw1=0;
 			long sumRaw2=0;
 			long sum1=0;
 			long sum2=0;
 			long sumsquare=0;
 			for(int i=0; i<lim; i++){
-				long x=histogram_total.get(i);
+				long x=khistogram.get(i);
 				long y=((x+i/2)/(i<1 ? 1 : i)); //x+i/2 rounds to compensate for colliding kmers being put in an overly high bin
 //				long y=((x)/(i<1 ? 1 : i));
 				sumRaw1+=x;
@@ -1752,8 +1750,8 @@ public class KmerNormalize {
 				}
 				if(sumRaw1>=remaining){break;} //Stop once there is no more coverage, even if PRINT_ZERO_COVERAGE is not set.
 			}
-			for(int i=lim; i<histogram_total.length(); i++){
-				long x=histogram_total.get(i);
+			for(int i=lim; i<khistogram.length(); i++){
+				long x=khistogram.get(i);
 				sumRaw2+=x;
 				long y=((x+i/2)/(i<1 ? 1 : i)); //x+i/2 rounds to compensate for colliding kmers being put in an overly high bin
 //				long y=((x)/(i<1 ? 1 : i));
@@ -1768,26 +1766,26 @@ public class KmerNormalize {
 				tswh.print(sb.toString());
 				tswh.poison();
 				tswh.waitForFinish();
-				outstream.println("Wrote histogram to "+histFile);
+				outstream.println("\nWrote histogram to "+khistFile);
 			}
 			
-			long histCount=Tools.sum(histogram_total); //Total number of kmers counted
+			long histCount=Tools.sum(khistogram); //Total number of kmers counted
 			long halfCount=(histCount+1)/2;
 			double histCountU=0; //Unique kmers counted
 			long temp1=0;
 			double temp2=0;
 			int median_all=-1;
 			int median_unique=-1;
-			for(int i=0; i<histogram_total.length(); i++){
-				long x=histogram_total.get(i);
+			for(int i=0; i<khistogram.length(); i++){
+				long x=khistogram.get(i);
 				temp1+=x;
 				if(temp1>=halfCount && median_all<0){median_all=i;}
 //				histSum+=(x*(double)i);
 				histCountU+=(x/(double)Tools.max(1, i));
 			}
 			double halfCount2=(histCountU)/2;
-			for(int i=0; i<histogram_total.length(); i++){
-				long x=histogram_total.get(i);
+			for(int i=0; i<khistogram.length(); i++){
+				long x=khistogram.get(i);
 				temp2+=(x/Tools.max(i, 1.0));
 				if(temp2>=halfCount2 && median_unique<0){
 					median_unique=i;
@@ -1797,8 +1795,8 @@ public class KmerNormalize {
 			if(median_all<0){median_all=0;}
 			double avg_all=sumsquare/(double)histCount;
 			double avg_unique=histCount/histCountU;
-			double stdev_unique=Tools.standardDeviationHistogramKmer(histogram_total);
-			double stdev_all=Tools.standardDeviationHistogram(histogram_total);
+			double stdev_unique=Tools.standardDeviationHistogramKmer(khistogram);
+			double stdev_all=Tools.standardDeviationHistogram(khistogram);
 			outstream.println("Total kmers counted:          \t"+(sumRaw1+sumRaw2));
 			
 			double uniqueC=((sum1+sum2)*100.0/(sumRaw1+sumRaw2));
@@ -1824,6 +1822,104 @@ public class KmerNormalize {
 			double readDepth=median_all*(avgReadLen/(avgReadLen-k+1));
 			
 			outstream.println("\nApprox. read depth median:    \t"+String.format("%.2f", (readDepth)));
+		}
+		
+		
+		if(rhistogram!=null){
+			TextStreamWriter tswh=null;
+			StringBuilder sb=new StringBuilder(100);
+			if(USE_RHISTOGRAM && rhistFile!=null){
+				tswh=new TextStreamWriter(rhistFile, overwrite, false, false);
+				tswh.start();
+				tswh.print("#Depth\tReads\tBases\n");
+			}
+			int lim=(int)(HIST_LEN_PRINT-1);
+			long remaining=Tools.sum(rhistogram);
+			long sumReads1=0;
+			long sumReads2=0;
+			long sumBases1=0;
+			long sumBases2=0;
+			long sumSquareReads=0;
+			long sumSquareBases=0;
+			for(int i=0; i<lim; i++){
+				final long x=rhistogram.get(i);
+				final long y=bhistogram.get(i);
+				sumReads1+=x;
+				sumBases1+=y;
+				sumSquareReads+=(x*Tools.max(1, i));
+				sumSquareBases+=(y*Tools.max(1, i));
+				if(tswh!=null){
+					if(PRINT_ZERO_COVERAGE /*|| x>0*/ || y>0){
+						sb.append(i).append('\t');
+						sb.append(x).append('\t');
+						sb.append(y).append('\n');
+					}
+					tswh.print(sb.toString());
+					sb.setLength(0);
+				}
+				if(sumReads1>=remaining){break;} //Stop once there is no more coverage, even if PRINT_ZERO_COVERAGE is not set.
+			}
+			for(int i=lim; i<rhistogram.length(); i++){
+				final long x=rhistogram.get(i);
+				final long y=bhistogram.get(i);
+				sumReads2+=x;
+				sumBases2+=y;
+			}
+			if(tswh!=null){
+				if(sumReads2>0 || sumBases2>0){
+					sb.append(lim).append('\t');
+					sb.append(sumReads2).append('\t');
+					sb.append(sumBases2).append('\n');
+				}
+				tswh.print(sb.toString());
+				tswh.poison();
+				tswh.waitForFinish();
+				outstream.println("\nWrote histogram to "+rhistFile);
+			}
+
+			long rhistCount=Tools.sum(rhistogram); //Total number of reads counted
+			long bhistCount=Tools.sum(bhistogram); //Total number of bases counted
+			int median_reads=-1;
+			int median_bases=-1;
+			{
+				long halfCount=(rhistCount+1)/2;
+				long temp=0;
+				for(int i=0; i<rhistogram.length(); i++){
+					long x=rhistogram.get(i);
+					temp+=x;
+					if(temp>=halfCount && median_reads<0){median_reads=i;}
+				}
+				if(median_reads<0){median_reads=0;}
+			}
+			{
+				long halfCount=(bhistCount+1)/2;
+				long temp=0;
+				for(int i=0; i<bhistogram.length(); i++){
+					long x=bhistogram.get(i);
+					temp+=x;
+					if(temp>=halfCount && median_bases<0){median_bases=i;}
+				}
+				if(median_bases<0){median_bases=0;}
+			}
+			double avg_reads=sumSquareReads/(double)rhistCount;
+			double avg_bases=sumSquareBases/(double)bhistCount;
+//			double read_stdev_unique=Tools.standardDeviationHistogramKmer(rhistogram_total);
+			double read_stdev_all=Tools.standardDeviationHistogram(rhistogram);
+			double base_stdev_all=Tools.standardDeviationHistogram(bhistogram);
+			outstream.println("Total reads counted:          \t"+(sumReads1+sumReads2));
+			
+//			double uniqueC=((sumBases1+sumBases2)*100.0/(sumReads1+sumReads2));
+//			double uniqueE=((estUnique)*100.0/(sumReads1+sumReads2));
+//			double uniqueM=Tools.max(uniqueC, uniqueE);
+			outstream.println("Total bases counted:          \t"+(sumBases1+sumBases2));
+
+			outstream.println("Read depth average:           \t"+String.format("%.2f", avg_reads));
+			outstream.println("Read depth median:            \t"+String.format("%d", median_reads));
+			outstream.println("Read depth standard deviation:\t"+String.format("%.2f", read_stdev_all));
+			
+			outstream.println("\nBase depth average:           \t"+String.format("%.2f)", avg_bases));
+			outstream.println("Base depth median:            \t"+String.format("%d", median_bases));
+			outstream.println("Base depth standard deviation:\t"+String.format("%.2f", base_stdev_all));
 		}
 		
 		return totalBases;
@@ -2693,6 +2789,13 @@ public class KmerNormalize {
 									for(int i=covlast; i>=0 && cov[i]<=lim; i--){lc++;}
 								}
 								lowcount+=lc;
+								
+								if(rhistogram!=null){
+									int d=depthAL1>=0 ? depthAL1 : truedepth1>=0 ? truedepth1 : 0;
+									d=Tools.min(d, HIST_LEN-1);
+									rhistogram.incrementAndGet(d);
+									bhistogram.addAndGet(d, r.bases.length);
+								}
 							}
 						}
 					}
@@ -2763,6 +2866,13 @@ public class KmerNormalize {
 								}
 								lowcount+=lc;
 								cov2=cov;
+								
+								if(rhistogram!=null){
+									int d=depthAL2>=0 ? depthAL2 : truedepth2>=0 ? truedepth2 : 0;
+									d=Tools.min(d, HIST_LEN-1);
+									rhistogram.incrementAndGet(d);
+									bhistogram.addAndGet(d, r2.bases.length);
+								}
 							}
 						}
 					}
@@ -3144,7 +3254,7 @@ public class KmerNormalize {
 //					outstream.println("Incrementing "+last+" by "+sum);
 //					sum2+=sum;
 					if(last<hist.length){hist[last]+=sum;}
-					else{histogram_total.addAndGet(last, sum);}
+					else{khistogram.addAndGet(last, sum);}
 					sum=1;
 				}
 				last=y;
@@ -3154,7 +3264,7 @@ public class KmerNormalize {
 //				outstream.println("Incrementing "+last+" by "+sum);
 //				sum2+=sum;
 				if(last<hist.length){hist[last]+=sum;}
-				else{histogram_total.addAndGet(last, sum);}
+				else{khistogram.addAndGet(last, sum);}
 			}
 //			assert(sum2==cov.length) : sum2+", "+cov.length+", "+last+", "+sum;
 		}
@@ -3219,9 +3329,12 @@ public class KmerNormalize {
 	public static int THREAD_HIST_LEN=1<<12;
 	public static int HIST_LEN=1<<20;
 	public static long HIST_LEN_PRINT=HIST_LEN;
-	public static boolean USE_HISTOGRAM=false;
+	public static boolean USE_KHISTOGRAM=false;
+	public static boolean USE_RHISTOGRAM=false;
 	public static boolean PRINT_ZERO_COVERAGE=false;
-	public static AtomicLongArray histogram_total;
+	public static AtomicLongArray khistogram;
+	public static AtomicLongArray rhistogram;
+	public static AtomicLongArray bhistogram;
 	public static long[] qhist_total;
 	
 	private static int THREADS=8;

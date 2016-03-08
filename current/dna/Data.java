@@ -171,7 +171,7 @@ public class Data {
 			}
 		}
 		assert(chromosomePlusMatrix[chrom].array[0]=='N') : (char)chromosomePlusMatrix[chrom].array[0]+
-			"\nIf you see this message, please regenerate your index.";//startpad was too low or for some reason invalid.
+			"\nIf you see this message, please regenerate your index.\n"/*+new String(chromosomePlusMatrix[chrom].array)*/;//startpad was too low or for some reason invalid.
 		return chromosomePlusMatrix[chrom];
 	}
 	
@@ -252,7 +252,6 @@ public class Data {
 	}
 	
 	public static void loadChromosomes(int min, int max){
-//		assert(false);
 		synchronized(CHROMLOCKS){
 			String pattern=chromFname(GENOME_BUILD);
 			ChromLoadThread.loadAll(pattern, min, max, chromosomePlusMatrix);

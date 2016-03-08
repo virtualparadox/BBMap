@@ -1,5 +1,5 @@
 ReformatReads readme by Brian Bushnell
-Last updated February 18, 2014.
+Last updated March 28, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 
 This is currently a stub.
@@ -17,3 +17,11 @@ Output quality switch (qout) was being ignored and ASCII33 was always used; this
 TrimRead.testOptimal() mode added, and made default when quality trimming is performed; old mode can be used with 'otf=f' flag.
 Fixed bug in ByteBuilder for reads with no quality values.  Noted by Brian Foster.
 All program message information now defaults to stderr.
+Added 'tbs' (trim bad sequence) flag to fix broken files from NCBI (like NT).  Works in test cases, but causes problems with NT for unknown reasons. 
+Added 'rbb' (requirebothbad) flag for tossing pairs shorter than minlen.  Default: false.
+Added 'qfake' flag for quality level of fasta -> fastq reformatting.
+Moved parsing to new Parser class.
+Fixed random seed setting crash (found by Michael Barton).
+Added support for breaking long fastq reads into shorter reads (maxlength and minlength flags).
+Added "overrideinterleaved" flag to allow unpaired input when specifying out1 and out2.  Requested by Vasanth Singan.
+Added "def" (deleteempty) flag which deletes output files that did not get any reads.  Requested by Vasanth Singan.  TODO: Consider adding to bbmap/bbsplit.

@@ -27,6 +27,7 @@ import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
 import dna.AminoAcid;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
@@ -54,7 +55,7 @@ public class BBDukF {
 	 */
 	public static void main(String[] args){
 		
-		if(Tools.parseHelp(args)){
+		if(Parser.parseHelp(args)){
 			printOptions();
 			System.exit(0);
 		}
@@ -100,7 +101,7 @@ public class BBDukF {
 		outstream.println("minq=4             \tTrim quality threshold.");
 		outstream.println("minlength=2        \t(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter.");
 		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fastawrap=100      \tLength of lines in fasta output");
+		outstream.println("fastawrap=80       \tLength of lines in fasta output");
 		outstream.println("qin=auto           \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto          \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 		outstream.println("rcomp=t            \tLook for reverse-complements of kmers also.");
@@ -144,7 +145,7 @@ public class BBDukF {
 		
 		byte trimq_=4;
 		byte minAvgQuality_=0;
-		int minReadLength_=20;
+		int minReadLength_=10;
 		float minLenFraction_=0f;
 		int maxNs_=-1;
 		boolean removePairsIfEitherBad_=true;
@@ -167,8 +168,10 @@ public class BBDukF {
 			if("null".equalsIgnoreCase(b)){b=null;}
 			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -216,24 +219,6 @@ public class BBDukF {
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("interleaved") || a.equals("int")){
 				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
 				else{
@@ -242,8 +227,6 @@ public class BBDukF {
 				}
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("k")){
 				assert(b!=null) : "\nThe k key needs an integer value greater than 0, such as k=28\n";
 				k_=Integer.parseInt(b);
@@ -432,7 +415,7 @@ public class BBDukF {
 			if(kbig_>k_){
 				System.err.println("***********************   WARNING   ***********************"); 
 				System.err.println("WARNING: When kmer-trimming, the maximum value of K is "+k_+".");
-				System.err.println("K has been reduced from kbig_ to "+k_+".");
+				System.err.println("K has been reduced from "+kbig_+" to "+k_+".");
 				System.err.println("***********************************************************"); 
 				kbig_=k_;
 			}
@@ -612,7 +595,7 @@ public class BBDukF {
 			while(rpstring.length()<8){rpstring=" "+rpstring;}
 			while(bpstring.length()<8){bpstring=" "+bpstring;}
 
-			outstream.println("Time:   \t\t\t"+t);
+			outstream.println("\nTime:   \t\t\t"+t);
 			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		}
@@ -653,9 +636,9 @@ public class BBDukF {
 		writeDuk(System.nanoTime()-startTime);
 		writeRqc();
 		
-		outstream.println("Input:                  \t"+readsIn+" reads \t\t"+basesIn+" bases.");
+		outstream.println("\nInput:                  \t"+readsIn+" reads \t\t"+basesIn+" bases.");
 		
-		if(ref!=null || literal!=null){
+		if((ref!=null || literal!=null) && !(ktrimLeft || ktrimRight || ktrimN)){
 			outstream.println("Contaminants:           \t"+readsKFiltered+" reads ("+String.format("%.2f",readsKFiltered*100.0/readsIn)+"%) \t"+
 					basesKFiltered+" bases ("+String.format("%.2f",basesKFiltered*100.0/basesIn)+"%)");
 			outstream.flush();
@@ -799,7 +782,7 @@ public class BBDukF {
 		sb.append("#Quality trim:	"+((qtrimLeft || qtrimRight) ? trimq : "false")+"\n");
 		sb.append("\n");
 		
-		sb.append("##REFERECE STAT##\n");
+		sb.append("##REFERENCE STAT##\n");
 		sb.append("#Total Reads:	"+refReads+"\n");
 		sb.append("#Total Bases:	"+refBases+"\n");
 		sb.append("#Total kmers:	"+refKmers+"\n");
@@ -1772,7 +1755,7 @@ public class BBDukF {
 		
 		if(ktrimLeft){ //Trim from the read start to the rightmost kmer base
 			if(verbose){System.err.println("Left trimming to "+(ktrimExclusive ? maxLocExclusive+1 : maxLoc+1)+", "+0);}
-			int x=TrimRead.trimToPosition(r, ktrimExclusive ? maxLocExclusive+1 : maxLoc+1, 0, 1);
+			int x=TrimRead.trimToPosition(r, ktrimExclusive ? maxLocExclusive+1 : maxLoc+1, bases.length-1, 1);
 			if(verbose){System.err.println("Trimmed "+x+" bases: "+new String(r.bases));}
 			return x;
 		}else{ //Trim from the leftmost kmer base to the read stop 
@@ -2147,7 +2130,7 @@ public class BBDukF {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static int VERSION=8;
+	public static int VERSION=9;
 	
 	/** Number of tables (and threads, during loading) */ 
 	private static final int WAYS=5; //123

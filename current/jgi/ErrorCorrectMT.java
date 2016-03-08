@@ -15,16 +15,15 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.RTextOutputStream3;
 import stream.Read;
-import stream.SamLine;
 
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
 
 import align2.ListNum;
-import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
 
@@ -94,8 +93,10 @@ public class ErrorCorrectMT extends Thread{
 			String b=(split.length>1 ? split[1] : "true");
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
@@ -162,8 +163,6 @@ public class ErrorCorrectMT extends Thread{
 				buildpasses=Integer.parseInt(b);
 			}else if(a.startsWith("stepsize") || a.startsWith("buildstepsize")){
 				buildStepsize=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.startsWith("reads") || a.startsWith("maxreads")){

@@ -11,6 +11,7 @@ import stream.SiteScoreR;
 
 import align2.Tools;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
@@ -36,7 +37,7 @@ public class SortSites {
 			String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("genome") || a.equals("build")){
 				Data.setGenome(Integer.parseInt(b)); //Not needed

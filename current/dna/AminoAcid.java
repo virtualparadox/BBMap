@@ -2,6 +2,11 @@ package dna;
 import java.util.Arrays;
 import java.util.HashMap;
 
+import align2.QualityTools;
+import align2.Tools;
+
+import stream.Read;
+
 
 /**
  * @author Brian Bushnell
@@ -138,6 +143,7 @@ public final class AminoAcid {
 	public static final AminoAcid[] AlphabeticalAAs=new AminoAcid[21];
 	public static final AminoAcid[] codeToAA=new AminoAcid[64];
 	public static final char[] codeToChar=new char[64];
+	public static final byte[] codeToByte=new byte[64];
 	public static final HashMap<String, AminoAcid> stringToAA=new HashMap<String, AminoAcid>(512);
 	
 	public static final AminoAcid Alanine=new AminoAcid("Alanine, Ala, A, GCU, GCC, GCA, GCG");
@@ -440,6 +446,7 @@ public final class AminoAcid {
 		return x;
 	}
 	
+	
 	public static final byte toNumber(char c1, char c2, char c3){
 		assert(baseToNumberACGTN[c1]>=0 && baseToNumberACGTN[c2]>=0 && baseToNumberACGTN[c3]>=0);
 		int x=(baseToNumberACGTN[c1]<<4)|(baseToNumberACGTN[c2]<<2)|(baseToNumberACGTN[c3]);
@@ -458,6 +465,13 @@ public final class AminoAcid {
 		return codeToChar[x];
 	}
 	
+	public static final byte toByte(byte c1, byte c2, byte c3){
+		int a=baseToNumber[c1], b=baseToNumber[c2], c=baseToNumber[c3];
+		if(a<0 || b<0 || c<0){return (byte)'.';}
+		int x=((a<<4)|(b<<2)|c);
+		return codeToByte[x];
+	}
+	
 	public static final char toChar(byte c1, byte c2, byte c3){
 		assert(baseToNumberACGTN[c1]>=0 && baseToNumberACGTN[c2]>=0 && baseToNumberACGTN[c3]>=0);
 		byte n1=baseToNumberACGTN[c1], n2=baseToNumberACGTN[c2], n3=baseToNumberACGTN[c3];
@@ -474,6 +488,88 @@ public final class AminoAcid {
 			sb.append(a);
 		}
 		return sb.toString();
+	}
+	
+	public static final byte[][] toAAsSixFrames(byte[] bases){
+		byte[][] out=new byte[6][];
+		if(bases!=null && bases.length>2){
+			for(int i=0; i<3; i++){
+				out[i]=toAAs(bases, i);
+			}
+			byte[] rcomp=reverseComplementBases(bases);
+			for(int i=0; i<3; i++){
+				out[i+3]=toAAs(rcomp, i);
+			}
+		}
+		return out;
+	}
+	
+	public static final byte[][] toQualitySixFrames(byte[] quals, int offset){
+		byte[][] out=new byte[6][];
+		if(quals!=null && quals.length>2){
+			for(int i=0; i<3; i++){
+				out[i]=toAAQuality(quals, i);
+			}
+			Tools.reverseInPlace(quals);
+			for(int i=0; i<3; i++){
+				out[i+3]=toAAQuality(quals, i);
+			}
+			Tools.reverseInPlace(quals);
+		}
+		
+		if(offset!=0){
+			for(byte[] array : out){
+				if(array!=null){
+					for(int i=0; i<array.length; i++){
+						array[i]+=offset;
+					}
+				}
+			}
+		}
+		
+		return out;
+	}
+	
+	public static final byte[] toAAs(byte[] bases, int frame){
+		assert(frame>=0 && frame<3);
+		if(bases==null){return null;}
+		int blen=bases.length-frame;
+		if(blen<3){return null;}
+		blen=blen-(blen%3);
+		final int stop=frame+blen;
+		final int alen=blen/3;
+		
+		byte[] out=new byte[alen];
+		for(int i=2+frame, j=0; i<stop; i+=3, j++){
+			byte a=toByte(bases[i-2], bases[i-1], bases[i]);
+			out[j]=a;
+		}
+		return out;
+	}
+	
+	public static final byte[] toAAQuality(byte[] quals, int frame){
+		assert(frame>=0 && frame<3);
+		int blen=quals.length-frame;
+		if(blen<3){return null;}
+		blen=blen-(blen%3);
+		final int stop=frame+blen;
+		final int alen=blen/3;
+		
+		byte[] out=new byte[alen];
+		for(int i=2+frame, j=0; i<stop; i+=3, j++){
+			byte qa=quals[i-2], qb=quals[i-1], qc=quals[i];
+			float pa=QualityTools.PROB_CORRECT[qa], pb=QualityTools.PROB_CORRECT[qb], pc=QualityTools.PROB_CORRECT[qc];
+			float p=pa*pb*pc;
+			byte q=QualityTools.probCorrectToPhred(p);
+			out[j]=q;
+
+//			System.out.println();
+//			System.out.println(qa+", "+qb+", "+qc+" -> "+q);
+//			System.out.println(pa+", "+pb+", "+pc+" -> "+p);
+			
+		}
+//		System.out.println(Arrays.toString(out));
+		return out;
 	}
 	
 	public static final short[] rcompBinaryTable=makeBinaryRcompTable(4);
@@ -584,6 +680,7 @@ public final class AminoAcid {
 //				System.out.println("x="+x+", aa="+aa);
 				codeToAA[x]=aa;
 				codeToChar[x]=aa.letter;
+				codeToByte[x]=(byte)(aa.letter);
 			}
 		}
 		

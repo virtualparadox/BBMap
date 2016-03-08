@@ -93,7 +93,6 @@ public abstract class MSA {
 //		}
 	}
 	
-	
 	/** return new int[] {rows, maxC, maxS, max}; 
 	 * Will not fill areas that cannot match minScore */
 	public abstract int[] fillLimited(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int minScore, int[] gaps);
@@ -133,6 +132,11 @@ public abstract class MSA {
 		assert(b>=a);
 		
 		int[] score;
+		
+		if(verbose && b-a<500){
+			System.err.println(new String(read));
+			System.err.println(new String(ref, a, b-a));
+		}
 		
 		if(gaps==null){
 			if(verbose){
@@ -675,12 +679,32 @@ public abstract class MSA {
 		return sb.toString();
 	}
 	
-	public final static String toTimePacked(int[] a, int TIMEMASK){
-		int width=7;
+	static void printMatrix(int[][][] packed, int readlen, int reflen, int TIMEMASK, int SCOREOFFSET){
+		for(int mode=0; mode<packed.length; mode++){
+			printMatrix(packed, readlen, reflen, TIMEMASK, SCOREOFFSET, mode);
+		}
+	}
+	
+	static void printMatrix(int[][][] packed, int readlen, int reflen, int TIMEMASK, int SCOREOFFSET, int mode){
+		final int ylim=Tools.min(readlen+1, packed[mode].length);
+		final int xlim=Tools.min(reflen+1, packed[mode].length);
+		for(int row=0; row<ylim; row++){
+			System.out.println(toScorePacked(packed[mode][row], SCOREOFFSET, xlim));
+		}
+		System.out.println();
+		for(int row=0; row<ylim; row++){
+			System.out.println(toTimePacked(packed[mode][row], TIMEMASK, xlim));
+		}
+		System.out.println();
+	}
+	
+	public final static String toTimePacked(int[] a, int TIMEMASK, int lim){
+		int width=6;
+		lim=Tools.min(lim, a.length);
 		
 		StringBuilder sb=new StringBuilder((a.length+1)*width+2);
-		for(int num_ : a){
-			int num=num_&TIMEMASK;
+		for(int j=0; j<lim; j++){
+			int num=a[j]&TIMEMASK;
 			String s=" "+num;
 			int spaces=width-s.length();
 			assert(spaces>=0) : width+", "+s.length()+", "+s+", "+num+", "+spaces;
@@ -691,17 +715,23 @@ public abstract class MSA {
 		return sb.toString();
 	}
 	
-	public final static String toScorePacked(int[] a, int SCOREOFFSET){
-		int width=7;
+	public final static String toScorePacked(int[] a, int SCOREOFFSET, int lim){
+		int width=6;
+		lim=Tools.min(lim, a.length);
+
+//		String minString=" -";
+//		String maxString="  ";
+//		while(minString.length()<width){minString+='9';}
+//		while(maxString.length()<width){maxString+='9';}
 
 		String minString=" -";
-		String maxString="  ";
-		while(minString.length()<width){minString+='9';}
-		while(maxString.length()<width){maxString+='9';}
+		String maxString=" +";
+		while(minString.length()<width){minString=minString+' ';}
+		while(maxString.length()<width){maxString=maxString+' ';}
 		
 		StringBuilder sb=new StringBuilder((a.length+1)*width+2);
-		for(int num_ : a){
-			int num=num_>>SCOREOFFSET;
+		for(int j=0; j<lim; j++){
+			int num=a[j]>>SCOREOFFSET;
 			String s=" "+num;
 			if(s.length()>width){s=num>0 ? maxString : minString;}
 			int spaces=width-s.length();

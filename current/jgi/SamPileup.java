@@ -15,9 +15,9 @@ import dna.CoverageArray2;
 import dna.CoverageArray3;
 import dna.Data;
 import dna.Gene;
+import dna.Parser;
 import dna.Scaffold;
 import dna.Timer;
-import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
 
@@ -59,8 +59,10 @@ public class SamPileup {
 			if("null".equalsIgnoreCase(b)){b=null;}
 //			System.err.println("Processing "+args[i]);
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("ref") || a.equals("reference") || a.equals("fasta")){
 				reference=b;
 			}else if(a.equals("in") || a.equals("in1")){
@@ -95,8 +97,6 @@ public class SamPileup {
 				binsize=Integer.parseInt(b);
 			}else if(a.equals("32bit")){
 				bits32=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("bitset") || a.equals("usebitset")){
 				bs=Tools.parseBoolean(b);
 				setbs=true;
@@ -112,24 +112,9 @@ public class SamPileup {
 			}else if(a.equals("secondary") || a.equals("usesecondary")){
 				USE_SECONDARY=Tools.parseBoolean(b);
 				System.err.println("Set USE_SECONDARY_ALIGNMENTS to "+USE_SECONDARY);
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
+			}else if(a.equals("keepshortbins") || a.equals("ksb")){
+				KEEP_SHORT_BINS=Tools.parseBoolean(b);
+				System.err.println("Set KEEP_SHORT_BINS to "+KEEP_SHORT_BINS);
 			}else if(i>1){
 				throw new RuntimeException("Unknown parameter: "+args[i]);
 			}
@@ -484,7 +469,13 @@ public class SamPileup {
 		}
 		
 		if(basecov!=null){writeCoveragePerBase(basecov, list, deltaOnly);}
-		if(bincov!=null){writeCoveragePerBaseBinned(bincov, list, binsize);}
+		if(bincov!=null){
+			if(KEEP_SHORT_BINS){
+				writeCoveragePerBaseBinned2(bincov, list, binsize);
+			}else{
+				writeCoveragePerBaseBinned(bincov, list, binsize);
+			}
+		}
 		
 		if(orffasta!=null){
 			processOrfsFasta(orffasta, outorf, table, readBases, refBases);
@@ -567,6 +558,40 @@ public class SamPileup {
 		tsw.waitForFinish();
 	}
 	
+	/** This version will NOT truncate all trailing bases of each scaffold's length modulo binsize.
+	 * @param fname
+	 * @param list
+	 * @param binsize
+	 */
+	public static void writeCoveragePerBaseBinned2(String fname, ArrayList<Scaffold> list, int binsize){
+		TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, false);
+		tsw.start();
+		tsw.print("#RefName\tCov\tPos\tRunningPos\n");
+		
+		long running=0;
+		for(Scaffold scaf : list){
+			CoverageArray ca=(CoverageArray)scaf.obj;
+			int lastPos=-1, nextPos=binsize-1;
+			long sum=0;
+			final int lim=scaf.length-1;
+			for(int i=0; i<scaf.length; i++){
+				int x=(ca==null ? 0 : ca.get(i));
+				sum+=x;
+				if(i>=nextPos || i==lim){
+					int bin=(i-lastPos);
+					tsw.print(String.format("%s\t%.1f\t%d\t%d\n", scaf.name, sum/(float)bin, (i+1), running));
+					running+=bin;
+					nextPos+=binsize;
+					lastPos=i;
+					sum=0;
+				}
+			}
+		}
+		
+		tsw.poison();
+		tsw.waitForFinish();
+	}
+	
 	
 	public static boolean COUNT_GC=true;
 	public static boolean verbose=false; 
@@ -580,6 +605,7 @@ public class SamPileup {
 	/** Process secondary alignments */
 	public static boolean USE_SECONDARY=true;
 	public static boolean ABORT_ON_ERROR=true;
+	public static boolean KEEP_SHORT_BINS=true;
 
 	public long maxReads=-1;
 	public int initialScaffolds=4096;

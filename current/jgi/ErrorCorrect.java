@@ -14,6 +14,7 @@ import stream.Read;
 
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
@@ -54,8 +55,10 @@ public class ErrorCorrect extends Thread{
 			String a=split[0].toLowerCase();
 			String b=(split.length>1 ? split[1] : "true");
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
@@ -78,8 +81,6 @@ public class ErrorCorrect extends Thread{
 				buildpasses=Integer.parseInt(b);
 			}else if(a.startsWith("stepsize") || a.startsWith("buildstepsize")){
 				buildStepsize=Integer.parseInt(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				System.err.println("Can't change threadcount for this class."); //THREADS=Integer.parseInt(b);
 			}else if(a.startsWith("reads") || a.startsWith("maxreads")){

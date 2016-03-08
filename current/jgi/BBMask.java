@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.LinkedHashMap;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -19,7 +20,7 @@ import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
-import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
@@ -71,8 +72,10 @@ public class BBMask{
 			String b=split.length>1 ? split[1] : null;
 			while(a.startsWith("-")){a=a.substring(1);} //In case people use hyphens
 
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("verbose")){
@@ -84,36 +87,18 @@ public class BBMask{
 				//			align2.FastaReadInputStream2.verbose=verbose;
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
-			}else if(a.equals("usegzip") || a.equals("gzip")){
-				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
-			}else if(a.equals("usepigz") || a.equals("pigz")){
-				if(b!=null && Character.isDigit(b.charAt(0))){
-					int zt=Integer.parseInt(b);
-					if(zt<1){ReadWrite.USE_PIGZ=false;}
-					else{
-						ReadWrite.USE_PIGZ=true;
-						if(zt>1){
-							ReadWrite.MAX_ZIP_THREADS=zt;
-							ReadWrite.ZIP_THREAD_DIVISOR=1;
-						}
-					}
-				}else{ReadWrite.USE_PIGZ=Tools.parseBoolean(b);}
-			}else if(a.equals("usegunzip") || a.equals("gunzip")){
-				ReadWrite.USE_GUNZIP=Tools.parseBoolean(b);
-			}else if(a.equals("useunpigz") || a.equals("unpigz")){
-				ReadWrite.USE_UNPIGZ=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("t") || a.equals("threads")){
 				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
-			}else if(a.equals("build") || a.equals("genome")){
-				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("bf1")){
 				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+			}else if(a.equals("sampad") || a.equals("sampadding") || a.equals("sp")){
+				samPad=Integer.parseInt(b);
 			}else if(a.equals("entropymode")){
 				entropyMode=Tools.parseBoolean(b);
 				setEntropyMode=true;
@@ -136,23 +121,29 @@ public class BBMask{
 			}else if(a.equals("extout")){
 				extoutRef=b;
 			}else if(a.equals("mink") || a.equals("kmin")){	
-				mink=Integer.parseInt(b);
+				mink=mink2=Integer.parseInt(b);
 			}else if(a.equals("maxk") || a.equals("kmax")){	
-				maxk=Integer.parseInt(b);
+				maxk=maxk2=Integer.parseInt(b);
 			}else if(a.equals("k")){	
+				mink=maxk=mink2=maxk2=Integer.parseInt(b);
+			}else if(a.equals("minkr") || a.equals("krmin")){	
+				mink=Integer.parseInt(b);
+			}else if(a.equals("maxkr") || a.equals("krmax")){	
+				maxk=Integer.parseInt(b);
+			}else if(a.equals("kr")){	
 				mink=maxk=Integer.parseInt(b);
-			}else if(a.equals("mink2") || a.equals("kmin2")){	
+			}else if(a.equals("mink2") || a.equals("kmin2") || a.equals("minke") || a.equals("kemin")){	
 				mink2=Integer.parseInt(b);
-			}else if(a.equals("maxk2") || a.equals("kmax2")){	
+			}else if(a.equals("maxk2") || a.equals("kmax2") || a.equals("maxke") || a.equals("kemax")){	
 				maxk2=Integer.parseInt(b);
-			}else if(a.equals("k2")){	
+			}else if(a.equals("k2") || a.equals("ke")){	
 				mink2=maxk2=Integer.parseInt(b);
-			}else if(a.equals("window")){	
+			}else if(a.equals("window") || a.equals("w")){
 				window=Integer.parseInt(b);
 			}else if(a.equals("ratio")){	
 				ratio=Float.parseFloat(b);
 				if(!setEntropyMode){entropyMode=false;}
-			}else if(a.equals("entropy")){	
+			}else if(a.equals("entropy") || a.equals("e")){	
 				entropyCutoff=Float.parseFloat(b);
 				if(!setEntropyMode){entropyMode=true;}
 			}else if(a.equals("lowercase") || a.equals("lc")){	
@@ -205,8 +196,6 @@ public class BBMask{
 				boolean x=Tools.parseBoolean(b);
 				Read.NULLIFY_BROKEN_QUALITY=x;
 				ConcurrentGenericReadInputStream.REMOVE_DISCARDED_READS=x;
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
 				int x=Integer.parseInt(b);
 				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
@@ -385,14 +374,20 @@ public class BBMask{
 		long total=repeats+mapping+lowcomplexity, masked=0;
 		
 		if(total>0 || true){
+			t.start();
 			masked=maskFromBitsets(MaskByLowercase);
+			t.stop();
+			outstream.println("Conversion Time:              \t"+t);
 		}
 		
 		assert(total==masked) : repeats+", "+mapping+", "+lowcomplexity+", "+total+", "+masked;
 		
 		if(outRef!=null){
+			t.start();
 			outstream.println("\nWriting output");
 			writeOutput();
+			t.stop();
+			outstream.println("Writing Time:                 \t"+t);
 		}
 		{
 			t0.stop();
@@ -579,11 +574,18 @@ public class BBMask{
 							byte[] rname=sl.rname();
 							assert(rname!=null) : "No rname for sam line "+sl;
 							Read ref=map.get(new String(rname));
-							assert(ref!=null) : "Could not find reference scaffold '"+rname+"' for samline \n"+sl+"\n in set \n"+map.keySet()+"\n";
-							BitSet bs=(BitSet)ref.obj;
-							int start=Tools.max(0, sl.start());
-							int stop=Tools.min(sl.stop()+1, ref.bases.length);
-							bs.set(start, stop);
+							final String rs=new String(rname);
+							if(ref==null){
+								handleNoRef(rs);
+							}else{
+								assert(ref!=null) : "Could not find reference scaffold '"+rs+"' for samline \n"+sl+"\n in set \n"+map.keySet()+"\n";
+								BitSet bs=(BitSet)ref.obj;
+								int start=Tools.max(0, sl.start()-samPad);
+								int stop=Tools.min(sl.stop()+1+samPad, ref.bases.length);
+								if(stop>start){
+									bs.set(start, stop);
+								}
+							}
 						}
 						
 					}
@@ -601,6 +603,14 @@ public class BBMask{
 		synchronized(this){
 			this.samBases+=samBases;
 			this.samReads+=samReads;
+		}
+	}
+	
+	private void handleNoRef(String rname){
+		assert(rname!=null);
+		String ret=norefSet.putIfAbsent(rname, rname);
+		if(ret==null){
+			System.err.println("Warning! Scaffold not found in assembly: "+rname);
 		}
 	}
 	
@@ -1119,7 +1129,7 @@ public class BBMask{
 		outstream.println("Other parameters and their defaults:\n");
 		outstream.println("overwrite=false  \tOverwrites files that already exist");
 		outstream.println("ziplevel=2       \tSet compression level, 1 (low) to 9 (max)");
-		outstream.println("fastawrap=100    \tLength of lines in fasta output");
+		outstream.println("fastawrap=80     \tLength of lines in fasta output");
 		outstream.println("qin=auto         \tASCII offset for input quality.  May be set to 33 (Sanger), 64 (Illumina), or auto");
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
@@ -1129,6 +1139,7 @@ public class BBMask{
 	/*--------------------------------------------------------------*/
 
 	private LinkedHashMap<String, Read> map=null;
+	private ConcurrentHashMap<String, String> norefSet=new ConcurrentHashMap<String, String>(256, .75f, 16);
 	
 	private long refReads=0;
 	private long refBases=0;
@@ -1174,6 +1185,8 @@ public class BBMask{
 	private int window=80;
 	private float ratio=0.35f;
 	private float entropyCutoff=0.75f;
+
+	private int samPad=0;
 
 	private final FileFormat ffinRef;
 	private final FileFormat[] ffinSam;

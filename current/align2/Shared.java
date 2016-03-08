@@ -23,7 +23,7 @@ public class Shared {
 	public static final byte GAPC='-';
 
 	public static int BBMAP_VERSION=31;
-	public static int BBMAP_VERSION_MINOR=32;
+	public static int BBMAP_VERSION_MINOR=56;
 	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
 
 	public static boolean TRIM_READ_COMMENTS=false;
@@ -56,7 +56,8 @@ public class Shared {
 		if(x>0){
 			THREADS=x;
 		}else{
-			THREADS=(Data.HOSTNAME()==null || !Data.HOSTNAME().startsWith("gpint") ? Data.LOGICAL_PROCESSORS : Tools.min(4, Data.LOGICAL_PROCESSORS));
+			//THREADS=(Data.HOSTNAME()==null || !Data.HOSTNAME().startsWith("gpint") ? Data.LOGICAL_PROCESSORS : Tools.min(4, Data.LOGICAL_PROCESSORS));
+			THREADS=Data.LOGICAL_PROCESSORS;
 		}
 //		assert(false) : Data.HOSTNAME()+", "+THREADS;
 		return THREADS;

@@ -1,74 +1,10 @@
-#!/bin/bash -l
+#!/bin/bash
 #bbmap in=<infile> out=<outfile>
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx1g"
-calcXmx () {
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
-		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=4
-	else
-		mult=75;
-		if [ $x -ge 1000000000 ]; then
-			mult=84
-			#echo "ram is 1000g+"
-		elif [ $x -ge 500000000 ]; then
-			mult=84
-			#echo "ram is 500g+"
-		elif [ $x -ge 250000000 ]; then
-			mult=84
-			#echo "ram is 250g+"
-		elif [ $x -ge 144000000 ]; then
-			mult=84
-			#echo "ram is 144g+"
-		elif [ $x -ge 120000000 ]; then
-			mult=84
-			#echo "ram is 120g+"
-		elif [ $x -ge 40000000 ]; then
-			mult=80
-			#echo "ram is 40g+"
-		else
-			mult=84
-			#echo "ram is under 40g"
-		fi
-		y=$(( ((x-500000)*mult/100)/1000000 ))
-	fi
-	#echo "y=$y"
-	z="-Xmx${y}g"
-	
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-
-bbmap() {
-	#module unload oracle-jdk
-	#module unload samtools
-	#module load oracle-jdk/1.7_64bit
-	#module load pigz
-	#module load samtools
-	local CMD="java -ea $z -cp $CP align2.BBMap build=1 overwrite=true match=long  fastareadlen=500 $@"
-	echo $CMD >&2
-	$CMD
-}
-
 usage(){
-	echo "BBMap v31"
+	echo "BBMap v31.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified January 6, 2014"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Fast and accurate short-read aligner for DNA and RNA."
 	echo ""
@@ -123,7 +59,7 @@ usage(){
 	echo "k=13             		Kmer length of index.  Higher is faster (for large genomes), less sensitive, and uses more RAM.  Max is 15."
 	echo "local=f         		Set to true to use local, rather than global, alignments.  This will soft-clip ugly ends of poor alignments."
 	echo "perfectmode=f      		Allow only perfect mappings when set to true (very fast)."
-	echo "semiperfectmode=f        	Allow only perfect and semiperfect (perfect except for N's in reference) mappings."
+	echo "semiperfectmode=f  		Allow only perfect and semiperfect (perfect except for N's in reference) mappings."
 	echo "threads=auto      		(t) Set to number of threads desired.  By default, uses all cores available."
 	echo "ambiguous=<best> 		(ambig) Set behavior on ambiguously-mapped reads (with multiple top-scoring mapping locations)."
 	echo "                 			best	(use the first best site)"
@@ -160,7 +96,7 @@ usage(){
 	echo "qualityhistogram=<file> 	(qhist) Write histogram of quality score by read location to this file."
 	echo "matchhistogram=<file>	 	(mhist) Write histogram of base match, substitution, deletion, and insertion rates by read location."
 	echo "inserthistogram=<file>  	(ihist) Write histogram of insert sizes (for paired reads)."
-	echo "bamscript=<file>        	(bs) Write a shell script to <file> that will turn the sam output into a sorted, indexed bam file."
+	echo "bamscript=<file>     		(bs) Write a shell script to <file> that will turn the sam output into a sorted, indexed bam file."
 	echo "ordered=f        		Set to true to output reads in same order as input.  Slower and uses more memory."
 	#echo "                 		Only relevant with multiple mapping threads."
 	#echo "showprogress=0   		Set to a positive number N to print a '.' once per N reads processed."
@@ -170,7 +106,7 @@ usage(){
 	echo "secondary=f      		Print secondary alignments."
 	echo "maxsites=5       		Maximum number of total alignments to print per read.  Only relevant when secondary=t."
 	echo "quickmatch=f      		Generate cigar strings more quickly.  Must be true to generate secondary site cigar strings."
-	echo "keepnames=f  			Keep original names of paired reads, rather than ensuring both reads have the same name."
+	echo "keepnames=f  	  		Keep original names of paired reads, rather than ensuring both reads have the same name."
 	echo "trimreaddescriptions=f  	(trd) Truncate read names at the first whitespace, assuming that the remaineder is a comment or description."
 	echo "sam=1.3          		Set to 1.4 to write Sam version 1.4 cigar strings, with = and X instead of M."
 	echo "md=f             		Write MD tags."
@@ -180,15 +116,102 @@ usage(){
 	echo "idtag=t          		Write a tag indicating percent identity, prefixed by YI:f:"
 	echo "inserttag=f         		Write a tag indicating insert size, prefixed by X8:Z:"
 	echo "ziplevel=2          		(zl) Compression level for zip or gzip output."
-	echo "pigz=f          		Spawn a pigz (parallel gzip) process for faster compression than using Java.  Requires pigz to be installed."
+	echo "pigz=f           		Spawn a pigz (parallel gzip) process for faster compression than using Java.  Requires pigz to be installed."
 	echo "machineout=f         		Set to true to output statistics in machine-friendly 'key=value' format."
 	echo ""
 	echo "Java Parameters:"
-	echo "-Xmx                  	This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
-	echo "					-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
+	echo "-Xmx             		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
+	echo "                 		-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
 	echo ""
 	echo "This list is not complete.  For more information, please consult $DIR""docs/readme.txt"
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx1g"
+z2="-Xms1g"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -Xms* ]]; then
+			z2="$arg"
+			set=1
+		elif [[ "$arg" == Xms* ]]; then
+			z2="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	
+	x=$(ulimit -v)
+	#echo "x=$x"
+	HOSTNAME=`hostname`
+	y=1
+	if [[ $x == unlimited ]]; then
+		#echo "ram is unlimited"
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		y=4
+	else
+		mult=75;
+		if [ $x -ge 1000000000 ]; then
+			mult=84
+			#echo "ram is 1000g+"
+		elif [ $x -ge 500000000 ]; then
+			mult=84
+			#echo "ram is 500g+"
+		elif [ $x -ge 250000000 ]; then
+			mult=84
+			#echo "ram is 250g+"
+		elif [ $x -ge 144000000 ]; then
+			mult=84
+			#echo "ram is 144g+"
+		elif [ $x -ge 120000000 ]; then
+			mult=84
+			#echo "ram is 120g+"
+		elif [ $x -ge 40000000 ]; then
+			mult=80
+			#echo "ram is 40g+"
+		else
+			mult=84
+			#echo "ram is under 40g"
+		fi
+		y=$(( ((x-500000)*mult/100)/1000000 ))
+	fi
+	#echo "y=$y"
+	z="-Xmx${y}g"
+}
+calcXmx "$@"
+
+
+bbmap() {
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
+	local CMD="java $EA $z -cp $CP align2.BBMap build=1 overwrite=true match=long  fastareadlen=500 $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then

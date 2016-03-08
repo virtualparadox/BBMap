@@ -3,6 +3,8 @@ package align2;
 import java.util.Arrays;
 import java.util.Random;
 
+import stream.FASTQ;
+
 import dna.AminoAcid;
 
 import jgi.CalcTrueQuality;
@@ -375,6 +377,20 @@ public class QualityTools {
 	public static final double phredToProbError(int phred){
 		if(phred<1){return 1;}
 		return Math.pow(10, 0-.1*phred);
+	}
+	
+	public static byte probCorrectToPhred(double prob){
+		if(prob<0){return 0;}
+		if(prob>=0.99999f){return 41;} 
+		
+		double phred=-10*Math.log10(1-prob);
+//		System.out.println("phred1="+phred);
+		phred=Math.round(phred);
+//		System.out.println("phred2="+phred);
+		byte q=(byte)Tools.mid(0, (int)phred, 41);
+//		System.out.println("phred3="+q);
+//		System.out.println("phred4="+(char)(q+33));
+		return (byte)q;
 	}
 	
 	private static final float[] makeQualityToFloat(int n){

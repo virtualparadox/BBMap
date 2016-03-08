@@ -22,6 +22,7 @@ import align2.ListNum;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
+import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
@@ -100,8 +101,10 @@ public class KmerCoverage {
 			String b=split.length>1 ? split[1] : null;
 			if("null".equalsIgnoreCase(b)){b=null;}
 			
-			if(arg.startsWith("-Xmx") || arg.startsWith("-Xms") || arg.equals("-ea") || arg.equals("-da")){
+			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
 			}else if(a.equals("k") || a.equals("kmer")){
@@ -148,8 +151,6 @@ public class KmerCoverage {
 				buildpasses=Integer.parseInt(b);
 			}else if(a.equals("printcoverage")){
 				OUTPUT_ATTACHMENT=Tools.parseBoolean(b);
-			}else if(a.equals("ziplevel") || a.equals("zl")){
-				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){

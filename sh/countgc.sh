@@ -1,31 +1,9 @@
-#!/bin/bash -l
+#!/bin/bash
 #countgc in=<infile> out=<outfile>
-
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
-CP="$DIR""current/"
-
-z="-Xmx120m"
-calcXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-		fi
-	done
-}
-calcXmx "$@"
-
-countgc() {
-	#module unload oracle-jdk
-	#module load oracle-jdk/1.7_64bit
-	local CMD="java -ea $z -cp $CP jgi.CountGC $@"
-	echo $CMD >&2
-	$CMD
-}
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified December 11, 2013"
+	echo "Last modified March 14, 2014"
 	echo ""
 	echo "Description:  Counts GC content of reads or scaffolds."
 	echo ""
@@ -39,6 +17,41 @@ usage(){
 	echo "Note that in format 1, A+C+G+T=1 even when N is nonzero."
 	echo ""
 	echo "Please contact Brian Bushnell at bbushnell@lbl.gov if you encounter any problems."
+}
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
+CP="$DIR""current/"
+
+z="-Xmx120m"
+EA="-da"
+set=0
+
+parseXmx () {
+	for arg in "$@"
+	do
+		if [[ "$arg" == -Xmx* ]]; then
+			z="$arg"
+			set=1
+		elif [[ "$arg" == Xmx* ]]; then
+			z="-$arg"
+			set=1
+		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
+			EA="$arg"
+		fi
+	done
+}
+
+calcXmx () {
+	parseXmx "$@"
+}
+calcXmx "$@"
+
+countgc() {
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	local CMD="java $EA $z -cp $CP jgi.CountGC $@"
+	echo $CMD >&2
+	$CMD
 }
 
 if [ -z "$1" ]; then
