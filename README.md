@@ -19,10 +19,16 @@ A Powerpoint comparison of performance (speed, memory, sensitivity, specificity)
 ## Compiling
 
 ````bash
+brew cask install java
+cd jni/
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_74.jdk/Contents/Home make -f makefile.osx
+cd -
 
 brew install --with-java open-mpi
 ant -Dmpijar=/usr/local/lib/mpi.jar
 ````
+
+To build Eclipse priject with `ant`, you need to put `ecj-4.5.2.jar` to `/usr/local/Cellar/ant/1.9.6/libexec/lib/`.
 
 ## Running
 
