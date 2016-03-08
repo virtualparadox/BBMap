@@ -32,6 +32,13 @@ To build Eclipse project with `ant`, you need to put `ecj-4.5.2.jar` to `/usr/lo
 
 ## Running
 
+To run with jar:
+
+````bash
+java -cp ./dist/lib/BBTools.jar align2.BBMap
+java -cp ./dist/lib/BBTools.jar align2.BBMap usejni=t
+````
+
 There is documentation in the docs folder and displayed by shellscripts when run with no arguments. But for example:
 
 `bbmap.sh ref=ecoli.fa`  
