@@ -119,6 +119,7 @@ public class CalcUniqueness {
 			sampleseed=parser.sampleseed;
 
 			overwrite=parser.overwrite;
+			append=parser.append;
 			testsize=parser.testsize;
 			
 			setInterleaved=parser.setInterleaved;
@@ -178,11 +179,11 @@ public class CalcUniqueness {
 			}
 		}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output file "+out+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output file "+out+"\n");
 		}
 		
-		ffout=FileFormat.testOutput(out, FileFormat.TEXT, extout, false, overwrite, false);
+		ffout=FileFormat.testOutput(out, FileFormat.TEXT, extout, false, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
@@ -280,7 +281,7 @@ public class CalcUniqueness {
 
 		TextStreamWriter tsw=null;
 		if(out!=null){
-			tsw=new TextStreamWriter(ffout, false);
+			tsw=new TextStreamWriter(ffout);
 			tsw.start();
 			tsw.print("#count");
 			if(showPercents){
@@ -592,6 +593,7 @@ public class CalcUniqueness {
 	public static boolean verbose=false;
 	public boolean errorState=false;
 	private boolean overwrite=false;
+	private boolean append=false;
 	private boolean colorspace=false;
 	private boolean testsize=false;
 	

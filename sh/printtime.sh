@@ -4,7 +4,7 @@
 function usage(){
 	echo "Prints time elapsed since last called on the same file."
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Usage:	printtime.sh <filename>"
 	echo ""
@@ -21,7 +21,7 @@ function printtime() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

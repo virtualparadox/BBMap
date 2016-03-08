@@ -21,9 +21,9 @@ public class Shared {
 	public static final int MINGAP=GAPBUFFER2+GAPLEN;
 	public static final int GAPCOST=Tools.max(1, GAPLEN/64);
 	public static final byte GAPC='-';
-
-	public static int BBMAP_VERSION=31;
-	public static int BBMAP_VERSION_MINOR=56;
+	
+	public static int BBMAP_VERSION=32;
+	public static String BBMAP_VERSION_MINOR="14";
 	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
 
 	public static boolean TRIM_READ_COMMENTS=false;

@@ -1,6 +1,15 @@
 BBDuk readme by Brian Bushnell
-Last updated February 18, 2014.
+Last updated April 7, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
+
+TODO:
+Add masking for multiple kmers in a single read.
+
+Verison 10:
+Added "trimpad" flag, allowing easier trimming of adapters with some wildcard bases.  Requested by Alicia Clum.
+Added bhist and qhist flags.
+Greatly accelerated BBDuk when run without a kmer reference.
+Added 'append' flag.
 
 Verison 9:
 All program message information now defaults to stderr.

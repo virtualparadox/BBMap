@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 
+import align2.ReadStats;
 import align2.Tools;
 
 import fileIO.ReadWrite;
@@ -87,8 +88,10 @@ public class FastaToChromArrays {
 				}else if(a.equals("genscaffoldinfo")){
 					genScaffoldInfo=Tools.parseBoolean(b);
 					System.err.println("Set genScaffoldInfo="+genScaffoldInfo);
+				}else if(a.equals("append") || a.equals("app")){
+					append=Tools.parseBoolean(b);
 				}else if(a.equals("overwrite") || a.equals("ow")){
-					OVERWRITE=Tools.parseBoolean(b);
+					overwrite=Tools.parseBoolean(b);
 				}else if(a.equals("mergescaffolds") || a.equals("mergecontigs") || (a.equals("merge"))){
 					MERGE_SCAFFOLDS=Tools.parseBoolean(b);
 					System.err.println("Set MERGE_SCAFFOLDS="+MERGE_SCAFFOLDS);
@@ -254,7 +257,7 @@ public class FastaToChromArrays {
 			File f=new File(outRoot);
 			if(!f.exists()){
 				if(!NODISK){f.mkdirs();}
-			}else if(OVERWRITE){
+			}else if(overwrite){
 				for(File g : f.listFiles()){
 					String s=g.getName();
 					if(g.isFile() && s.contains(".chrom")){
@@ -267,7 +270,7 @@ public class FastaToChromArrays {
 			f=new File(outRoot.replace("ref/genome/", "ref/index/"));
 			if(!f.exists()){
 				if(!NODISK){f.mkdirs();}
-			}else if(OVERWRITE){
+			}else if(overwrite){
 				for(File g : f.listFiles()){
 					String s=g.getName();
 					if(g.isFile() && (s.endsWith(".int2d") || s.endsWith(".block") || s.endsWith(".block2.gz") || s.endsWith(".blockB") || s.endsWith(".blockB2.gz"))){
@@ -345,7 +348,7 @@ public class FastaToChromArrays {
 			
 			if(writeChroms){
 				String x=outRoot+"chr"+chrom+Data.chromExtension();
-				if(new File(x).exists() && !OVERWRITE){throw new RuntimeException("Tried to overwrite existing file "+x+", but OVERWRITE=false.");}
+				if(new File(x).exists() && !overwrite){throw new RuntimeException("Tried to overwrite existing file "+x+", but overwrite=false.");}
 				if(Data.CHROMC){
 					ChromosomeArrayCompressed cac=new ChromosomeArrayCompressed(ca);
 					ReadWrite.writeObjectInThread(cac, x, false);
@@ -559,7 +562,8 @@ public class FastaToChromArrays {
 	
 	public static boolean MERGE_SCAFFOLDS=true;
 	public static boolean WRITE_IN_THREAD=false;
-	public static boolean OVERWRITE=true;
+	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static int START_PADDING=8000; //Always applied
 	public static int MID_PADDING=300; //Applied when merging scaffolds
 	public static int END_PADDING=8000; //Only applied if not enough terminal Ns

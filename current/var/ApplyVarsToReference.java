@@ -6,6 +6,7 @@ import java.util.Arrays;
 
 
 import align2.IndexMaker4;
+import align2.ReadStats;
 import align2.Tools;
 import dna.ChromosomeArray;
 import dna.Data;
@@ -58,8 +59,10 @@ public class ApplyVarsToReference {
 				N_BLOCK_TRIGGER=Integer.parseInt(b);
 			}else if(a.equals("staynearref")){
 				STAY_NEAR_REF=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
+				overwrite=Tools.parseBoolean(b);
 			}else if(a.startsWith("regen")){
 				REGEN_N_BLOCKS=Tools.parseBoolean(b);
 			}else if(a.startsWith("name=")){
@@ -83,7 +86,7 @@ public class ApplyVarsToReference {
 		
 		for(int chrom=minChrom; chrom<=maxChrom; chrom++){
 			String outName=Data.chromFname(chrom, outgenome);
-			assert(OVERWRITE || !new File(outName).exists()) : "Destination "+outName+" already exists.";
+			assert(overwrite || !new File(outName).exists()) : "Destination "+outName+" already exists.";
 //			assert(false) : inPattern+", "+outName;
 			process(inPattern.replaceFirst("#", ""+chrom), outName, chrom);
 		}
@@ -314,6 +317,9 @@ public class ApplyVarsToReference {
 	public static int N_BLOCK_END_SIZE=2000;
 	public static int N_BLOCK_SIZE=300;
 	public static int N_BLOCK_TRIGGER=80;
-	public static boolean OVERWRITE=false;
+	/** Permission to overwrite existing files */
+	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	
 }

@@ -12,6 +12,7 @@ import stream.FastaReadInputStream;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.Parser;
@@ -76,6 +77,8 @@ public static void main(String[] args){
 			}else if(a.equals("out")){
 				out=b;
 				setOut=true;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("bf1")){
@@ -208,6 +211,7 @@ public static void main(String[] args){
 	
 	private static PrintStream outstream=System.err;
 	public static boolean overwrite=false;
+	public static boolean append=false;
 	public static boolean showspeed=true;
 	public static boolean verbose=false;
 	

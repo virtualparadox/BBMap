@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 21, 2014"
 	echo ""
 	echo "Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format."
 	echo "Optionally performs additional functions such as quality trimming, subsetting, and subsampling."
@@ -16,6 +16,7 @@ function usage(){
 	echo "Other parameters and their defaults:"
 	echo ""
 	echo "ow=f         		(overwrite) Overwrites files that already exist."
+	echo "app=f        		(append) Append to files that already exist."
 	echo "zl=4            	(ziplevel) Set compression level, 1 (low) to 9 (max)."
 	echo "int=f		 	(interleaved) Determines whether INPUT file is considered interleaved."
 	echo "fastawrap=100    	Length of lines in fasta output."
@@ -34,6 +35,10 @@ function usage(){
 	echo "tossbrokenreads=f	(tbr) Discard reads that have different numbers of bases and qualities.  By default this will be detected and cause a crash."
 	echo "ignorebadquality=f	(ibq) Fix out-of-range quality values instead of crashing with a warning."
 	echo "addslash=f		Append ' /1' and ' /2' to read names, if not already present.  Also add 'int=t' if the reads are interleaved."
+	echo "rcomp=f	  		(rc) Reverse-compliment reads."
+	echo "rcompmate=f		(rcm) Reverse-compliment read 2 only."
+	echo "bhist=<file>		Write a base composition histogram to file."
+	echo "qhist=<file>		Write a quality histogram to file."
 	echo ""
 	echo "Sampling parameters:"
 	echo "reads=-1 		Set to a positive number to only process this many INPUT reads (or pairs), then quit."
@@ -47,11 +52,14 @@ function usage(){
 	echo "qtrim=f          	Trim read ends to remove bases with quality below minq."
 	echo "                 	Values: t (trim both ends), f (neither end), r (right end only), l (left end only)."
 	echo "trimq=4           	Trim quality threshold."
-	echo "minlength=20     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
+	echo "minlength=0     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
+	echo "maxlength=0     	If nonzero, reads longer than this after trimming will be discarded."
+	echo "breaklength=0     	If nonzero, reads longer than this will be broken into multiple reads of this length.  Does not work for paired reads."
 	echo "requirebothbad=t 	(rbb) Only discard pairs if both reads are shorter than minlen."
 	echo "minavgquality=0     	(maq) Reads with average quality (before trimming) below this will be discarded."
 	echo "forcetrimleft=0     	(ftl) If nonzero, trim left bases of the read to this position (exclusive, 0-based)."
 	echo "forcetrimright=0    	(ftr) If nonzero, trim right bases of the read after this position (exclusive, 0-based)."
+	echo "outsingle=<file>    	(outs) If a read is longer than minlength and its mate is shorter, the longer one goes here."
 	echo ""
 	echo "Sam file reformatting options.  Note that most of these will require an indexed reference."
 	echo "build=<integer> 	Assign a genome's build id.  You can index like this: bbmap.sh ref=<file> build=1"
@@ -79,25 +87,11 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx200m"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
-
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 }
 calcXmx "$@"
@@ -113,7 +107,7 @@ function reformat() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

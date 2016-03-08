@@ -10,6 +10,7 @@ import stream.FastaReadInputStream;
 import stream.Read;
 import stream.ReadStreamByteWriter;
 import stream.SamLine;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -40,6 +41,7 @@ public class Parser {
 		if(parseSam(arg, a, b)){return true;}
 		if(parseFasta(arg, a, b)){return true;}
 		if(parseCommonStatic(arg, a, b)){return true;}
+		if(parseHist(arg, a, b)){return true;}
 
 		if(parseFiles(arg, a, b)){return true;}
 		if(parseCommon(arg, a, b)){return true;}
@@ -60,11 +62,13 @@ public class Parser {
 			sampleseed=Long.parseLong(b);
 		}else if(a.equals("t") || a.equals("threads")){
 			Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
+		}else if(a.equals("append") || a.equals("app")){
+			append=ReadStats.append=Tools.parseBoolean(b);
 		}else if(a.equals("overwrite") || a.equals("ow")){
 			overwrite=Tools.parseBoolean(b);
 		}else if(a.equals("testsize")){
 			testsize=Tools.parseBoolean(b);
-		}else if(a.equals("breaklen") || a.equals("breaklength") || a.equals("maxlength") || a.equals("maxlen")){
+		}else if(a.equals("breaklen") || a.equals("breaklength")){
 			breakLength=Integer.parseInt(b);
 		}else{
 			return false;
@@ -161,10 +165,16 @@ public class Parser {
 			requireBothBad=Tools.parseBoolean(b);
 		}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 			minReadLength=Integer.parseInt(b);
+		}else if(a.equals("maxlength") || a.equals("maxlen")){
+			maxReadLength=Integer.parseInt(b);
 		}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 			minLenFraction=Float.parseFloat(b);
 		}else if(a.equals("minavgquality") || a.equals("maq")){
 			minAvgQuality=Byte.parseByte(b);
+			averageQualityByProbability=false;
+		}else if(a.equals("minavgquality2") || a.equals("maq2")){
+			minAvgQuality=Byte.parseByte(b);
+			averageQualityByProbability=true;
 		}else if(a.equals("trimBadSequence") || a.equals("tbs")){
 			trimBadSequence=Tools.parseBoolean(b);
 		}else{
@@ -180,20 +190,27 @@ public class Parser {
 			in2=b;
 		}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1")){
 			out1=b;
+			setOut=true;
 		}else if(a.equals("out2") || a.equals("output2")){
 			out2=b;
+			setOut=true;
 		}else if(a.equals("qfin") || a.equals("qfin1")){
 			qfin1=b;
 		}else if(a.equals("qfout") || a.equals("qfout1")){
 			qfout1=b;
+			setOut=true;
 		}else if(a.equals("qfin2")){
 			qfin2=b;
 		}else if(a.equals("qfout2")){
 			qfout2=b;
+			setOut=true;
 		}else if(a.equals("extin")){
 			extin=b;
 		}else if(a.equals("extout")){
 			extout=b;
+		}else if(a.equals("outsingle") || a.equals("outs")){
+			outsingle=b;
+			setOut=true;
 		}else{
 			return false;
 		}
@@ -224,6 +241,33 @@ public class Parser {
 		}else if(a.equals("bf2")){
 			ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 			ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+		}else{
+			return false;
+		}
+		return true;
+	}
+	
+	public static boolean parseHist(String arg, String a, String b){
+		if(a.equals("qualityhistogram") || a.equals("qualityhist") || a.equals("qhist")){
+			ReadStats.QUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.QUAL_HIST_FILE!=null);
+			if(ReadStats.COLLECT_QUALITY_STATS){System.err.println("Set quality histogram output to "+ReadStats.QUAL_HIST_FILE);}
+		}else if(a.equals("matchhistogram") || a.equals("matchhist") || a.equals("mhist")){
+			ReadStats.MATCH_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_MATCH_STATS=(ReadStats.MATCH_HIST_FILE!=null);
+			if(ReadStats.COLLECT_MATCH_STATS){System.err.println("Set match histogram output to "+ReadStats.MATCH_HIST_FILE);}
+		}else if(a.equals("inserthistogram") || a.equals("inserthist") || a.equals("ihist")){
+			ReadStats.INSERT_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_INSERT_STATS=(ReadStats.INSERT_HIST_FILE!=null);
+			if(ReadStats.COLLECT_INSERT_STATS){System.err.println("Set insert size histogram output to "+ReadStats.INSERT_HIST_FILE);}
+		}else if(a.equals("basehistogram") || a.equals("basehist") || a.equals("bhist")){
+			ReadStats.BASE_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_BASE_STATS=(ReadStats.BASE_HIST_FILE!=null);
+			if(ReadStats.COLLECT_BASE_STATS){System.err.println("Set base content histogram output to "+ReadStats.BASE_HIST_FILE);}
+		}else if(a.equals("qualityaccuracyhistogram") || a.equals("qahist")){
+			ReadStats.QUAL_ACCURACY_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_QUALITY_ACCURACY=(ReadStats.QUAL_ACCURACY_FILE!=null);
+			if(ReadStats.COLLECT_QUALITY_ACCURACY){System.err.println("Set quality accuracy histogram output to "+ReadStats.QUAL_ACCURACY_FILE);}
 		}else{
 			return false;
 		}
@@ -376,6 +420,7 @@ public class Parser {
 	public byte trimq=6;
 	public byte minAvgQuality=0;
 	public int minReadLength=0;
+	public int maxReadLength=0;
 	public float minLenFraction=0;
 	public int breakLength=0;
 	/** Toss pair only if both reads are shorter than limit */ 
@@ -383,6 +428,7 @@ public class Parser {
 	public boolean trimBadSequence=false;
 
 	public boolean overwrite=false;
+	public boolean append=false;
 	public boolean testsize=false;
 	
 	public boolean setInterleaved=false;
@@ -395,12 +441,16 @@ public class Parser {
 
 	public String out1=null;
 	public String out2=null;
+	public String outsingle=null;
+	public boolean setOut=false;
 
 	public String qfout1=null;
 	public String qfout2=null;
 	
 	public String extin=null;
 	public String extout=null;
+	
+	public boolean averageQualityByProbability=false;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/

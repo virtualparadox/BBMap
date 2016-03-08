@@ -23,6 +23,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -172,6 +173,8 @@ public class BBDukF {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseHist(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -200,8 +203,10 @@ public class BBDukF {
 			}else if(a.equals("literal")){
 				literal=(b==null) ? null : b.split(",");
 //				assert(false) : b+", "+Arrays.toString(literal);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				overwrite=Tools.parseBoolean(b);
+				overwrite=ReadStats.overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("forest")){
 				useForest_=Tools.parseBoolean(b);
 				if(useForest_){useTable_=useArray_=false;}
@@ -242,6 +247,8 @@ public class BBDukF {
 				assert(mink_<0 || (mink_>0 && mink_<32)) : "kmin must be between 1 and 31; default is 4, negative numbers disable it.";
 			}else if(a.equals("useshortkmers") || a.equals("shortkmers") || a.equals("usk")){
 				useShortKmers=Tools.parseBoolean(b);
+			}else if(a.equals("trimextra") || a.equals("trimpad") || a.equals("tp")){
+				trimPad=Integer.parseInt(b);
 			}else if(a.equals("dist") || a.equals("distance") || a.equals("hdist") || a.equals("hammingdistance")){
 				hammingDistance=Integer.parseInt(b);
 				assert(hammingDistance>=0 && hammingDistance<4) : "hamming distance must be between 0 and 3; default is 0.";
@@ -401,7 +408,12 @@ public class BBDukF {
 		minReadLength=minReadLength_;
 		minLenFraction=minLenFraction_;
 		removePairsIfEitherBad=removePairsIfEitherBad_;
-		maxNs=maxNs_;
+		maxNs=maxNs_;	
+		
+		MAKE_QUALITY_HISTOGRAM=ReadStats.COLLECT_QUALITY_STATS;
+		MAKE_MATCH_HISTOGRAM=ReadStats.COLLECT_MATCH_STATS;
+		MAKE_BASE_HISTOGRAM=ReadStats.COLLECT_BASE_STATS;
+		
 //		if(maxReads>0){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
 		
 //		if(ways_==-1){
@@ -447,6 +459,7 @@ public class BBDukF {
 		ktrimLeft=ktrimLeft_;
 		ktrimN=ktrimN_;
 		ktrimExclusive=ktrimExclusive_;
+		kfilter=(ref!=null || literal!=null) && !(ktrimRight || ktrimLeft || ktrimN);
 		
 		assert(!useShortKmers || ktrimRight || ktrimLeft || ktrimN) : "\nSetting mink or useShortKmers also requires setting a ktrim mode, such as 'r', 'l', or 'n'\n";
 		
@@ -561,7 +574,7 @@ public class BBDukF {
 	public void process(){
 		
 		/* Check for output file collisions */
-		Tools.testOutputFiles(overwrite, false, out1, out2, outb1, outb2, outstats, outduk, outrqc);
+		Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outstats, outduk, outrqc);
 		
 		/* Start overall timer */
 		Timer t=new Timer();
@@ -620,7 +633,7 @@ public class BBDukF {
 		}
 		
 		/* Fill tables with reference kmers */
-		fillSet_MT();
+		storedKmers=fillSet_MT();
 		
 //		if(THREADS>=4){
 //			fillSet_MT();
@@ -992,20 +1005,22 @@ public class BBDukF {
 			Thread cristhread=new Thread(cris);
 			cristhread.start();
 		}
+		final boolean paired=cris.paired();
+		outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
 		
 		/* Create read output streams */
 		RTextOutputStream3 ros=null, rosb=null;
 		if(out1!=null){
 			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ORDERED);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ORDERED);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			ros=new RTextOutputStream3(ff1, ff2, null, null, buff, null, true);
 			ros.start();
 		}
 		if(outb1!=null){
 			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
-			FileFormat ff1=FileFormat.testOutput(outb1, FileFormat.FASTQ, null, true, overwrite, ORDERED);
-			FileFormat ff2=FileFormat.testOutput(outb2, FileFormat.FASTQ, null, true, overwrite, ORDERED);
+			FileFormat ff1=FileFormat.testOutput(outb1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
+			FileFormat ff2=FileFormat.testOutput(outb2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			rosb=new RTextOutputStream3(ff1, ff2, null, null, buff, null, true);
 			rosb.start();
 		}
@@ -1075,6 +1090,7 @@ public class BBDukF {
 		
 		/* Shut down I/O streams; capture error status */
 		errorState|=ReadWrite.closeStreams(cris, ros, rosb);
+		errorState|=ReadStats.writeAll(paired);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -1397,6 +1413,8 @@ public class BBDukF {
 			cris=cris_;
 			ros=ros_;
 			rosb=rosb_;
+			
+			readstats=(MAKE_QUALITY_HISTOGRAM || MAKE_MATCH_HISTOGRAM || MAKE_BASE_HISTOGRAM) ? new ReadStats() : null;
 		}
 		
 		@Override
@@ -1414,6 +1432,12 @@ public class BBDukF {
 				for(int i=0; i<reads.size(); i++){
 					final Read r1=reads.get(i);
 					final Read r2=r1.mate;
+					
+					if(readstats!=null){
+						if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r1);}
+						if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r1);}
+						if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r1);}
+					}
 
 					final int initialLength1=(r1.bases==null ? 0 : r1.bases.length);
 					final int initialLength2=(r2==null ? 0 : r2.bases==null ? 0 : r2.bases.length);
@@ -1496,7 +1520,7 @@ public class BBDukF {
 							
 							final int a=(kbig<=k ? countSetKmers(r1, keySets) : countSetKmersBig(r1, keySets));
 							final int b=(kbig<=k ? countSetKmers(r2, keySets) : countSetKmersBig(r2, keySets));
-							
+
 							if(r1!=null && a>maxBadKmers){r1.setDiscarded(true);}
 							if(r2!=null && b>maxBadKmers){r2.setDiscarded(true);}
 							
@@ -1598,6 +1622,8 @@ public class BBDukF {
 		/** Output read streams */
 		private final RTextOutputStream3 ros, rosb;
 		
+		private final ReadStats readstats;
+		
 		private long readsInT=0;
 		private long basesInT=0;
 		private long readsOutT=0;
@@ -1628,7 +1654,7 @@ public class BBDukF {
 	 */
 	private final int ktrim(final Read r, final AbstractKmerTable[] sets){
 		assert(ktrimLeft || ktrimRight || ktrimN);
-		if(r==null || r.bases==null){return 0;}
+		if(r==null || r.bases==null || storedKmers<1){return 0;}
 		if(verbose){System.err.println("KTrimming read "+r.id);}
 		final byte[] bases=r.bases, quals=r.quality;
 		final int minlen=k-1;
@@ -1741,11 +1767,18 @@ public class BBDukF {
 			}
 		}
 		
-
+		
 		if(verbose){System.err.println("found="+found+", minLoc="+minLoc+", maxLoc="+maxLoc+", minLocExclusive="+minLocExclusive+", maxLocExclusive="+maxLocExclusive);}
 		
 		
 		if(found==0){return 0;}
+		
+		if(trimPad!=0){
+			maxLoc=Tools.mid(0, maxLoc+trimPad, bases.length);
+			minLoc=Tools.mid(0, minLoc-trimPad, bases.length);
+			maxLocExclusive=Tools.mid(0, maxLocExclusive+trimPad, bases.length);
+			minLocExclusive=Tools.mid(0, minLocExclusive-trimPad, bases.length);
+		}
 		
 		if(ktrimN){ //Replace kmer hit zone with the trim symbol
 			Arrays.fill(bases, minLoc, maxLoc+1, trimSymbol);
@@ -1774,7 +1807,7 @@ public class BBDukF {
 	 * @return Number of hits
 	 */
 	private final int countSetKmers(final Read r, final AbstractKmerTable sets[]){
-		if(r==null || r.bases==null){return 0;}
+		if(r==null || r.bases==null || storedKmers<1){return 0;}
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
@@ -1834,10 +1867,10 @@ public class BBDukF {
 	 * @return Number of sets of consecutive hits of exactly length kbig
 	 */
 	private final int countSetKmersBig(final Read r, final AbstractKmerTable sets[]){
+		if(r==null || r.bases==null || storedKmers<1){return 0;}
 		assert(kbig>k);
 		final int sub=kbig-k-1;
 		assert(sub>=0) : kbig+", "+sub;
-		if(r==null || r.bases==null){return 0;}
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
@@ -1942,22 +1975,6 @@ public class BBDukF {
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	@Deprecated
-	/** Now handled by Read class */
-	private static final void toUpperCase(Read r){
-		final byte[] bases1=r.bases, bases2=(r.mate==null ? null : r.mate.bases);
-		if(bases1!=null){
-			for(int i=0; i<bases1.length; i++){
-				bases1[i]=(byte)Character.toUpperCase(bases1[i]);
-			}
-		}
-		if(bases2!=null){
-			for(int i=0; i<bases2.length; i++){
-				bases2[i]=(byte)Character.toUpperCase(bases2[i]);
-			}
-		}
-	}
-	
 	/** Print statistics about current memory use and availability */
 	private static final void printMemory(){
 		if(GC_BEFORE_PRINT_MEMORY){
@@ -2036,6 +2053,9 @@ public class BBDukF {
 	 * Note that a skip of 1 means every kmer is used, 2 means every other, etc. */
 	private int minSkip=1;
 	
+	/** Trim this much extra around matched kmers */
+	private int trimPad;
+	
 	/*--------------------------------------------------------------*/
 	/*----------------          Statistics          ----------------*/
 	/*--------------------------------------------------------------*/
@@ -2058,6 +2078,8 @@ public class BBDukF {
 	long refReads=0;
 	long refBases=0;
 	long refKmers=0;
+	
+	long storedKmers=0;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
@@ -2085,8 +2107,6 @@ public class BBDukF {
 	private final int kbig;
 	/** Shortest kmer to use for trimming */
 	private final int mink;
-//	/** OR bitmask for full-length kmers, with a single 1 bit immediately to the left of the kmer */
-//	private final long kmask; //TODO: Eliminate this and just use kmasks array
 	/** A read may contain up to this many kmers before being considered a match.  Default: 0 */
 	private final int maxBadKmers;
 	
@@ -2104,6 +2124,8 @@ public class BBDukF {
 	private final int minReadLength;
 	/** Toss reads shorter than this fraction of initital length, after trimming */
 	private final float minLenFraction;
+	/** Filter reads by whether or not they have matching kmers */
+	private final boolean kfilter;
 	/** Trim matching kmers and all bases to the left */
 	private final boolean ktrimLeft;
 	/** Trim matching kmers and all bases to the right */
@@ -2126,11 +2148,15 @@ public class BBDukF {
 	 * Default: true. */
 	private final boolean removePairsIfEitherBad;
 	
+	private final boolean MAKE_QUALITY_HISTOGRAM;
+	private final boolean MAKE_MATCH_HISTOGRAM;
+	private final boolean MAKE_BASE_HISTOGRAM;
+	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static int VERSION=9;
+	public static int VERSION=10;
 	
 	/** Number of tables (and threads, during loading) */ 
 	private static final int WAYS=5; //123
@@ -2141,6 +2167,8 @@ public class BBDukF {
 	private static PrintStream outstream=System.err;
 	/** Permission to overwrite existing files */
 	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	/** Print speed statistics upon completion */
 	public static boolean showSpeed=true;
 	/** Display progress messages such as memory usage */

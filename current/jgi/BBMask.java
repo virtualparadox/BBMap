@@ -17,6 +17,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 import stream.SamLine;
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
@@ -120,6 +121,8 @@ public class BBMask{
 				extinRef=b;
 			}else if(a.equals("extout")){
 				extoutRef=b;
+			}else if(a.equals("split")){
+				splitMode=Tools.parseBoolean(b);
 			}else if(a.equals("mink") || a.equals("kmin")){	
 				mink=mink2=Integer.parseInt(b);
 			}else if(a.equals("maxk") || a.equals("kmax")){	
@@ -156,6 +159,8 @@ public class BBMask{
 				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
 			}else if(a.equals("parsecustom")){
 				parsecustom=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
@@ -220,18 +225,13 @@ public class BBMask{
 			throw new RuntimeException("Error - at least one input file is required.");
 		}
 		if(!ByteFile.FORCE_MODE_BF1 && !ByteFile.FORCE_MODE_BF2 && Shared.THREADS>2){
-			//		if(ReadWrite.isCompressed(in1)){ByteFile.FORCE_MODE_BF2=true;}
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 
-//		if(outRef==null){
-//			outRef="stdout.fa";
-//		}
-
 		if(outRef!=null && outRef.equalsIgnoreCase("null")){outRef=null;}
 
-		if(!Tools.testOutputFiles(overwrite, false, outRef)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output file "+outRef+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, outRef)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output file "+outRef+"\n");
 		}
 
 		FASTQ.PARSE_CUSTOM=parsecustom;
@@ -249,7 +249,7 @@ public class BBMask{
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
-		ffoutRef=FileFormat.testOutput(outRef, FileFormat.FASTA, extoutRef, true, overwrite, false);
+		ffoutRef=FileFormat.testOutput(outRef, FileFormat.FASTA, extoutRef, true, overwrite, append, false);
 
 		ffinRef=FileFormat.testInput(inRef, FileFormat.FASTA, extinRef, true, true);
 		
@@ -375,7 +375,11 @@ public class BBMask{
 		
 		if(total>0 || true){
 			t.start();
-			masked=maskFromBitsets(MaskByLowercase);
+			if(splitMode){
+				masked=splitFromBitsets();
+			}else{
+				masked=maskFromBitsets(MaskByLowercase);
+			}
 			t.stop();
 			outstream.println("Conversion Time:              \t"+t);
 		}
@@ -438,6 +442,70 @@ public class BBMask{
 			}
 		}
 		System.err.println("Done Masking");
+		return sum;
+	}
+	
+	private long splitFromBitsets(){
+		System.err.println("\nSplitting reads by removing masked bases"); //123
+		long sum=0;
+		
+		LinkedHashMap<String, Read> map2=new LinkedHashMap<String, Read>();
+
+		for(String key : map.keySet()){
+			Read r=map.get(key);
+			BitSet bs=((BitSet)r.obj);
+			int rnum=0;
+			if(bs.isEmpty()){
+				map2.put(key, r);
+			}else{
+				byte[] bases=r.bases;
+				byte[] quals=r.quality;
+
+				int lastGood, lastBad;
+				if(bs.get(0)){
+					lastGood=-1;
+					lastBad=0;
+				}else{
+					lastGood=0;
+					lastBad=-1;
+				}
+				
+				int i=1;
+				for(; i<bases.length; i++){
+					if(bs.get(i)){
+						if(lastGood==i-1){
+							int len=lastGood-lastBad;
+							if(len>0){
+								byte[] bases2=Arrays.copyOfRange(bases, lastBad+1, i);
+								byte[] quals2=(quals==null ? null : Arrays.copyOfRange(quals, lastBad+1, i));
+								Read r2=new Read(bases2, -1, -1, -1, r.id+"_"+rnum, quals2, r.numericID, r.flags);
+								Read old=map2.put(r2.id, r2);
+								assert(old==null) : "Duplicate id "+r2.id; //TODO:  This can easily be resolved by making a new ID string.
+							}
+						}
+						lastBad=i;
+					}else{
+						lastGood=i;
+					}
+				}
+				if(lastGood==i-1){
+					int len=lastGood-lastBad;
+					if(len>0){
+						byte[] bases2=Arrays.copyOfRange(bases, lastBad+1, i);
+						byte[] quals2=(quals==null ? null : Arrays.copyOfRange(quals, lastBad+1, i));
+						Read r2=new Read(bases2, -1, -1, -1, r.id+"_"+rnum, quals2, r.numericID, r.flags);
+						Read old=map2.put(r2.id, r2);
+						assert(old==null) : "Duplicate id "+r2.id; //TODO:  This can easily be resolved by making a new ID string.
+					}
+				}
+			}
+		}
+		
+		map.clear();
+		map.putAll(map2);
+		map2.clear();
+		
+		System.err.println("Done Splitting");
 		return sum;
 	}
 	
@@ -1165,6 +1233,7 @@ public class BBMask{
 
 	private boolean parsecustom=false;
 	private boolean overwrite=false;
+	private boolean append=false;
 	private boolean colorspace=false;
 
 	private long maxReads=-1;
@@ -1180,6 +1249,7 @@ public class BBMask{
 
 	private boolean processEntropy=true;
 	private boolean entropyMode=true;
+	private boolean splitMode=false;
 	private int mink2=5;
 	private int maxk2=5;
 	private int window=80;

@@ -24,6 +24,7 @@ import fileIO.ReadWrite;
 import fileIO.FileFormat;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 import align2.TrimRead;
 
@@ -72,6 +73,7 @@ public class ErrorCorrectMT extends Thread{
 		String output=null;
 		boolean ordered=true;
 		boolean overwrite=true;
+		boolean append=false;
 		int threads=-1;
 		
 		boolean auto=true;
@@ -205,6 +207,8 @@ public class ErrorCorrectMT extends Thread{
 				TRIM_QUAL=Byte.parseByte(b);
 			}else if(a.startsWith("maxtrimq")){
 				MAX_TRIM_QUAL=Byte.parseByte(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("auto") || a.equals("automatic")){
@@ -323,7 +327,7 @@ public class ErrorCorrectMT extends Thread{
 //		assert(false) : cells+", "+cells2;
 		KCountArray kca=makeTable(reads1, reads2, extra, k, cbits, gap, hashes, buildpasses, cells, cells2, tablereads, buildStepsize, thresh1, thresh2);
 		
-		long bases=detect(reads1, reads2, kca, k, thresh2, maxReads, output, ordered, overwrite);
+		long bases=detect(reads1, reads2, kca, k, thresh2, maxReads, output, ordered, append, overwrite);
 		t.stop();
 		Data.sysout.println("Total time:      \t"+t+"   \t"+String.format("%.2f", bases*1000000.0/(t.elapsed))+" kb/sec");
 		
@@ -418,7 +422,7 @@ public class ErrorCorrectMT extends Thread{
 		return kca;
 	}
 	
-	public static long detect(String in1, String in2, KCountArray kca, int k, int thresh, long maxReads, String output, boolean ordered, boolean overwrite) {
+	public static long detect(String in1, String in2, KCountArray kca, int k, int thresh, long maxReads, String output, boolean ordered, boolean append, boolean overwrite) {
 		final ConcurrentReadStreamInterface cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
@@ -446,8 +450,8 @@ public class ErrorCorrectMT extends Thread{
 
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, append, ordered);
 			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			assert(!ff1.sam()) : "Sam files need reference info for the header.";
@@ -483,8 +487,8 @@ public class ErrorCorrectMT extends Thread{
 					outbad2=out2.replaceFirst("\\.", "_BAD.");
 				}
 				
-				FileFormat ffb1=FileFormat.testOutput(outbad1, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, ordered);
-				FileFormat ffb2=FileFormat.testOutput(outbad2, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, ordered);
+				FileFormat ffb1=FileFormat.testOutput(outbad1, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, append, ordered);
+				FileFormat ffb2=FileFormat.testOutput(outbad2, FileFormat.FASTQ, OUTPUT_INFO_ONLY ? ".info" : null, true, overwrite, append, ordered);
 				ros=new RTextOutputStream3(ffb1, ffb2, buff, null, true);
 			}
 		}

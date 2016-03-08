@@ -59,12 +59,22 @@ public class ChromosomeArray implements Serializable {
 		
 		if(fname.endsWith(".chrom") || fname.endsWith(".chrom.gz")){
 			ChromosomeArray ca=ReadWrite.read(ChromosomeArray.class, fname);
+			if(UNDEFINED_TO_N){
+				ca.changeUndefinedToN();
+			}
 			return ca;
 		}else{
 			assert(fname.endsWith(".chromC") || fname.endsWith(".chromC.gz"));
 			
 			ChromosomeArrayCompressed cac=ReadWrite.read(ChromosomeArrayCompressed.class, fname);
 			return cac.toChromosomeArray();
+		}
+	}
+	
+	public void changeUndefinedToN(){
+		assert(!colorspace);
+		for(int i=0; i<array.length; i++){
+			if(!AminoAcid.isACGTN(array[i])){array[i]='N';}
 		}
 	}
 	
@@ -396,6 +406,8 @@ public class ChromosomeArray implements Serializable {
 	public int minIndex=Integer.MAX_VALUE;
 	
 	public final boolean colorspace;
+	
+	public static boolean UNDEFINED_TO_N=false;
 	
 	
 }

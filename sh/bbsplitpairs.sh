@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Separates paired reads into files of 'good' pairs and 'good' singletons by removing 'bad' reads that are shorter than a min length."
 	echo "Designed to handle situations where reads become too short to be useful after trimming.  This program also optionally performs quality trimming."
@@ -43,25 +43,12 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx120m"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 }
 calcXmx "$@"
@@ -75,7 +62,7 @@ splitpairs() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

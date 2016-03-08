@@ -13,6 +13,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -107,6 +108,8 @@ public final class SplitPairsAndSingles {
 			}else if(a.equals("outs") || a.equals("outsingle") || a.equals("outb") || a.equals("outbad")){
 				outsingle=b;
 				setOut=true;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("bf1")){
@@ -316,13 +319,13 @@ public final class SplitPairsAndSingles {
 		final RTextOutputStream3 ros, rosb;
 		final int buff=4;
 		if(out1!=null){
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, false);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, false);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, false);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, false);
 			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			ros.start();
 		}else{ros=null;}
 		if(outsingle!=null){
-			FileFormat ff1=FileFormat.testOutput(outsingle, FileFormat.FASTQ, null, true, overwrite, false);
+			FileFormat ff1=FileFormat.testOutput(outsingle, FileFormat.FASTQ, null, true, overwrite, append, false);
 			rosb=new RTextOutputStream3(ff1, null, buff, null, true);
 			rosb.start();
 		}else{rosb=null;}
@@ -628,7 +631,10 @@ public final class SplitPairsAndSingles {
 	private final boolean fixPairs;
 	
 	private static PrintStream outstream=System.err;
+	/** Permission to overwrite existing files */
 	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	public static boolean showSpeed=true;
 	public static boolean verbose=false;
 	

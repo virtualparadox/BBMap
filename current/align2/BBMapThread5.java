@@ -357,256 +357,6 @@ public final class BBMapThread5 extends AbstractMapThread {
 	}
 	
 	
-	public void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
-		if(OUTPUT_PAIRED_ONLY && r.mate!=null && !r.paired() && (r.mapped() || r.mate.mapped())){r.clearPairMapping();}
-		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
-			ambiguousBestAlignment1++;
-		}
-
-		int[] correctness=calcCorrectness(r, THRESH);
-		int correctGroup=correctness[0];
-		int correctGroupSize=correctness[1];
-		int numGroups=correctness[2];
-		int elements=correctness[3];
-		int correctScore=correctness[4];
-		int topScore=correctness[5];
-		int sizeOfTopGroup=correctness[6];
-		int numCorrect=correctness[7];
-		boolean firstElementCorrect=(correctness[8]==1);
-		boolean firstElementCorrectLoose=(correctness[9]==1);
-		boolean firstGroupCorrectLoose=(correctness[10]==1);
-		
-		assert(elements>0 == r.mapped());
-		
-		if(elements>0){
-			
-			if(r.match!=null){
-				int[] errors=r.countErrors();
-				matchCountM1+=errors[0];
-				matchCountS1+=errors[1];
-				matchCountD1+=errors[2];
-				matchCountI1+=errors[3];
-				matchCountN1+=errors[4];
-			}
-			
-			
-			mappedRetained1++;
-			if(r.rescued()){
-				if(r.strand()==Gene.PLUS){
-					rescuedP1++;
-				}else{
-					rescuedM1++;
-				}
-			}
-			if(r.paired()){
-				numMated++;
-				int inner;
-				int outer;
-				if(r.start<=r.mate.start){
-					inner=r.mate.start-r.stop;
-					outer=r.mate.stop-r.start;
-				}else{
-					inner=r.start-r.mate.stop;
-					outer=r.stop-r.mate.start;
-				}
-
-				inner=Tools.min(MAX_PAIR_DIST, inner);
-				inner=Tools.max(MIN_PAIR_DIST, inner);
-				innerLengthSum+=inner;
-				outerLengthSum+=outer;
-				insertSizeSum+=(inner+r.bases.length+r.mate.bases.length);
-			}else if(r.mate!=null && r.mate.mapped()/*&& r.list!=null && r.list.size()>0*/){
-				badPairs++;
-			}
-			
-			if(r.perfect() || (maxSwScore>0 && r.topSite().slowScore==maxSwScore)){
-				perfectMatch1++;
-			}else if(SLOW_ALIGN){
-				assert(r.topSite().slowScore<maxSwScore) : maxSwScore+"\t"+r.topSite().toText();
-			}
-			
-			int foundSemi=0;
-			for(SiteScore ss : r.sites){
-				if(ss.perfect){
-					perfectHitCount1++;
-					assert(ss.semiperfect);
-				}
-				if(ss.semiperfect){
-					semiPerfectHitCount1++;
-					foundSemi=1;
-				}
-			}
-			semiperfectMatch1+=foundSemi;
-			
-			if(firstElementCorrect){
-				if(r.strand()==Gene.PLUS){firstSiteCorrectP1++;}
-				else{firstSiteCorrectM1++;}
-				if(r.paired()){firstSiteCorrectPaired1++;}
-				else{firstSiteCorrectSolo1++;}
-				if(r.rescued()){firstSiteCorrectRescued1++;}
-			}else{
-				firstSiteIncorrect1++;
-//				System.out.println("********");
-//				System.out.println(r.toText(false));
-//				System.out.println(r.mate.toText(false));
-			}
-			
-			if(firstElementCorrectLoose){
-				firstSiteCorrectLoose1++;
-			}else{
-				firstSiteIncorrectLoose1++;
-			}
-
-			siteSum1+=elements;
-			topSiteSum1+=sizeOfTopGroup;
-
-			if(topScore==maxPossibleQuickScore){perfectHit1++;}
-			if(sizeOfTopGroup==1){uniqueHit1++;}
-
-			if(correctGroup>0){
-				
-				if(r.strand()==Gene.PLUS){truePositiveP1++;}
-				else{truePositiveM1++;}
-				totalCorrectSites1+=numCorrect;
-
-				if(correctGroup==1){
-					if(sizeOfTopGroup==1){
-						correctUniqueHit1++;
-					}else{
-						correctMultiHit1++;
-					}
-				}else{
-					correctLowHit1++;
-				}
-
-			}else{
-
-				falsePositive1++;
-//				System.out.println("********");
-//				System.out.println(r.toText(false));
-//				System.out.println(r.mate.toText(false));
-			}
-		}else if(maxPossibleQuickScore==-1){
-			lowQualityReadsDiscarded1++;
-			r.setDiscarded(true);
-		}else{
-			noHit1++;
-		}
-	}
-	
-	
-	public void calcStatistics2(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
-		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
-			ambiguousBestAlignment2++;
-		}
-
-		int[] correctness=calcCorrectness(r, THRESH);
-		int correctGroup=correctness[0];
-		int correctGroupSize=correctness[1];
-		int numGroups=correctness[2];
-		int elements=correctness[3];
-		int correctScore=correctness[4];
-		int topScore=correctness[5];
-		int sizeOfTopGroup=correctness[6];
-		int numCorrect=correctness[7];
-		boolean firstElementCorrect=(correctness[8]==1);
-		boolean firstElementCorrectLoose=(correctness[9]==1);
-		boolean firstGroupCorrectLoose=(correctness[10]==1);
-
-		if(elements>0){
-			
-			if(r.match!=null){
-				int[] errors=r.countErrors();
-				matchCountM2+=errors[0];
-				matchCountS2+=errors[1];
-				matchCountD2+=errors[2];
-				matchCountI2+=errors[3];
-				matchCountN2+=errors[4];
-			}
-			
-			mappedRetained2++;
-			if(r.rescued()){
-				if(r.strand()==Gene.PLUS){
-					rescuedP2++;
-				}else{
-					rescuedM2++;
-				}
-			}
-			
-			if(r.perfect() || (maxSwScore>0 && r.topSite().slowScore==maxSwScore)){
-				perfectMatch2++;
-			}else if(SLOW_ALIGN){
-				assert(r.topSite().slowScore<maxSwScore) : maxSwScore+"\t"+r.topSite().toText();
-			}
-			
-			int foundSemi=0;
-			for(SiteScore ss : r.sites){
-				if(ss.perfect){
-					perfectHitCount2++;
-					assert(ss.semiperfect);
-				}
-				if(ss.semiperfect){
-					semiPerfectHitCount2++;
-					foundSemi=1;
-				}
-			}
-			semiperfectMatch2+=foundSemi;
-
-			if(firstElementCorrect){
-				if(r.strand()==Gene.PLUS){firstSiteCorrectP2++;}
-				else{firstSiteCorrectM2++;}
-				if(r.paired()){firstSiteCorrectPaired2++;}
-				else{firstSiteCorrectSolo2++;}
-				if(r.rescued()){firstSiteCorrectRescued2++;}
-			}else{
-				firstSiteIncorrect2++;
-//				System.out.println("********");
-//				System.out.println(r.toText(false));
-//				System.out.println(r.mate.toText(false));
-			}
-			
-			if(firstElementCorrectLoose){
-				firstSiteCorrectLoose2++;
-			}else{
-				firstSiteIncorrectLoose2++;
-			}
-
-			siteSum2+=elements;
-			topSiteSum2+=sizeOfTopGroup;
-
-			if(topScore==maxPossibleQuickScore){perfectHit2++;}
-			if(sizeOfTopGroup==1){uniqueHit2++;}
-
-			if(correctGroup>0){
-
-				if(r.strand()==Gene.PLUS){truePositiveP2++;}
-				else{truePositiveM2++;}
-				totalCorrectSites2+=numCorrect;
-
-				if(correctGroup==1){
-					if(sizeOfTopGroup==1){
-						correctUniqueHit2++;
-					}else{
-						correctMultiHit2++;
-					}
-				}else{
-					correctLowHit2++;
-				}
-
-			}else{
-
-				falsePositive2++;
-//				System.out.println("********");
-//				System.out.println(r.toText(false));
-//				System.out.println(r.mate.toText(false));
-			}
-		}else if(maxPossibleQuickScore==-1){
-			lowQualityReadsDiscarded2++;
-		}else{
-			noHit2++;
-		}
-	}
-	
 	public void processRead(final Read r, final byte[] basesM){
 		if(idmodulo>1 && r.numericID%idmodulo!=1){return;}
 		final byte[] basesP=r.bases;
@@ -621,7 +371,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 //		}
 		
 		if(verbose){System.err.println("\nProcessing "+r);}
-		readsUsed++;
+		readsUsed1++;
 		
 		final int maxPossibleQuickScore=quickMap(r, basesM);
 		if(verbose){System.err.println("\nQuick Map: \t"+r.sites);}
@@ -629,6 +379,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		if(maxPossibleQuickScore<0){
 			r.sites=null;
 			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=basesP.length;
 			r.setDiscarded(true);
 			return;
 		}
@@ -1094,8 +845,9 @@ public final class BBMapThread5 extends AbstractMapThread {
 		final Read r2=r.mate;
 		assert(r2!=null);
 		final byte[] basesP1=r.bases, basesP2=r2.bases;
+		final int len1=(basesP1==null ? 0 : basesP1.length), len2=(basesP2==null ? 0 : basesP2.length);
 		
-		readsUsed++;
+		readsUsed1++;
 		readsUsed2++;
 
 		final int maxPossibleQuickScore1=quickMap(r, basesM1);
@@ -1109,8 +861,10 @@ public final class BBMapThread5 extends AbstractMapThread {
 			r.sites=null;
 			r2.sites=null;
 			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=len1;
 			r.setDiscarded(true);
 			lowQualityReadsDiscarded2++;
+			lowQualityBasesDiscarded2+=len2;
 			r2.setDiscarded(true);
 			return;
 		}
@@ -1126,10 +880,10 @@ public final class BBMapThread5 extends AbstractMapThread {
 		//Discards need to be tracked separately for each end. 
 //		if(maxPossibleQuickScore2<0){lowQualityReadsDiscarded--;}
 		
-		final int maxSwScore1=msa.maxQuality(r.bases.length);
-		final int maxImperfectSwScore1=msa.maxImperfectScore(r.bases.length);
-		final int maxSwScore2=msa.maxQuality(r2.bases.length);
-		final int maxImperfectSwScore2=msa.maxImperfectScore(r2.bases.length);
+		final int maxSwScore1=msa.maxQuality(len1);
+		final int maxImperfectSwScore1=msa.maxImperfectScore(len1);
+		final int maxSwScore2=msa.maxQuality(len2);
+		final int maxImperfectSwScore2=msa.maxImperfectScore(len2);
 		
 		pairSiteScoresInitial(r, r2, TRIM_LIST);
 		if(verbose){System.err.println("\nAfter initial pair:\nRead1:\t"+r+"\nRead2:\t"+r2);}
@@ -1324,7 +1078,7 @@ public final class BBMapThread5 extends AbstractMapThread {
 		if(r.numSites()>0 && r2.numSites()>0){
 			SiteScore ss1=r.topSite();
 			SiteScore ss2=r2.topSite();
-			if(canPair(ss1, ss2, r.bases.length, r2.bases.length, REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
+			if(canPair(ss1, ss2, len1, len2, REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
 				assert(SLOW_ALIGN ? ss1.pairedScore>ss1.slowScore : ss1.pairedScore>ss1.quickScore) : 
 					"\n"+ss1.toText()+"\n"+ss2.toText()+"\n"+r.toText(false)+"\n"+r2.toText(false)+"\n";
 				assert(SLOW_ALIGN ? ss2.pairedScore>ss2.slowScore : ss2.pairedScore>ss2.quickScore) : 
@@ -1345,8 +1099,8 @@ public final class BBMapThread5 extends AbstractMapThread {
 		assert(checkTopSite(r)); // TODO remove this
 		if(KILL_BAD_PAIRS){
 			if(r.isBadPair(REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
-				int x=r.mapScore/r.bases.length;
-				int y=r2.mapScore/r2.bases.length;
+				int x=r.mapScore/len1;
+				int y=r2.mapScore/len2;
 				if(x>=y){
 					r2.clearAnswers(false);
 				}else{

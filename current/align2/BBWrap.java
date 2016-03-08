@@ -95,6 +95,8 @@ public class BBWrap {
 			}else if(a.equals("bamscript") || a.equals("bs")){
 				add(b, bsList);
 				args[i]=null;
+			}else if(a.equals("append") || a.equals("app")){
+				append=Tools.parseBoolean(b);
 			}
 		}
 		
@@ -124,21 +126,21 @@ public class BBWrap {
 			
 			if(i==0 && ref!=null){list.add("ref="+ref);}
 			else if(i>0){list.add("indexloaded=t");}
-
-			if(bsList.size()>0){list.add("bs="+bsList.get(i));}
-			if(qhistList.size()>0){list.add("qhist="+qhistList.get(i));}
-			if(mhistList.size()>0){list.add("mhist="+mhistList.get(i));}
-			if(ihistList.size()>0){list.add("ihist="+ihistList.get(i));}
-			if(in1List.size()>0){list.add("in="+in1List.get(i));}
-			if(out1List.size()>0){list.add("out="+out1List.get(i));}
-			if(outu1List.size()>0){list.add("outu="+outu1List.get(i));}
-			if(outm1List.size()>0){list.add("outm="+outm1List.get(i));}
-			if(outb1List.size()>0){list.add("outb="+outb1List.get(i));}
-			if(in2List.size()>0){list.add("in2="+in2List.get(i));}
-			if(out2List.size()>0){list.add("out2="+out2List.get(i));}
-			if(outu2List.size()>0){list.add("outu2="+outu2List.get(i));}
-			if(outm2List.size()>0){list.add("outm2="+outm2List.get(i));}
-			if(outb2List.size()>0){list.add("outb2="+outb2List.get(i));}
+			
+			addToList(list, bsList, "bs", i);
+			addToList(list, qhistList, "qhist", i);
+			addToList(list, mhistList, "mhist", i);
+			addToList(list, ihistList, "ihist", i);
+			addToList(list, in1List, "in", i);
+			addToList(list, out1List, "out", i);
+			addToList(list, outu1List, "outu", i);
+			addToList(list, outm1List, "outm", i);
+			addToList(list, outb1List, "outb", i);
+			addToList(list, in2List, "in2", i);
+			addToList(list, out2List, "out2", i);
+			addToList(list, outu2List, "outu2", i);
+			addToList(list, outm2List, "outm2", i);
+			addToList(list, outb2List, "outb2", i);
 			
 			String[] args=list.toArray(new String[list.size()]);
 			if(mapper==null || mapper.equalsIgnoreCase("bbmap")){
@@ -154,6 +156,14 @@ public class BBWrap {
 			}else if(mapper.equalsIgnoreCase("bbsplit") || mapper.equalsIgnoreCase("bbsplitter")){
 				BBSplitter.main(args);
 			}
+		}
+	}
+	
+	private void addToList(ArrayList<String> list, ArrayList<String> source, String key, int i){
+		if(source.size()>i){
+			list.add(key+"="+source.get(i));
+		}else if(append && source.size()==1){
+			list.add(key+"="+source.get(0));
 		}
 	}
 
@@ -176,6 +186,8 @@ public class BBWrap {
 	private ArrayList<String> outu2List=new ArrayList<String>();
 	private ArrayList<String> outm2List=new ArrayList<String>();
 	private ArrayList<String> outb2List=new ArrayList<String>();
+	
+	private boolean append=false;
 	
 	static PrintStream sysout=System.err;
 	

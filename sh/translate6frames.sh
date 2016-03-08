@@ -47,56 +47,16 @@ z2="-Xms2g"
 EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-			set=1
-		elif [[ "$arg" == Xms* ]]; then
-			z2="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
 		return
 	fi
-	
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 2G." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
-		y=2000
-	fi
-	
-	mult=42;
-
-	y=$(( ((x-20000)*mult/100)/1000 ))
-
-	if [ $y -ge 15000 ]; then
-		y=15000
-	elif [ 200 -ge $y ]; then
-		y=200
-	fi
-	
-	#echo "y=$y"
-	z="-Xmx${y}m"
+	freeRam 2000m 42
+	z="-Xmx${RAM}m"
+	z2="-Xms${RAM}m"
 }
 calcXmx "$@"
 
@@ -111,7 +71,7 @@ translate6frames() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

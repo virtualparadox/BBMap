@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Compares reads to the kmers in a reference dataset, optionally allowing an edit distance."
 	echo "Splits the reads into two outputs - those that match the reference, and those that don't."
@@ -39,6 +39,8 @@ usage(){
 	echo "ziplevel=2       	(zl) Compression level; 1 (min) through 9 (max)."
 	echo "fastawrap=80     	Length of lines in fasta output."
 	echo "qout=auto        	Output quality offset: 33 (Sanger), 64, or auto."
+	echo "bhist=<file>		Write a base composition histogram to file."
+	echo "qhist=<file>		Write a quality histogram to file."
 	echo ""
 	echo "Processing parameters:"
 	echo "threads=auto     	(t) Set number of threads to use; default is number of logical processors."
@@ -66,6 +68,7 @@ usage(){
 	echo "minlength=20     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
 	echo "minavgquality=0  	(maq) Reads with average quality (before trimming) below this will be discarded."
 	echo "otm=f            	(outputtrimmedtomatch) Output reads trimmed to shorter than minlength to outm rather than discarding."
+	echo "tp=0             	(trimpad) Trim this much extra around matching kmers."
 	echo ""
 #	echo "Other parameters:"
 #	echo "array=t    	  	Use HashArray data structure."
@@ -86,59 +89,17 @@ CP="$DIR""current/"
 
 z="-Xmx1g"
 z2="-Xms1g"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-			set=1
-		elif [[ "$arg" == Xms* ]]; then
-			z2="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
-
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
 		return
 	fi
-	
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 2G." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
-		y=2000
-	fi
-	
-	mult=42;
-
-	y=$(( ((x-20000)*mult/100)/1000 ))
-
-	if [ $y -ge 15000 ]; then
-		y=15000
-	elif [ 200 -ge $y ]; then
-		y=200
-	fi
-	
-	#echo "y=$y"
-	z="-Xmx${y}m"
+	freeRam 2000m 42
+	z="-Xmx${RAM}m"
 }
 calcXmx "$@"
 
@@ -153,7 +114,7 @@ bbduk() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

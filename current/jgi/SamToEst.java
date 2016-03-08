@@ -19,6 +19,7 @@ import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
 import align2.LongList;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 
@@ -75,6 +76,8 @@ public class SamToEst {
 				est=b;
 			}else if(a.equals("fraction")){
 				fractionForAllCaptured=Float.parseFloat(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("qauto")){
@@ -410,6 +413,7 @@ public class SamToEst {
 	public boolean USE_SECONDARY=false;
 	public static int minIntron=10;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 //	public HashMap<String, EST> //Only needed if sam file is unordered.
 	
 	public static class EST{

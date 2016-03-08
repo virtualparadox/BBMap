@@ -18,10 +18,10 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -51,7 +51,7 @@ public class CountKmersExact {
 			System.exit(0);
 		}
 		
-		//Create a new BBDuk instance
+		//Create a new CountKmersExact instance
 		CountKmersExact cke=new CountKmersExact(args);
 		
 		///And run it
@@ -67,9 +67,7 @@ public class CountKmersExact {
 		outstream.println("\nOptional flags:");
 		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
 		outstream.println("in2=<file>         \tUse this if 2nd read of pairs are in a different file.");
-		outstream.println("out=<file>         \t(outnonmatch) The 'out=' flag is needed if the output file is not the second parameter.  'out=stdout' will pipe to standard out.");
-		outstream.println("out2=<file>        \t(outnonmatch2) Use this to write 2nd read of pairs to a different file.");
-		outstream.println("stats=<file>       \tWrite statistics about which contaminants were detected.");
+		outstream.println("out=<file>         \tDump kmers and counts to this file.");
 		outstream.println("");
 		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
 		outstream.println("overwrite=t        \t(ow) Set to false to force the program to abort rather than overwrite an existing file.");
@@ -108,19 +106,16 @@ public class CountKmersExact {
 		ByteFile.FORCE_MODE_BF2=Shared.THREADS>2;
 		
 		/* Initialize local variables with defaults */
-		boolean setOut=false, setOutb=false, qtrimRight_=false, qtrimLeft_=false;
+		boolean setOut=false, qtrimRight_=false, qtrimLeft_=false;
 		boolean rcomp_=true;
 		boolean useForest_=false, useTable_=false, useArray_=true;
 		long skipreads_=0;
-		int k_=28;
+		int k_=31;
 		int ways_=-1;
-		byte qin=-1, qout=-1;
+		byte qin=-1;
 		
 		byte trimq_=4;
 		byte minAvgQuality_=0;
-		int minReadLength_=20;
-		int maxNs_=-1;
-		boolean removePairsIfEitherBad_=true;
 		int filterMax_=2;
 		
 		{
@@ -147,18 +142,15 @@ public class CountKmersExact {
 				in1=b;
 			}else if(a.equals("in2")){
 				in2=b;
-			}else if(a.equals("out") || a.equals("out1") || a.equals("outu") || a.equals("outu1") || a.equals("outnonmatch") || 
-					a.equals("outnonmatch1") || a.equals("outunnmatch") || a.equals("outunmatch1") || a.equals("outunnmatched") || a.equals("outunmatched1")){
+			}else if(a.equals("out") || a.equals("out1")){
 				out1=b;
 				setOut=true;
-			}else if(a.equals("out2") || a.equals("outu2") || a.equals("outnonmatch2") || a.equals("outunmatch2") || 
-					a.equals("outnonmatched2") || a.equals("outunmatched2")){
-				out2=b;
-			}else if(a.equals("stats")){
-				outstats=b;
+			}else if(a.equals("hist") || a.equals("khist")){
+				outHist=b;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-				
 			}else if(a.equals("initialsize")){
 				initialSize=Integer.parseInt(b);
 			}else if(a.equals("forest")){
@@ -197,8 +189,6 @@ public class CountKmersExact {
 				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
 			}else if(a.equals("minavgquality") || a.equals("maq")){
 				minAvgQuality_=Byte.parseByte(b);
-			}else if(a.equals("maxns")){
-				maxNs_=Byte.parseByte(b);
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -251,7 +241,7 @@ public class CountKmersExact {
 				else if(b.equalsIgnoreCase("illumina")){x=64;}
 				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;}
 				else{x=(byte)Integer.parseInt(b);}
-				qin=qout=x;
+				qin=x;
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -259,13 +249,6 @@ public class CountKmersExact {
 				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY=true;}
 				else{x=(byte)Integer.parseInt(b);}
 				qin=x;
-			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
-				byte x;
-				if(b.equalsIgnoreCase("sanger")){x=33;}
-				else if(b.equalsIgnoreCase("illumina")){x=64;}
-				else if(b.equalsIgnoreCase("auto")){x=-1;FASTQ.DETECT_QUALITY_OUT=true;}
-				else{x=(byte)Integer.parseInt(b);}
-				qout=x;
 			}else if(a.equals("qauto")){
 				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 			}else if(a.equals("prefilter")){
@@ -305,9 +288,6 @@ public class CountKmersExact {
 		skipreads=skipreads_;
 		trimq=trimq_;
 		minAvgQuality=minAvgQuality_;
-		minReadLength=minReadLength_;
-		removePairsIfEitherBad=removePairsIfEitherBad_;
-		maxNs=maxNs_;
 		WAYS=ways_;
 		filterMax=Tools.min(filterMax_, 0x7FFFFFFF);
 		
@@ -322,16 +302,9 @@ public class CountKmersExact {
 		
 		/* Adjust I/O settings and filenames */
 		
-		if(qin!=-1 && qout!=-1){
-			FASTQ.ASCII_OFFSET=qin;
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY=false;
-		}else if(qin!=-1){
+		if(qin!=-1){
 			FASTQ.ASCII_OFFSET=qin;
 			FASTQ.DETECT_QUALITY=false;
-		}else if(qout!=-1){
-			FASTQ.ASCII_OFFSET_OUT=qout;
-			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
 		assert(FastaReadInputStream.settingsOK());
@@ -354,28 +327,10 @@ public class CountKmersExact {
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
 		
-		if(out1!=null && out1.contains("#")){
-			int pound=out1.lastIndexOf('#');
-			String a=out1.substring(0, pound);
-			String b=out1.substring(pound+1);
-			out1=a+1+b;
-			out2=a+2+b;
-		}
-
-		if(!setOut){
-			out1="stdout.fq";
-			outstream=System.err;
-			out2=null;
-		}else if("stdout".equalsIgnoreCase(out1) || "standarddout".equalsIgnoreCase(out1)){
-			out1="stdout.fq";
-			outstream=System.err;
-			out2=null;
-		}
 		if(out1!=null && !Tools.canWrite(out1, overwrite)){throw new RuntimeException("Output file "+out1+" already exists, and overwrite="+overwrite);}
 
 		assert(!in1.equalsIgnoreCase(out1));
 		assert(!in1.equalsIgnoreCase(in2));
-		assert(out1==null || !out1.equalsIgnoreCase(out2));
 		assert(THREADS>0);
 
 		assert(in1==null || in1.toLowerCase().startsWith("stdin") || in1.toLowerCase().startsWith("standardin") || new File(in1).exists()) : "Can't find "+in1;
@@ -405,24 +360,22 @@ public class CountKmersExact {
 	public void process(){
 		
 		/* Check for output file collisions */
-		Tools.testOutputFiles(overwrite, false, out1, out2,outstats);
+		Tools.testOutputFiles(overwrite, append, false, out1, outHist);
 		
 		/* Start overall timer */
 		Timer t=new Timer();
 		t.start();
 		
-//		boolean dq0=FASTQ.DETECT_QUALITY;
-//		boolean ti0=FASTQ.TEST_INTERLEAVED;
-//		int rbl0=Shared.READ_BUFFER_LENGTH;
-//		FASTQ.DETECT_QUALITY=false;
-//		FASTQ.TEST_INTERLEAVED=false;
-//		Shared.READ_BUFFER_LENGTH=16;
-		
+		/* Count kmers */
 		process2(t.time1);
 		
-//		FASTQ.DETECT_QUALITY=dq0;
-//		FASTQ.TEST_INTERLEAVED=ti0;
-//		Shared.READ_BUFFER_LENGTH=rbl0;
+		if(outHist!=null){
+			throw new RuntimeException();
+		}
+		
+		if(outKmers!=null){
+			dumpKmersAsText(outKmers, k);
+		}
 		
 		/* Stop timer and calculate speed statistics */
 		t.stop();
@@ -519,7 +472,7 @@ public class CountKmersExact {
 		}
 		
 		/* Write statistics to files */
-		writeStats(System.nanoTime()-startTime);
+//		writeStats(System.nanoTime()-startTime);
 		
 		outstream.println("Input:                  \t"+readsIn+" reads \t\t"+basesIn+" bases.");
 		
@@ -527,65 +480,13 @@ public class CountKmersExact {
 			outstream.println("QTrimmed:               \t"+readsTrimmed+" reads ("+String.format("%.2f",readsTrimmed*100.0/readsIn)+"%) \t"+
 					basesTrimmed+" bases ("+String.format("%.2f",basesTrimmed*100.0/basesIn)+"%)");
 		}
-		if(minAvgQuality>0 || maxNs>=0){
+		if(minAvgQuality>0){
 			outstream.println("Low quality discards:   \t"+lowqReads+" reads ("+String.format("%.2f",lowqReads*100.0/readsIn)+"%) \t"+
 					lowqBases+" bases ("+String.format("%.2f",lowqBases*100.0/basesIn)+"%)");
 		}
 		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
 				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
 		outstream.println("Unique Kmers:               \t"+added);
-	}
-	
-	/**
-	 * Write processing statistics in DUK's format.
-	 * @param time Elapsed time, nanoseconds
-	 */
-	private void writeStats(long time){
-		if(outstats==null){return;}
-		final TextStreamWriter tsw=new TextStreamWriter(outstats, overwrite, false, false);
-		tsw.start();
-		tsw.println(dukString(time));
-		tsw.poisonAndWait();
-	}
-	
-	/**
-	 * Helper method; formats statistics to be duk-compatible
-	 * @param time Elapsed time, nanoseconds
-	 * @return duk output string
-	 */
-	private String dukString(long time){
-		StringBuilder sb=new StringBuilder();
-		sb.append("##INPUT PARAMETERS##\n");
-		sb.append("#Query file:	"+in1+(in2==null ? "" : ","+in2)+"\n");
-		sb.append("#Not matched reads file:	"+out1+(out2==null ? "" : ","+out2)+"\n");
-		sb.append("#Output file (stats):	"+outstats+"\n");
-		sb.append("#Mer size:	"+k+"\n");
-		long size=0;
-		for(AbstractKmerTable x : keySets){size+=x.size();}
-		sb.append("#Quality trim:	"+((qtrimLeft || qtrimRight) ? trimq : "false")+"\n");
-		sb.append("\n");
-		
-		sb.append("##REFERENCE STAT##\n");
-//		sb.append("#Total Reads:	"+refReads+"\n");
-//		sb.append("#Total Bases:	"+refBases+"\n");
-//		sb.append("#Total kmers:	"+refKmers+"\n");
-		sb.append("#Total stored kmers:	"+size+"\n");
-		sb.append("\n");
-
-		sb.append("## ELAPSED TIME##\n");
-		sb.append("# Time:	"+String.format("%.2f", time/1000000000.0)+" seconds\n");
-		sb.append("\n");
-
-		sb.append("##QUERY FILE STAT##\n");
-		sb.append("# Total number of reads:	"+readsIn+"\n");
-		sb.append("\n");
-
-		sb.append("##P-VALUE##\n");
-		sb.append("#Avg number of Kmer for each read:	"+((basesIn/(Tools.max(readsIn, 1)))-k)+"\n");
-//		sb.append("# P value for the given threshold 1 is 4.05231e-14\n"); //duk prints a P value; not sure what it means
-		sb.append("\n");
-		
-		return sb.toString();
 	}
 	
 	
@@ -608,21 +509,6 @@ public class CountKmersExact {
 			cristhread.start();
 		}
 		
-		/* Create read output streams */
-		RTextOutputStream3 ros=null;
-		if(out1!=null){
-			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ORDERED);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ORDERED);
-			ros=new RTextOutputStream3(ff1, ff2, null, null, buff, null, true);
-			ros.start();
-		}
-		if(ros!=null){
-			t.stop();
-			outstream.println("Started output stream:\t"+t);
-			t.start();
-		}
-		
 		/* Optionally skip the first reads, since initial reads may have lower quality */
 		if(skipreads>0){
 			long skipped=0;
@@ -633,17 +519,13 @@ public class CountKmersExact {
 			while(skipped<skipreads && reads!=null && reads.size()>0){
 				skipped+=reads.size();
 				
-				if(ros!=null){
-					ros.add(new ArrayList<Read>(1), ln.id);
-				}
-				
 				cris.returnList(ln, ln.list.isEmpty());
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			cris.returnList(ln, ln.list.isEmpty());
 			if(reads==null || reads.isEmpty()){
-				ReadWrite.closeStreams(cris, ros);
+				ReadWrite.closeStreams(cris);
 				System.err.println("Skipped all of the reads.");
 				System.exit(0);
 			}
@@ -679,7 +561,7 @@ public class CountKmersExact {
 		}
 		
 		/* Shut down I/O streams; capture error status */
-		errorState|=ReadWrite.closeStreams(cris, ros);
+		errorState|=ReadWrite.closeStreams(cris);
 		return added;
 	}
 	
@@ -730,11 +612,6 @@ public class CountKmersExact {
 						if(r1!=null && r1.quality!=null && r1.avgQuality()<minAvgQuality){r1.setDiscarded(true);}
 						if(r2!=null && r2.quality!=null && r2.avgQuality()<minAvgQuality){r2.setDiscarded(true);}
 					}
-					//Determine whether to discard the reads based on the presence of Ns
-					if(maxNs>=0){
-						if(r1!=null && r1.countUndefined()>maxNs){r1.setDiscarded(true);}
-						if(r2!=null && r2.countUndefined()>maxNs){r2.setDiscarded(true);}
-					}
 					
 					int rlen1=0, rlen2=0;
 					if(r1!=null){
@@ -744,7 +621,7 @@ public class CountKmersExact {
 							readsTrimmedT+=(x>0 ? 1 : 0);
 						}
 						rlen1=r1.bases==null ? 0 : r1.bases.length;
-						if(rlen1<minReadLength){r1.setDiscarded(true);}
+						if(rlen1<k){r1.setDiscarded(true);}
 					}
 					if(r2!=null){
 						if(qtrimLeft || qtrimRight){
@@ -753,28 +630,24 @@ public class CountKmersExact {
 							readsTrimmedT+=(x>0 ? 1 : 0);
 						}
 						rlen2=r2.bases==null ? 0 : r2.bases.length;
-						if(rlen2<minReadLength){r2.setDiscarded(true);}
+						if(rlen2<k){r2.setDiscarded(true);}
 					}
 
-					if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
-							(r1.discarded() && (r2==null || r2.discarded()))){
-						if(r1!=null){
+					if(r1!=null){
+						if(r1.discarded()){
 							lowqBasesT+=r1.bases.length;
 							lowqReadsT++;
-						}
-						if(r2!=null){
-							lowqBasesT+=r2.bases.length;
-							lowqReadsT++;
-						}
-					}else{
-						//Process kmers
-
-						if(r1!=null && !r1.discarded()){
+						}else{
 							long temp=addKmersToTable(r1);
 							added+=temp;
 							if(verbose){System.err.println("Added "+temp);}
 						}
-						if(r2!=null && !r2.discarded()){
+					}
+					if(r2!=null){
+						if(r2.discarded()){
+							lowqBasesT+=r2.bases.length;
+							lowqReadsT++;
+						}else{
 							long temp=addKmersToTable(r2);
 							added+=temp;
 							if(verbose){System.err.println("Added "+temp);}
@@ -927,14 +800,14 @@ public class CountKmersExact {
 	/** Input reads */
 	private String in1=null, in2=null;
 	/** Output reads */
-	private String out1=null, out2=null;
-	/** Statistics output file */
-	private String outstats=null;
+	private String out1=null;
+	/** Histogram output file */
+	private String outHist=null;
+	/** Kmer count output file */
+	private String outKmers=null;
 	
 	/** Maximum input reads (or pairs) to process.  Does not apply to references.  -1 means unlimited. */
 	private long maxReads=-1;
-	/** Output reads in input order.  May reduce speed. */
-	private boolean ORDERED=false;
 	
 	private int buflen=1000;
 	
@@ -946,10 +819,6 @@ public class CountKmersExact {
 	long basesTrimmed=0;
 	long lowqReads=0;
 	long lowqBases=0;
-	
-//	long refReads=0;
-//	long refBases=0;
-//	long refKmers=0;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
@@ -983,19 +852,11 @@ public class CountKmersExact {
 	private final byte trimq;
 	/** Throw away reads below this average quality before trimming.  Default: 0 */
 	private final byte minAvgQuality;
-	/** Throw away reads containing more than this many Ns.  Default: -1 (disabled) */
-	private final int maxNs;
-	/** Throw away reads shorter than this after trimming.  Default: 20 */
-	private final int minReadLength;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
 	/** Skip this many initial input reads */
 	private final long skipreads;
-
-	/** Pairs go to outbad if either of them is bad, as opposed to requiring both to be bad.
-	 * Default: true. */
-	private final boolean removePairsIfEitherBad;
 	
 	
 	/*--------------------------------------------------------------*/
@@ -1008,6 +869,8 @@ public class CountKmersExact {
 	private static PrintStream outstream=System.err;
 	/** Permission to overwrite existing files */
 	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	/** Print speed statistics upon completion */
 	public static boolean showSpeed=true;
 	/** Display progress messages such as memory usage */
@@ -1016,8 +879,6 @@ public class CountKmersExact {
 	public static final boolean verbose=false;
 	/** Number of ProcessThreads */
 	public static int THREADS=Shared.THREADS;
-	/** Indicates end of input stream */
-	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
 	/** Do garbage collection prior to printing memory usage */
 	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
 	

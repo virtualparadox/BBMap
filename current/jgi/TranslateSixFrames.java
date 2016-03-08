@@ -85,6 +85,10 @@ public class TranslateSixFrames {
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("tag")){
 				addTag=Tools.parseBoolean(b);
+			}else if(a.equals("skipquality")){
+				skipquality=Tools.parseBoolean(b);
+			}else if(a.equals("translatequality")){
+				skipquality=!Tools.parseBoolean(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -107,6 +111,7 @@ public class TranslateSixFrames {
 			sampleseed=parser.sampleseed;
 			
 			overwrite=parser.overwrite;
+			append=parser.append;
 
 			setInterleaved=parser.setInterleaved;
 			
@@ -157,11 +162,13 @@ public class TranslateSixFrames {
 				printOptions();
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
-			out1="stdout";
+			if(!parser.setOut){
+				out1="stdout";
+			}
 		}
 		
 		if(!setInterleaved){
-			assert(in1!=null && out1!=null) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
+			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
@@ -177,8 +184,8 @@ public class TranslateSixFrames {
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out1, out2)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
 		{
@@ -196,9 +203,9 @@ public class TranslateSixFrames {
 			}
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false);
-
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
+		
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 
@@ -210,6 +217,8 @@ public class TranslateSixFrames {
 				SamLine.CONVERT_CIGAR_TO_MATCH=true;
 			}
 		}
+		
+		if((ffout1!=null && ffout1.fasta()) || (ffin1!=null && ffin1.fasta())){skipquality=true;}
 	}
 	
 	void process(Timer t){
@@ -276,9 +285,9 @@ public class TranslateSixFrames {
 					
 
 					final byte[][] bm1=AminoAcid.toAAsSixFrames(r1.bases);
-					final byte[][] qm1=AminoAcid.toQualitySixFrames(r1.quality, 0);
+					final byte[][] qm1=(skipquality ? QNULL : AminoAcid.toQualitySixFrames(r1.quality, 0));
 					final byte[][] bm2=(r2==null ? null : AminoAcid.toAAsSixFrames(r2.bases));
-					final byte[][] qm2=(r2==null ? null : AminoAcid.toQualitySixFrames(r2.quality, 0));
+					final byte[][] qm2=(r2==null ? null : (skipquality ? QNULL : AminoAcid.toQualitySixFrames(r2.quality, 0)));
 					
 					for(int i=0; i<6; i++){
 						Read aa1=new Read(bm1[i], r1.chrom, r1.start, r1.stop, (addTag ? r1.id+frametag[i] : r1.id), qm1[i], r1.numericID, r1.flags|Read.AAMASK);
@@ -423,6 +432,8 @@ public class TranslateSixFrames {
 	/** Add /1 and /2 to paired reads */
 	private boolean addslash=false;
 
+	private boolean skipquality=false;
+
 	private long maxReads=-1;
 	private float samplerate=1f;
 	private long sampleseed=-1;
@@ -436,6 +447,7 @@ public class TranslateSixFrames {
 	private final FileFormat ffout2;
 	
 	private static final String[] frametag= new String[] {" fr1", " fr2", " fr3", " fr4", " fr5", " fr6"};
+	private static final byte[][] QNULL=new byte[6][];
 	private boolean addTag=true;
 	
 	/*--------------------------------------------------------------*/
@@ -444,6 +456,7 @@ public class TranslateSixFrames {
 	public static boolean verbose=false;
 	public boolean errorState=false;
 	private boolean overwrite=false;
+	private boolean append=false;
 	private boolean useSharedHeader;
 
 //	private java.util.concurrent.ThreadLocalRandom randy;

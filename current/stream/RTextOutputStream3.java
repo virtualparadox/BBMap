@@ -9,60 +9,8 @@ import fileIO.FileFormat;
 
 public class RTextOutputStream3 {
 	
-	public RTextOutputStream3(String fname, String mate_fname, int maxSize, 
-			boolean ordered, boolean sam, boolean bam, boolean fastq, boolean fasta, boolean attachment, boolean overwrite, boolean sitesonly){
-		this(fname, mate_fname, null, null, maxSize, ordered, sam, bam, fastq, fasta, attachment, overwrite, sitesonly, false);
-	}
-	
-	public RTextOutputStream3(String fname, String mate_fname, String qfname, String mate_qfname, int maxSize, 
-			boolean ordered, boolean sam, boolean bam, boolean fastq, boolean fasta, boolean attachment, boolean overwrite, boolean sitesonly, boolean useSharedHeader){
-//		System.err.println("Called RTextOutputStream3 with fname="+fname+", mate_fname="+mate_fname+", qfname="+qfname+", mate_qfname="+mate_qfname);
-		STANDARD_OUT=("standardout".equalsIgnoreCase(fname) || fname.toLowerCase().startsWith("standardout.")
-				|| "stdout".equalsIgnoreCase(fname) || fname.toLowerCase().startsWith("stdout."));
-		
-		if(verbose){
-			System.err.println("RTextOutputStream3("+fname+", "+mate_fname+", "+qfname+", "+mate_qfname+", "+maxSize+", "+ordered+")");
-		}
-		
-		ORDERED=ordered;
-		ATTACHMENT=attachment;
-		SAM=!ATTACHMENT && (sam || bam);
-		BAM=!ATTACHMENT && bam;
-		FASTQ=!ATTACHMENT && fastq;
-		FASTA=!ATTACHMENT && fasta;
-		SITESONLY=!ATTACHMENT && sitesonly;
-		
-		assert(((SAM ? 1 : 0)+(FASTQ ? 1 : 0)+(FASTA ? 1 : 0)+(ATTACHMENT ? 1 : 0)+(SITESONLY ? 1 : 0))<=1) : 
-			SAM+", "+SITESONLY+", "+FASTQ+", "+FASTA+", "+ATTACHMENT;
-		
-		if(fname!=null && !fname.equals("/dev/null")){
-			File f=new File(fname);
-			assert(overwrite || !f.exists()) : f.getAbsolutePath()+" already exists; please delete it.";
-			if(mate_fname!=null){assert(!fname.equals(mate_fname)) : fname+"=="+mate_fname;}
-		}
-		
-		boolean allowSubprocess=true; //TODO - make parameter
-		
-		if(BYTE_WRITER){
-			readstream1=new ReadStreamByteWriter(fname, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, allowSubprocess);
-			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-				new ReadStreamByteWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, allowSubprocess));
-		}else{
-			readstream1=new ReadStreamStringWriter(fname, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, allowSubprocess);
-			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-				new ReadStreamStringWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, allowSubprocess));
-		}
-		
-		if(readstream2==null && readstream1!=null){
-//			System.out.println("RTextOutputStream3 detected interleaved output.");
-			readstream1.OUTPUT_INTERLEAVED=true;
-		}
-		
-		table=(ORDERED ? new HashMap<Long, ArrayList<Read>>(MAX_CAPACITY) : null);
-		
-		assert(readstream1==null || readstream1.read1==true);
-		assert(readstream2==null || (readstream2.read1==false));
-//		assert(false) : ATTACHMENT;
+	public RTextOutputStream3(FileFormat ff1, int maxSize, CharSequence header, boolean useSharedHeader){
+		this(ff1, null, null, null, maxSize, header, useSharedHeader);
 	}
 	
 	public RTextOutputStream3(FileFormat ff1, FileFormat ff2, int maxSize, CharSequence header, boolean useSharedHeader){
@@ -100,17 +48,9 @@ public class RTextOutputStream3 {
 		if(BYTE_WRITER){
 			readstream1=new ReadStreamByteWriter(ff1, qf1, true, maxSize, header, useSharedHeader);
 			readstream2=ff1.stdio() || ff2==null ? null : new ReadStreamByteWriter(ff2, qf2, false, maxSize, header, useSharedHeader);
-			
-//			readstream1=new ReadStreamByteWriter(ff1, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, ff.allowSubprocess());
-//			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-//				new ReadStreamByteWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, ff.allowSubprocess()));
 		}else{
 			readstream1=new ReadStreamStringWriter(ff1, qf1, true, maxSize, header, useSharedHeader);
 			readstream2=ff1.stdio() || ff2==null ? null : new ReadStreamStringWriter(ff2, qf2, false, maxSize, header, useSharedHeader);
-			
-//			readstream1=new ReadStreamStringWriter(fname, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, ff.allowSubprocess());
-//			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-//				new ReadStreamStringWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, ff.allowSubprocess()));
 		}
 		
 		if(readstream2==null && readstream1!=null){
@@ -124,61 +64,6 @@ public class RTextOutputStream3 {
 		assert(readstream2==null || (readstream2.read1==false));
 	}
 	
-//	public RTextOutputStream3(String fname, String mate_fname, int maxSize, 
-//			boolean ordered, int[] exts, CharSequence header, boolean overwrite, boolean useSharedHeader){
-//		this(fname, mate_fname, null, null, maxSize, ordered, exts, header, overwrite, useSharedHeader);
-//	}
-//	
-//	public RTextOutputStream3(String fname, String mate_fname, String qfname, String mate_qfname, int maxSize, 
-//			boolean ordered, int[] exts, CharSequence header, boolean overwrite, boolean useSharedHeader){
-//		
-//		if(verbose){
-//			System.err.println("RTextOutputStream3("+fname+", "+mate_fname+", "+qfname+", "+mate_qfname+", "+maxSize+", "+ordered+")");
-//		}
-//		
-//		if(exts==null){exts=FileFormat.testFormat(fname, false);}
-//		int ext=exts[0], zip=exts[1], itype=exts[2];
-//		FASTA=ff.fasta();
-////		boolean bread=(ext==TestFormat.txt);
-//		SAM=ff.samOrBam();
-//		BAM=ff.bam();
-//		ATTACHMENT=ff.attachment();
-//		SITESONLY=ff.sites();
-//		FASTQ=(ff.fastq() || (ext==FileFormat.UNKNOWN && !SAM && !ATTACHMENT && !SITESONLY));
-//		STANDARD_OUT=ff.stdio();
-//		
-//		assert(((SAM ? 1 : 0)+(FASTQ ? 1 : 0)+(FASTA ? 1 : 0)+(ATTACHMENT ? 1 : 0)+(SITESONLY ? 1 : 0))<=1) : 
-//			SAM+", "+SITESONLY+", "+FASTQ+", "+FASTA+", "+ATTACHMENT;
-//		
-//		ORDERED=ordered;
-//		if(fname!=null && !fname.equals("/dev/null")){
-//			File f=new File(fname);
-//			assert(overwrite || !f.exists()) : f.getAbsolutePath()+" already exists; please delete it.";
-//			if(mate_fname!=null){assert(!fname.equals(mate_fname)) : fname+"=="+mate_fname;}
-//		}
-//		
-//		boolean allowSubprocess=true; //TODO - make parameter
-//		
-//		if(BYTE_WRITER){
-//			readstream1=new ReadStreamByteWriter(fname, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, allowSubprocess);
-//			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-//				new ReadStreamByteWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, allowSubprocess));
-//		}else{
-//			readstream1=new ReadStreamStringWriter(fname, qfname, true, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, STANDARD_OUT, useSharedHeader, allowSubprocess);
-//			readstream2=STANDARD_OUT ? null : ((SAM || SITESONLY || mate_fname==null) ? null : 
-//				new ReadStreamStringWriter(mate_fname, mate_qfname, false, maxSize, SAM, BAM, FASTQ, FASTA, SITESONLY, ATTACHMENT, false, useSharedHeader, allowSubprocess));
-//		}
-//		
-//		if(readstream2==null && readstream1!=null){
-////			System.out.println("RTextOutputStream3 detected interleaved output.");
-//			readstream1.OUTPUT_INTERLEAVED=true;
-//		}
-//		
-//		table=(ORDERED ? new HashMap<Long, ArrayList<Read>>(MAX_CAPACITY) : null);
-//		
-//		assert(readstream1==null || readstream1.read1==true);
-//		assert(readstream2==null || (readstream2.read1==false));
-//	}
 	
 	public synchronized void add(ArrayList<Read> list, long listnum){
 		

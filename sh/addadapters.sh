@@ -35,22 +35,9 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 }
 calcXmx "$@"
@@ -63,7 +50,7 @@ function rename() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

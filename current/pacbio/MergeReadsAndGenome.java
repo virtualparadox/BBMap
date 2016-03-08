@@ -20,6 +20,7 @@ import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 
 /**
@@ -37,6 +38,7 @@ public class MergeReadsAndGenome {
 		long reads=-1;
 		int readlen=300;
 		boolean overwrite=false;
+		boolean append=false;
 		int sequentialOverlap=5;
 		boolean sequentialStrandAlt=true;
 		ReadWrite.ZIPLEVEL=2;
@@ -70,9 +72,11 @@ public class MergeReadsAndGenome {
 				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
 			}else if(a.startsWith("fastaminread") || a.startsWith("fastaminlen")){
 				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
-				System.out.println("Set OVERWRITE to "+overwrite);
+				System.out.println("Set overwrite to "+overwrite);
 			}else if(a.endsWith("parsecustom")){
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
 				System.out.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);

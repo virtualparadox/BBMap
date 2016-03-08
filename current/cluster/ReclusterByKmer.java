@@ -5,10 +5,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicLongArray;
 
-import jgi.Dedupe;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -19,7 +16,6 @@ import stream.Read;
 import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
-import dna.AminoAcid;
 import dna.Data;
 import dna.Parser;
 import dna.Timer;
@@ -122,6 +118,7 @@ public class ReclusterByKmer {
 			
 			maxReads=parser.maxReads;
 			overwrite=parser.overwrite;
+			append=parser.append;
 			
 			setInterleaved=parser.setInterleaved;
 			
@@ -174,7 +171,7 @@ public class ReclusterByKmer {
 		}
 		
 		if(!setInterleaved){
-			assert(in1!=null && out1!=null) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
+			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
@@ -190,8 +187,8 @@ public class ReclusterByKmer {
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out1, out2)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
 		
@@ -207,14 +204,14 @@ public class ReclusterByKmer {
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false);
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 
 		/* Check for output file collisions */
-		Tools.testOutputFiles(overwrite, false, out1, out2);
+		Tools.testOutputFiles(overwrite, append, false, out1, out2);
 
 		k1=k1_;
 		assert(k1>=-1 && k1<=15) : "k1 must lie between 1 and 15, inclusive (0 to disable)";
@@ -617,6 +614,7 @@ public class ReclusterByKmer {
 	private String extout=null;
 	
 	private boolean overwrite=false;
+	private boolean append=false;
 	private boolean colorspace=false;
 	
 	private long maxReads=-1;

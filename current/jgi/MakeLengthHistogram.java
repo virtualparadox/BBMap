@@ -175,11 +175,11 @@ public class MakeLengthHistogram {
 
 		TextStreamWriter tsw=new TextStreamWriter(out==null ? "stdout" : out, true, false, false);
 		tsw.start();
-		tsw.println("Reads:      \t"+readsProcessed);
-		tsw.println("Bases:      \t"+bhistC[0]);
-		tsw.println("Avg Length: \t"+String.format("%.1f",(bhistC[0]*1d/readsProcessed)));
-		tsw.println("Read Length Histogram:\n");
-		tsw.println("Length\treads\t%reads\tcum reads\tcum %reads\tbases\t%bases\tcum bases\tcum %bases");
+		tsw.println("#Reads:      \t"+readsProcessed);
+		tsw.println("#Bases:      \t"+bhistC[0]);
+		tsw.println("#Avg Length: \t"+String.format("%.1f",(bhistC[0]*1d/readsProcessed)));
+		tsw.println("#Read Length Histogram:");
+		tsw.println("#Length\treads\tpct_reads\tcum_reads\tcum_pct_reads\tbases\tpct_bases\tcum_bases\tcum_pct_bases");
 		for(int i=0; i<=max; i++){
 			tsw.println((i*MULT)+"\t"+hist[i]+String.format("\t%.3f%%", histF[i])+"\t"+histC[i]+String.format("\t%.3f%%", histCF[i])+
 					"\t"+bhist[i]+String.format("\t%.3f%%", bhistF[i])+"\t"+bhistC[i]+String.format("\t%.3f%%", bhistCF[i]));

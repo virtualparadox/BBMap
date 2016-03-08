@@ -1398,16 +1398,23 @@ public final class Read implements Comparable<Read>, Cloneable{
 		
 		return r;
 	}
-	
-	
+
+	/** Average based on summing quality scores */
 	public int avgQuality(){
 		if(quality==null){return 40;}
-		assert(quality!=null);
 		int x=0;
 		for(byte b : quality){
 			x+=(b<0 ? 0 : b);
 		}
 		return x/quality.length;
+	}
+	
+	/** Average based on summing error probabilities */
+	public int avgQualityByProbability(){
+		if(quality==null){return 40;}
+		float e=expectedErrors();
+		float p=e/bases.length;
+		return QualityTools.probCorrectToPhred(1-p);
 	}
 	
 	public int avgQualityFirstNBases(int n){
@@ -1682,16 +1689,24 @@ public final class Read implements Comparable<Read>, Cloneable{
 		return count;
 	}
 	
-	/** {M, S, D, I, N} */
-	public int[] countErrors() {
+	/** {M, S, D, I, N, splice} */
+	public int[] countErrors(int minSplice) {
 		assert(match!=null) : this.toText(false);
 		int m=0;
 		int s=0;
 		int d=0;
 		int i=0;
 		int n=0;
+		int splice=0;
+		
+		byte prev=' ';
+		int streak=0;
+		minSplice=Tools.max(minSplice, 1);
 		
 		for(byte b : match){
+			
+			if(b==prev){streak++;}else{streak=1;}
+			
 			if(b=='m'){
 				m++;
 			}else if(b=='N' || b=='C'){
@@ -1702,6 +1717,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 				i++;
 			}else if(b=='D'){
 				d++;
+				if(streak==minSplice){splice++;}
 			}else if(b=='S'){
 				s++;
 			}else{
@@ -1712,14 +1728,15 @@ public final class Read implements Comparable<Read>, Cloneable{
 					new Exception().printStackTrace();
 					match=toLongMatchString(match);
 					setShortMatch(false);
-					return countErrors();
+					return countErrors(minSplice);
 				}else{
 					throw new RuntimeException("\nUnknown symbol "+(char)b+":\n"+new String(match)+"\n"+this+"\nshortmatch="+this.shortmatch());
 				}
 			}
 			
+			prev=b;
 		}
-		return new int[] {m, s, d, i, n};
+		return new int[] {m, s, d, i, n, splice};
 	}
 	
 	public static byte[] toShortMatchString(byte[] match){

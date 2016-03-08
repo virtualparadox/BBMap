@@ -78,9 +78,11 @@ public class SortReadsTopologically {
 					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
 					Data.sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				}
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
-				Data.sysout.println("Set OVERWRITE to "+OVERWRITE);
+				overwrite=Tools.parseBoolean(b);
+				Data.sysout.println("Set overwrite to "+overwrite);
 			}else if(a.equals("prefix")){
 				prefix=Integer.parseInt(b);
 			}else if(a.endsWith("blocksize")){
@@ -172,11 +174,11 @@ public class SortReadsTopologically {
 		final String fname1=outname.replaceFirst("#", "1");
 		final String fname2=(!paired ? null : outname.replaceFirst("#", "2"));
 		if(fname1!=null && new File(fname1).exists()){
-			if(OVERWRITE){new File(fname1).delete();}
+			if(overwrite){new File(fname1).delete();}
 			else{throw new RuntimeException("Destination file "+fname1+" already exists.");}
 		}
 		if(fname2!=null && new File(fname2).exists()){
-			if(OVERWRITE){new File(fname1).delete();}
+			if(overwrite){new File(fname1).delete();}
 			else{throw new RuntimeException("Destination file "+fname2+" already exists.");}
 		}
 		
@@ -514,7 +516,7 @@ public class SortReadsTopologically {
 				outStream1=null;
 				writer1=null;
 			}else{
-				outStream1=ReadWrite.getOutputStream(fname1, false, true, false);
+				outStream1=ReadWrite.getOutputStream(fname1, append, true, false);
 				writer1=new PrintWriter(outStream1);
 			}
 			
@@ -522,7 +524,7 @@ public class SortReadsTopologically {
 				outStream2=null;
 				writer2=null;
 			}else{
-				outStream2=ReadWrite.getOutputStream(fname2, false, true, false);
+				outStream2=ReadWrite.getOutputStream(fname2, append, true, false);
 				writer2=new PrintWriter(outStream2);
 			}
 		}
@@ -681,7 +683,8 @@ public class SortReadsTopologically {
 
 	public static final boolean DONT_COMPRESS_TEMP_FILES=false;
 	public static boolean MERGE_DUPLICATES=false;
-	public static boolean OVERWRITE=false;
+	public static boolean overwrite=false;
+	public static boolean append=false;
 	public static boolean PRINT_BLOCKS=false;
 	
 

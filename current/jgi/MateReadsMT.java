@@ -25,6 +25,7 @@ import fileIO.FileFormat;
 import fileIO.TextFile;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -73,17 +74,13 @@ public class MateReadsMT {
 		}
 		
 		FASTQ.PARSE_CUSTOM=false;
-		ReadWrite.MAX_ZIP_THREADS=8;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS-1;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		
-//		assert(false) : FASTQ.TEST_INTERLEAVED;
-
-		int threads_=-1;
 		
 		boolean trimRight_=false;
 		boolean trimLeft_=false;
 		boolean setPigz=false;
-		byte trimq_=4;
+		byte trimq_=trimq;
 		int minReadLength_=0;
 		
 		for(int i=0; i<args.length; i++){
@@ -112,7 +109,7 @@ public class MateReadsMT {
 				MIN_OVERLAPPING_BASES_0=Integer.parseInt(b);
 			}else if(a.equals("minoverlap0") || a.equals("minoverlappingkmers0") || a.equals("minoverlapkmers0")){
 				MIN_OVERLAPPING_KMERS_0=Integer.parseInt(b);
-			}else if(a.equals("minoverlapinsert")){
+			}else if(a.equals("minoverlapinsert") || a.equals("minoi")){
 				MIN_OVERLAP_INSERT=Integer.parseInt(b);
 			}else if(a.equals("badlimit")){
 				DEFAULT_BADLIMIT=Integer.parseInt(b);
@@ -127,7 +124,7 @@ public class MateReadsMT {
 			}else if(a.equals("bin")){
 				bin=Integer.parseInt(b);
 			}else if(a.equals("threads") || a.equals("t")){
-				THREADS=threads_=Integer.parseInt(b);
+				THREADS=Integer.parseInt(b);
 			}else if(a.startsWith("minq")){
 				MIN_QUALITY=(byte)Integer.parseInt(b);
 			}else if(a.startsWith("minqo")){
@@ -192,7 +189,7 @@ public class MateReadsMT {
 				outhist3=(b==null || b.equals("null") ? null : b);
 			}else if(a.startsWith("outhist2") || a.equals("hist2")){
 				outhist2=(b==null || b.equals("null") ? null : b);
-			}else if(a.startsWith("outhist") || a.startsWith("hist")){
+			}else if(a.startsWith("outhist") || a.startsWith("hist") || a.equals("ihist")){
 				outhist=(b==null || b.equals("null") ? null : b);
 			}else if(a.equals("outputfailed")){
 				OUTPUT_FAILED=Tools.parseBoolean(b);
@@ -235,10 +232,16 @@ public class MateReadsMT {
 			}else if(a.equals("parsecustom")){
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
 				System.err.println("Setting FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("trimonfailure") || a.equals("tof")){
-				TRIM_ON_OVERLAP_FAILURE=Tools.parseBoolean(b);
+				if(b!=null && Character.isDigit(b.charAt(0))){
+					TRIM_ON_OVERLAP_FAILURE=Integer.parseInt(b);
+				}else{
+					TRIM_ON_OVERLAP_FAILURE=(Tools.parseBoolean(b) ? 1 : 0);
+				}
 			}else if(a.equals("untrim")){
 				untrim=Tools.parseBoolean(b);
 			}else if(a.equals("trim") || a.equals("qtrim")){
@@ -571,8 +574,8 @@ public class MateReadsMT {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 
-			final FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, true);
-			final FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, true);
+			final FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, true);
+			final FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, true);
 			assert(!ff1.samOrBam()) : "Sam files need reference info for the header.";
 			
 			final int buff=Tools.max(16, 2*THREADS);
@@ -595,8 +598,8 @@ public class MateReadsMT {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 
-			final FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, true);
-			final FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, true);
+			final FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, true);
+			final FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, true);
 			assert(!ff1.samOrBam()) : "Sam files need reference info for the header.";
 			
 			final int buff=Tools.max(16, 2*THREADS);
@@ -606,16 +609,14 @@ public class MateReadsMT {
 		
 		if(outinsert!=null){
 			final int buff=Tools.max(16, 2*THREADS);
-			boolean sam=false, bam=false;
-			boolean fq=false;
-			boolean info=true;
 			
 			String out1=outinsert.replaceFirst("#", "1");
 
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			
 			ReadStreamWriter.HEADER=header();
-			rosinsert=new RTextOutputStream3(out1, null, buff, true, sam, bam, fq, false, info, overwrite, false);
+			final FileFormat ff=FileFormat.testOutput(out1, FileFormat.ATTACHMENT, ".info", true, overwrite, append, true);
+			rosinsert=new RTextOutputStream3(ff, null, null, null, buff, null, false);
 			rosinsert.start();
 		}
 		
@@ -1410,22 +1411,27 @@ public class MateReadsMT {
 								bBad=rvector[2];
 								bAmbig=(rvector[4]==1);
 								bestVotes=rvector[5];
-								if(TRIM_ON_OVERLAP_FAILURE && !qtrim && bInsert<0 /*&& !bAmbig*/){
+								final int len1=r1.bases.length, len2=r2.bases.length;
+								for(int trims=0, q=trimq; trims<TRIM_ON_OVERLAP_FAILURE && !qtrim && bInsert<0 /*&& !bAmbig*/; trims++, q+=8){
+//									System.err.println(trims+", "+q);
 									Object old1=r1.obj;
 									Object old2=r2.obj;
-									tr1=TrimRead.trim(r1, false, true, trimq, 1);
-									tr2=TrimRead.trim(r2, true, false, trimq, 1);
+									tr1=TrimRead.trim(r1, false, true, q, 1+len1*4/10); //r1.bases.length);
+									tr2=TrimRead.trim(r2, true, false, q, 1+len2*4/10); //r2.bases.length);
 									r1.obj=old1;
 									r2.obj=old2;
 									if(tr1!=null || tr2!=null){
+//										System.err.println(r1.bases.length+", "+r2.bases.length);
 										int x=mateByOverlap(r1, r2, rvector, MIN_OVERLAPPING_BASES_0-1, MIN_OVERLAPPING_BASES);
 										if(x>-1){
+//											System.err.println(trims);
 											bInsert=x;
 											bestScore=rvector[0];
 											bestGood=rvector[1];
 											bBad=rvector[2];
 											bAmbig=(rvector[4]==1);
 											bestVotes=rvector[5];
+											trims=TRIM_ON_OVERLAP_FAILURE;
 										}else{
 											if(tr1!=null){tr1.untrim();}
 											if(tr2!=null){tr2.untrim();}
@@ -1635,7 +1641,7 @@ public class MateReadsMT {
 	static int minReadLength=0;
 	static int minInsert=0;
 	static boolean qtrim=false;
-	static boolean TRIM_ON_OVERLAP_FAILURE=true;
+	static int TRIM_ON_OVERLAP_FAILURE=1;
 	
 	
 	static int[] histTotal=new int[1000];
@@ -1682,10 +1688,11 @@ public class MateReadsMT {
 	public static boolean FILL_MIDDLE_INTERMEDIATE=false;
 	public static boolean FILL_MIDDLE_FINAL=false;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean verbose=false;
 	public static boolean ignoreMappingStrand=false;
 	
 	public static int THREADS=-1;
-	public static float version=1.4f;
+	public static float version=2.0f;
 	
 }

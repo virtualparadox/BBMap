@@ -104,6 +104,7 @@ public class CountUniqueness {
 	private String in[];
 	private String out;
 	private boolean overwrite=true;
+	private boolean append=false;
 	private long readsProcessed=0;
 	private long basesProcessed=0;
 	private boolean errorState=false;

@@ -1,9 +1,8 @@
 #!/bin/bash
-#khist in=<infile> out=<outfile>
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 21, 2014"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."
@@ -20,6 +19,7 @@ usage(){
 	echo ""
 	echo "in=<file,file>   	A single file or a comma-delimited list of files."
 	echo "out=<file>       	Destination for all output contigs."
+	echo "pattern=<file>   	Clusters will be written to individual files, where the '%' symbol in the pattern is replaced by cluster number."
 	echo "outd=<file>      	Optional; removed duplicates will go here."
 	echo "threads=auto          (t) Set number of threads to use; default is number of logical processors."
 	echo "overwrite=t           (ow) Set to false to force the program to abort rather than overwrite an existing file."
@@ -49,6 +49,7 @@ usage(){
 	echo "cc=t                  (canonicizeclusters) Flip contigs so clusters have a single orientation."
 	echo "fcc=f                 (fixcanoncontradictions) Truncate graph at nodes with canonization disputes."
 	echo "foc=f                 (fixoffsetcontradictions) Truncate graph at nodes with offset disputes."
+	echo "pto=f                 (preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster."
 	echo ""
 	echo "Overlap Detection Parameters"
 	echo ""
@@ -83,77 +84,18 @@ CP="$DIR""current/"
 
 z="-Xmx1g"
 z2="-Xms1g"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]] || [[ "$arg" == "-?" ]]; then
-			usage
-			exit
-		elif [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-			set=1
-		elif [[ "$arg" == Xms* ]]; then
-			z2="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
-
-calcXmx () {
+function calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
 		return
 	fi
-	
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
-		y=4
-	else
-		mult=75;
-		if [ $x -ge 1000000000 ]; then
-			mult=85
-			#echo "ram is 1000g+"
-		elif [ $x -ge 500000000 ]; then
-			mult=85
-			#echo "ram is 500g+"
-		elif [ $x -ge 250000000 ]; then
-			mult=85
-			#echo "ram is 250g+"
-		elif [ $x -ge 144000000 ]; then
-			mult=85
-			#echo "ram is 144g+"
-		elif [ $x -ge 120000000 ]; then
-			mult=85
-			#echo "ram is 120g+"
-		elif [ $x -ge 40000000 ]; then
-			mult=80
-			#echo "ram is 40g+"
-		else
-			mult=85
-			#echo "ram is under 40g"
-		fi
-		y=$(( ((x-500000)*mult/100)/1000000 ))
-	fi
-	#echo "y=$y"
-	z="-Xmx${y}g"
-	z2="-Xms${y}g"
+	freeRam 3200m 84
+	z="-Xmx${RAM}m"
+	z2="-Xms${RAM}m"
 }
 calcXmx "$@"
 
@@ -166,7 +108,7 @@ dedupe() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

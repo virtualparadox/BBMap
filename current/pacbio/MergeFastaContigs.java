@@ -10,6 +10,7 @@ import stream.FASTQ;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 import dna.Parser;
 import dna.Timer;
@@ -70,6 +71,8 @@ public class MergeFastaContigs {
 				maxDataOut=Long.parseLong(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("padfront") || a.equals("padstart")){
@@ -525,6 +528,7 @@ public class MergeFastaContigs {
 	private static long dataOut=0;
 	public static String npad, npad2;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean PAD_START=true; //Set to true to add padding to beginning.
 	public static boolean verbose=false;
 	

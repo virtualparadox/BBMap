@@ -19,6 +19,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
@@ -167,6 +168,8 @@ public class KmerCoverage {
 				USE_HEADER=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("auto") || a.equals("automatic")){
@@ -473,8 +476,8 @@ public class KmerCoverage {
 			assert(!out1.equalsIgnoreCase(reads1) && !out1.equalsIgnoreCase(reads1));
 			assert(out2==null || (!out2.equalsIgnoreCase(reads1) && !out2.equalsIgnoreCase(reads2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
 			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			ros.start();
@@ -524,8 +527,8 @@ public class KmerCoverage {
 						ReadWrite.closeStream(ros);
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(out1[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(out2[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(out1[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(out2[x], FileFormat.FASTQ, OUTPUT_ATTACHMENT ? "attachment" : null, true, overwrite, append, ordered);
 					ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					ros.start();
@@ -1218,6 +1221,7 @@ public class KmerCoverage {
 	public static boolean FIX_SPIKES=true;
 	public static boolean ordered=true;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean prefilter=false;
 
 	public static AtomicLong peaks=new AtomicLong();

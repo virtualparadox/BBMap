@@ -1,9 +1,9 @@
 BBMap readme by Brian Bushnell
-Last updated April 3, 2014.
+Last updated April 16, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 BBMap is free to use for noncommercial purposes, and investigators are free to publish results derived from the program, as long as the source code is not published or modified.
 
-This is the official release of BBMAP, version 31.x
+This is the official release of BBMAP, version 32.x
 
 
 Basic Syntax:
@@ -100,6 +100,7 @@ outu=<>			Write only unmapped reads to this file.
 outb=<>			Write only blacklisted reads to this file.  If a pair has one end mapped to a non-blacklisted scaffold, it will NOT go to this file. (see: blacklist)
 out2=<>			If you set out2, outu2, outm2, or outb2, the second read in each pair will go to this file.  Not currently allowed for SAM format, but OK for others (such as fasta, fastq, bread).
 overwrite=<f>		Or "ow".  Overwrite output file if it exists, instead of aborting.
+append=<f>		Or "app".  Append to output file if it exists, instead of aborting.
 ambiguous=<best>	Or "ambig". Sets how to handle ambiguous reads.  "first" or "best" uses the first encountered best site (fastest).  "all" returns all best sites.  "random" selects a random site from all of the best sites (does not yet work with paired-ends).  "toss" discards all sites and considers the read unmapped (same as discardambiguous=true).  Note that for all options (aside from toss) ambiguous reads in SAM format will have the extra field "XT:A:R" while unambiguous reads will have "XT:A:U".
 ambiguous2=<best>	Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
 outputunmapped=<t>	Outputs unmapped reads to primary output stream (otherwise they are dropped).
@@ -131,7 +132,9 @@ Statistics Parameters:
 showprogress=<f>	Set to true to print out a '.' once per million reads processed.  You can also change the interval with e.g. showprogress=20000.
 qhist=<filename>	Output a per-base average quality histogram to <filename>.
 mhist=<filename>	Output a per-base match histogram to <filename>.  Requires cigar strings to be enabled.  The columns give fraction of bases at each position having each match string operation: match, substitution, deletion, insertion, N, or other.
+qahist=<filename>	Output a per-quality match histogram to <filename>.
 ihist=<filename>	Output a per-read-pair insert size histogram to <filename>.
+bhist=<filename>	Output a per-base composition histogram to <filename>.
 scafstats=<filename>	Track mapping statistics per scaffold, and output to <filename>.
 refstats=<filename>	For BBSplitter, enable or disable tracking of read mapping statistics on a per-reference-set basis, and output to <filename>.
 verbosestats=<0>	From 0-3; higher numbers will print more information about internal program counters.
@@ -182,6 +185,20 @@ File types are autodetected by parsing the filename.  So you can name files, say
 
 Change Log:
 
+v32.
+Revised all shellscripts to better detect memory in Linux.  This should massively increase reliability and ease of use.
+Added append flag.  Allows appending to output files instead of overwriting.
+Append flag now should work with BBWrap, with sam files, and with gzipped files.
+All statistics are now stored in longs, rather than ints.
+Added statistics tracking of # bases as well as # reads.  Updated human-readable output to show 4 columns.
+Split bbmerge into gapped (split kmer) and ungapped (overlap only) versions.  bbmerge.sh calls the ungapped version.
+Added "qahist" to bbmap - match/sub/ins/del histogram by quality score.
+Fixed "pairlen" flag; it was only being used if greater than the default. (Noted by Harald on seqanswers)
+Added insert size median and standard deviation to output stats.  The 'ihist=' flag must be set to enable this, otherwise the data won't be tracked. (Requested by Harald on seqanswers)
+Fixed bug in which non-ACGTN IUPAC symbols were not being converted to N. (Noted by Leanne on seqanswers)
+Changed shellscripts from DOS to Unix EOL encoding.
+Added support for "-h" and "--help" in shellscripts (before it was just in java files).
+
 v31.
 TODO:  Change pipethreads to redirects (where possible), and hash pipethreads by process, not by filename.
 TODO:  Improve scoring function by using gembal distribution and/or accounting for read length.
@@ -218,6 +235,12 @@ Fixed support for breaking long reads; was failing on the last read in the set. 
 Improved accuracy slightly by better detecting when padding is needed.
 Improved verbose output from MSA.
 Created TranslateSixFrames, first step toward amino acid mapping.
+Improved RandomReads ability to simulate PacBio error profile.
+Fixed crash when using BBSplit in PacBio mode. (Noted by Esther Singer)
+May have improved ability to read relatively-pathed files if "." is not in $PATH. (nope, seems not)
+Fixed crash when using "usequality=f" flag with fasta input reads. (Noted by Esther Singer)
+Corrected behaviour of minlength with regards to trimming; it was not always working correctly.
+Added "bhist" (base composition histogram) flag.
 
 v30.
 Disabled compression/decompression subprocesses when total system threads allowed is less than 3.

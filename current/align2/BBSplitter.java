@@ -143,9 +143,13 @@ public class BBSplitter {
 					basename=b;
 					assert(b==null || (b.indexOf('%')>=0 && (b.indexOf('%')<b.lastIndexOf('.')))) : 
 						"basename must contain a '%' symbol prior to file extension.";
+				}else if(a.equals("append") || a.equals("app")){
+					append=ReadStats.append=Tools.parseBoolean(b);
+//					sysout.println("Set append to "+append);
+					unparsed.add(args[i]);
 				}else if(a.equals("overwrite") || a.equals("ow")){
-					OVERWRITE=Tools.parseBoolean(b);
-//					Data.sysout.println("Set OVERWRITE to "+OVERWRITE);
+					overwrite=Tools.parseBoolean(b);
+//					Data.sysout.println("Set overwrite to "+overwrite);
 					unparsed.add(args[i]);
 				}else if(a.equals("verbose")){
 					verbose=Tools.parseBoolean(b);
@@ -338,7 +342,7 @@ public class BBSplitter {
 				{
 //					assert(false) : fnames;
 //					assert(fnames.size()>0);
-					TextStreamWriter tsw=new TextStreamWriter(reflist, OVERWRITE, false, false);
+					TextStreamWriter tsw=new TextStreamWriter(reflist, overwrite, append, false);
 					tsw.start();
 					for(String s : fnames){tsw.println(s);}
 					tsw.poisonAndWait();
@@ -346,7 +350,7 @@ public class BBSplitter {
 				}
 				{
 //					assert(nameSet.size()>0);
-					TextStreamWriter tsw=new TextStreamWriter(namelist, OVERWRITE, false, false);
+					TextStreamWriter tsw=new TextStreamWriter(namelist, overwrite, append, false);
 					tsw.start();
 					for(String s : nameSet){tsw.println(s);}
 					tsw.poisonAndWait();
@@ -389,7 +393,7 @@ public class BBSplitter {
 		//			Data.sysout.println("Creating merged reference file /ref/genome/"+build+"/"+refname0);
 		Data.sysout.println("Creating merged reference file "+refname);
 		
-		TextStreamWriter tsw=new TextStreamWriter(refname, OVERWRITE, false, true);
+		TextStreamWriter tsw=new TextStreamWriter(refname, overwrite, false, true);
 		tsw.start();
 		for(String fname : fnames){
 			TextFile tf=new TextFile(fname, false, false);
@@ -477,7 +481,7 @@ public class BBSplitter {
 	}
 	
 	public static synchronized HashMap<String, RTextOutputStream3> makeOutputStreams(String[] args, boolean OUTPUT_READS, boolean OUTPUT_ORDERED_READS, 
-			int buff, boolean paired, boolean overwrite_, boolean ambiguous){
+			int buff, boolean paired, boolean overwrite_, boolean append_, boolean ambiguous){
 		
 		HashMap<String, RTextOutputStream3> table=new HashMap<String, RTextOutputStream3>();
 		for(String arg : args){
@@ -509,8 +513,8 @@ public class BBSplitter {
 				}
 //				assert(!ambiguous) : fname1+", "+fname2+", "+b+", "+ambiguous;
 
-				FileFormat ff1=FileFormat.testOutput(fname1, FileFormat.SAM, null, true, overwrite_, OUTPUT_ORDERED_READS);
-				FileFormat ff2=paired ? FileFormat.testOutput(fname2, FileFormat.SAM, null, true, overwrite_, OUTPUT_ORDERED_READS) : null;
+				FileFormat ff1=FileFormat.testOutput(fname1, FileFormat.SAM, null, true, overwrite_, append_, OUTPUT_ORDERED_READS);
+				FileFormat ff2=paired ? FileFormat.testOutput(fname2, FileFormat.SAM, null, true, overwrite_, append_, OUTPUT_ORDERED_READS) : null;
 				RTextOutputStream3 ros=new RTextOutputStream3(ff1, ff2, null, null, buff, null, false);
 				ros.start();
 //				Data.sysout.println("Started output stream:\t"+t);
@@ -1024,7 +1028,7 @@ public class BBSplitter {
 		LinkedHashSet<String> set=new LinkedHashSet<String>();
 		if(sams!=null){
 			for(String s : sams){
-				if(s!=null && (s.endsWith(".sam") || s.endsWith(".sam.gz"))){
+				if(s!=null && (s.endsWith(".sam") || s.endsWith(".sam.gz") || s.endsWith(".bam"))){
 					set.add(s);
 				}
 			}
@@ -1032,17 +1036,18 @@ public class BBSplitter {
 		if(streamTable!=null){
 			for(RTextOutputStream3 ros : streamTable.values()){
 				String s=ros.fname();
-				if(s.endsWith(".sam") || s.endsWith(".sam.gz")){
+				if(s.endsWith(".sam") || s.endsWith(".sam.gz") || s.endsWith(".bam")){
 					set.add(s);
 				}
 			}
 		}
-		TextStreamWriter tsw=new TextStreamWriter(outname, OVERWRITE, false, false);
+		TextStreamWriter tsw=new TextStreamWriter(outname, overwrite, append, false);
 		tsw.start();
 		for(String sam : set){
 			String bam;
 			if(sam.endsWith(".sam.gz")){bam=sam.substring(0, sam.length()-6)+"bam";}
-			else{bam=sam.substring(0, sam.length()-3)+"bam";}
+			else if(sam.endsWith(".sam")){bam=sam.substring(0, sam.length()-3)+"bam";}
+			else{bam=sam;} //Hopefully, they must have outputted a bam file using samtools. 
 			String bam2=bam.substring(0, bam.length()-4)+"_sorted";
 			
 			boolean pipe=true;
@@ -1059,12 +1064,12 @@ public class BBSplitter {
 			tsw.println("echo \"Note: This script is designed to run with the amount of memory detected by BBMap.\"");
 			tsw.println("echo \"      If Samtools crashes, please ensure you are running on the same platform as BBMap,\"");
 			tsw.println("echo \"      or reduce Samtools' memory setting (the -m flag).\"");
-			if(pipe){
+			if(pipe && sam!=bam){
 				tsw.println("echo \"Note: Please ignore any warnings about 'EOF marker is absent'; " +
 						"this is a bug in samtools that occurs when using piped input.\"");
 				tsw.println("samtools view -bSh1 "+sam+" | samtools sort -m "+memstring+" -@ 3 - "+bam2);
 			}else{
-				tsw.println("samtools view -bSh1 -o "+bam+" "+sam);
+				if(sam!=bam){tsw.println("samtools view -bSh1 -o "+bam+" "+sam);}
 				tsw.println("samtools sort -m "+memstring+" -@ 3 "+bam+" "+bam2);
 			}
 			
@@ -1105,7 +1110,7 @@ public class BBSplitter {
 	public static void printCounts(String fname, HashMap<String, SetCount> map, boolean header, long totalReads){
 		final ArrayList<SetCount> list=new ArrayList<SetCount>(map.size());
 		list.addAll(map.values());
-		final TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, false);
+		final TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, append, false);
 		tsw.start();
 		Collections.sort(list);
 		Collections.reverse(list);
@@ -1154,7 +1159,8 @@ public class BBSplitter {
 	public static boolean TRACK_SCAF_STATS=false;
 	public static String SCAF_STATS_FILE=null;
 	public static String SET_STATS_FILE=null;
-	public static boolean OVERWRITE=true;
+	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean verbose=false;
 	private static final ArrayList<Read> blank=new ArrayList<Read>(0);
 

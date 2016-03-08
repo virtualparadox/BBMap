@@ -249,7 +249,7 @@ public class FASTQ {
 	}
 	
 	public static String customID(Read r){
-		if(PARSE_CUSTOM && (r.chrom>-1 && r.stop>-1)){
+		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
 			if(Data.GENOME_BUILD>=0){
 				final int chrom1=r.chrom;
 				final int start1=r.start;
@@ -285,7 +285,7 @@ public class FASTQ {
 		int len=fastqLength(r);
 		final String id;
 		final byte[] bases=r.bases, quals=r.quality;
-		if(PARSE_CUSTOM && (r.chrom>-1 && r.stop>-1)){
+		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
 			id=customID(r);
 			if(id!=null){len+=id.length();}
 		}else{
@@ -339,7 +339,7 @@ public class FASTQ {
 		int len=fastqLength(r);
 		final String id;
 		final byte[] bases=r.bases, quals=r.quality;
-		if(PARSE_CUSTOM && (r.chrom>-1 && r.stop>-1)){
+		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
 			id=customID(r);
 			if(id!=null){len+=id.length();}
 		}else{
@@ -766,8 +766,9 @@ public class FASTQ {
 	
 	private static synchronized long incr(){return incr++;}
 	private static long incr=10000000000L;
-	
+
 	public static boolean PARSE_CUSTOM=false;
+	public static boolean TAG_CUSTOM=false;
 	public static byte ASCII_OFFSET=33;
 	public static byte ASCII_OFFSET_OUT=33;
 	public static byte FAKE_QUAL=30;

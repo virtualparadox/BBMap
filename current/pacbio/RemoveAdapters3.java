@@ -13,6 +13,7 @@ import stream.Read;
 import align2.ListNum;
 import align2.MultiStateAligner9PacBio;
 import align2.MultiStateAligner9PacBioAdapter;
+import align2.ReadStats;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
@@ -87,9 +88,11 @@ public class RemoveAdapters3 {
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("ziplevel") || a.equals("zl")){
 				ziplevel=Integer.parseInt(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
-				System.out.println("Set OVERWRITE to "+OVERWRITE);
+				overwrite=Tools.parseBoolean(b);
+				System.out.println("Set overwrite to "+overwrite);
 			}else if(a.equals("threads") || a.equals("t")){
 				if(b.equalsIgnoreCase("auto")){THREADS=Data.LOGICAL_PROCESSORS;}
 				else{THREADS=Integer.parseInt(b);}
@@ -150,8 +153,8 @@ public class RemoveAdapters3 {
 		if(OUTPUT_READS){
 			final int buff=(!OUTPUT_ORDERED_READS ? THREADS : Tools.max(24, 2*THREADS));
 			
-			FileFormat ff1=FileFormat.testOutput(outname1, FileFormat.FASTQ, null, true, OVERWRITE, OUTPUT_ORDERED_READS);
-			FileFormat ff2=FileFormat.testOutput(outname2, FileFormat.FASTQ, null, true, OVERWRITE, OUTPUT_ORDERED_READS);
+			FileFormat ff1=FileFormat.testOutput(outname1, FileFormat.FASTQ, null, true, overwrite, append, OUTPUT_ORDERED_READS);
+			FileFormat ff2=FileFormat.testOutput(outname2, FileFormat.FASTQ, null, true, overwrite, append, OUTPUT_ORDERED_READS);
 			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 		}
 		process(cris, ros, query, splitReads);
@@ -598,7 +601,10 @@ public class RemoveAdapters3 {
 	}
 
 	public static boolean DONT_OUTPUT_BROKEN_READS;
-	private static boolean OVERWRITE=true;
+	/** Permission to overwrite existing files */
+	private static boolean overwrite=true;
+	/** Permission to append to existing files */
+	private static boolean append=false;
 	private static int THREADS=Data.LOGICAL_PROCESSORS;
 	private static boolean OUTPUT_READS=false;
 	private static boolean OUTPUT_ORDERED_READS=false;

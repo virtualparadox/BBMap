@@ -197,7 +197,7 @@ public final class BBMap extends AbstractMapper {
 	@Override
 	public void setup(){
 		
-		assert(!useRandomReads || reads>0 || (in1!=null && in1.equals("sequential"))) : "Please specify number of reads to use.";
+		assert(!useRandomReads || maxReads>0 || (in1!=null && in1.equals("sequential"))) : "Please specify number of reads to use.";
 		
 		if(minid!=-1){
 			MINIMUM_ALIGNMENT_SCORE_RATIO=MSA.minIdToMinRatio(minid, MSA_TYPE);
@@ -366,7 +366,7 @@ public final class BBMap extends AbstractMapper {
 			t.start();
 		}
 		
-		if(!forceanalyze && (in1==null || reads==0)){return;}
+		if(!forceanalyze && (in1==null || maxReads==0)){return;}
 		
 		BBIndex.analyzeIndex(minChrom, maxChrom, colorspace, BBIndex.FRACTION_GENOME_TO_EXCLUDE, keylen);
 		
@@ -377,7 +377,7 @@ public final class BBMap extends AbstractMapper {
 		
 	public void testSpeed(String[] args){
 		
-		if(in1==null || reads==0){
+		if(in1==null || maxReads==0){
 			sysout.println("No reads to process; quitting.");
 			return;
 		}

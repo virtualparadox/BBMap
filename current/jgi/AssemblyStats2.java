@@ -1364,6 +1364,7 @@ public final class AssemblyStats2 {
 	
 	private static int bbmapkmer=0;//13;
 	public static boolean overwrite=false;
+	public static boolean append=false;
 	public static boolean useheader=true;
 	public static boolean addfilename=false;
 	public static boolean showspeed=false;//true;

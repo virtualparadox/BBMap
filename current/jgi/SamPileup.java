@@ -8,6 +8,7 @@ import java.util.HashMap;
 
 import stream.SamLine;
 
+import align2.ReadStats;
 import align2.Tools;
 
 import dna.CoverageArray;
@@ -37,6 +38,7 @@ public class SamPileup {
 		sp.process();
 		
 		t.stop();
+		Data.sysout.println();
 		Data.sysout.println("Time: \t"+t);
 		
 	}
@@ -103,9 +105,11 @@ public class SamPileup {
 			}else if(a.startsWith("nonzero") || a.equals("nzo")){
 				NONZERO_ONLY=Tools.parseBoolean(b);
 				System.err.println("Set NONZERO_ONLY to "+NONZERO_ONLY);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
-				System.err.println("Set OVERWRITE to "+OVERWRITE);
+				overwrite=Tools.parseBoolean(b);
+				System.err.println("Set overwrite to "+overwrite);
 			}else if(a.equalsIgnoreCase("twocolumn")){
 				TWOCOLUMN=Tools.parseBoolean(b);
 				System.err.println("Set TWOCOLUMN to "+TWOCOLUMN);
@@ -152,19 +156,19 @@ public class SamPileup {
 			}
 		}
 		assert(in!=null);
-		assert(out!=null || outset);
+//		assert(out!=null || outset) : "Output file was not set.";
 	}
 	
 	
-	public static void processOrfsFasta(String fname_in, String fname_out, HashMap<String, Scaffold> map, long readBases, long refBases){
+	public void processOrfsFasta(String fname_in, String fname_out, HashMap<String, Scaffold> map){
 		TextFile tf=new TextFile(fname_in, false, false);
 		assert(!fname_in.equalsIgnoreCase(fname_out));
-		TextStreamWriter tsw=new TextStreamWriter(fname_out, OVERWRITE, false, true);
+		TextStreamWriter tsw=new TextStreamWriter(fname_out, overwrite, false, true);
 		tsw.start();
 
 //		tsw.println("#refBases="+refBases);
-		tsw.print("#readBases="+readBases+"\n");
-		tsw.print("#name\tlength\tdepthSum\tavgDepth\tavgDepth/readBases\tminDepth\tmaxDepth\tmedianDepth\tstdDevDepth\tfractionCovered\n");
+		tsw.print("#mappedBases="+mappedBases+"\n");
+		tsw.print("#name\tlength\tdepthSum\tavgDepth\tavgDepth/mappedBases\tminDepth\tmaxDepth\tmedianDepth\tstdDevDepth\tfractionCovered\n");
 		
 		String line;
 		final StringBuilder sb=new StringBuilder(500);
@@ -221,7 +225,7 @@ public class SamPileup {
 				sb.append(orf.length()).append('\t');
 				sb.append(orf.baseDepth).append('\t');
 				sb.append(String.format("%.4f", orf.avgCoverage())).append('\t');
-				sb.append(orf.avgCoverage()/readBases);
+				sb.append(orf.avgCoverage()/mappedBases);
 
 				sb.append('\t');
 				sb.append(orf.minDepth).append('\t');
@@ -242,8 +246,8 @@ public class SamPileup {
 	
 	
 	public void process(){
-		long refBases=0;
-		long readBases=0;
+		refBases=0;
+		mappedBases=0;
 		ArrayList<Scaffold> list=new ArrayList<Scaffold>(initialScaffolds);
 		HashMap<String, Scaffold> table=new HashMap<String, Scaffold>(initialScaffolds);
 		TextFile tf=new TextFile(in, false, false);
@@ -255,7 +259,7 @@ public class SamPileup {
 		boolean bbmap=false;
 		float bbversion=-1;
 		
-		final TextStreamWriter tsw=(outsam==null ? null : new TextStreamWriter(outsam, OVERWRITE, false, true));
+		final TextStreamWriter tsw=(outsam==null ? null : new TextStreamWriter(outsam, overwrite, false, true));
 		if(outsam!=null){tsw.start();}
 		
 		for(line=tf.nextLine(); line!=null && line.startsWith("@"); line=tf.nextLine()){
@@ -294,14 +298,6 @@ public class SamPileup {
 //				assert(false) : line;
 			}
 		}
-		
-//		if(bbmap && bbversion<=17){
-//			for(Scaffold sc : list){
-//				sc.length-=1000;
-//				assert(sc.length>0) : "Error when reducing scaffold length: "+bbversion+", "+sc.length;
-//			}
-//		}
-//		assert(false) : bbmap+", "+bbversion+", "+program+", "+version;
 		
 		if(reference!=null){
 			TextFile tf2=new TextFile(reference, false, false);
@@ -370,8 +366,7 @@ public class SamPileup {
 
 				SamLine sl=new SamLine(line);
 				if(sl.mapped() && (USE_SECONDARY || sl.primary())){
-//					readBases+=sl.seq.length();
-					readBases+=sl.seq.length;
+					mappedBases+=sl.seq.length;
 					final Scaffold scaf=table.get(new String(sl.rname()));
 					assert(scaf!=null) : "Can't find "+new String(sl.rname());
 					final int a=Tools.max(sl.start(), 0);
@@ -412,8 +407,9 @@ public class SamPileup {
 //		OutputStream os=ReadWrite.getOutputStream(out, false);
 //		PrintWriter pw=new PrintWriter(os);
 		
+//		for()
 		
-		final TextStreamWriter tsw2=(out==null ? null : new TextStreamWriter(out, OVERWRITE, false, true));
+		final TextStreamWriter tsw2=(out==null ? null : new TextStreamWriter(out, overwrite, false, true));
 		
 		if(tsw2!=null){
 			tsw2.start();
@@ -428,7 +424,8 @@ public class SamPileup {
 			}
 		}
 		
-		if(histogram!=null || tsw2!=null){
+		totalScaffolds=list.size();
+		if(USE_COVERAGE_ARRAYS || USE_BITSETS /*histogram!=null || tsw2!=null*/){
 			final long[] hist=(USE_COVERAGE_ARRAYS ? new long[Character.MAX_VALUE+1] : null);
 
 			for(Scaffold scaf : list){
@@ -449,6 +446,10 @@ public class SamPileup {
 					BitSet bs=(BitSet)scaf.obj;
 					covered=(bs==null ? 0 : bs.cardinality());
 				}
+				
+				if(sum>0){
+					scaffoldsWithCoverage++;
+				}
 				//			pw.print(scaf.name);
 				if(tsw2!=null && (sum>0 || !NONZERO_ONLY)){
 					if(TWOCOLUMN){
@@ -461,6 +462,7 @@ public class SamPileup {
 						tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length));
 					}
 				}
+				totalCoveredBases+=covered;
 			}
 			
 			if(tsw2!=null){tsw2.poison();}
@@ -478,15 +480,26 @@ public class SamPileup {
 		}
 		
 		if(orffasta!=null){
-			processOrfsFasta(orffasta, outorf, table, readBases, refBases);
+			processOrfsFasta(orffasta, outorf, table);
 		}
 		
 		if(tsw2!=null){tsw2.waitForFinish();}
 		if(tsw!=null){tsw.waitForFinish();}
+		
+
+		double depthCovered=mappedBases*1.0/refBases;
+		double pctScaffoldsWithCoverage=scaffoldsWithCoverage*100.0/totalScaffolds;
+		double pctCovered=totalCoveredBases*100.0/refBases;
+		
+		Data.sysout.println(String.format("\nAverage coverage:                    \t%.2f", depthCovered));
+		Data.sysout.println(String.format("Percent scaffolds with any coverage: \t%.2f", pctScaffoldsWithCoverage));
+		if(USE_COVERAGE_ARRAYS || USE_BITSETS){
+			Data.sysout.println(String.format("Percent of reference bases covered:  \t%.2f", pctCovered));
+		}
 	}
 	
 	public static void writeHist(String fname, long[] counts){
-		TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, false);
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
 		tsw.start();
 		tsw.print("#Coverage\tnumBases\n");
 		int max=0;
@@ -500,7 +513,7 @@ public class SamPileup {
 	}
 	
 	public static void writeCoveragePerBase(String fname, ArrayList<Scaffold> list, boolean deltaOnly){
-		TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, true);
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
 		tsw.start();
 		tsw.print("#RefName\tPos\tCoverage\n");
 		
@@ -527,7 +540,7 @@ public class SamPileup {
 	 * @param binsize
 	 */
 	public static void writeCoveragePerBaseBinned(String fname, ArrayList<Scaffold> list, int binsize){
-		TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, false);
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
 		tsw.start();
 		tsw.print("#RefName\tCov\tPos\tRunningPos\n");
 		
@@ -564,7 +577,7 @@ public class SamPileup {
 	 * @param binsize
 	 */
 	public static void writeCoveragePerBaseBinned2(String fname, ArrayList<Scaffold> list, int binsize){
-		TextStreamWriter tsw=new TextStreamWriter(fname, OVERWRITE, false, false);
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
 		tsw.start();
 		tsw.print("#RefName\tCov\tPos\tRunningPos\n");
 		
@@ -595,7 +608,10 @@ public class SamPileup {
 	
 	public static boolean COUNT_GC=true;
 	public static boolean verbose=false; 
-	public static boolean OVERWRITE=false;
+	/** Permission to overwrite existing files */
+	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	public static boolean TWOCOLUMN=false;
 	public static boolean ADD_FROM_REF=false;
 	public static boolean NONZERO_ONLY=false;
@@ -620,6 +636,12 @@ public class SamPileup {
 	public String orffasta=null;
 	public boolean bits32=false;
 	public int binsize=1000;
+
+	public long refBases=0;
+	public long mappedBases=0;
+	public long totalCoveredBases=0;
+	public long scaffoldsWithCoverage=0;
+	public long totalScaffolds=0;
 	
 	private static final byte[] charToNum=makeCharToNum();
 	private static byte[] makeCharToNum() {

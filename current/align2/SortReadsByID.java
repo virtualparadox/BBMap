@@ -70,9 +70,11 @@ public class SortReadsByID {
 					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
 					Data.sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				}
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
-				Data.sysout.println("Set OVERWRITE to "+OVERWRITE);
+				overwrite=Tools.parseBoolean(b);
+				Data.sysout.println("Set overwrite to "+overwrite);
 			}else if(a.endsWith("blocksize")){
 				BLOCKSIZE=Integer.parseInt(b);
 			}else{
@@ -219,7 +221,7 @@ public class SortReadsByID {
 		in2=in2_;
 		out=out_;
 		
-		FileFormat ff=FileFormat.testOutput(out, FileFormat.BREAD, null, true, false, false);
+		FileFormat ff=FileFormat.testOutput(out, FileFormat.BREAD, null, true, false, append, false);
 		outFastq=ff.fastq();
 		outFasta=ff.fasta();
 		outText=ff.bread();
@@ -234,7 +236,8 @@ public class SortReadsByID {
 	private final boolean outFastq;
 	
 	public static int BLOCKSIZE=8000000;
-	public static boolean OVERWRITE=true;
+	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean RENUMBER=false;
 	public static boolean OUT_INTERLEAVED=false;
 	
@@ -244,8 +247,8 @@ public class SortReadsByID {
 			out1=out1_;
 			out2=out2_;
 			
-			tsw1=new TextStreamWriter(out1, OVERWRITE, false, false);
-			tsw2=(out2==null ? null : new TextStreamWriter(out2, OVERWRITE, false, false));
+			tsw1=new TextStreamWriter(out1, overwrite, false, false);
+			tsw2=(out2==null ? null : new TextStreamWriter(out2, overwrite, false, false));
 			
 			tsw1.start();
 			if(tsw2!=null){tsw2.start();}

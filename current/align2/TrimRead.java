@@ -2,8 +2,6 @@ package align2;
 
 import java.util.Arrays;
 
-import jgi.CalcTrueQuality;
-
 import stream.Read;
 import stream.SiteScore;
 
@@ -100,6 +98,7 @@ public final class TrimRead {
 		assert(bases1==null || qual1==null || bases1.length==qual1.length) : "\n"+new String(bases1)+"\n"+new String(qual1)+"\n";
 		int trimmed=trim(trimLeft, trimRight, minlen_);
 		if(trimmed>0){
+			assert(bases2==null || bases2.length>=minlen_ || bases1.length<minlen_) : bases1.length+", "+bases2.length+", "+minlen_+", "+trimLeft+", "+trimRight;
 			r.bases=bases2;
 			r.quality=qual2;
 			r.mapLength=(bases2==null ? 0 : bases2.length);
@@ -124,9 +123,20 @@ public final class TrimRead {
 	
 	/** Trim the left end of the read, from left to right */
 	private int trim(int trimLeft, int trimRight, final int minlen){
-		if(trimLeft+trimRight>bases1.length){
-			trimRight=Tools.max(0, bases1.length-minlen);
-			trimLeft=0;
+		assert(trimLeft>=0 && trimRight>=0) : "trimLeft="+trimLeft+", trimRight="+trimRight+", minlen="+minlen+", len="+bases1.length;
+		assert(trimLeft>0 || trimRight>0) : "trimLeft="+trimLeft+", trimRight="+trimRight+", minlen="+minlen+", len="+bases1.length;
+		final int maxTrim=Tools.min(bases1.length, bases1.length-minlen);
+		if(trimLeft+trimRight>maxTrim){
+			int excess=trimLeft+trimRight-maxTrim;
+			if(trimLeft>0 && excess>0){
+				trimLeft=Tools.max(0, trimLeft-excess);
+				excess=trimLeft+trimRight-maxTrim;
+			}
+			if(trimRight>0 && excess>0){
+				trimRight=Tools.max(0, trimRight-excess);
+				excess=trimLeft+trimRight-maxTrim;
+			}
+			
 		}
 		
 		leftTrimmed=trimLeft;

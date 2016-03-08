@@ -11,6 +11,7 @@ import stream.Read;
 
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 import dna.Data;
 import dna.Parser;
@@ -79,9 +80,11 @@ public class PartitionReads {
 				partitions=Integer.parseInt(b);
 			}else if(a.equals("ziplevel") || a.equals("zl")){
 				ReadWrite.ZIPLEVEL=Integer.parseInt(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
-				System.out.println("Set OVERWRITE to "+OVERWRITE);
+				overwrite=Tools.parseBoolean(b);
+				System.out.println("Set overwrite to "+overwrite);
 			}else if(a.equals("reads") || a.equals("maxreads")){
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("out") || a.equals("out1")){
@@ -135,15 +138,15 @@ public class PartitionReads {
 		TextStreamWriter[] tsw1=new TextStreamWriter[partitions];
 		TextStreamWriter[] tsw2=new TextStreamWriter[partitions];
 		
-		FileFormat ff=FileFormat.testOutput(outname1, FileFormat.FASTQ, null, true, OVERWRITE, false);
+		FileFormat ff=FileFormat.testOutput(outname1, FileFormat.FASTQ, null, true, overwrite, append, false);
 		fastq=ff.fastq();
 		fasta=ff.fasta();
 		bread=ff.bread();
 		
 		for(int i=0; i<partitions; i++){
-			tsw1[i]=new TextStreamWriter(outname1.replaceFirst("#", ""+i), OVERWRITE, false, true);
+			tsw1[i]=new TextStreamWriter(outname1.replaceFirst("#", ""+i), overwrite, false, true);
 			if(outname2!=null){
-				tsw2[i]=new TextStreamWriter(outname2.replaceFirst("#", ""+i), OVERWRITE, false, true);
+				tsw2[i]=new TextStreamWriter(outname2.replaceFirst("#", ""+i), overwrite, false, true);
 			}
 		}
 		
@@ -220,7 +223,10 @@ public class PartitionReads {
 		return x;
 	}
 	
-	public static boolean OVERWRITE=false;
+	/** Permission to overwrite existing files */
+	public static boolean overwrite=false;
+	/** Permission to append to existing files */
+	public static boolean append=false;
 	public static int partitions=2;
 	public static boolean fastq=false;
 	public static boolean fasta=false;

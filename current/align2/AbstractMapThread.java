@@ -9,6 +9,7 @@ import jgi.ReformatReads;
 import stream.ConcurrentReadStreamInterface;
 import stream.RTextOutputStream3;
 import stream.Read;
+import stream.SamLine;
 import stream.SiteScore;
 
 import dna.AminoAcid;
@@ -160,7 +161,7 @@ public abstract class AbstractMapThread extends Thread {
 		
 //		index=new BBIndex(KEYLEN, minChrom, maxChrom, KFILTER, msa);
 		GENERATE_KEY_SCORES_FROM_QUALITY=AbstractIndex.GENERATE_KEY_SCORES_FROM_QUALITY;
-		readstats=(ReadStats.COLLECT_MATCH_STATS || ReadStats.COLLECT_QUALITY_STATS || ReadStats.COLLECT_INSERT_STATS ? new ReadStats() : null);
+		readstats=(ReadStats.collectingStats() ? new ReadStats() : null);
 		
 //		assert(false) : "READ_BUFFER_NUM_BUFFERS="+Shared.READ_BUFFER_NUM_BUFFERS+", READ_BUFFER_LENGTH="+Shared.READ_BUFFER_LENGTH;
 	}
@@ -190,6 +191,8 @@ public abstract class AbstractMapThread extends Thread {
 		final boolean MAKE_QUALITY_HISTOGRAM=(readstats==null ? false : ReadStats.COLLECT_QUALITY_STATS);
 		final boolean MAKE_MATCH_HISTOGRAM=(readstats==null ? false : ReadStats.COLLECT_MATCH_STATS);
 		final boolean MAKE_INSERT_HISTOGRAM=(readstats==null ? false : ReadStats.COLLECT_INSERT_STATS);
+		final boolean MAKE_BASE_HISTOGRAM=(readstats==null ? false : ReadStats.COLLECT_BASE_STATS);
+		final boolean MAKE_QUALITY_ACCURACY=(readstats==null ? false : ReadStats.COLLECT_QUALITY_ACCURACY);
 		
 		if(SKIP_INITIAL>0){
 			while(!readlist.isEmpty()){
@@ -257,6 +260,7 @@ public abstract class AbstractMapThread extends Thread {
 				final Read r2=r.mate;
 
 				if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r);}
+				if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r);}
 
 				if(TRIM_LEFT || TRIM_RIGHT){
 					TrimRead.trim(r, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_MIN_LENGTH);
@@ -266,7 +270,7 @@ public abstract class AbstractMapThread extends Thread {
 				if(r2==null){
 					final byte[] basesP=r.bases;
 					final byte[] basesM=AminoAcid.reverseComplementBases(basesP, colorspace);
-					basesUsed+=(basesM==null ? 0 : basesM.length);
+					basesUsed1+=(basesM==null ? 0 : basesM.length);
 					processRead(r, basesM);
 					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
 					assert(Read.CHECKSITES(r, basesM));
@@ -275,8 +279,8 @@ public abstract class AbstractMapThread extends Thread {
 					final byte[] basesM1=AminoAcid.reverseComplementBases(basesP1, colorspace);
 					final byte[] basesP2=r2.bases;
 					final byte[] basesM2=AminoAcid.reverseComplementBases(basesP2, colorspace);
-					basesUsed+=(basesM1==null ? 0 : basesM1.length);
-					basesUsed+=(basesM2==null ? 0 : basesM2.length);
+					basesUsed1+=(basesM1==null ? 0 : basesM1.length);
+					basesUsed2+=(basesM2==null ? 0 : basesM2.length);
 					assert(r2.bases==null || r2.bases.length<maxReadLength()) : 
 						"Read "+r2.numericID+", length "+r2.bases.length+", exceeds the limit of "+maxReadLength()+"\n"+
 						"You can map the reads in chunks by reformatting to fasta, then mapping with the setting 'fastareadlen="+maxReadLength()+"'";
@@ -295,6 +299,7 @@ public abstract class AbstractMapThread extends Thread {
 
 				if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r);}
 				if(MAKE_INSERT_HISTOGRAM && r.paired()){readstats.addToInsertHistogram(r, (SAME_STRAND_PAIRS || !REQUIRE_CORRECT_STRANDS_PAIRS));}
+				if(MAKE_QUALITY_ACCURACY){readstats.addToQualityAccuracy(r);}
 
 				if(translateToBaseSpace && r.numSites()>0){
 					SiteScore ss=r.topSite();
@@ -395,7 +400,6 @@ public abstract class AbstractMapThread extends Thread {
 	public final int quickMap(final Read r, final byte[] basesM){
 		final AbstractIndex index=index();
 		byte[] basesP=r.bases;
-		basesAtQuickmap+=basesP.length;
 		if(basesP.length<KEYLEN){return 0;}
 		assert(basesP.length>=KEYLEN);
 		
@@ -425,7 +429,7 @@ public abstract class AbstractMapThread extends Thread {
 		
 		keyDen3=Tools.max(keyDensity, keyDen3);
 		
-		if(GENERATE_KEY_SCORES_FROM_QUALITY){
+		if(GENERATE_KEY_SCORES_FROM_QUALITY || r.quality==null){
 			QualityTools.makeKeyProbs(r.quality, KEYLEN, keyProbs);
 			
 			boolean offsetsMode3=true;
@@ -1193,10 +1197,288 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	public abstract void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore);
+	public void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
+		final Read r2=r.mate;
+		final int len1=(r.bases==null ? 0 : r.bases.length);
+		final int len2=(r2==null ? 0 : r.bases==null ? 0 : r.bases.length);
+		
+		if(OUTPUT_PAIRED_ONLY && r.mate!=null && !r.paired() && (r.mapped() || r.mate.mapped())){r.clearPairMapping();}
+		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
+			ambiguousBestAlignment1++;
+			ambiguousBestAlignmentBases1+=len1;
+		}
+
+		int[] correctness=calcCorrectness(r, THRESH);
+		int correctGroup=correctness[0];
+		int correctGroupSize=correctness[1];
+		int numGroups=correctness[2];
+		int elements=correctness[3];
+		int correctScore=correctness[4];
+		int topScore=correctness[5];
+		int sizeOfTopGroup=correctness[6];
+		int numCorrect=correctness[7];
+		boolean firstElementCorrect=(correctness[8]==1);
+		boolean firstElementCorrectLoose=(correctness[9]==1);
+		boolean firstGroupCorrectLoose=(correctness[10]==1);
+		
+		assert(elements>0 == r.mapped());
+		
+		if(elements>0){
+			
+			if(r.match!=null){
+				int[] errors=r.countErrors(SamLine.INTRON_LIMIT);
+				matchCountM1+=errors[0];
+				matchCountS1+=errors[1];
+				matchCountD1+=errors[2];
+				matchCountI1+=errors[3];
+				matchCountN1+=errors[4];
+				
+				readCountS1+=(errors[1]>0 ? 1 : 0);
+				readCountD1+=(errors[2]>0 ? 1 : 0);
+				readCountI1+=(errors[3]>0 ? 1 : 0);
+				readCountN1+=(errors[4]>0 ? 1 : 0);
+				readCountSplice1+=(errors[5]>0 ? 1 : 0);
+				readCountE1+=((errors[1]>0 || errors[2]>0 || errors[3]>0)? 1 : 0);
+			}
+			
+			
+			mappedRetained1++;
+			mappedRetainedBases1+=len1;
+			if(r.rescued()){
+				if(r.strand()==Gene.PLUS){
+					rescuedP1++;
+				}else{
+					rescuedM1++;
+				}
+			}
+			if(r.paired()){
+				numMated++;
+				numMatedBases+=(len1+len2);
+				int inner;
+				int outer;
+				if(r.start<=r2.start){
+					inner=r2.start-r.stop;
+					outer=r2.stop-r.start;
+				}else{
+					inner=r.start-r2.stop;
+					outer=r.stop-r2.start;
+				}
+
+				inner=Tools.min(MAX_PAIR_DIST, inner);
+				inner=Tools.max(MIN_PAIR_DIST, inner);
+				innerLengthSum+=inner;
+				outerLengthSum+=outer;
+				insertSizeSum+=(inner+r.bases.length+r2.bases.length);
+			}else if(r2!=null && r2.mapped()/*&& r.list!=null && r.list.size()>0*/){
+				badPairs++;
+				badPairBases+=(len1+len2);
+			}
+			
+			if(r.perfect() || (maxSwScore>0 && r.topSite().slowScore==maxSwScore)){
+				perfectMatch1++;
+				perfectMatchBases1+=len1;
+			}else if(SLOW_ALIGN){
+				assert(r.topSite().slowScore<maxSwScore) : maxSwScore+"\t"+r.topSite().toText();
+			}
+			
+			int foundSemi=0;
+			for(SiteScore ss : r.sites){
+				if(ss.perfect){
+					perfectHitCount1++;
+					assert(ss.semiperfect);
+				}
+				if(ss.semiperfect){
+					semiPerfectHitCount1++;
+					foundSemi=1;
+				}
+			}
+			semiperfectMatch1+=foundSemi;
+			if(foundSemi>0){semiperfectMatchBases1+=len1;}
+			
+			if(firstElementCorrect){
+				if(r.strand()==Gene.PLUS){firstSiteCorrectP1++;}
+				else{firstSiteCorrectM1++;}
+				if(r.paired()){firstSiteCorrectPaired1++;}
+				else{firstSiteCorrectSolo1++;}
+				if(r.rescued()){firstSiteCorrectRescued1++;}
+			}else{
+				firstSiteIncorrect1++;
+//				System.out.println("********");
+//				System.out.println(r.toText(false));
+//				System.out.println(r2.toText(false));
+			}
+			
+			if(firstElementCorrectLoose){
+				firstSiteCorrectLoose1++;
+			}else{
+				firstSiteIncorrectLoose1++;
+			}
+
+			siteSum1+=elements;
+			topSiteSum1+=sizeOfTopGroup;
+
+			if(topScore==maxPossibleQuickScore){perfectHit1++;}
+			if(sizeOfTopGroup==1){uniqueHit1++;}
+
+			if(correctGroup>0){
+				
+				if(r.strand()==Gene.PLUS){truePositiveP1++;}
+				else{truePositiveM1++;}
+				totalCorrectSites1+=numCorrect;
+
+				if(correctGroup==1){
+					if(sizeOfTopGroup==1){
+						correctUniqueHit1++;
+					}else{
+						correctMultiHit1++;
+					}
+				}else{
+					correctLowHit1++;
+				}
+
+			}else{
+
+				falsePositive1++;
+//				System.out.println("********");
+//				System.out.println(r.toText(false));
+//				System.out.println(r2.toText(false));
+			}
+		}else if(maxPossibleQuickScore==-1){
+			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=len1;
+			r.setDiscarded(true);
+		}else{
+			noHit1++;
+		}
+	}
 	
 	
-	public abstract void calcStatistics2(final Read r, final int maxSwScore, final int maxPossibleQuickScore);
+	public void calcStatistics2(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
+		final int len=(r.bases==null ? 0 : r.bases.length);
+		
+		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
+			ambiguousBestAlignment2++;
+			ambiguousBestAlignmentBases2+=len;
+		}
+		
+		int[] correctness=calcCorrectness(r, THRESH);
+		int correctGroup=correctness[0];
+		int correctGroupSize=correctness[1];
+		int numGroups=correctness[2];
+		int elements=correctness[3];
+		int correctScore=correctness[4];
+		int topScore=correctness[5];
+		int sizeOfTopGroup=correctness[6];
+		int numCorrect=correctness[7];
+		boolean firstElementCorrect=(correctness[8]==1);
+		boolean firstElementCorrectLoose=(correctness[9]==1);
+		boolean firstGroupCorrectLoose=(correctness[10]==1);
+
+		if(elements>0){
+			
+			if(r.match!=null){
+				int[] errors=r.countErrors(SamLine.INTRON_LIMIT);
+				matchCountM2+=errors[0];
+				matchCountS2+=errors[1];
+				matchCountD2+=errors[2];
+				matchCountI2+=errors[3];
+				matchCountN2+=errors[4];
+				
+				readCountS2+=(errors[1]>0 ? 1 : 0);
+				readCountD2+=(errors[2]>0 ? 1 : 0);
+				readCountI2+=(errors[3]>0 ? 1 : 0);
+				readCountN2+=(errors[4]>0 ? 1 : 0);
+				readCountSplice2+=(errors[5]>0 ? 1 : 0);
+				readCountE2+=((errors[1]>0 || errors[2]>0 || errors[3]>0)? 1 : 0);
+			}
+			
+			mappedRetained2++;
+			mappedRetainedBases2+=len;
+			if(r.rescued()){
+				if(r.strand()==Gene.PLUS){
+					rescuedP2++;
+				}else{
+					rescuedM2++;
+				}
+			}
+			
+			if(r.perfect() || (maxSwScore>0 && r.topSite().slowScore==maxSwScore)){
+				perfectMatch2++;
+				perfectMatchBases2+=len;
+			}else if(SLOW_ALIGN){
+				assert(r.topSite().slowScore<maxSwScore) : maxSwScore+"\t"+r.topSite().toText();
+			}
+			
+			int foundSemi=0;
+			for(SiteScore ss : r.sites){
+				if(ss.perfect){
+					perfectHitCount2++;
+					assert(ss.semiperfect);
+				}
+				if(ss.semiperfect){
+					semiPerfectHitCount2++;
+					foundSemi=1;
+				}
+			}
+			semiperfectMatch2+=foundSemi;
+			if(foundSemi>0){semiperfectMatchBases2+=len;}
+
+			if(firstElementCorrect){
+				if(r.strand()==Gene.PLUS){firstSiteCorrectP2++;}
+				else{firstSiteCorrectM2++;}
+				if(r.paired()){firstSiteCorrectPaired2++;}
+				else{firstSiteCorrectSolo2++;}
+				if(r.rescued()){firstSiteCorrectRescued2++;}
+			}else{
+				firstSiteIncorrect2++;
+//				System.out.println("********");
+//				System.out.println(r.toText(false));
+//				System.out.println(r.mate.toText(false));
+			}
+			
+			if(firstElementCorrectLoose){
+				firstSiteCorrectLoose2++;
+			}else{
+				firstSiteIncorrectLoose2++;
+			}
+
+			siteSum2+=elements;
+			topSiteSum2+=sizeOfTopGroup;
+
+			if(topScore==maxPossibleQuickScore){perfectHit2++;}
+			if(sizeOfTopGroup==1){uniqueHit2++;}
+
+			if(correctGroup>0){
+
+				if(r.strand()==Gene.PLUS){truePositiveP2++;}
+				else{truePositiveM2++;}
+				totalCorrectSites2+=numCorrect;
+
+				if(correctGroup==1){
+					if(sizeOfTopGroup==1){
+						correctUniqueHit2++;
+					}else{
+						correctMultiHit2++;
+					}
+				}else{
+					correctLowHit2++;
+				}
+
+			}else{
+
+				falsePositive2++;
+//				System.out.println("********");
+//				System.out.println(r.toText(false));
+//				System.out.println(r.mate.toText(false));
+			}
+		}else if(maxPossibleQuickScore==-1){
+			lowQualityReadsDiscarded2++;
+			lowQualityBasesDiscarded2+=len;
+		}else{
+			noHit2++;
+		}
+	}
+	
 	
 //	/** Assumes list is sorted */
 //	public abstract void genMatchString(final Read r, final byte[] basesP, final byte[] basesM, final int maxImperfectSwScore, final int maxSwScore, boolean setSSScore, boolean recur);
@@ -2411,79 +2693,90 @@ public abstract class AbstractMapThread extends Thread {
 	
 	/*--------------------------------------------------------------*/
 	
-	public int totalNumCorrect1=0;
-	public int totalNumIncorrect1=0;
-	public int totalNumIncorrectPrior1=0;
-	public int totalNumCapturedAllCorrect1=0;
-	public int totalNumCapturedAllCorrectTop1=0;
-	public int totalNumCapturedAllCorrectOnly1=0;
+	public long totalNumCorrect1=0;
+	public long totalNumIncorrect1=0;
+	public long totalNumIncorrectPrior1=0;
+	public long totalNumCapturedAllCorrect1=0;
+	public long totalNumCapturedAllCorrectTop1=0;
+	public long totalNumCapturedAllCorrectOnly1=0;
 	
-	public int totalNumCorrect2=0;
-	public int totalNumIncorrect2=0;
-	public int totalNumIncorrectPrior2=0;
-	public int totalNumCapturedAllCorrect2=0;
-	public int totalNumCapturedAllCorrectTop2=0;
-	public int totalNumCapturedAllCorrectOnly2=0;
+	public long totalNumCorrect2=0;
+	public long totalNumIncorrect2=0;
+	public long totalNumIncorrectPrior2=0;
+	public long totalNumCapturedAllCorrect2=0;
+	public long totalNumCapturedAllCorrectTop2=0;
+	public long totalNumCapturedAllCorrectOnly2=0;
 	
 	/*--------------------------------------------------------------*/
 
 	public boolean verbose=false;
 	public static final boolean verboseS=false;
 	
-	public long readsUsed=0;
+	public long readsUsed1=0;
 	public long readsUsed2=0;
+	public long basesUsed1=0;
+	public long basesUsed2=0;
 	public long numMated=0;
+	public long numMatedBases=0;
 	public long badPairs=0;
+	public long badPairBases=0;
 	public long innerLengthSum=0;
 	public long outerLengthSum=0;
 	public long insertSizeSum=0;
 	public long keysUsed=0;
-	public long basesUsed=0; //basesUsed and basesAtQuickmap are identical
-	public long basesAtQuickmap=0; //basesUsed and basesAtQuickmap are identical
 	public long syntheticReads=0;
 
-	public int mapped1=0;
-	public int mappedRetained1=0;
-	public int rescuedP1=0;
-	public int rescuedM1=0;
-	public int truePositiveP1=0;
-	public int truePositiveM1=0;
-	public int falsePositive1=0;
-	public int totalCorrectSites1=0;
+	public long mapped1=0;
+	public long mappedRetained1=0;
+	public long mappedRetainedBases1=0;
+	public long rescuedP1=0;
+	public long rescuedM1=0;
+	public long truePositiveP1=0;
+	public long truePositiveM1=0;
+	public long falsePositive1=0;
+	public long totalCorrectSites1=0;
 
-	public int firstSiteCorrectP1=0;
-	public int firstSiteCorrectM1=0;
-	public int firstSiteIncorrect1=0;
-	public int firstSiteCorrectLoose1=0;
-	public int firstSiteIncorrectLoose1=0;
-	public int firstSiteCorrectPaired1=0;
-	public int firstSiteCorrectSolo1=0;
-	public int firstSiteCorrectRescued1=0;
+	public long firstSiteCorrectP1=0;
+	public long firstSiteCorrectM1=0;
+	public long firstSiteIncorrect1=0;
+	public long firstSiteCorrectLoose1=0;
+	public long firstSiteIncorrectLoose1=0;
+	public long firstSiteCorrectPaired1=0;
+	public long firstSiteCorrectSolo1=0;
+	public long firstSiteCorrectRescued1=0;
 
 	public long matchCountS1=0;
 	public long matchCountI1=0;
 	public long matchCountD1=0;
 	public long matchCountM1=0;
 	public long matchCountN1=0;
+
+	public long readCountE1=0;
+	public long readCountS1=0;
+	public long readCountI1=0;
+	public long readCountD1=0;
+	public long readCountN1=0;
+	public long readCountSplice1=0;
 	
-	
-	public int perfectHit1=0; //Highest quick score is max quick score
-	public int uniqueHit1=0; //Only one hit has highest score
-	public int correctUniqueHit1=0; //unique highest hit on answer site 
-	public int correctMultiHit1=0;  //non-unique highest hit on answer site 
-	public int correctLowHit1=0;  //hit on answer site, but not highest scorer 
-	public int noHit1=0;
+	public long perfectHit1=0; //Highest quick score is max quick score
+	public long uniqueHit1=0; //Only one hit has highest score
+	public long correctUniqueHit1=0; //unique highest hit on answer site 
+	public long correctMultiHit1=0;  //non-unique highest hit on answer site 
+	public long correctLowHit1=0;  //hit on answer site, but not highest scorer 
+	public long noHit1=0;
 	
 	/** Number of perfect hit sites found */
-	public int perfectHitCount1=0;
+	public long perfectHitCount1=0;
 	/** Number of sites found that are perfect except for no-ref */
-	public int semiPerfectHitCount1=0;
+	public long semiPerfectHitCount1=0;
 	
 	
-	public int perfectMatch1=0; //Highest slow score is max slow score
-	public int semiperfectMatch1=0;
-	
-	public int ambiguousBestAlignment1=0;
+	public long perfectMatch1=0; //Highest slow score is max slow score
+	public long semiperfectMatch1=0;
+	public long perfectMatchBases1=0;
+	public long semiperfectMatchBases1=0;
+	public long ambiguousBestAlignment1=0;
+	public long ambiguousBestAlignmentBases1=0;
 
 	public long initialSiteSum1=0;
 	public long postTrimSiteSum1=0;
@@ -2492,47 +2785,58 @@ public abstract class AbstractMapThread extends Thread {
 	public long topSiteSum1=0;
 	
 	public long lowQualityReadsDiscarded1=0;
+	public long lowQualityBasesDiscarded1=0;
 	
-	public int mapped2=0;
-	public int mappedRetained2=0;
-	public int rescuedP2=0;
-	public int rescuedM2=0;
-	public int truePositiveP2=0;
-	public int truePositiveM2=0;
-	public int falsePositive2=0;
-	public int totalCorrectSites2=0;
+	public long mapped2=0;
+	public long mappedRetained2=0;
+	public long mappedRetainedBases2=0;
+	public long rescuedP2=0;
+	public long rescuedM2=0;
+	public long truePositiveP2=0;
+	public long truePositiveM2=0;
+	public long falsePositive2=0;
+	public long totalCorrectSites2=0;
 
-	public int firstSiteCorrectP2=0;
-	public int firstSiteCorrectM2=0;
-	public int firstSiteIncorrect2=0;
-	public int firstSiteCorrectLoose2=0;
-	public int firstSiteIncorrectLoose2=0;
-	public int firstSiteCorrectPaired2=0;
-	public int firstSiteCorrectSolo2=0;
-	public int firstSiteCorrectRescued2=0;
+	public long firstSiteCorrectP2=0;
+	public long firstSiteCorrectM2=0;
+	public long firstSiteIncorrect2=0;
+	public long firstSiteCorrectLoose2=0;
+	public long firstSiteIncorrectLoose2=0;
+	public long firstSiteCorrectPaired2=0;
+	public long firstSiteCorrectSolo2=0;
+	public long firstSiteCorrectRescued2=0;
 	
 	public long matchCountS2=0;
 	public long matchCountI2=0;
 	public long matchCountD2=0;
 	public long matchCountM2=0;
 	public long matchCountN2=0;
+
+	public long readCountE2=0;
+	public long readCountS2=0;
+	public long readCountI2=0;
+	public long readCountD2=0;
+	public long readCountN2=0;
+	public long readCountSplice2=0;
 	
-	public int perfectHit2=0; //Highest quick score is max quick score
-	public int uniqueHit2=0; //Only one hit has highest score
-	public int correctUniqueHit2=0; //unique highest hit on answer site 
-	public int correctMultiHit2=0;  //non-unique highest hit on answer site 
-	public int correctLowHit2=0;  //hit on answer site, but not highest scorer 
-	public int noHit2=0;
+	public long perfectHit2=0; //Highest quick score is max quick score
+	public long uniqueHit2=0; //Only one hit has highest score
+	public long correctUniqueHit2=0; //unique highest hit on answer site 
+	public long correctMultiHit2=0;  //non-unique highest hit on answer site 
+	public long correctLowHit2=0;  //hit on answer site, but not highest scorer 
+	public long noHit2=0;
 	
 	/** Number of perfect hit sites found */
-	public int perfectHitCount2=0;
+	public long perfectHitCount2=0;
 	/** Number of sites found that are perfect except for no-ref */
-	public int semiPerfectHitCount2=0;
-
-	public int perfectMatch2=0; //Highest slow score is max slow score
-	public int semiperfectMatch2=0;
+	public long semiPerfectHitCount2=0;
 	
-	public int ambiguousBestAlignment2=0;
+	public long perfectMatch2=0; //Highest slow score is max slow score
+	public long semiperfectMatch2=0;
+	public long perfectMatchBases2=0;
+	public long semiperfectMatchBases2=0;
+	public long ambiguousBestAlignment2=0;
+	public long ambiguousBestAlignmentBases2=0;
 
 	public long initialSiteSum2=0;
 	public long postTrimSiteSum2=0;
@@ -2541,6 +2845,7 @@ public abstract class AbstractMapThread extends Thread {
 	public long topSiteSum2=0;
 	
 	public long lowQualityReadsDiscarded2=0;
+	public long lowQualityBasesDiscarded2=0;
 	
 	/*--------------------------------------------------------------*/
 	

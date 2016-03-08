@@ -7,6 +7,7 @@ import java.util.Collections;
 import stream.ConcurrentReadStreamInterface;
 import stream.RTextOutputStream3;
 import stream.Read;
+import stream.SamLine;
 import stream.SiteScore;
 
 import dna.AminoAcid;
@@ -401,6 +402,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 	
 	public void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
 		if(OUTPUT_PAIRED_ONLY && r.mate!=null && !r.paired() && (r.mapped() || r.mate.mapped())){r.clearPairMapping();}
+		final Read r2=r.mate;
 
 		/* {number of correct (loose) sites, number of incorrect (loose) sites, number incorrect sites before last correct site, 
 		 * number of sites, correctScore, maxScore, firstElementCorrect, firstElementCorrectLoose, position of first correct element (or -1),
@@ -418,6 +420,9 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		int positionOfFirstCorrect=correctness[8];
 		int sizeOfTopGroup=correctness[9];
 		int numTopCorrect=correctness[10];
+
+		final int len1=(r.bases==null ? 0 : r.bases.length);
+		final int len2=(r2==null ? 0 : r.bases==null ? 0 : r.bases.length);
 		
 		assert(numSites==numCorrect+numIncorrect) : numSites+", "+numCorrect+", "+numIncorrect+", "+r.numSites();
 		assert(numSites==r.numSites());
@@ -441,12 +446,19 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		if(numSites>0){
 			
 			if(r.match!=null){
-				int[] errors=r.countErrors();
+				int[] errors=r.countErrors(SamLine.INTRON_LIMIT);
 				matchCountM1+=errors[0];
 				matchCountS1+=errors[1];
 				matchCountD1+=errors[2];
 				matchCountI1+=errors[3];
 				matchCountN1+=errors[4];
+				
+				readCountS1+=(errors[1]>0 ? 1 : 0);
+				readCountD1+=(errors[2]>0 ? 1 : 0);
+				readCountI1+=(errors[3]>0 ? 1 : 0);
+				readCountN1+=(errors[4]>0 ? 1 : 0);
+				readCountSplice1+=(errors[5]>0 ? 1 : 0);
+				readCountE1+=((errors[1]>0 || errors[2]>0 || errors[3]>0)? 1 : 0);
 			}
 			
 			
@@ -497,6 +509,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 				}
 			}
 			semiperfectMatch1+=foundSemi;
+			if(foundSemi>0){semiperfectMatchBases1+=len1;}
 			
 			if(firstElementCorrect){
 				if(r.strand()==Gene.PLUS){firstSiteCorrectP1++;}
@@ -544,6 +557,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 			}
 		}else if(maxPossibleQuickScore==-1){
 			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=len1;
 			r.setDiscarded(true);
 		}else{
 			noHit1++;
@@ -566,6 +580,8 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		int positionOfFirstCorrect=correctness[8];
 		int sizeOfTopGroup=correctness[9];
 		int numTopCorrect=correctness[10];
+
+		final int len=(r.bases==null ? 0 : r.bases.length);
 		
 		totalNumCorrect2+=numCorrect;
 		totalNumIncorrect2+=numIncorrect;
@@ -583,12 +599,19 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		if(numSites>0){
 			
 			if(r.match!=null){
-				int[] errors=r.countErrors();
+				int[] errors=r.countErrors(SamLine.INTRON_LIMIT);
 				matchCountM2+=errors[0];
 				matchCountS2+=errors[1];
 				matchCountD2+=errors[2];
 				matchCountI2+=errors[3];
 				matchCountN2+=errors[4];
+				
+				readCountS2+=(errors[1]>0 ? 1 : 0);
+				readCountD2+=(errors[2]>0 ? 1 : 0);
+				readCountI2+=(errors[3]>0 ? 1 : 0);
+				readCountN2+=(errors[4]>0 ? 1 : 0);
+				readCountSplice2+=(errors[5]>0 ? 1 : 0);
+				readCountE2+=((errors[1]>0 || errors[2]>0 || errors[3]>0)? 1 : 0);
 			}
 			
 			mappedRetained2++;
@@ -618,6 +641,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 				}
 			}
 			semiperfectMatch2+=foundSemi;
+			if(foundSemi>0){semiperfectMatchBases2+=len;}
 
 			if(firstElementCorrect){
 				if(r.strand()==Gene.PLUS){firstSiteCorrectP2++;}
@@ -684,7 +708,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 //		}
 		
 		if(verbose){System.err.println("\nProcessing "+r);}
-		readsUsed++;
+		readsUsed1++;
 		
 		final int maxPossibleQuickScore=quickMap(r, basesM);
 		if(verbose){System.err.println("\nQuick Map: \t"+r.sites);}
@@ -692,6 +716,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		if(maxPossibleQuickScore<0){
 			r.sites=null;
 			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=basesP.length;
 			r.setDiscarded(true);
 			return;
 		}
@@ -1182,8 +1207,9 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		final Read r2=r.mate;
 		assert(r2!=null);
 		final byte[] basesP1=r.bases, basesP2=r2.bases;
+		final int len1=(basesP1==null ? 0 : basesP1.length), len2=(basesP2==null ? 0 : basesP2.length);
 		
-		readsUsed++;
+		readsUsed1++;
 		readsUsed2++;
 
 		final int maxPossibleQuickScore1=quickMap(r, basesM1);
@@ -1197,8 +1223,10 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 			r.sites=null;
 			r2.sites=null;
 			lowQualityReadsDiscarded1++;
+			lowQualityBasesDiscarded1+=len1;
 			r.setDiscarded(true);
 			lowQualityReadsDiscarded2++;
+			lowQualityBasesDiscarded2+=len2;
 			r2.setDiscarded(true);
 			return;
 		}
@@ -1214,10 +1242,10 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		//Discards need to be tracked separately for each end. 
 //		if(maxPossibleQuickScore2<0){lowQualityReadsDiscarded--;}
 		
-		final int maxSwScore1=msa.maxQuality(r.bases.length);
-		final int maxImperfectSwScore1=msa.maxImperfectScore(r.bases.length);
-		final int maxSwScore2=msa.maxQuality(r2.bases.length);
-		final int maxImperfectSwScore2=msa.maxImperfectScore(r2.bases.length);
+		final int maxSwScore1=msa.maxQuality(len1);
+		final int maxImperfectSwScore1=msa.maxImperfectScore(len1);
+		final int maxSwScore2=msa.maxQuality(len2);
+		final int maxImperfectSwScore2=msa.maxImperfectScore(len2);
 		
 		//TODO: POSSIBLY block pairing across N blocks.
 		pairSiteScoresInitial(r, r2, TRIM_LIST);
@@ -1435,7 +1463,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		if(r.numSites()>0 && r2.numSites()>0){
 			SiteScore ss1=r.topSite();
 			SiteScore ss2=r2.topSite();
-			if(canPair(ss1, ss2, r.bases.length, r2.bases.length, REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
+			if(canPair(ss1, ss2, len1, len2, REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
 				assert(SLOW_ALIGN ? ss1.pairedScore>ss1.slowScore : ss1.pairedScore>ss1.quickScore) : 
 					"\n"+ss1.toText()+"\n"+ss2.toText()+"\n"+r.toText(false)+"\n"+r2.toText(false)+"\n";
 				assert(SLOW_ALIGN ? ss2.pairedScore>ss2.slowScore : ss2.pairedScore>ss2.quickScore) : 
@@ -1456,8 +1484,8 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		assert(checkTopSite(r)); // TODO remove this
 		if(KILL_BAD_PAIRS){
 			if(r.isBadPair(REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
-				int x=r.mapScore/r.bases.length;
-				int y=r2.mapScore/r2.bases.length;
+				int x=r.mapScore/len1;
+				int y=r2.mapScore/len2;
 				if(x>=y){
 					r2.clearAnswers(false);
 				}else{

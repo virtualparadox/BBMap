@@ -1362,6 +1362,7 @@ public class Data {
 	public static String ROOT_CHAIN;
 	public static String ROOT_AFFY;
 	public static String ROOT_TEMPDIR;
+	public static String ROOT_CURRENT;
 	
 	static{
 		ROOT=(new File(Data.class.getClassLoader().getResource(Data.class.getName().replace('.', '/') + ".class")
@@ -1377,6 +1378,8 @@ public class Data {
 		boolean local=mode.equals("local") || mode.equals(".") || mode.equals("/.") || mode.equals("./");
 		boolean win=mode.contains("windows");
 		boolean unix=mode.contains("unix");
+		
+		ROOT_CURRENT=System.getProperty("user.dir");
 		
 		if(local){
 			ROOT_BASE="";

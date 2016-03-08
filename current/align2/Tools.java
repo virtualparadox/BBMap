@@ -15,7 +15,7 @@ import dna.Data;
 public final class Tools {
 	
 	/** Checks for permission to overwrite files, and output name collisions. */
-	public static boolean testOutputFiles(boolean overwrite, boolean allowDuplicates, String...args){
+	public static boolean testOutputFiles(boolean overwrite, boolean append, boolean allowDuplicates, String...args){
 		if(args==null || args.length==0){return true;}
 		HashSet<String> set=new HashSet<String>(args.length*2);
 		int terms=0;
@@ -24,7 +24,7 @@ public final class Tools {
 				if(isOutputFileName(s)){
 					terms++;
 					
-					if(!overwrite && new File(s).exists()){
+					if(!overwrite && !append && new File(s).exists()){
 						assert(overwrite) : "File "+s+" exists and overwrite=false";
 						return false;
 					}
@@ -788,6 +788,14 @@ public final class Tools {
 		return x;
 	}
 	
+	public static long sumHistogram(long[] array){
+		long x=0;
+		for(int i=1; i<array.length; i++){
+			x+=(i*array[i]);
+		}
+		return x;
+	}
+	
 	public static long sum(AtomicIntegerArray array){
 		long x=0;
 		for(int i=0; i<array.length(); i++){x+=array.get(i);}
@@ -1203,7 +1211,22 @@ public final class Tools {
 	
 	public static int median(int[] array){return percentile(array, .5);}
 	
+	public static int median(long[] array){return percentile(array, .5);}
+	
 	public static int percentile(int[] array, double fraction){
+		if(array==null || array.length<1){return 0;}
+		long target=(long)(sum(array)*fraction);
+		long sum=0;
+		for(int i=0; i<array.length; i++){
+			sum+=array[i];
+			if(sum>=target){
+				return i;
+			}
+		}
+		return array.length-1;
+	}
+	
+	public static int percentile(long[] array, double fraction){
 		if(array==null || array.length<1){return 0;}
 		long target=(long)(sum(array)*fraction);
 		long sum=0;

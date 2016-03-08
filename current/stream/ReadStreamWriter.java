@@ -1,5 +1,6 @@
 package stream;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -12,131 +13,11 @@ import fileIO.ReadWrite;
 import fileIO.FileFormat;
 
 public abstract class ReadStreamWriter extends Thread {
-
-//	public ReadStreamWriter(String fname_, String qfname_, boolean read1_, int bufferSize, 
-//			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout,
-//			boolean useSharedHeader, boolean makeWriter, boolean buffered){
-//		this(fname_, qfname_, read1_, bufferSize, 
-//				outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout,
-//				useSharedHeader, makeWriter, buffered, true);
-//		
-//	}
-
-	protected ReadStreamWriter(String fname_, String qfname_, boolean read1_, int bufferSize, 
-			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout,
-			boolean useSharedHeader, boolean makeWriter, boolean buffered, boolean allowSubprocess_){
-		fname=fname_;
-		qfname=qfname_;
-		read1=read1_;
-		OUTPUT_SAM=(outputSamFile || outputBamFile);
-		OUTPUT_BAM=outputBamFile;
-		OUTPUT_FASTQ=fastq;
-		OUTPUT_FASTA=fasta;
-		OUTPUT_ATTACHMENT=attachment;
-		OUTPUT_STANDARD_OUT=stdout;
-		SITES_ONLY=sitesOnly;
-		allowSubprocess=allowSubprocess_;
-		assert(((OUTPUT_SAM ? 1 : 0)+(OUTPUT_FASTQ ? 1 : 0)+(OUTPUT_FASTA ? 1 : 0)+(OUTPUT_ATTACHMENT ? 1 : 0)+(SITES_ONLY ? 1 : 0))<=1) : 
-			OUTPUT_SAM+", "+SITES_ONLY+", "+OUTPUT_FASTQ+", "+OUTPUT_FASTA+", "+OUTPUT_ATTACHMENT;
-//		assert(fname==null || (fname.contains(".sam") || fname.contains(".bam"))==OUTPUT_SAM) : "Outfile name and sam output mode flag disagree: "+fname;
-		assert(read1 || !OUTPUT_SAM) : "Attempting to output paired reads to different sam files.";
-//		System.err.println("Called ReadStreamWriter with fname="+fname+", qfname="+qfname);
-		
-		if(qfname==null){
-			myQOutstream=null;
-			myQWriter=null;
-		}else{
-			myQOutstream=ReadWrite.getOutputStream(qfname, false, buffered, allowSubprocess);
-			myQWriter=(makeWriter ? new PrintWriter(myQOutstream) : null);
-		}
-//		System.err.println("myQWriter="+myQWriter);
-		
-		if(fname==null && !OUTPUT_STANDARD_OUT){
-			myOutstream=null;
-			myWriter=null;
-		}else{
-//			if(OUTPUT_STANDARD_OUT){myOutstream=System.out;}
-//			else 
-			if(!OUTPUT_BAM || !Data.SAMTOOLS() || !Data.SH()){
-				myOutstream=ReadWrite.getOutputStream(fname, false, buffered, allowSubprocess);
-			}else{
-				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true);
-			}
-			myWriter=(makeWriter ? new PrintWriter(myOutstream) : null);
-			
-			if(HEADER!=null){
-				if(makeWriter){
-					myWriter.println(HEADER);
-				}else{
-					ByteBuilder bb=new ByteBuilder(HEADER);
-					try {
-						if(bb.length>0){myOutstream.write(bb.array, 0, bb.length);}
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-			}else if(OUTPUT_SAM){
-				if(useSharedHeader){
-					ArrayList<byte[]> list=SamReadInputStream.getSharedHeader(true);
-					if(list==null){
-						System.err.println("Header was null.");
-					}else{
-						try {
-							for(byte[] line : list){
-								myOutstream.write(line);
-								myOutstream.write('\n');
-								//myWriter.println(new String(line));
-							}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-				}else{
-					if(makeWriter){
-						myWriter.println(SamLine.header0());
-						int a=(MINCHROM==-1 ? 1 : MINCHROM);
-						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
-						for(int chrom=a; chrom<=b; chrom++){
-							//					myWriter.print(SamLine.header1(chrom, chrom));
-							SamLine.printHeader1(chrom, chrom, myWriter);
-						}
-						myWriter.println(SamLine.header2());
-					}else{
-						ByteBuilder bb=new ByteBuilder(4096);
-						SamLine.header0B(bb);
-						bb.append('\n');
-						int a=(MINCHROM==-1 ? 1 : MINCHROM);
-						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
-						for(int chrom=a; chrom<=b; chrom++){
-							SamLine.printHeader1B(chrom, chrom, bb, myOutstream);
-						}
-						SamLine.header2B(bb);
-						bb.append('\n');
-						
-						
-						try {
-							if(bb.length>0){myOutstream.write(bb.array, 0, bb.length);}
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-				}
-			}else if(!OUTPUT_SAM && !OUTPUT_FASTQ && !OUTPUT_FASTA && !SITES_ONLY && !OUTPUT_ATTACHMENT){
-//				myWriter.println("#"+Read.header());
-			}
-		}
-		
-		assert(bufferSize>=1);
-		queue=new ArrayBlockingQueue<Job>(bufferSize);
-	}
 	
 	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, boolean makeWriter, boolean buffered, boolean useSharedHeader){
 //		assert(false) : useSharedHeader+", "+header;
 		assert(ff!=null);
-		assert(ff.write()) : "FileFormat is not in read mode for "+ff.name();
+		assert(ff.write()) : "FileFormat is not in write mode for "+ff.name();
 		
 		assert(!ff.text() && !ff.unknownFormat()) : "Unknown format for "+ff;
 		OUTPUT_FASTQ=ff.fastq();
@@ -161,7 +42,7 @@ public abstract class ReadStreamWriter extends Thread {
 			myQOutstream=null;
 			myQWriter=null;
 		}else{
-			myQOutstream=ReadWrite.getOutputStream(fname, false, buffered, allowSubprocess);
+			myQOutstream=ReadWrite.getOutputStream(qfname, (ff==null ? false : ff.append()), buffered, allowSubprocess);
 			myQWriter=(makeWriter ? new PrintWriter(myQOutstream) : null);
 		}
 		
@@ -174,17 +55,20 @@ public abstract class ReadStreamWriter extends Thread {
 		}else{
 			if(OUTPUT_STANDARD_OUT){myOutstream=System.out;}
 			else if(!OUTPUT_BAM || !Data.SAMTOOLS() || !Data.SH()){
-				myOutstream=ReadWrite.getOutputStream(fname, false, buffered, allowSubprocess);
+				myOutstream=ReadWrite.getOutputStream(ff, buffered);
 			}else{
 				if(!allowSubprocess){System.err.println("Warning! Spawning a samtools process when allowSubprocess="+allowSubprocess);}
-				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true);
+				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, ff.append());
 			}
 			
 			
 			
 			myWriter=(makeWriter ? new PrintWriter(myOutstream) : null);
-
-			if(header!=null){
+			
+			boolean supressHeader=(ff.append() && ff.exists());
+//			assert(false) : ff.append()+", "+ff.exists();
+			
+			if(header!=null && !supressHeader){
 				if(myWriter!=null){
 					myWriter.println(header);
 				}else{
@@ -197,7 +81,7 @@ public abstract class ReadStreamWriter extends Thread {
 						e.printStackTrace();
 					}
 				}
-			}else if(OUTPUT_SAM){
+			}else if(OUTPUT_SAM && !supressHeader){
 				if(useSharedHeader){
 					ArrayList<byte[]> list=SamReadInputStream.getSharedHeader(true);
 					if(list==null){
@@ -245,7 +129,7 @@ public abstract class ReadStreamWriter extends Thread {
 						}
 					}
 				}
-			}else if(ff.bread()){
+			}else if(ff.bread() && !supressHeader){
 				if(myWriter!=null){
 					myWriter.println("#"+Read.header());
 				}else{

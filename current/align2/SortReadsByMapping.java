@@ -68,7 +68,7 @@ public class SortReadsByMapping {
 			}else if(s.startsWith("threads=")){
 				REGEN_THREADS=Integer.parseInt(split[1]);
 			}else if(s.startsWith("overwrite=")){
-				OVERWRITE=Tools.parseBoolean(split[1]);
+				overwrite=Tools.parseBoolean(split[1]);
 			}
 		}
 		
@@ -160,7 +160,7 @@ public class SortReadsByMapping {
 
 		final String fname1=outname.replaceFirst("#", "1");
 		final String fname2=(!paired ? null : outname.replaceFirst("#", "2"));
-		if(!OVERWRITE){
+		if(!overwrite){
 			if(fname1!=null && new File(fname1).exists()){throw new RuntimeException("Destination file "+fname1+" already exists.");}
 			if(fname2!=null && new File(fname2).exists()){throw new RuntimeException("Destination file "+fname2+" already exists.");}
 		}
@@ -280,28 +280,6 @@ public class SortReadsByMapping {
 
 		if(wtt1!=null){wtt1.start();}
 		if(wtt2!=null){wtt2.start();}
-		
-//		OutputStream outStream1, outStream2;
-//		PrintWriter writer1, writer2;
-//		
-//		if(fname1==null){
-//			assert(false);
-//			outStream1=null;
-//			writer1=null;
-//		}else{
-//			outStream1=ReadWrite.getOutputStream(fname1, false);
-//			writer1=new PrintWriter(outStream1);
-//			writer1.println("#"+Read.header());
-//		}
-//		
-//		if(fname2==null){
-//			outStream2=null;
-//			writer2=null;
-//		}else{
-//			outStream2=ReadWrite.getOutputStream(fname2, false);
-//			writer2=new PrintWriter(outStream2);
-//			writer2.println("#"+Read.header());
-//		}
 		
 		ArrayList<String> keys=new ArrayList<String>(table.size());
 		keys.addAll(table.keySet());
@@ -1851,7 +1829,7 @@ public class SortReadsByMapping {
 				outStream1=null;
 				writer1=null;
 			}else{
-				outStream1=ReadWrite.getOutputStream(fname1, false, true, false);
+				outStream1=ReadWrite.getOutputStream(fname1, append, true, false);
 				writer1=new PrintWriter(outStream1);
 			}
 			
@@ -1859,7 +1837,7 @@ public class SortReadsByMapping {
 				outStream2=null;
 				writer2=null;
 			}else{
-				outStream2=ReadWrite.getOutputStream(fname2, false, true, false);
+				outStream2=ReadWrite.getOutputStream(fname2, append, true, false);
 				writer2=new PrintWriter(outStream2);
 			}
 		}
@@ -2174,7 +2152,8 @@ public class SortReadsByMapping {
 	public static long READ_LIMIT=-1; //Max number of reads to process
 	public static final int WRITE_BUFFER=8000; //Bigger number uses more memory, for less frequent writes.
 	public static final int MAX_BLOCKSIZE_TO_SORT=8000000;
-	public static boolean OVERWRITE=false;
+	public static boolean overwrite=false;
+	public static boolean append=false;
 	
 	public static final boolean DONT_COMPRESS_TEMP_FILES=false;
 	public static boolean MERGE_DUPLICATES=false;

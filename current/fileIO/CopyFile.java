@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.zip.ZipOutputStream;
 
+import align2.ReadStats;
 import align2.Tools;
 
 import dna.Parser;
@@ -26,6 +27,7 @@ public class CopyFile {
 
 		String in=null, out=null;
 		boolean overwrite=true;
+		boolean append=false;
 
 		for(int i=0; i<args.length; i++){
 
@@ -46,6 +48,8 @@ public class CopyFile {
 					out=b;
 				}else if(a.equals("bf2")){
 					ByteFile.FORCE_MODE_BF1=!(ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b));
+				}else if(a.equals("append") || a.equals("app")){
+					append=ReadStats.append=Tools.parseBoolean(b);
 				}else if(a.equals("overwrite") || a.equals("ow")){
 					overwrite=Tools.parseBoolean(b);
 				}else if(in==null && i==0 && !args[i].contains("=")){

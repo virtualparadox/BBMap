@@ -14,6 +14,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 import align2.ListNum;
 import align2.QualityTools;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
@@ -138,6 +139,8 @@ public class AddAdapters {
 				adderrors=Tools.parseBoolean(b);
 			}else if(a.equals("addreversecomplement") || a.equals("arc")){
 				addRC=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("write")){
@@ -272,8 +275,8 @@ public class AddAdapters {
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out1, out2)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
 		if(qin!=-1 && qout!=-1){
@@ -288,8 +291,8 @@ public class AddAdapters {
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false);
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
@@ -734,6 +737,7 @@ public class AddAdapters {
 	private String[] literals=null;
 	
 	private boolean overwrite=false;
+	private boolean append=false;
 
 	/** Add /1 and /2 to paired reads */
 	private boolean addslash=true;

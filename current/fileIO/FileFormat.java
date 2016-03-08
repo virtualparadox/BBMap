@@ -36,10 +36,10 @@ public final class FileFormat {
 
 	public static FileFormat testInput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean allowFileRead){
 		if(fname==null){return null;}
-		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowFileRead, false, allowSubprocess, false);
+		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowFileRead, false, false, allowSubprocess, false);
 	}
 	
-	public static FileFormat testOutput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean overwrite, boolean ordered){
+	public static FileFormat testOutput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
 		if(fname==null){return null;}
 		int overrideFormat=0;
 		int overrideCompression=0;
@@ -50,27 +50,30 @@ public final class FileFormat {
 				if(a[1]!=RAW){overrideCompression=a[1];}
 			}
 		}
-		return testOutput(fname, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, overwrite, ordered);
+		return testOutput(fname, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, overwrite, append, ordered);
 	}
 	
-	public static FileFormat testOutput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean overwrite, boolean ordered){
+	public static FileFormat testOutput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
 		if(fname==null){return null;}
-		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, false, overwrite, allowSubprocess, ordered);
+		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, false, overwrite, append, allowSubprocess, ordered);
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------          Constructor         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private FileFormat(String fname, int mode_, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowFileRead
-			, boolean overwrite_, boolean allowSubprocess_, boolean ordered_){
+	private FileFormat(String fname, int mode_, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowFileRead, 
+			boolean overwrite_, boolean append_, boolean allowSubprocess_, boolean ordered_){
 //			, boolean interleaved_, boolean colorspace_, long maxReads_){
 		
 		if(verbose){
 			new Exception().printStackTrace(System.err);
 			System.err.println("FileFormat(fname="+fname+", mode="+mode_+", dFormat="+defaultFormat+", oFormat="+overrideFormat+", oCompression="+overrideCompression+
-					", allowRead="+allowFileRead+", ow="+overwrite_+", allowSub="+allowSubprocess_+", ordered="+ordered_+")");
+					", allowRead="+allowFileRead+", ow="+overwrite_+", append="+append_+", allowSub="+allowSubprocess_+", ordered="+ordered_+")");
 		}
+		
+//		assert(!overwrite_ || !append_) : "Both overwrite and append may not be set to true.";
+		if(overwrite_ && append_){overwrite_=false;}
 		
 		assert(fname!=null);
 		fname=fname.trim().replace('\\', '/');
@@ -100,8 +103,9 @@ public final class FileFormat {
 		compression=a[1];
 		type=a[2];
 		mode=mode_;
-		
+
 		overwrite=overwrite_;
+		append=append_;
 		allowSubprocess=allowSubprocess_;
 		ordered=ordered_;
 		
@@ -132,6 +136,7 @@ public final class FileFormat {
 		sb.append(type+"("+TYPE_ARRAY[type]+")").append(',');
 		sb.append(mode+"("+MODE_ARRAY[mode]+")").append(',');
 		sb.append("ow="+(overwrite ? "t" : "f")).append(',');
+		sb.append("app="+(append ? "t" : "f")).append(',');
 		sb.append("sub="+(allowSubprocess ? "t" : "f")).append(',');
 		sb.append("ordered="+(ordered ? "t" : "f"));
 		return sb.toString();
@@ -245,7 +250,7 @@ public final class FileFormat {
 		File f=new File(name);
 		if(!f.exists()){return true;}
 		if(!f.canWrite()){return false;}
-		return overwrite();
+		return overwrite() || append();
 	}
 	public final boolean canRead(){
 		assert(read());
@@ -291,8 +296,17 @@ public final class FileFormat {
 	public final boolean write(){return mode==WRITE;}
 
 	public final boolean overwrite(){return overwrite;}
+	public final boolean append(){return append;}
 	public final boolean allowSubprocess(){return allowSubprocess;}
 	public final boolean ordered(){return ordered;}
+	
+	public final boolean exists(){
+		if(!file()){return read();}
+		File f=new File(name);
+		if(!f.exists() && !gzip()){return false;}
+		long size=f.length();
+		return size>10;
+	}
 	
 //	public final boolean interleaved(){return interleaved;}
 //	public final boolean colorspace(){return colorspace;}
@@ -309,6 +323,7 @@ public final class FileFormat {
 	private final int mode;
 
 	private final boolean overwrite;
+	private final boolean append;
 	private final boolean allowSubprocess;
 	private final boolean ordered;
 	

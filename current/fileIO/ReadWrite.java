@@ -403,6 +403,9 @@ public class ReadWrite {
 		return out;
 	}
 	
+	public static OutputStream getOutputStream(FileFormat ff, boolean buffered){
+		return getOutputStream(ff.name(), ff.append(), buffered, ff.allowSubprocess());
+	}
 
 	public static OutputStream getOutputStream(String fname, boolean append, boolean buffered, boolean allowSubprocess){
 		
@@ -427,8 +430,8 @@ public class ReadWrite {
 		allowSubprocess=(allowSubprocess && Shared.THREADS>1);
 				
 		if(gzipped){
-			assert(!append);
-			return getGZipOutputStream(fname, allowSubprocess);
+//			assert(!append);
+			return getGZipOutputStream(fname, append, allowSubprocess);
 		}else if(zipped){
 			assert(!append);
 			return getZipOutputStream(fname, buffered, allowSubprocess);
@@ -528,14 +531,14 @@ public class ReadWrite {
 		return null;
 	}
 	
-	public static OutputStream getGZipOutputStream(String fname, boolean allowSubprocess){
-		if(verbose){System.err.println("getGZipOutputStream("+fname+", "+allowSubprocess+")");}
+	public static OutputStream getGZipOutputStream(String fname, boolean append, boolean allowSubprocess){
+		if(verbose){System.err.println("getGZipOutputStream("+fname+", "+append+", "+allowSubprocess+")");}
 		if(allowSubprocess && Shared.THREADS>2){
-			if(USE_PIGZ && Data.PIGZ() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getPigzStream(fname);}
-			if(USE_GZIP && Data.GZIP() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getGzipStream(fname);}
+			if(USE_PIGZ && Data.PIGZ() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getPigzStream(fname, append);}
+			if(USE_GZIP && Data.GZIP() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getGzipStream(fname, append);}
 		}
 		
-		final OutputStream raw=getRawOutputStream(fname, false, false);
+		final OutputStream raw=getRawOutputStream(fname, append, false);
 		if(RAWMODE){return raw;}
 		try {
 			final GZIPOutputStream out=new GZIPOutputStream(raw, 8192){
@@ -553,23 +556,23 @@ public class ReadWrite {
 		return null;
 	}
 	
-	public static OutputStream getPigzStream(String fname){
+	public static OutputStream getPigzStream(String fname, boolean append){
 		if(verbose){System.err.println("getPigzStream("+fname+")");}
-		int threads=Tools.min(MAX_ZIP_THREADS, Tools.max(Shared.THREADS/Tools.max(ZIP_THREAD_DIVISOR, 1), 1));
+		int threads=Tools.min(MAX_ZIP_THREADS, Tools.max((Shared.THREADS-1)/Tools.max(ZIP_THREAD_DIVISOR, 1), 1));
 		threads=Tools.max(1, threads);
 		int zl=ZIPLEVEL;
 		if(threads>=4 && zl>0 && zl<4){zl=4;}
-		OutputStream out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true);
+		OutputStream out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append);
 		return out;
 	}
 	
-	public static OutputStream getGzipStream(String fname){
+	public static OutputStream getGzipStream(String fname, boolean append){
 		if(verbose){System.err.println("getGzipStream("+fname+")");}
-		OutputStream out=getOutputStreamFromProcess(fname, "gzip -c -"+ZIPLEVEL, true);
+		OutputStream out=getOutputStreamFromProcess(fname, "gzip -c -"+ZIPLEVEL, true, append);
 		return out;
 	}
 	
-	public static OutputStream getOutputStreamFromProcess(String fname, String command, boolean sh){
+	public static OutputStream getOutputStreamFromProcess(String fname, String command, boolean sh, boolean append){
 		if(verbose){System.err.println("getOutputStreamFromProcess("+fname+", "+command+", "+sh+")");}
 		
 		OutputStream out=null;
@@ -587,7 +590,11 @@ public class ReadWrite {
 			}else{
 				
 				if(fname!=null){
-					pb.redirectOutput(new File(fname));
+					if(append){
+						pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(fname)));
+					}else{
+						pb.redirectOutput(new File(fname));
+					}
 				}
 				
 				pb.command(command.split(" "));
@@ -637,13 +644,13 @@ public class ReadWrite {
 					String[] cmd = {
 							"sh",
 							"-c",
-							command+" 1>"+fname
+							command+" 1"+(append ? ">>" : ">")+fname
 					};
 					p=Runtime.getRuntime().exec(cmd);
 				}else{
+					//TODO: append won't work here...
 					p=Runtime.getRuntime().exec(command);
 				}
-//				p = Runtime.getRuntime().exec("gzip -c -"+ZIPLEVEL+" 1>"+fname);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -799,6 +806,7 @@ public class ReadWrite {
 		final boolean jar=fname.startsWith("jar:");
 		
 		if(!jar){
+			boolean failed=false;
 			File f=new File(fname);
 			if(!f.exists()){
 				String f2=fname.toLowerCase();
@@ -806,16 +814,25 @@ public class ReadWrite {
 					//				System.err.println("Returning stdin: A");
 					return System.in;
 				}
-				throw new RuntimeException("Can't find file "+fname);
+				
+				if(fname.indexOf('/')<0){
+					f2=Data.ROOT_CURRENT+"/"+fname;
+					if(!new File(f2).exists()){
+						failed=true;
+					}else{
+						fname=f2;
+					}
+				}else{
+					failed=true;
+				}
 			}
+			if(failed){throw new RuntimeException("Can't find file "+fname);}
 		}
 		
 //		System.err.println("Getting input stream for "+fname);
 //		assert(!fname.contains("\\"));
 //		assert(!loadedFiles.contains(fname)) : "Already loaded "+fname;
 //		loadedFiles.add(fname);
-//		assert(!fname.contains("custom_summary_unionGene_build36.txt"));
-		
 		
 		InputStream in=null;
 		if(jar){

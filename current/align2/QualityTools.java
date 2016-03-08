@@ -380,10 +380,7 @@ public class QualityTools {
 	}
 	
 	public static byte probCorrectToPhred(double prob){
-		if(prob<0){return 0;}
-		if(prob>=0.99999f){return 41;} 
-		
-		double phred=-10*Math.log10(1-prob);
+		double phred=probErrorToPhredDouble(1-prob);
 //		System.out.println("phred1="+phred);
 		phred=Math.round(phred);
 //		System.out.println("phred2="+phred);
@@ -391,6 +388,14 @@ public class QualityTools {
 //		System.out.println("phred3="+q);
 //		System.out.println("phred4="+(char)(q+33));
 		return (byte)q;
+	}
+	
+	public static double probErrorToPhredDouble(double prob){
+		if(prob>=1){return 0;}
+		if(prob<=0.000001){return 60;} 
+		
+		double phred=-10*Math.log10(prob);
+		return phred;
 	}
 	
 	private static final float[] makeQualityToFloat(int n){

@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Calculates per-scaffold coverage information from an unsorted sam file."
 	echo ""
@@ -26,6 +26,7 @@ usage(){
 	echo "basecov=<file>		Prints coverage per base location."
 	echo "bincov=<file>		Prints binned coverage per location (one line per X bases)."
 	echo "binsize=<1000>		Set the binsize for binned coverage output."
+	echo "keepshortbins=<true>	(ksb) Keep residual bins shorter than binsize."
 	echo "delta=<false>		Only print base coverage lines when the coverage differs from the previous base."
 	echo ""
 	echo "Other parameters:"
@@ -66,75 +67,20 @@ CP="$DIR""current/"
 
 z="-Xmx1g"
 z2="-Xms1g"
-EA="-da"
+EA="-ea"
 set=0
 
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-			set=1
-		elif [[ "$arg" == Xms* ]]; then
-			z2="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
 		return
 	fi
-	
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 4G." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
-		y=4
-	else
-		mult=75;
-		if [ $x -ge 1000000000 ]; then
-			mult=85
-			#echo "ram is 1000g+"
-		elif [ $x -ge 500000000 ]; then
-			mult=85
-			#echo "ram is 500g+"
-		elif [ $x -ge 250000000 ]; then
-			mult=85
-			#echo "ram is 250g+"
-		elif [ $x -ge 144000000 ]; then
-			mult=85
-			#echo "ram is 144g+"
-		elif [ $x -ge 120000000 ]; then
-			mult=85
-			#echo "ram is 120g+"
-		elif [ $x -ge 40000000 ]; then
-			mult=80
-			#echo "ram is 40g+"
-		else
-			mult=85
-			#echo "ram is under 40g"
-		fi
-		mult=$(( mult-5 )) #to save room for samtools if needed.
-		y=$(( ((x-500000)*mult/100)/1000000 ))
-	fi
-	#echo "y=$y"
-	z="-Xmx${y}g"
+	freeRam 3200m 84
+	z="-Xmx${RAM}m"
+	z2="-Xms${RAM}m"
 }
 calcXmx "$@"
 
@@ -149,7 +95,7 @@ pileup() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

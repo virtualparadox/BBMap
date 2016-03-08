@@ -9,23 +9,6 @@ import fileIO.ReadWrite;
 
 public class ReadStreamByteWriter extends ReadStreamWriter {
 
-	public ReadStreamByteWriter(String fname_, boolean read1_, int bufferSize, boolean allowSubprocess_){
-		this(fname_, null, read1_, bufferSize, false, false, false, false, false, false, false, false, allowSubprocess_);
-	}
-	
-//	public ReadStreamByteWriter(String fname_, boolean read1_, int bufferSize, 
-//			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout){
-//		this(fname_, null, read1_, bufferSize, outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout, false);
-//	}
-
-	public ReadStreamByteWriter(String fname_, String qfname_, boolean read1_, int bufferSize, 
-			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout,
-			boolean useSharedHeader, boolean allowSubprocess_){
-		super(fname_, qfname_, read1_, bufferSize, 
-				outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout,
-				useSharedHeader, false, buffered, allowSubprocess_);
-	}
-
 	public ReadStreamByteWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, boolean useSharedHeader){
 		super(ff, qfname_, read1_, bufferSize, header, false, buffered, useSharedHeader);
 	}
@@ -76,14 +59,12 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 			final OutputStream abc=myOutstream;
 			
 			if(!job.isEmpty()){
-				
 				if(myQOutstream!=null){
 					bbq.setLength(0);
 					if(read1){
 						for(final Read r : job.list){
 							if(r!=null){
 								{
-									bbq.append('\n');
 									bbq.append('>');
 									bbq.append(r.id);
 									bbq.append('\n');
@@ -92,7 +73,6 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 								}
 								Read r2=r.mate;
 								if(OUTPUT_INTERLEAVED && r2!=null){
-									bbq.append('\n');
 									bbq.append('>');
 									bbq.append(r2.id);
 									bbq.append('\n');
@@ -100,7 +80,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 									bbq.append('\n');
 								}
 							}
-							if(bbq.length>=32768){
+							if(bbq.length>=32768 || true){
 								myQOutstream.write(bbq.array, 0, bbq.length);
 								bbq.setLength(0);
 							}
@@ -110,7 +90,6 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 							if(r1!=null){
 								final Read r2=r1.mate;
 								assert(r2!=null && r2.mate==r1 && r2!=r1) : r1.toText(false);
-								bbq.append('\n');
 								bbq.append('>');
 								bbq.append(r2.id);
 								bbq.append('\n');

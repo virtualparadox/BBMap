@@ -24,6 +24,7 @@ import stream.Read;
 
 import align2.ListNum;
 import align2.ReadErrorComparator;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -281,6 +282,8 @@ public class KmerNormalize {
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("auto") || a.equals("automatic")){
@@ -520,7 +523,7 @@ public class KmerNormalize {
 		
 		if(DETERMINISTIC){ordered=true;}
 		
-		boolean ok=Tools.testOutputFiles(overwrite, false, outKeep, outToss, khistFile, khistFileOut, rhistFile, rhistFileOut);
+		boolean ok=Tools.testOutputFiles(overwrite, append, false, outKeep, outToss, khistFile, khistFileOut, rhistFile, rhistFileOut);
 		
 //		assert(Tools.canWrite(outKeep, overwrite)) : outKeep+" already exists, and overwrite="+overwrite;
 //		assert(Tools.canWrite(outToss, overwrite)) : outToss+" already exists, and overwrite="+overwrite;
@@ -1141,8 +1144,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosKeep=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			rosKeep.start();
 			outstream.println("Started output threads.");
@@ -1166,8 +1169,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosToss=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			rosToss.start();
@@ -1192,8 +1195,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosLow=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			rosLow.start();
@@ -1218,8 +1221,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosMid=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			rosMid.start();
@@ -1244,8 +1247,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosHigh=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			rosHigh.start();
@@ -1270,8 +1273,8 @@ public class KmerNormalize {
 			assert(!out1.equalsIgnoreCase(in1) && !out1.equalsIgnoreCase(in1));
 			assert(out2==null || (!out2.equalsIgnoreCase(in1) && !out2.equalsIgnoreCase(in2)));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ordered);
 			rosUnc=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			rosUnc.start();
@@ -1397,8 +1400,8 @@ public class KmerNormalize {
 						rosKeep.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outKeep1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outKeep2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outKeep1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outKeep2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosKeep=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosKeep.start();
@@ -1415,8 +1418,8 @@ public class KmerNormalize {
 						rosToss.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outToss1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outToss2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outToss1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outToss2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosToss=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosToss.start();
@@ -1433,8 +1436,8 @@ public class KmerNormalize {
 						rosLow.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outLow1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outLow2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outLow1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outLow2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosLow=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosLow.start();
@@ -1451,8 +1454,8 @@ public class KmerNormalize {
 						rosMid.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outMid1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outMid2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outMid1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outMid2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosMid=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosMid.start();
@@ -1469,8 +1472,8 @@ public class KmerNormalize {
 						rosHigh.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outHigh1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outHigh2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outHigh1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outHigh2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosHigh=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosHigh.start();
@@ -1487,8 +1490,8 @@ public class KmerNormalize {
 						rosUnc.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outUnc1[x], FileFormat.FASTQ, null, true, overwrite, ordered);
-					FileFormat ff2=FileFormat.testOutput(outUnc2[x], FileFormat.FASTQ, null, true, overwrite, ordered);
+					FileFormat ff1=FileFormat.testOutput(outUnc1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outUnc2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosUnc=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosUnc.start();
@@ -3444,6 +3447,7 @@ public class KmerNormalize {
 	public static boolean KEEP_ALL=false;
 	public static boolean ordered=false;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean prefilter=false;
 	public static boolean renameReads=false;
 	public static boolean DETERMINISTIC=true;

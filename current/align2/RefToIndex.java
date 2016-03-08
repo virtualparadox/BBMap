@@ -54,8 +54,8 @@ public class RefToIndex {
 				if(f.exists()){
 					File[] f2=f.listFiles();
 					if(f2!=null && f2.length>0){
-						if(OVERWRITE || f2[0].getAbsolutePath().equals(new File(reference).getAbsolutePath())){
-							sysout.println("NOTE:\tDeleting contents of "+dir+" because reference is specified and overwrite="+OVERWRITE);
+						if(overwrite || f2[0].getAbsolutePath().equals(new File(reference).getAbsolutePath())){
+							sysout.println("NOTE:\tDeleting contents of "+dir+" because reference is specified and overwrite="+overwrite);
 							if(LOG && !NODISK){ReadWrite.writeString(new Date()+"\nDeleting genome for build "+build+".\n"+args+"\n", indexlog, true);}
 							for(File f3 : f2){
 								if(f3.isFile()){
@@ -80,8 +80,8 @@ public class RefToIndex {
 				if(f.exists()){
 					File[] f2=f.listFiles();
 					if(f2!=null && f2.length>0){
-						if(OVERWRITE){
-							sysout.println("NOTE:\tDeleting contents of "+dir+" because reference is specified and overwrite="+OVERWRITE);
+						if(overwrite){
+							sysout.println("NOTE:\tDeleting contents of "+dir+" because reference is specified and overwrite="+overwrite);
 							if(LOG && !NODISK){ReadWrite.writeString(new Date()+"\nDeleting index for build "+build+".\n"+args+"\n", indexlog, true);}
 							for(File f3 : f2){
 								if(f3.isFile()){f3.delete();}
@@ -129,7 +129,8 @@ public class RefToIndex {
 	public static boolean AUTO_CHROMBITS=true;
 	public static boolean LOG=false;
 	public static boolean NODISK=false;
-	public static boolean OVERWRITE=true;
+	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean genScaffoldInfo=true;
 	
 	public static long maxChromLen=-1;

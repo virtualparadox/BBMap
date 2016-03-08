@@ -4,7 +4,7 @@
 usage(){
 	echo "Calculates basic statistics of assembly fasta files."
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Generates basic assembly statistics such as scaffold count, N50, L50, GC content, gap percent, etc."
 	echo ""
@@ -44,25 +44,12 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 z="-Xmx120m"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 }
 calcXmx "$@"
@@ -75,7 +62,7 @@ stats() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

@@ -1,5 +1,5 @@
 ReformatReads readme by Brian Bushnell
-Last updated March 28, 2014.
+Last updated April 16, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 
 This is currently a stub.
@@ -25,3 +25,8 @@ Fixed random seed setting crash (found by Michael Barton).
 Added support for breaking long fastq reads into shorter reads (maxlength and minlength flags).
 Added "overrideinterleaved" flag to allow unpaired input when specifying out1 and out2.  Requested by Vasanth Singan.
 Added "def" (deleteempty) flag which deletes output files that did not get any reads.  Requested by Vasanth Singan.  TODO: Consider adding to bbmap/bbsplit.
+Added "uniquenames" flag.  Allows reads to be renamed to ensure all have unique names.  Important for fasta files that will be mapped to.
+Added mhist, bhist, qhist, and rcomp flags.
+Fixed by in which qual file was being written to same destination as fasta file. Found by Brian Foster.
+Added 'append' flag.
+Added 'outsingle' for reads that have a mate that gets discard (generally because they are too short after trimming).

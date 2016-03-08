@@ -14,6 +14,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 import dna.Data;
 import dna.Parser;
@@ -65,7 +66,7 @@ public class GetReads {
 		long maxReads=-1;
 		int passes=1;
 		boolean testsize=false;
-		boolean overwrite=false;
+		boolean overwrite=false, append=false;
 		float samplerate=1f;
 		long sampleseed=1;
 		
@@ -155,6 +156,8 @@ public class GetReads {
 				parsecustom=Tools.parseBoolean(b);
 			}else if(a.equals("testsize")){
 				testsize=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.startsWith("fastareadlen")){
@@ -244,7 +247,7 @@ public class GetReads {
 		}
 		
 		if(!setInterleaved){
-			assert(in1!=null && out1!=null) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
+			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
@@ -260,8 +263,8 @@ public class GetReads {
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out1, out2)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
 		FASTQ.PARSE_CUSTOM=parsecustom;
@@ -281,7 +284,7 @@ public class GetReads {
 		
 
 		FileFormat ffin=FileFormat.testInput(in1, 0, null, true, true);
-		FileFormat ffout=FileFormat.testOutput(out1, 0, null, true, overwrite, false);
+		FileFormat ffout=FileFormat.testOutput(out1, 0, null, true, overwrite, append, false);
 		
 		
 		final boolean useSharedHeader=(ffin!=null && ffout!=null && ffin.samOrBam() && ffout.samOrBam());

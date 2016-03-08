@@ -3,9 +3,10 @@ package cluster;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLongArray;
 
+import jgi.Dedupe;
+
 import dna.AminoAcid;
 
-import jgi.Dedupe;
 import align2.Tools;
 
 /**

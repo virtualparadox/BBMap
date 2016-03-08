@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
 
+import align2.ReadStats;
 import align2.Tools;
 
 import dna.Parser;
@@ -38,8 +39,10 @@ public class ConcatenateTextFiles {
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
-				OVERWRITE=Tools.parseBoolean(b);
+				overwrite=Tools.parseBoolean(b);
 			}else{
 				concatenate(args[i].split(","));
 			}
@@ -52,9 +55,7 @@ public class ConcatenateTextFiles {
 
 	private static void concatenate(String[] split) {
 		String outname=split[split.length-1];
-		assert(OVERWRITE || !new File(outname).exists()) : outname+" exists.";
-//		OutputStream os=ReadWrite.getOutputStream(outname, false);
-//		PrintWriter writer=new PrintWriter(os);
+		assert(overwrite || !new File(outname).exists()) : outname+" exists.";
 		
 		WriteThread wt=new WriteThread(outname);
 		wt.start();
@@ -131,7 +132,7 @@ public class ConcatenateTextFiles {
 				e.printStackTrace();
 			}
 			fname=temp;
-			os=ReadWrite.getOutputStream(fname, false, true, true);
+			os=ReadWrite.getOutputStream(fname, append, true, true);
 			writer=new PrintWriter(os);
 		}
 		
@@ -184,7 +185,8 @@ public class ConcatenateTextFiles {
 
 	public static final int MAX_LISTS=8;
 	public static final int LIST_SIZE=100;
-	public static boolean OVERWRITE=true;
+	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean allowSubprocess=true;
 	
 }

@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Calculates EST (expressed sequence tags) capture by an assembly from a sam file."
 	echo "Designed to use BBMap output generated with these flags: k=13 maxindel=100000 customtag ordered"
@@ -34,7 +34,7 @@ function bbest() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

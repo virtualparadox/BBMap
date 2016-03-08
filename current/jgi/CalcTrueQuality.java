@@ -42,7 +42,7 @@ public class CalcTrueQuality {
 	public static void main(String[] args){
 		ReadStats.COLLECT_QUALITY_STATS=true;
 		CalcTrueQuality ctq=new CalcTrueQuality(args);
-		ReadStats.OVERWRITE=ctq.overwrite;
+		ReadStats.overwrite=ctq.overwrite;
 		ctq.process();
 		
 		ctq.writeMatrices();
@@ -109,6 +109,8 @@ public class CalcTrueQuality {
 				q102out=b;
 			}else if(a.equals("qbp") || a.equals("qbpout")){
 				qbpout=b;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("tuc") || a.equals("touppercase")){
@@ -136,8 +138,8 @@ public class CalcTrueQuality {
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 		
-		if(!Tools.testOutputFiles(overwrite, false, q102out, qbpout, q10out, q12out, qb012out, qb234out, qpout, qout, pout)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output file "+q102out+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, q102out, qbpout, q10out, q12out, qb012out, qb234out, qpout, qout, pout)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output file "+q102out+"\n");
 		}
 	}
 	
@@ -219,22 +221,22 @@ public class CalcTrueQuality {
 	}
 	
 	public void writeMatrices(){
-		if(q102out!=null){writeMatrix(q102out, q102GoodMatrix, q102BadMatrix, overwrite);}
-		if(qbpout!=null){writeMatrix(qbpout, qbpGoodMatrix, qbpBadMatrix, overwrite);}
-		if(q10out!=null){writeMatrix(q10out, q10GoodMatrix, q10BadMatrix, overwrite);}
-		if(q12out!=null){writeMatrix(q12out, q12GoodMatrix, q12BadMatrix, overwrite);}
-		if(qb012out!=null){writeMatrix(qb012out, qb012GoodMatrix, qb012BadMatrix, overwrite);}
-		if(qb234out!=null){writeMatrix(qb234out, qb234GoodMatrix, qb234BadMatrix, overwrite);}
-		if(qpout!=null){writeMatrix(qpout, qpGoodMatrix, qpBadMatrix, overwrite);}
-		if(qout!=null){writeMatrix(qout, qGoodMatrix, qBadMatrix, overwrite);}
-		if(pout!=null){writeMatrix(pout, pGoodMatrix, pBadMatrix, overwrite);}
+		if(q102out!=null){writeMatrix(q102out, q102GoodMatrix, q102BadMatrix, overwrite, append);}
+		if(qbpout!=null){writeMatrix(qbpout, qbpGoodMatrix, qbpBadMatrix, overwrite, append);}
+		if(q10out!=null){writeMatrix(q10out, q10GoodMatrix, q10BadMatrix, overwrite, append);}
+		if(q12out!=null){writeMatrix(q12out, q12GoodMatrix, q12BadMatrix, overwrite, append);}
+		if(qb012out!=null){writeMatrix(qb012out, qb012GoodMatrix, qb012BadMatrix, overwrite, append);}
+		if(qb234out!=null){writeMatrix(qb234out, qb234GoodMatrix, qb234BadMatrix, overwrite, append);}
+		if(qpout!=null){writeMatrix(qpout, qpGoodMatrix, qpBadMatrix, overwrite, append);}
+		if(qout!=null){writeMatrix(qout, qGoodMatrix, qBadMatrix, overwrite, append);}
+		if(pout!=null){writeMatrix(pout, pGoodMatrix, pBadMatrix, overwrite, append);}
 		readstats.writeQualityToFile(qhist, false);
 	}
 	
-	public static void writeMatrix(String fname, long[][][][] goodMatrix, long[][][][] badMatrix, boolean overwrite){
+	public static void writeMatrix(String fname, long[][][][] goodMatrix, long[][][][] badMatrix, boolean overwrite, boolean append){
 		assert(fname!=null) : "No file specified";
-		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, false);
-		TextStreamWriter tsw=new TextStreamWriter(ff, false);
+		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, append, false);
+		TextStreamWriter tsw=new TextStreamWriter(ff);
 		System.err.println("Starting tsw for "+fname);
 		tsw.start();
 		System.err.println("Started tsw for "+fname);
@@ -275,10 +277,10 @@ public class CalcTrueQuality {
 		System.err.println("Done.");
 	}
 	
-	public static void writeMatrix(String fname, long[][][] goodMatrix, long[][][] badMatrix, boolean overwrite){
+	public static void writeMatrix(String fname, long[][][] goodMatrix, long[][][] badMatrix, boolean overwrite, boolean append){
 		assert(fname!=null) : "No file specified";
-		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, false);
-		TextStreamWriter tsw=new TextStreamWriter(ff, false);
+		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, append, false);
+		TextStreamWriter tsw=new TextStreamWriter(ff);
 		System.err.println("Starting tsw for "+fname);
 		tsw.start();
 		System.err.println("Started tsw for "+fname);
@@ -315,10 +317,10 @@ public class CalcTrueQuality {
 		System.err.println("Done.");
 	}
 	
-	public static void writeMatrix(String fname, long[][] goodMatrix, long[][] badMatrix, boolean overwrite){
+	public static void writeMatrix(String fname, long[][] goodMatrix, long[][] badMatrix, boolean overwrite, boolean append){
 		assert(fname!=null) : "No file specified";
-		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, false);
-		TextStreamWriter tsw=new TextStreamWriter(ff, false);
+		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, append, false);
+		TextStreamWriter tsw=new TextStreamWriter(ff);
 		System.err.println("Starting tsw for "+fname);
 		tsw.start();
 		System.err.println("Started tsw for "+fname);
@@ -351,10 +353,10 @@ public class CalcTrueQuality {
 		System.err.println("Done.");
 	}
 	
-	public static void writeMatrix(String fname, long[] goodMatrix, long[] badMatrix, boolean overwrite){
+	public static void writeMatrix(String fname, long[] goodMatrix, long[] badMatrix, boolean overwrite, boolean append){
 		assert(fname!=null) : "No file specified";
-		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, false);
-		TextStreamWriter tsw=new TextStreamWriter(ff, false);
+		FileFormat ff=FileFormat.testOutput(fname, FileFormat.TEXT, null, false, overwrite, append, false);
+		TextStreamWriter tsw=new TextStreamWriter(ff);
 		System.err.println("Starting tsw for "+fname);
 		tsw.start();
 		System.err.println("Started tsw for "+fname);
@@ -954,6 +956,7 @@ public class CalcTrueQuality {
 	private String qhist="qhist.txt";
 	
 	private boolean overwrite=false;
+	private boolean append=false;
 	private long readsProcessed=0;
 	private long basesProcessed=0;
 	private long readsUsed=0;

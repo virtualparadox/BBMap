@@ -63,14 +63,14 @@ public class GradeSamFile {
 		}
 		
 		if(outl!=null){
-			ffLoose=FileFormat.testOutput(outl, FileFormat.SAM, null, false, true, true);
-			tswLoose=new TextStreamWriter(ffLoose, false);
+			ffLoose=FileFormat.testOutput(outl, FileFormat.SAM, null, false, true, false, true);
+			tswLoose=new TextStreamWriter(ffLoose);
 			tswLoose.start();
 		}
 		
 		if(outs!=null){
-			ffStrict=FileFormat.testOutput(outs, FileFormat.SAM, null, false, true, true);
-			tswStrict=new TextStreamWriter(ffStrict, false);
+			ffStrict=FileFormat.testOutput(outs, FileFormat.SAM, null, false, true, false, true);
+			tswStrict=new TextStreamWriter(ffStrict);
 			tswStrict.start();
 		}
 		

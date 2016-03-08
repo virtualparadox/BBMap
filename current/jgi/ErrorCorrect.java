@@ -20,6 +20,7 @@ import fileIO.FileFormat;
 import fileIO.ReadWrite;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 
 /**
@@ -48,6 +49,7 @@ public class ErrorCorrect extends Thread{
 		String output=null;
 		boolean ordered=true;
 		boolean overwrite=false;
+		boolean append=false;
 		
 		for(int i=2; i<args.length; i++){
 			final String arg=args[i];
@@ -99,6 +101,8 @@ public class ErrorCorrect extends Thread{
 //				verbose=KCountArray.verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else{
@@ -108,7 +112,7 @@ public class ErrorCorrect extends Thread{
 		
 		KCountArray kca=makeTable(reads1, reads2, k, cbits, gap, hashes, buildpasses, matrixbits, tablereads, buildStepsize, thresh1, thresh2);
 		
-		detect(reads1, reads2, kca, k, thresh2, maxReads, output, ordered, overwrite);
+		detect(reads1, reads2, kca, k, thresh2, maxReads, output, ordered, append, overwrite);
 		
 	}
 	
@@ -162,7 +166,7 @@ public class ErrorCorrect extends Thread{
 		return kca;
 	}
 	
-	public static void detect(String reads1, String reads2, KCountArray kca, int k, int thresh, long maxReads, String output, boolean ordered, boolean overwrite) {
+	public static void detect(String reads1, String reads2, KCountArray kca, int k, int thresh, long maxReads, String output, boolean ordered, boolean append, boolean overwrite) {
 
 		
 		final ConcurrentReadStreamInterface cris;
@@ -192,8 +196,8 @@ public class ErrorCorrect extends Thread{
 			
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, OUTPUT_INFO ? ".info" : null, true, overwrite, append, ordered);
 			ros=new RTextOutputStream3(ff1, ff2, buff, null, true);
 			
 			assert(!ff1.sam()) : "Sam files need reference info for the header.";

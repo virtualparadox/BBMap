@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 14, 2014"
+	echo "Last modified April 9, 2014"
 	echo ""
 	echo "Description:  Performs quality-trimming and/or kmer-trimming on reads."
 	echo ""
@@ -81,59 +81,24 @@ CP="$DIR""current/"
 
 z="-Xmx200m"
 z2="-Xms200m"
-EA="-da"
+EA="-ea"
 set=0
 
-parseXmx () {
-	for arg in "$@"
-	do
-		if [[ "$arg" == -Xmx* ]]; then
-			z="$arg"
-			set=1
-		elif [[ "$arg" == Xmx* ]]; then
-			z="-$arg"
-			set=1
-		elif [[ "$arg" == -Xms* ]]; then
-			z2="$arg"
-			set=1
-		elif [[ "$arg" == Xms* ]]; then
-			z2="-$arg"
-			set=1
-		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
-			EA="$arg"
-		fi
-	done
-}
 
 calcXmx () {
+	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
 		return
 	fi
-	
-	x=$(ulimit -v)
-	#echo "x=$x"
-	HOSTNAME=`hostname`
-	y=1
-	if [[ $x == unlimited ]]; then
-		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 1G." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
-		y=1000
+	freeRam 800m 30
+	if [ $RAM -ge 2000 ]; then
+		RAM=2000
+	elif [ 200 -ge $RAM ]; then
+		RAM=200
 	fi
-	
-	mult=30;
-
-	y=$(( ((x-20000)*mult/100)/1000 ))
-
-	if [ $y -ge 1500 ]; then
-		y=1500 
-	elif [ 200 -ge $y ]; then
-		y=200 
-	fi
-	
-	#echo "y=$y"
-	z="-Xmx${y}m"
+	z="-Xmx${RAM}m"
+	z2="-Xms${RAM}m"
 }
 calcXmx "$@"
 
@@ -146,7 +111,7 @@ bbduk() {
 	$CMD
 }
 
-if [ -z "$1" ]; then
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
 	usage
 	exit
 fi

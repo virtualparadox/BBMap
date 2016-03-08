@@ -12,6 +12,7 @@ import stream.FastaReadInputStream;
 import stream.RTextOutputStream3;
 import stream.Read;
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.Data;
@@ -110,6 +111,8 @@ public class MergeReadHeaders {
 				extout=b;
 			}else if(a.equals("trd") || a.equals("trc") || a.equals("trimreaddescription")){
 				Shared.TRIM_READ_COMMENTS=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
@@ -211,7 +214,7 @@ public class MergeReadHeaders {
 		}
 		
 		if(!setInterleaved){
-			assert(in1!=null && out1!=null) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
+			assert(in1!=null && (out1!=null || out2==null)) : "\nin1="+in1+"\nin2="+in2+"\nout1="+out1+"\nout2="+out2+"\n";
 			if(in2!=null){ //If there are 2 input streams.
 				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
@@ -227,8 +230,8 @@ public class MergeReadHeaders {
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
 		if(out2!=null && out2.equalsIgnoreCase("null")){out2=null;}
 		
-		if(!Tools.testOutputFiles(overwrite, false, out1, out2)){
-			throw new RuntimeException("\n\nOVERWRITE="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2)){
+			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
 		
@@ -244,8 +247,8 @@ public class MergeReadHeaders {
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, false);
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, false);
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
 
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
@@ -380,6 +383,7 @@ public class MergeReadHeaders {
 	private String extout=null;
 	
 	private boolean overwrite=false;
+	private boolean append=false;
 	private boolean colorspace=false;
 	
 	private long maxReads=-1;

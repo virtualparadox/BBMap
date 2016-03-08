@@ -12,24 +12,16 @@ import dna.Data;
 
 
 public class TextStreamWriter extends Thread {
-
-//	public TextStreamWriter(String fname_, boolean overwrite_){
-//		this(fname_, overwrite_, false, false, -1);
-//	}
-//	
-//	public TextStreamWriter(String fname_, boolean overwrite_, boolean append_){
-//		this(fname_, overwrite_, append_, false, -1);
-//	}
 	
 	public TextStreamWriter(String fname_, boolean overwrite_, boolean append_, boolean allowSubprocess_){
 		this(fname_, overwrite_, append_, allowSubprocess_, 0);
 	}
 	
 	public TextStreamWriter(String fname_, boolean overwrite_, boolean append_, boolean allowSubprocess_, int format){
-		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, true), append_);
+		this(FileFormat.testOutput(fname_, FileFormat.TEXT, format, 0, allowSubprocess_, overwrite_, append_, true));
 	}
 	
-	public TextStreamWriter(FileFormat ff, boolean append_){
+	public TextStreamWriter(FileFormat ff){
 		FASTQ=ff.fastq() || ff.text();
 		FASTA=ff.fasta();
 		BREAD=ff.bread();
@@ -42,15 +34,16 @@ public class TextStreamWriter extends Thread {
 		
 		fname=ff.name();
 		overwrite=ff.overwrite();
+		append=ff.append();
 		allowSubprocess=ff.allowSubprocess();
-		assert(!(overwrite&append_));
-		assert(append_ || ff.canWrite()) : "File "+fname+" exists and overwrite=="+overwrite;
-		if(append_ && !ff.raw()){throw new RuntimeException("Can't append to compressed files.");}
+		assert(!(overwrite&append));
+		assert(ff.canWrite()) : "File "+fname+" exists and overwrite=="+overwrite;
+		if(append && !(ff.raw() || ff.gzip())){throw new RuntimeException("Can't append to compressed files.");}
 		
 		if(!BAM || !Data.SAMTOOLS() || !Data.SH()){
-			myOutstream=ReadWrite.getOutputStream(fname, append_, true, allowSubprocess);
+			myOutstream=ReadWrite.getOutputStream(fname, append, true, allowSubprocess);
 		}else{
-			myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true);
+			myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, append);
 		}
 		myWriter=new PrintWriter(myOutstream);
 		
@@ -134,14 +127,8 @@ public class TextStreamWriter extends Thread {
 	}
 
 	public synchronized void poison(){
-		if(!open){return;}
-		addJob(buffer);
-		buffer=null;
-//		System.err.println("Poisoned!");
-//		assert(false);
-		
 		//Don't allow thread to shut down before it has started
-		while(this.getState()==Thread.State.NEW || !started){
+		while(!started || this.getState()==Thread.State.NEW){
 			try {
 				this.wait(20);
 			} catch (InterruptedException e) {
@@ -149,6 +136,13 @@ public class TextStreamWriter extends Thread {
 				e.printStackTrace();
 			}
 		}
+		
+		if(!open){return;}
+		addJob(buffer);
+		buffer=null;
+//		System.err.println("Poisoned!");
+//		assert(false);
+		
 //		assert(false) : open+", "+this.getState()+", "+started;
 		open=false;
 		addJob(POISON2);
@@ -191,6 +185,7 @@ public class TextStreamWriter extends Thread {
 	public int maxBufferLen=60000;
 	private int bufferLen=0;
 	public final boolean overwrite;
+	public final boolean append;
 	public final boolean allowSubprocess;
 	public final String fname;
 	private final OutputStream myOutstream;

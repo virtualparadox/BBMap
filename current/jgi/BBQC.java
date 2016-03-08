@@ -6,13 +6,13 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.TimeZone;
 
-import stream.FASTQ;
 import stream.Read;
 
 import dna.Data;
 import dna.Parser;
 
 import align2.BBMap;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -116,6 +116,8 @@ public class BBQC {
 				artifactFileDna=b;
 			}else if(a.equals("phixref")){
 				phixRef=b;
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
@@ -829,6 +831,7 @@ public class BBQC {
 	
 	private boolean verbose=false;
 	private boolean overwrite=true;
+	private boolean append=false;
 	private boolean compress=true;
 	
 	/** Arguments to pass to BBDuk */

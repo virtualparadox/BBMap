@@ -29,6 +29,12 @@ public final class LongList{
 		size=max(size, loc+1);
 	}
 	
+	public final void add(LongList b){
+		for(int i=b.size-1; i>=0; i--){
+			increment(i, b.get(i));
+		}
+	}
+	
 	public final long get(int loc){
 		return(loc>=size ? 0 : array[loc]);
 	}

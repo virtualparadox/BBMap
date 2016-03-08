@@ -255,6 +255,10 @@ public final class ByteBuilder {
 		return new String(array, 0, length);
 	}
 	
+	public final byte[] toBytes(){
+		return Arrays.copyOf(array, length);
+	}
+	
 	private final boolean isRoom(int x){
 		return array.length-length>=x;
 	}

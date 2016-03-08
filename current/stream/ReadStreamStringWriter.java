@@ -7,29 +7,9 @@ import fileIO.ReadWrite;
 
 public class ReadStreamStringWriter extends ReadStreamWriter {
 
+	@Deprecated
 	public ReadStreamStringWriter(String fname_, boolean read1_, int bufferSize, boolean allowSubprocess_){
-		this(fname_, read1_, bufferSize, false, false, false, false, false, false, false, false, allowSubprocess_);
-	}
-	
-//	public ReadStreamStringWriter(String fname_, boolean read1_, int bufferSize, 
-//			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout){
-//		this(fname_, null, read1_, bufferSize, outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout, false);
-//	}
-
-	public ReadStreamStringWriter(String fname_, boolean read1_, int bufferSize, 
-			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout,
-			boolean useSharedHeader, boolean allowSubprocess_){
-		super(fname_, null, read1_, bufferSize, 
-				outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout,
-				useSharedHeader, true, true, allowSubprocess_);
-	}
-
-	public ReadStreamStringWriter(String fname_, String qfname_, boolean read1_, int bufferSize, 
-			boolean outputSamFile, boolean outputBamFile, boolean fastq, boolean fasta, boolean sitesOnly, boolean attachment, boolean stdout,
-			boolean useSharedHeader, boolean allowSubprocess_){
-		super(fname_, qfname_, read1_, bufferSize, 
-				outputSamFile, outputBamFile, fastq, fasta, sitesOnly, attachment, stdout,
-				useSharedHeader, true, true, allowSubprocess_);
+		this(FileFormat.testOutput(fname_, FileFormat.BREAD, null, allowSubprocess_, false, false, true), null, read1_, bufferSize, null, false);
 	}
 	
 	public ReadStreamStringWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, boolean useSharedHeader){

@@ -21,6 +21,7 @@ import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
@@ -174,6 +175,8 @@ public class ReadKmerDepthDistribution {
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered=Tools.parseBoolean(b);
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("auto") || a.equals("automatic")){
@@ -512,8 +515,8 @@ public class ReadKmerDepthDistribution {
 			
 //			assert(false) : out1+", "+out2;
 			
-			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, "attachment", true, overwrite, ordered);
-			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, "attachment", true, overwrite, ordered);
+			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, "attachment", true, overwrite, append, ordered);
+			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, "attachment", true, overwrite, append, ordered);
 			rosKeep=new RTextOutputStream3(ff1, ff2, buff, null, true);
 		}
 		
@@ -1089,6 +1092,7 @@ public class ReadKmerDepthDistribution {
 	public static boolean FIX_SPIKES=true;
 	public static boolean ordered=false;
 	public static boolean overwrite=true;
+	public static boolean append=false;
 	public static boolean prefilter=false;
 
 	public static AtomicLong peaks=new AtomicLong();
