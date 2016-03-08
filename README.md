@@ -1,5 +1,9 @@
 # BBMap/BBTools
-(Not Offical) BBMap short read aligner for DNA/RNAseq, and other bioinformatic tools.
+
+(Not Offical) BBMap short read aligner for DNA/RNAseq, and other bioinformatic tools.  
+BBTools bioinformatics tools, including BBMap.
+
+I have moved those dozens of shell scripts from root to `./sh/` to make it tidy.
 
 * [SEQanswers Page](http://seqanswers.com/forums/showthread.php?t=41057)
 * [SourceForge Page](https://sourceforge.net/projects/bbmap/)
