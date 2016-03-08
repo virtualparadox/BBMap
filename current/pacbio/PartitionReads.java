@@ -98,6 +98,8 @@ public class PartitionReads {
 					outname2=b;
 					assert(!outname2.equalsIgnoreCase(outname1));
 				}
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				byte ascii_offset=Byte.parseByte(b);
 				FASTQ.ASCII_OFFSET=ascii_offset;

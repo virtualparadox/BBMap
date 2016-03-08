@@ -5,7 +5,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 function printtime() {
-	module load oracle-jdk/1.7_64bit
+	#module load oracle-jdk/1.7_64bit
 	local CMD="java -ea -Xmx8m -cp $CP align2.PrintTime $@"
 	echo $CMD >&2
 	$CMD

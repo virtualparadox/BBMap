@@ -144,7 +144,16 @@ public class BBQC {
 			}else if(a.equals("mink")){
 				mink=Integer.parseInt(b);
 			}else if(a.equals("k")){
-				k=Integer.parseInt(b);
+				assert(false) : "To specify kmer length, use filterk, trimk, mapk, or normalizek instead of just 'k'";
+				filter_k=Integer.parseInt(b);
+			}else if(a.equals("filterk")){
+				filter_k=Integer.parseInt(b);
+			}else if(a.equals("trimk")){
+				trim_k=Integer.parseInt(b);
+			}else if(a.equals("mapk")){
+				map_k=Integer.parseInt(b);
+			}else if(a.equals("normalizek") || a.equals("normk") || a.equals("ecck")){
+				normalize_k=Integer.parseInt(b);
 			}else if(a.equals("maq")){
 				maq=Byte.parseByte(b);
 			}else if(a.equals("trimq")){
@@ -395,7 +404,7 @@ public class BBQC {
 			if(maxNs>=0){argList.add("maxns="+maxNs);}
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
-			argList.add("k="+k);
+			argList.add("k="+filter_k);
 			argList.add("hdist=1");
 			
 			if(qtrim!=null && trimAfterFiltering){
@@ -491,6 +500,7 @@ public class BBQC {
 			argList.add("minhits=2");
 			argList.add("path="+humanPath);
 			argList.add("quickmatch");
+			argList.add("k="+map_k);
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -548,7 +558,7 @@ public class BBQC {
 				argList.add("qtrim="+qtrim);
 			}
 			if(minLen>0){argList.add("minlen="+minLen);}
-			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+			//if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 
 			argList.add("ecc="+ecc);
 			argList.add("aec="+aec);
@@ -560,6 +570,7 @@ public class BBQC {
 			argList.add("prehashes="+prehashes);
 			argList.add("hashes="+hashes);
 			argList.add("bits="+bits);
+			argList.add("k="+normalize_k);
 			if(normalize){
 				if(target>0){
 					argList.add("target="+target);
@@ -628,7 +639,7 @@ public class BBQC {
 			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
-			argList.add("k=23");
+			argList.add("k="+trim_k);
 			argList.add("hdist=1");
 			
 			//Pass along uncaptured arguments
@@ -816,19 +827,25 @@ public class BBQC {
 	/** Toss reads shorter than this fraction of initial length, after trimming */
 	private float minLenFraction=0.6f;
 	/** Trim bases at this quality or below */
-	private byte trimq=14;
+	private byte trimq=12;
 	/** Throw away reads below this average quality before trimming.  Default: 8 */
 	private byte maq=8;
 	/** Quality-trimming mode */
 	private String qtrim="rl";
 	/** Kmer-trimming mode */
 	private String ktrim="r";
-	/** Kmer to use for filtering */
-	private int k=27;
+	/** Kmer length to use for filtering */
+	private int filter_k=27;
+	/** Kmer length to use for trimming */
+	private int trim_k=23;
+	/** Kmer length to use for normalization and error-correction */
+	private int normalize_k=31;
+	/** Kmer length to use for mapping */
+	private int map_k=13;
 	/** Shortest kmer to use for trimming */
 	private int mink=11;
-	/** Throw away reads containing more than this many Ns.  Default: 0 (toss reads with any Ns) */
-	private int maxNs=5;
+	/** Throw away reads containing more than this many Ns.  Default: 1 */
+	private int maxNs=1;
 	
 	private boolean verbose=false;
 	private boolean overwrite=true;

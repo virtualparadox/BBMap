@@ -55,11 +55,11 @@ calcXmx () {
 calcXmx "$@"
 
 pileup() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP jgi.SamPileup $@"
 	echo $CMD >&2
 	$CMD
@@ -67,7 +67,7 @@ pileup() {
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified December 11, 2013"
+	echo "Last modified February 21, 2014"
 	echo ""
 	echo "Description:  Calculates per-scaffold coverage information from an unsorted sam file."
 	echo ""
@@ -87,9 +87,10 @@ usage(){
 	echo "twocolumn=<false> 	Change to true to print only ID and Avg_fold instead of all 6 columns to the 'out=' file."
 	echo "outsam=<file>		Prints the input sam stream to this file (or stdout).  Useful for piping data."
 	echo "hist=<file>		Prints a histogram of # occurrences of each depth level."
-	echo "basecov=<file>		Prints coverage per base location (excluding bases where coverage was the same as the previous base)."
+	echo "basecov=<file>		Prints coverage per base location."
 	echo "bincov=<file>		Prints binned coverage per location (one line per X bases)."
 	echo "binsize=<1000>		Set the binsize for binned coverage output."
+	echo "delta=<false>		Only print base coverage lines when the coverage differs from the previous base."
 	echo ""
 	echo "Other parameters:"
 	echo "32bit=<false>		Set to true if you need per-base coverage over 64k; does not affect per-scaffold coverage precision."

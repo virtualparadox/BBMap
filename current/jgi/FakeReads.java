@@ -138,6 +138,8 @@ public class FakeReads {
 				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -174,8 +176,13 @@ public class FakeReads {
 				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 				minReadLength=Integer.parseInt(b);
-			}else if(a.equals("length")){
+			}else if(a.equals("length") || a.equals("maxlen") || a.equals("length")){
 				desiredLength=Integer.parseInt(b);
+			}else if(a.equals("split")){
+				SPLITMODE=Tools.parseBoolean(b);
+			}else if(a.equals("overlap")){
+				SPLITMODE=true;
+				overlap=Integer.parseInt(b);
 			}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -313,6 +320,8 @@ public class FakeReads {
 						//Do nothing
 					}else{
 						int len=Tools.min(r.bases.length, desiredLength);
+						if(SPLITMODE){len=Tools.min(r.bases.length, r.bases.length/2+overlap);}
+						
 						byte[] bases1=Arrays.copyOfRange(r.bases, 0, len);
 						byte[] bases2=Arrays.copyOfRange(r.bases, r.bases.length-len, r.bases.length);
 						AminoAcid.reverseComplementBasesInPlace(bases2);
@@ -411,6 +420,8 @@ public class FakeReads {
 	private long maxReads=-1;
 	private int minReadLength=1;
 	private int desiredLength=250;
+	private int overlap=50;
+	private boolean SPLITMODE=false;
 	
 	private byte qin=-1;
 	private byte qout=-1;

@@ -576,7 +576,7 @@ public class SamPileup {
 	public static boolean NONZERO_ONLY=false;
 	public static boolean USE_COVERAGE_ARRAYS=true;
 	public static boolean USE_BITSETS=false;
-	public static boolean deltaOnly=true;
+	public static boolean deltaOnly=false;
 	/** Process secondary alignments */
 	public static boolean USE_SECONDARY=true;
 	public static boolean ABORT_ON_ERROR=true;

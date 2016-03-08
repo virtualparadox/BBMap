@@ -335,16 +335,28 @@ public class FastaReadInputStream extends ReadInputStream {
 		}
 		
 		byte[] r=new byte[bases];
+		
+//		if(Read.TO_UPPER_CASE){
+//			for(int i=bstart, j=0; j<bases; i++){
+//				assert(i<x);
+//				byte b=buffer[i];
+//				//			if(verbose){System.err.println("grabbed base "+(char)b+" = "+b);}
+//				if(b>slashr){
+//					r[j]=(b<91 ? b : (byte)(b-32));//Convert to upper case
+//					//				if(verbose){System.err.println("set to base "+(char)r[j]+" = "+r[j]);}
+//					j++;
+//				}
+//			}
+//		}else{
 		for(int i=bstart, j=0; j<bases; i++){
 			assert(i<x);
 			byte b=buffer[i];
-//			if(verbose){System.err.println("grabbed base "+(char)b+" = "+b);}
 			if(b>slashr){
-				r[j]=(b<91 ? b : (byte)(b-32));//Convert to upper case
-//				if(verbose){System.err.println("set to base "+(char)r[j]+" = "+r[j]);}
+				r[j]=b;
 				j++;
 			}
 		}
+//		}
 		
 		if(verbose){System.err.println("Fetched "+bases+" bases, open="+open+":\n'"+(r.length>1000 ? "*LONG*" : new String(r))+"'");}
 		

@@ -121,6 +121,8 @@ public class RemoveAdapters2 {
 				System.out.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+MINIMUM_ALIGNMENT_SCORE_RATIO);
 			}else if(a.equals("suspectratio")){
 				SUSPECT_RATIO=Float.parseFloat(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				byte ascii_offset=Byte.parseByte(b);
 				FASTQ.ASCII_OFFSET=ascii_offset;

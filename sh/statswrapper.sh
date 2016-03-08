@@ -16,8 +16,8 @@ calcXmx () {
 calcXmx "$@"
 
 stats() {
-	module unload oracle-jdk
-	module load oracle-jdk/1.7_64bit
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
 	local CMD="java -ea $z -cp $CP jgi.AssemblyStatsWrapper $@"
 	echo $CMD >&2
 	$CMD

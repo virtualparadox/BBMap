@@ -28,6 +28,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
+
+//import org.apache.tools.bzip2.CBZip2InputStream;//comment to disable BZip2
+//import org.apache.tools.bzip2.CBZip2OutputStream;//comment to disable BZip2
+
 import stream.ConcurrentReadStreamInterface;
 import stream.RTextOutputStream3;
 
@@ -373,11 +377,11 @@ public class ReadWrite {
 
 				out=gos;
 			}else if(bzipped){
-				throw new RuntimeException("bz2 compression not supported in public version.");
-//				out.write('B');
-//				out.write('Z');
-//				CBZip2OutputStream zos=new CBZip2OutputStream(out, 8192);
-//				out=zos;
+				throw new RuntimeException("bz2 compression not supported in this version.");
+//				out.write('B'); //comment to disable BZip2
+//				out.write('Z'); //comment to disable BZip2
+//				CBZip2OutputStream zos=new CBZip2OutputStream(out, 8192); //comment to disable BZip2
+//				out=zos; //comment to disable BZip2
 			}
 			//				else if(PROCESS_XZ && xz){
 			//					org.tukaani.xz.LZMA2Options options = new org.tukaani.xz.LZMA2Options();
@@ -486,7 +490,8 @@ public class ReadWrite {
 		if(verbose){System.err.println("getBZipOutputStream("+fname+", "+buffered+", "+allowSubprocess+")");}
 		final OutputStream raw=getRawOutputStream(fname, false, RAWMODE);
 		if(RAWMODE){return raw;}
-		throw new RuntimeException("bz2 compression not supported in public version.");
+		throw new RuntimeException("bz2 compression not supported in this version.");
+		//comment to disable BZip2
 //		try {
 //			raw.write('B');
 //			raw.write('Z');
@@ -1026,7 +1031,9 @@ public class ReadWrite {
 	
 	private static InputStream getBZipInputStream(String fname, boolean stripBZ) throws IOException{
 		if(verbose){System.err.println("getBZipInputStream("+fname+", "+stripBZ+")");}
-		throw new RuntimeException("bz2 compression not supported in public version.");
+		throw new RuntimeException("bz2 compression not supported in this version.");
+		
+		//comment to disable BZip2
 //		InputStream raw=getRawInputStream(fname, true);
 //		InputStream in=null;
 //		

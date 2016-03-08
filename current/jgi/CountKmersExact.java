@@ -260,6 +260,8 @@ public class CountKmersExact {
 				TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}

@@ -58,7 +58,7 @@ public final class SplitPairsAndSingles {
 		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
 		outstream.println("trimq=4            \tTrim quality threshold.");
 		outstream.println("minlen=2           \t(ml) Reads shorter than this after trimming will be discarded.");
-		outstream.println("ziplevel=20        \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
+		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
 		outstream.println("fixpairs=f         \t(fp, fint) Fixes corrupted interleaved files by examining paired read names.");
 		
 	}
@@ -173,6 +173,8 @@ public final class SplitPairsAndSingles {
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength") || a.equals("minreadlength")){
 				minReadLength=Integer.parseInt(b);
 				assert(minReadLength>=0) : "minReadLength must be at least 0";
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				if(b.equalsIgnoreCase("auto")){
 					FASTQ.DETECT_QUALITY=true;

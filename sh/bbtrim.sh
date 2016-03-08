@@ -12,19 +12,19 @@ calcXmx () {
 	y=1
 	if [[ $x == unlimited ]] || [[ $HOSTNAME == gpint* ]]; then
 		#echo "ram is unlimited"
-		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 2G." 1>&2
+		echo "This system does not have ulimit set, so max memory cannot be determined.  Attempting to use 1G." 1>&2
 		echo "If this fails, please set ulimit or run this program qsubbed or from a qlogin session on Genepool." 1>&2
-		y=2000
+		y=1000
 	fi
 	
-	mult=42;
+	mult=30;
 
 	y=$(( ((x-20000)*mult/100)/1000 ))
 
-	if [ $y -ge 15000 ]; then
-		y=15000
-	elif [ 100 -ge $y ]; then
-		y=100
+	if [ $y -ge 2500 ]; then
+		y=2500 
+	elif [ 200 -ge $y ]; then
+		y=200 
 	fi
 	
 	#echo "y=$y"
@@ -41,27 +41,24 @@ calcXmx "$@"
 
 bbduk() {
 	#module unload oracle-jdk
-	#module unload samtools
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
-	#module load samtools
-	local CMD="java -ea $z -cp $CP jgi.BBDukF $@"
+	local CMD="java -ea $z -cp $CP jgi.BBDukF k=23 mink=12 ktrim=r qtrim=rl trimq=10 mm=f $@"
 	echo $CMD >&2
 	$CMD
 }
 
 usage(){
 	echo "This script is designed for Genepool nodes."
-	echo "Last modified December 11, 2013"
+	echo "Last modified February 21, 2014"
 	echo ""
-	echo "Description:  Compares reads to the kmers in a reference dataset, optionally allowing an edit distance."
-	echo "Splits the reads into two outputs - those that match the reference, and those that don't."
-	echo "Can also trim (remove) the matching parts of the reads rather than binning the reads."
+	echo "Description:  Performs quality-trimming and/or kmer-trimming on reads."
 	echo ""
-	echo "Usage:	bbduk.sh in=<input file> out=<output file> ref=<contaminant files>"
+	echo "Usage:	bbduk.sh in=<input file> out=<output file> ref=<adapter files> trimq=10"
 	echo ""
 	echo "Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed."
 	echo "Output may be stdout or a file."
+	echo "ref is optional, but may be a comma-delimited list of adapter/primer/linker fasta files."
 	echo "If you pipe via stdin/stdout, please include the file type; e.g. for gzipped fasta input, set in=stdin.fa.gz"
 	echo ""
 	echo "Optional parameters (and their defaults)"
@@ -77,12 +74,10 @@ usage(){
 #	echo "skipreads=0      	Ignore this many initial reads (or pairs) and process the rest."
 	echo ""
 	echo "Output parameters:"
-	echo "out=<file>       	(outnonmatch) Write reads here that do not contain kmers matching the database.  'out=stdout.fq' will pipe to standard out."
-	echo "out2=<file>      	(outnonmatch2) Use this to write 2nd read of pairs to a different file."
-	echo "outmatch=<file>    	(outm or outb) Write reads here that contain kmers matching the database."
-	echo "outmatch2=<file>   	(outm2 or outb2) Use this to write 2nd read of pairs to a different file."
-	echo "stats=<file>     	Write statistics about which contamininants were detected."
-	echo "duk=<file>       	Write statistics in duk's format."
+	echo "out=<file>       	Write good reads here.  'out=stdout.fq' will pipe to standard out."
+	echo "out2=<file>      	Use this to write 2nd read of pairs to a different file."
+	echo "outbad=<file>    	(outb) Write reads here that were trimmed to shorter than minlen."
+	echo "outbad2=<file>   	(outb2) Use this to write 2nd read of pairs to a different file."
 	echo "overwrite=t      	(ow) Set to false to force the program to abort rather than overwrite an existing file."
 	echo "showspeed=t      	(ss) Set to 'f' to suppress display of processing speed."
 	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
@@ -91,10 +86,7 @@ usage(){
 	echo ""
 	echo "Processing parameters:"
 	echo "threads=auto     	(t) Set number of threads to use; default is number of logical processors."
-	echo "k=28             	Kmer length used for finding contaminants.  Contaminants shorter than k will not be found.  k must be at least 1."
 	echo "rcomp=t            	Look for reverse-complements of kmers in addition to forward kmers."
-	echo "maskmiddle=t     	(mm) Treat the middle base of a kmer as a wildcard, to increase sensitivity in the presence of errors."
-	echo "maxbadkmers=0    	(mbk) Reads with more than this many contaminant kmers will be discarded."
 	echo "hammingdistance=0	(hdist) Maximum Hamming distance from ref kmers (subs only).  Memory use is proportional to (3*K)^hdist."
 	echo "editdistance=0   	(edist) Maximum edit distance from ref kmers (subs and indels).  Memory use is proportional to (8*K)^edist."
 	echo "forbidn=f     	  	(fn) Forbids matching of read kmers containing N.  By default, these will match a reference 'A' if hdist>0 or edist>0, to increase sensitivity."
@@ -104,14 +96,15 @@ usage(){
 	echo "removeifeitherbad=t	(rieb) Paired reads get sent to 'outmatch' if either is match (or either is trimmed shorter than minlen).  Set to false to require both."
 	echo ""
 	echo "Trimming parameters:"
-	echo "ktrim=f          	Trim reads to remove bases matching reference kmers."
-	echo "                 	Values: f (don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming)."
+	echo "k=25             	Kmer length used for finding contaminants.  Contaminants shorter than k will not be found.  k must be at least 1."
+	echo "ktrim=r          	Trim reads to remove bases matching reference kmers."
+	echo "                 	Values: f (filter, don't trim), r (trim right end), l (trim left end), n (convert to N instead of trimming)."
 	echo "                 	Any single non-whitespace character other than t, f, r, l, n: convert to that symbol rather than trimming."
-	echo "useshortkmers=f  	(usk) Look for shorter kmers at read tips (only for k-trimming).  Enabling this will disable maskmiddle."
-	echo "mink=4           	Minimum length of short kmers.  Setting this automatically sets useshortkmers=t."
+	echo "useshortkmers=t  	(usk) Look for shorter kmers at read tips (only for k-trimming).  Enabling this will disable maskmiddle."
+	echo "mink=12           	Minimum length of short kmers.  Setting this automatically sets useshortkmers=t."
 	echo "qtrim=f          	Trim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers."
 	echo "                 	Values: t (trim both ends), f (neither end), r (right end only), l (left end only)."
-	echo "trimq=4           	Trim quality threshold."
+	echo "trimq=10           	Trim quality threshold."
 	echo "minlength=20     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
 	echo "minavgquality=0  	(maq) Reads with average quality (before trimming) below this will be discarded."
 	echo "otm=f            	(outputtrimmedtomatch) Output reads trimmed to shorter than minlength to outm rather than discarding."

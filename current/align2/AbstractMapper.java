@@ -118,6 +118,8 @@ public abstract class AbstractMapper {
 		Timer t=new Timer();
 		t.start();
 		
+		Read.TO_UPPER_CASE=true;
+		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
 			final String[] split=arg.split("=");
@@ -298,6 +300,8 @@ public abstract class AbstractMapper {
 				TRIM_LEFT=Tools.parseBoolean(b);
 			}else if(a.equals("trimq") || a.equals("trimquality")){
 				TRIM_QUALITY=Byte.parseByte(b);
+			}else if(a.equals("mintl") || a.equals("mintrimlen") || a.equals("mintrimlength")){
+				MIN_TRIM_LENGTH=Integer.parseInt(b);
 			}else if(a.equals("q102matrix") || a.equals("q102m")){
 				CalcTrueQuality.q102matrix=b;
 			}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
@@ -448,6 +452,8 @@ public abstract class AbstractMapper {
 			}else if(a.equals("minratio")){
 				MINIMUM_ALIGNMENT_SCORE_RATIO=Float.parseFloat(b);
 				sysout.println("Set MINIMUM_ALIGNMENT_SCORE_RATIO to "+String.format("%.3f",MINIMUM_ALIGNMENT_SCORE_RATIO));
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				if(b.equalsIgnoreCase("auto")){
 					FASTQ.DETECT_QUALITY=true;
@@ -2423,6 +2429,8 @@ public abstract class AbstractMapper {
 	static boolean UNTRIM=false;
 	/** Trim bases with quality less than or equal to this value */
 	static byte TRIM_QUALITY=7;
+	/** Don't trim reads to be shorter than this */
+	static int MIN_TRIM_LENGTH=60;
 	/** Produce local alignments instead of global alignments */
 	static boolean LOCAL_ALIGN=false;
 	

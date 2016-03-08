@@ -54,9 +54,9 @@ calcXmx () {
 calcXmx "$@"
 
 khist() {
-	module unload oracle-jdk
-	module load oracle-jdk/1.7_64bit
-	module load pigz
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
 	local CMD="java -ea $z -cp $CP jgi.KmerNormalize bits=32 ecc=f passes=1 keepall dr=f prefilter hist=stdout minprob=0 minqual=0 mindepth=0 minkmers=1 hashes=3 $@"
 	echo $CMD >&2
 	$CMD

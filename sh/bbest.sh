@@ -5,11 +5,11 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 function bbest() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load samtools
-	module load pigz
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load samtools
+	#module load pigz
 	local CMD="java -ea -Xmx64m -cp $CP jgi.SamToEst $@"
 #	echo $CMD >&2
 	$CMD

@@ -11,7 +11,7 @@ public class Shared {
 
 	public static int READ_BUFFER_LENGTH=200;
 	public static int READ_BUFFER_NUM_BUFFERS=Tools.max(4, (THREADS*3)/2);
-	public static final long READ_BUFFER_MAX_DATA=500000;
+	public static final long READ_BUFFER_MAX_DATA=400000;
 	
 	//TODO:  Actually... for some reason...  it seems as though GAPBUFFER must equal exactly 1/2 of GAPLEN.  Not good; 1/4 would be far better.
 	
@@ -23,7 +23,7 @@ public class Shared {
 	public static final byte GAPC='-';
 
 	public static int BBMAP_VERSION=31;
-	public static int BBMAP_VERSION_MINOR=27;
+	public static int BBMAP_VERSION_MINOR=32;
 	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
 
 	public static boolean TRIM_READ_COMMENTS=false;

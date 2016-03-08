@@ -180,7 +180,7 @@ public class IndexMaker4 {
 					}
 				}
 			}
-			Data.sysout.println("Indexing threads finished.");
+			Data.sysout.println("Indexing threads finished for block "+baseChrom(minChrom)+"-"+maxChrom);
 			
 			for(int i=sizes.length-2; i>=0; i--){
 				sizes[i+1]=sizes[i];

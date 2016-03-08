@@ -145,6 +145,8 @@ public class ReformatReads {
 				parsecustom=Tools.parseBoolean(b);
 			}else if(a.equals("testsize")){
 				testsize=Tools.parseBoolean(b);
+			}else if(a.equals("addslash")){
+				addslash=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
 				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("fastareadlen") || a.equals("fastareadlength")){
@@ -154,6 +156,8 @@ public class ReformatReads {
 				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -179,6 +183,8 @@ public class ReformatReads {
 				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
 			}else if(a.equals("tuc") || a.equals("touppercase")){
 				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
+			}else if(a.equals("lctn") || a.equals("lowercaseton")){
+				Read.LOWER_CASE_TO_N=Tools.parseBoolean(b);
 			}else if(a.equals("tossbrokenreads") || a.equals("tbr")){
 				boolean x=Tools.parseBoolean(b);
 				Read.NULLIFY_BROKEN_QUALITY=x;
@@ -578,6 +584,14 @@ public class ReformatReads {
 					}
 					
 					if(remove){reads.set(idx, null);}
+					else if(addslash){
+						if(r1.id==null){r1.id=" "+r1.numericID;}
+						if(!r1.id.contains(" /1")){r1.id+=" /1";}
+						if(r2!=null){
+							if(r2.id==null){r2.id=" "+r2.numericID;}
+							if(!r2.id.contains(" /2")){r2.id+=" /2";}
+						}
+					}
 				}
 				
 //				assert(false) : sampleReadsExact+", "+sampleBasesExact;
@@ -775,6 +789,8 @@ public class ReformatReads {
 	private boolean verifyinterleaving=false;
 	private boolean fixinterleaving=false;
 	private boolean colorspace=false;
+	/** Add /1 and /2 to paired reads */
+	private boolean addslash=false;
 	
 	private long maxReads=-1;
 //	private int passes=1;

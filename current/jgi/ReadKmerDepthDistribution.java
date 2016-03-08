@@ -179,6 +179,8 @@ public class ReadKmerDepthDistribution {
 				auto=Tools.parseBoolean(b);
 			}else if(a.startsWith("parsecustom")){
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				if(b.equalsIgnoreCase("auto")){
 					FASTQ.DETECT_QUALITY=true;

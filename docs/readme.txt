@@ -200,6 +200,13 @@ Reduced Shared.READ_BUFFER_LENGTH from 500 to 200 and Shared.READ_BUFFER_MAX_DAT
 Noticed small bug in trimming; somehow a read had a 'T' with quality 0, which triggered assertion error.  I disabled the assertion but I'm not sure how it happened.
 Fixed bug in which pigz was not used to decompress fasta files.
 All program message information now defaults to stderr.
+Added "ignorebadquality" (ibq) flag for reads with out-of-range quality.
+TODO: mask by information content
+Added "mtl"/"mintrimlength" flag (default 60).  Reads will not be trimmed shorter than that.
+Made 'tuc' (to uppercase) default to true for bbmap, to prevent assertion errors.  Reads MUST be uppercase to match reference.
+Added new tool, BBMask.
+Reads and SamLines can now be created with null bases.  
+SamLines to Read is now faster, skipping colorspace check.
 
 v30.
 Disabled compression/decompression subprocesses when total system threads allowed is less than 3.

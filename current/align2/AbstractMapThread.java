@@ -26,7 +26,7 @@ public abstract class AbstractMapThread extends Thread {
 	AbstractMapThread(ConcurrentReadStreamInterface cris_, 
 			RTextOutputStream3 outStream_, RTextOutputStream3 outStreamMapped_, RTextOutputStream3 outStreamUnmapped_, RTextOutputStream3 outStreamBlack_,
 			boolean colorspace_, boolean SLOW_ALIGN_, boolean LOCAL_ALIGN_, boolean AMBIGUOUS_TOSS_, 
-			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int THRESH_, 
+			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int MIN_TRIM_LEN_, int THRESH_, 
 			int minChrom_, int maxChrom_, int KFILTER_, boolean KILL_BAD_PAIRS_, boolean SAVE_AMBIGUOUS_XY_,
 			boolean translateToBaseSpace_, boolean REQUIRE_CORRECT_STRANDS_PAIRS_,
 			boolean SAME_STRAND_PAIRS_, boolean DO_RESCUE_, boolean STRICT_MAX_INDEL_, int SLOW_ALIGN_PADDING_, int SLOW_RESCUE_PADDING_,
@@ -54,6 +54,7 @@ public abstract class AbstractMapThread extends Thread {
 		TRIM_RIGHT=TRIM_RIGHT_;
 		UNTRIM=UNTRIM_;
 		TRIM_QUAL=TRIM_QUAL_;
+		TRIM_MIN_LENGTH=MIN_TRIM_LEN_;
 		THRESH=THRESH_;
 		minChrom=minChrom_;
 		maxChrom=maxChrom_;
@@ -159,7 +160,7 @@ public abstract class AbstractMapThread extends Thread {
 		GENERATE_KEY_SCORES_FROM_QUALITY=AbstractIndex.GENERATE_KEY_SCORES_FROM_QUALITY;
 		readstats=(ReadStats.COLLECT_MATCH_STATS || ReadStats.COLLECT_QUALITY_STATS || ReadStats.COLLECT_INSERT_STATS ? new ReadStats() : null);
 		
-		
+//		assert(false) : "READ_BUFFER_NUM_BUFFERS="+Shared.READ_BUFFER_NUM_BUFFERS+", READ_BUFFER_LENGTH="+Shared.READ_BUFFER_LENGTH;
 	}
 	
 	public abstract int ALIGN_COLUMNS();
@@ -2582,7 +2583,7 @@ public abstract class AbstractMapThread extends Thread {
 	/** Trim until 2 consecutive bases are encountered with at least this quality. */
 	protected final byte TRIM_QUAL;
 	/** Don't trim reads to be shorter than this */
-	protected final int TRIM_MIN_LENGTH=30;
+	protected final int TRIM_MIN_LENGTH;
 	/** Distance cutoff for classifying a read as loosely correct */
 	protected final int THRESH;
 	/** Semi-deprecated.  Minimum chrom to index or load. */

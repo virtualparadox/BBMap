@@ -5,10 +5,10 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 function gradesam() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load samtools
 	local CMD="java -ea -Xmx200m -cp $CP align2.GradeSamFile $@"
 #	echo $CMD >&2
 	$CMD

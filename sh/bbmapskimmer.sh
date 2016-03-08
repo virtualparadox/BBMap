@@ -53,11 +53,11 @@ calcXmx () {
 calcXmx "$@"
 
 mapPacBioSkimmer() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP align2.BBMapPacBioSkimmer build=1 overwrite=true minratio=0.40 match=long fastareadlen=6000 dprr=false ambiguous=best minscaf=100 startpad=10000 stoppad=10000 midpad=6000 $@"
 	echo $CMD >&2
 	$CMD

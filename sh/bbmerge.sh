@@ -16,11 +16,11 @@ calcXmx () {
 calcXmx "$@"
 
 function merge() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP jgi.MateReadsMT $@"
 	echo $CMD >&2
 	$CMD

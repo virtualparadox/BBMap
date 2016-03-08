@@ -16,10 +16,10 @@ calcXmx () {
 calcXmx "$@"
 
 samtoroc() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load samtools
 	local CMD="java -ea $z -cp $CP align2.MakeRocCurve $@"
 #	echo $CMD >&2
 	$CMD

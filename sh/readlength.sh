@@ -5,8 +5,8 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
 stats() {
-	module unload oracle-jdk
-	module load oracle-jdk/1.7_64bit
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
 	local CMD="java -ea -Xmx120m -cp $CP jgi.MakeLengthHistogram $@"
 #	echo $CMD >&2
 	$CMD

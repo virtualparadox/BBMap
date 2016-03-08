@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.LinkedHashMap;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -61,6 +62,7 @@ public class BBMask{
 		ReadWrite.MAX_ZIP_THREADS=16;
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+		boolean setEntropyMode=false;
 
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -112,10 +114,17 @@ public class BBMask{
 			}else if(a.equals("bf2")){
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
+			}else if(a.equals("entropymode")){
+				entropyMode=Tools.parseBoolean(b);
+				setEntropyMode=true;
+			}else if(a.equals("maskrepeats") || a.equals("mr")){
+				processRepeats=Tools.parseBoolean(b);
+			}else if(a.equals("masklowentropy") || a.equals("masklowcomplexity") || a.equals("mlc") || a.equals("mle") || a.equals("me")){
+				processEntropy=Tools.parseBoolean(b);
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1") || a.equals("ref")){
 				inRef=b;
 			}else if(a.equals("insam") || a.equals("samin") || a.equals("sam")){
-				inSam=b.split(",");
+				inSam=(b==null || b.equalsIgnoreCase("null")) ? null : b.split(",");
 			}else if(a.equals("out") || a.equals("output") || a.equals("out1") || a.equals("output1") || a.equals("output1")){
 				outRef=b;
 			}else if(a.equals("qfin") || a.equals("qfin1")){
@@ -132,6 +141,22 @@ public class BBMask{
 				maxk=Integer.parseInt(b);
 			}else if(a.equals("k")){	
 				mink=maxk=Integer.parseInt(b);
+			}else if(a.equals("mink2") || a.equals("kmin2")){	
+				mink2=Integer.parseInt(b);
+			}else if(a.equals("maxk2") || a.equals("kmax2")){	
+				maxk2=Integer.parseInt(b);
+			}else if(a.equals("k2")){	
+				mink2=maxk2=Integer.parseInt(b);
+			}else if(a.equals("window")){	
+				window=Integer.parseInt(b);
+			}else if(a.equals("ratio")){	
+				ratio=Float.parseFloat(b);
+				if(!setEntropyMode){entropyMode=false;}
+			}else if(a.equals("entropy")){	
+				entropyCutoff=Float.parseFloat(b);
+				if(!setEntropyMode){entropyMode=true;}
+			}else if(a.equals("lowercase") || a.equals("lc")){	
+				MaskByLowercase=Tools.parseBoolean(b);
 			}else if(a.equals("minlen")){	
 				minlen=Integer.parseInt(b);
 			}else if(a.equals("mincount")){	
@@ -149,6 +174,8 @@ public class BBMask{
 				FastaReadInputStream.MIN_READ_LEN=Integer.parseInt(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -183,11 +210,14 @@ public class BBMask{
 			}else if(a.startsWith("minscaf") || a.startsWith("mincontig")){
 				int x=Integer.parseInt(b);
 				stream.FastaReadInputStream.MIN_READ_LEN=(x>0 ? x : Integer.MAX_VALUE);
-			}else if(inRef==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
+			}
+			else if(inRef==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				inRef=arg;
-			}else if(outRef==null && i==1 && !arg.contains("=")){
-				outRef=arg;
-			}else{
+			}
+//			else if(outRef==null && i==1 && !arg.contains("=")){
+//				outRef=arg;
+//			}
+			else{
 				System.err.println("Unknown parameter "+args[i]);
 				assert(false) : "Unknown parameter "+args[i];
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
@@ -205,9 +235,9 @@ public class BBMask{
 			ByteFile.FORCE_MODE_BF2=true;
 		}
 
-		if(outRef==null){
-			outRef="stdout";
-		}
+//		if(outRef==null){
+//			outRef="stdout.fa";
+//		}
 
 		if(outRef!=null && outRef.equalsIgnoreCase("null")){outRef=null;}
 
@@ -229,7 +259,7 @@ public class BBMask{
 			FASTQ.ASCII_OFFSET_OUT=qout;
 			FASTQ.DETECT_QUALITY_OUT=false;
 		}
-
+		
 		ffoutRef=FileFormat.testOutput(outRef, FileFormat.FASTA, extoutRef, true, overwrite, false);
 
 		ffinRef=FileFormat.testInput(inRef, FileFormat.FASTA, extinRef, true, true);
@@ -244,7 +274,24 @@ public class BBMask{
 		}
 		
 		SamLine.CONVERT_CIGAR_TO_MATCH=false;
+		
+
+		if(window>0){
+			entropy=new double[window+2];
+			double mult=1d/window;
+			for(int i=0; i<entropy.length; i++){
+				double pk=i*mult;
+				entropy[i]=pk*Math.log(pk);
+			}
+			entropyMult=-1/Math.log(window);
+		}else{
+			entropy=null;
+			entropyMult=0;
+		}
+		
 	}
+	
+	/*--------------------------------------------------------------*/
 
 
 	public void process(Timer t0){
@@ -252,15 +299,18 @@ public class BBMask{
 		Timer t=new Timer();
 		{
 			t.start();
+			outstream.println("Loading input");
 			map=hashRef();
 			t.stop();
-//			outstream.println("Loaded "+repeats+" repeat bases in "+t);
+			outstream.println("Loading Time:                 \t"+t);
 		}
 		
-		long repeats=0, mapping=0;
+		long repeats=0, mapping=0, lowcomplexity=0;
 
-		if(maxk>0){
+		if(processRepeats && maxk>0){
 			t.start();
+			outstream.println("\nMasking repeats (to disable, set 'mr=f')");
+//			repeats=maskRepeats_ST();
 			repeats=maskRepeats();
 			t.stop();
 			
@@ -275,14 +325,44 @@ public class BBMask{
 			while(bpstring.length()<12){bpstring=" "+bpstring;}
 			while(bmstring.length()<12){bmstring=" "+bmstring;}
 	
-			outstream.println("Time:                         \t"+t);
-			outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format("%.2fk scafs/sec", rpnano*1000000));
+			outstream.println("Repeat Masking Time:          \t"+t);
+			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format("%.2fk scafs/sec", rpnano*1000000));
 			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 			outstream.println("Repeat Bases Masked:    "+bmstring);
+		}
+
+		if(processEntropy && maxk2>0){
+			t.start();
+			if(entropyMode){
+				outstream.println("\nMasking low-entropy (to disable, set 'mle=f')");
+//				lowcomplexity=maskLowEntropy_ST(null);
+				lowcomplexity=maskLowEntropy();
+			}else{
+				outstream.println("\nMasking low-complexity (to disable, set 'mlc=f')");
+				lowcomplexity=maskLowComplexity(null);
+			}
+			t.stop();
+			
+			double rpnano=refReads/(double)(t.elapsed);
+			double bpnano=refBases/(double)(t.elapsed);
+			
+			String rpstring=""+refReads;
+			String bpstring=""+refBases;
+			String bmstring=""+lowcomplexity;
+	
+			while(rpstring.length()<12){rpstring=" "+rpstring;}
+			while(bpstring.length()<12){bpstring=" "+bpstring;}
+			while(bmstring.length()<12){bmstring=" "+bmstring;}
+	
+			outstream.println("Low Complexity Masking Time:  \t"+t);
+			//outstream.println("Ref Scaffolds:          "+rpstring+" \t"+String.format("%.2fk scafs/sec", rpnano*1000000));
+			outstream.println("Ref Bases:              "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
+			outstream.println("Low Complexity Bases:   "+bmstring);
 		}
 		
 		if(ffinSam!=null){
 			t.start();
+			outstream.println("\nMasking from sam");
 			mapping=maskSam();
 			t.stop();
 			
@@ -296,28 +376,30 @@ public class BBMask{
 			while(rpstring.length()<12){rpstring=" "+rpstring;}
 			while(bpstring.length()<12){bpstring=" "+bpstring;}
 			while(bmstring.length()<12){bmstring=" "+bmstring;}
-	
-			outstream.println("Time:                         \t"+t);
+			
+			outstream.println("Sam Masking Time:             \t"+t);
 			outstream.println("Sam Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 			outstream.println("Sam Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 			outstream.println("Sam Bases Masked:       "+bmstring);
 		}
-		long total=repeats+mapping, masked=0;
+		long total=repeats+mapping+lowcomplexity, masked=0;
 		
 		if(total>0 || true){
-			masked=maskFromBitsets();
+			masked=maskFromBitsets(MaskByLowercase);
 		}
 		
-		assert(total==masked) : repeats+", "+mapping+", "+total+", "+masked;
+		assert(total==masked) : repeats+", "+mapping+", "+lowcomplexity+", "+total+", "+masked;
 		
-		{
+		if(outRef!=null){
+			outstream.println("\nWriting output");
 			writeOutput();
+		}
+		{
 			t0.stop();
 			String tstring=""+total;
 			while(tstring.length()<12){tstring=" "+tstring;}
-			outstream.println("\nTotal Bases Masked:     "+tstring+"/"+refBases);
-			outstream.println("Total Time:                   \t"+t);
-//			outstream.println("Total Time:             "+t0);
+			outstream.println("\nTotal Bases Masked:     "+tstring+"/"+refBases+String.format("\t%.3f%%", total*100.0/refBases));
+			outstream.println("Total Time:                   \t"+t0);
 		}
 		
 		
@@ -327,20 +409,40 @@ public class BBMask{
 		}
 	}
 	
-	private long maskFromBitsets(){
+	/*--------------------------------------------------------------*/
+	
+	private long maskFromBitsets(final boolean lowercase){
+		System.err.println("\nConverting masked bases to "+(lowercase ? "lower case" : "N")); //123
 		long sum=0;
-		for(Read r : map.values()){
-			BitSet bs=((BitSet)r.obj);
-			byte[] bases=r.bases;
-			for(int i=0; i<bases.length; i++){
-				if(bs.get(i)){
-					if(bases[i]!='N'){sum++;}
-					bases[i]='N';
-				}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
-					bases[i]='N';
+		if(!lowercase){
+			for(Read r : map.values()){
+//				System.err.println(r.id); //123
+				BitSet bs=((BitSet)r.obj);
+				byte[] bases=r.bases;
+				for(int i=0; i<bases.length; i++){
+					if(bs.get(i)){
+						if(bases[i]!='N'){sum++;}
+						bases[i]='N';
+					}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
+						bases[i]='N';
+					}
+				}
+			}
+		}else{
+			for(Read r : map.values()){
+				BitSet bs=((BitSet)r.obj);
+				byte[] bases=r.bases;
+				for(int i=0; i<bases.length; i++){
+					if(bs.get(i)){
+						if(!Character.isLowerCase(bases[i]) && bases[i]!='N'){sum++;}
+						bases[i]=(byte)Character.toLowerCase(bases[i]);
+					}else if(CONVERT_NON_ACGTN && !AminoAcid.isACGTN(bases[i])){
+						bases[i]='N';
+					}
 				}
 			}
 		}
+		System.err.println("Done Masking");
 		return sum;
 	}
 	
@@ -364,13 +466,7 @@ public class BBMask{
 		errorState|=ReadWrite.closeStream(ros);
 	}
 	
-	private long maskRepeats(){
-		long sum=0;
-		for(Read r : map.values()){
-			sum+=maskRepeats(r, mink, maxk, mincount, minlen);
-		}
-		return sum;
-	}
+	/*--------------------------------------------------------------*/
 	
 	private long maskSam(){
 		long before=0, after=0;
@@ -378,7 +474,8 @@ public class BBMask{
 			before+=((BitSet)r.obj).cardinality();
 		}
 		for(FileFormat ff : ffinSam){
-			maskSam(ff);
+			//maskSam_ST(ff);
+			maskSam_MT(ff);
 		}
 		for(Read r : map.values()){
 			after+=((BitSet)r.obj).cardinality();
@@ -386,7 +483,7 @@ public class BBMask{
 		return after-before;
 	}
 	
-	private void maskSam(FileFormat ff){
+	private void maskSam_MT(FileFormat ff){
 		
 		final ConcurrentReadStreamInterface cris;
 		final Thread cristhread;
@@ -396,6 +493,68 @@ public class BBMask{
 			cristhread=new Thread(cris);
 			cristhread.start();
 		}
+		
+		MaskSamThread[] threads=new MaskSamThread[Shared.THREADS];
+//		outstream.println("Spawning "+numThreads+" threads.");
+		for(int i=0; i<threads.length; i++){threads[i]=new MaskSamThread(cris);}
+		for(int i=0; i<threads.length; i++){threads[i].start();}
+		for(int i=0; i<threads.length; i++){
+			while(threads[i].getState()!=Thread.State.TERMINATED){
+				try {
+					threads[i].join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+
+		errorState|=ReadWrite.closeStreams(cris);
+
+		if(errorState){
+			throw new RuntimeException("BBMask terminated in an error state; the output may be corrupt.");
+		}
+	}
+	
+	private class MaskSamThread extends Thread{
+		
+		MaskSamThread(ConcurrentReadStreamInterface cris_){
+			cris=cris_;
+		}
+		
+		@Override
+		public void run(){
+			maskSam(cris);
+		}
+		
+		final ConcurrentReadStreamInterface cris;
+		
+	}
+	
+	private void maskSam_ST(FileFormat ff){
+		
+		final ConcurrentReadStreamInterface cris;
+		final Thread cristhread;
+		{
+			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, colorspace, false, ff, null, null, null);
+			if(verbose){System.err.println("Started cris");}
+			cristhread=new Thread(cris);
+			cristhread.start();
+		}
+		
+		maskSam(cris);
+
+		errorState|=ReadWrite.closeStreams(cris);
+
+		if(errorState){
+			throw new RuntimeException("BBMask terminated in an error state; the output may be corrupt.");
+		}
+	}
+	
+	private void maskSam(ConcurrentReadStreamInterface cris){
+		
+		long samReads=0;
+		long samBases=0;
 		
 		{
 
@@ -421,7 +580,6 @@ public class BBMask{
 							assert(rname!=null) : "No rname for sam line "+sl;
 							Read ref=map.get(new String(rname));
 							assert(ref!=null) : "Could not find reference scaffold '"+rname+"' for samline \n"+sl+"\n in set \n"+map.keySet()+"\n";
-							byte[] bases=ref.bases;
 							BitSet bs=(BitSet)ref.obj;
 							int start=Tools.max(0, sl.start());
 							int stop=Tools.min(sl.stop()+1, ref.bases.length);
@@ -439,13 +597,14 @@ public class BBMask{
 				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
 			}
 		}
-
-		errorState|=ReadWrite.closeStreams(cris);
-
-		if(errorState){
-			throw new RuntimeException("ReformatReads terminated in an error state; the output may be corrupt.");
+		
+		synchronized(this){
+			this.samBases+=samBases;
+			this.samReads+=samReads;
 		}
 	}
+	
+	/*--------------------------------------------------------------*/
 
 	private LinkedHashMap<String, Read> hashRef(){
 
@@ -470,10 +629,23 @@ public class BBMask{
 
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r=reads.get(idx);
+					final byte[] bases=r.bases;
 
-					final int initialLength1=(r.bases==null ? 0 : r.bases.length);
+					final int initialLength1=(bases==null ? 0 : bases.length);
 
-					r.obj=new BitSet(initialLength1);
+					final BitSet bs=new BitSet(initialLength1);
+					r.obj=bs;
+					
+					if(MaskByLowercase){
+						for(int i=0; i<bases.length; i++){
+							if(bases[i]=='N' || Character.isLowerCase(bases[i])){bs.set(i);}
+						}
+					}else{
+						for(int i=0; i<bases.length; i++){
+							if(bases[i]=='N'){bs.set(i);}
+						}
+					}
+					
 					refReads++;
 					refBases+=initialLength1;
 					Read old=hmr.put(r.id, r);
@@ -500,18 +672,370 @@ public class BBMask{
 	
 	/*--------------------------------------------------------------*/
 	
-	private static int maskRepeats(Read r, int mink, int maxk, int mincount, int minlen){
+	
+	private long maskLowComplexity(short[][] matrix){
+		long sum=0;
+		if(matrix==null){matrix=new short[16][];}
+		for(Read r : map.values()){
+			sum+=maskLowComplexity(r, mink2, maxk2, window, ratio, matrix);
+		}
+		return sum;
+	}
+	
+	private static int maskLowComplexity(Read r, int mink, int maxk, int window, float ratio, short[][] matrix){
 		
 		final byte[] bases=r.bases;
-		final BitSet bs;
-		if(r.obj==null){
-			r.obj=bs=new BitSet(bases.length);
-		}else{
-			bs=(BitSet)r.obj;
-			for(int i=0; i<bases.length; i++){
-				if(bases[i]=='N'){bs.set(i);}
+		final BitSet bs=(BitSet)r.obj;
+		
+		int before=bs.cardinality();
+//		System.err.println("\nbefore="+before+"\n"+new String(bases)+"\n"+bs);
+		
+		for(int k=mink; k<=maxk; k++){
+			if(matrix[k]==null){matrix[k]=new short[(1<<(2*k))];}
+		}
+		
+		for(int k=mink; k<=maxk; k++){
+			final short[] counts=matrix[k];
+			final int kmerspace=(1<<(2*k));
+			final int mincount=(int)Math.ceil(ratio*Tools.min(window, kmerspace));
+			maskLowComplexity(bases, bs, k, window, mincount, counts);
+		}
+
+		int after=bs.cardinality();
+		
+//		System.err.println("before="+before+", after="+after+"\n"+new String(bases)+"\n"+bs);
+		
+		return after-before;
+	}
+	
+	
+	private static void maskLowComplexity(final byte[] bases, final BitSet bs, final int k, final int window, final int mincount, final short[] counts){
+		assert(k>0) : "k must be greater than 0";
+		
+		if(verify){
+			for(int c : counts){assert(c==0);}
+		}
+		
+		final int mask=(k>15 ? -1 : ~((-1)<<(2*k)));
+		int current=0, ns=0;
+		int kmer=0, kmer2=0;
+		
+		for(int i=0, i2=-window; i2<bases.length; i++, i2++){
+			
+//			System.err.println("\nStart: i="+i+", current="+current+", ns="+ns+"\n"+Arrays.toString(counts));
+			
+			if(i<bases.length){
+				final byte b=bases[i];
+				final int n=Dedupe.baseToNumber[b];
+				kmer=((kmer<<2)|n)&mask;
+				
+				if(!AminoAcid.isFullyDefined(b)){ns++;}
+				if(counts[kmer]<1){
+					assert(counts[kmer]==0);
+					current++;
+				}
+				counts[kmer]++;
+				if(verify){assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);}
+				
+//				System.err.println("Added "+kmer+"; counts["+kmer+"]="+counts[kmer]);
+			}
+			
+			if(i2>=0){
+				final byte b2=bases[i2];
+				final int n2=Dedupe.baseToNumber[b2];
+				kmer2=((kmer2<<2)|n2)&mask;
+
+				if(!AminoAcid.isFullyDefined(b2)){
+					ns--;
+					assert(ns>=0);
+				}
+				counts[kmer2]--;
+				if(counts[kmer2]<1){
+					assert(counts[kmer2]==0) : Arrays.toString(counts);
+					current--;
+				}
+				if(verify){assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);}
+				
+//				System.err.println("Removed "+kmer2+"; count="+counts[kmer2]);
+			}
+			
+			if(verify && i2>-1 && i<bases.length){
+				assert(Tools.sum(counts)==window);
+			}
+			
+			if(current<mincount && ns<1 && i2>=-1 && i<bases.length){
+//				System.err.println("Masked ("+(i2+1)+", "+(i+1)+")");
+				bs.set(i2+1, i+1);
 			}
 		}
+		
+	}
+	
+	
+	/*--------------------------------------------------------------*/
+	
+	/*--------------------------------------------------------------*/
+	
+	
+	private long maskLowEntropy_ST(short[][] matrix){
+		long sum=0;
+		if(matrix==null){matrix=new short[maxk2+1][];}
+		short[] countCounts=new short[window+2];
+		countCounts[0]=(short)window;
+		for(Read r : map.values()){
+			sum+=maskLowEntropy(r, mink2, maxk2, window, entropyCutoff, matrix, countCounts);
+		}
+		return sum;
+	}
+	
+	private long maskLowEntropy(){
+		ArrayBlockingQueue<Read> queue=new ArrayBlockingQueue<Read>(map.size());
+		for(Read r : map.values()){queue.add(r);}
+		int numThreads=Tools.min(Shared.THREADS, queue.size());
+		MaskLowEntropyThread[] threads=new MaskLowEntropyThread[numThreads];
+		long sum=0;
+//		outstream.println("Spawning "+numThreads+" threads.");
+		for(int i=0; i<threads.length; i++){threads[i]=new MaskLowEntropyThread(queue, mink2, maxk2, window, entropyCutoff);}
+		for(int i=0; i<threads.length; i++){threads[i].start();}
+		for(int i=0; i<threads.length; i++){
+			while(threads[i].getState()!=Thread.State.TERMINATED){
+				try {
+					threads[i].join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			sum+=threads[i].masked;
+		}
+		return sum;
+	}
+	
+	private class MaskLowEntropyThread extends Thread{
+		
+		MaskLowEntropyThread(ArrayBlockingQueue<Read> queue_, int mink_, int maxk_, int window_, float cutoff_){
+			queue=queue_;
+			mink=mink_;
+			maxk=maxk_;
+			window=(short)window_;
+			cutoff=cutoff_;
+			countCounts=new short[window+2];
+			matrix=new short[maxk+1][];
+			countCounts[0]=window;
+		}
+		
+		@Override
+		public void run(){
+			for(Read r=queue.poll(); r!=null; r=queue.poll()){
+				masked+=maskLowEntropy(r, mink, maxk, window, cutoff, matrix, countCounts);
+			}
+		}
+		
+		final ArrayBlockingQueue<Read> queue;
+		final int mink;
+		final int maxk;
+		final short window;
+		final float cutoff;
+		final short[] countCounts;
+		final short[][] matrix;
+		long masked=0;
+		
+	}
+	
+	private int maskLowEntropy(Read r, int mink, int maxk, int window, float cutoff, short[][] matrix, short[] countCounts){
+//		outstream.println("maskLowEntropy("+r.numericID+", "+mink+", "+maxk+", "+window+", "+cutoff+", "+matrix.length+", "+countCounts.length+")");
+//		System.err.println(new String(r.bases));
+		final byte[] bases=r.bases;
+		final BitSet bs=(BitSet)r.obj;
+		
+		int before=bs.cardinality();
+//		System.err.println("\nbefore="+before+"\n"+new String(bases)+"\n"+bs);
+		
+		for(int k=mink; k<=maxk; k++){
+			if(matrix[k]==null){matrix[k]=new short[(1<<(2*k))];}
+		}
+		
+		for(int k=mink; k<=maxk; k++){
+			final short[] counts=matrix[k];
+			final int kmerspace=(1<<(2*k));
+			maskLowEntropy(bases, bs, k, window, counts, countCounts, cutoff, kmerspace);
+		}
+
+		int after=bs.cardinality();
+		
+//		System.err.println("before="+before+", after="+after+"\n"+new String(bases)+"\n"+bs);
+		
+		return after-before;
+	}
+	
+	
+	private void maskLowEntropy(final byte[] bases, final BitSet bs, final int k, final int window, final short[] counts, final short[] countCounts, float cutoff, int kmerspace){
+		assert(k>0) : "k must be greater than 0";
+//		Arrays.fill(counts, 0);
+
+		assert(countCounts[0]==window);
+		if(verify){
+			for(int c : counts){assert(c==0);}
+			for(int i=1; i<countCounts.length; i++){assert(countCounts[i]==0);}
+		}
+		
+		final int mask=(k>15 ? -1 : ~((-1)<<(2*k)));
+		int current=0, ns=0;
+		int kmer=0, kmer2=0;
+		
+		for(int i=0, i2=-window; i2<bases.length; i++, i2++){
+			
+//			System.err.println("\nStart: i="+i+", current="+current+", ns="+ns+"\n"+Arrays.toString(counts)+"\n"+Arrays.toString(countCounts));
+			
+			if(i<bases.length){
+				final byte b=bases[i];
+				final int n=Dedupe.baseToNumber[b];
+				kmer=((kmer<<2)|n)&mask;
+				
+				if(!AminoAcid.isFullyDefined(b)){ns++;}
+				if(counts[kmer]<1){
+					assert(counts[kmer]==0);
+					current++;
+				}
+				countCounts[counts[kmer]]--;
+				assert(countCounts[counts[kmer]]>=-1): i+", "+current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts)+"\n"+Arrays.toString(countCounts);
+				counts[kmer]++;
+				assert(counts[kmer]<=window+1) : Arrays.toString(counts)+"\n"+Arrays.toString(countCounts);
+				countCounts[counts[kmer]]++;
+				if(verify){
+					assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);
+					assert(Tools.sum(countCounts)>0 && (Tools.sum(countCounts)<=window+1)): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
+				}
+				
+//				System.err.println("Added "+kmer+"; counts["+kmer+"]="+counts[kmer]);
+			}
+			
+			if(i2>=0){
+				final byte b2=bases[i2];
+				final int n2=Dedupe.baseToNumber[b2];
+				kmer2=((kmer2<<2)|n2)&mask;
+
+				if(!AminoAcid.isFullyDefined(b2)){
+					ns--;
+					assert(ns>=0);
+				}
+				countCounts[counts[kmer2]]--;
+				assert(countCounts[counts[kmer2]]>=0);
+				counts[kmer2]--;
+				countCounts[counts[kmer2]]++;
+				if(counts[kmer2]<1){
+					assert(counts[kmer2]==0) : Arrays.toString(counts);
+					current--;
+				}
+				if(verify){
+					assert(current==Tools.cardinality(counts)) : current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(counts);
+					assert(Tools.sum(countCounts)>=0 && (Tools.sum(countCounts)<=window)): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
+				}
+				
+//				System.err.println("Removed "+kmer2+"; count="+counts[kmer2]);
+			}
+			
+			if(verify && i2>-1 && i<bases.length){
+				assert(Tools.sum(counts)==window);
+				assert(Tools.sum(countCounts)==window): current+", "+Tools.cardinality(counts)+"\n"+Arrays.toString(countCounts);
+			}
+			
+			if(ns<1 && i2>=-1 && i<bases.length && calcEntropy(countCounts, window, kmerspace)<cutoff){
+//				System.err.println("Masked ("+(i2+1)+", "+(i+1)+")");
+				bs.set(i2+1, i+1);
+			}
+		}
+		
+	}
+	
+	private float calcEntropy(int[] countCounts, int window, int kmerspace){
+		double sum=0;
+		for(int i=1; i<countCounts.length; i++){
+			int cc=countCounts[i];
+			double pklogpk=entropy[i];
+			sum+=(cc*pklogpk);
+		}
+//		System.err.println("sum = "+sum);
+//		System.err.println("entropy = "+(sum*entropyMult));
+		return (float)(sum*entropyMult);
+	}
+	
+	private float calcEntropy(short[] countCounts, int window, int kmerspace){
+		double sum=0;
+		for(int i=1; i<countCounts.length; i++){
+			int cc=countCounts[i];
+			double pklogpk=entropy[i];
+			sum+=(cc*pklogpk);
+		}
+//		System.err.println("sum = "+sum);
+//		System.err.println("entropy = "+(sum*entropyMult));
+		return (float)(sum*entropyMult);
+	}
+	
+	
+	/*--------------------------------------------------------------*/
+	
+
+
+	private long maskRepeats_ST(){
+		long sum=0;
+		for(Read r : map.values()){
+			sum+=maskRepeats(r, mink, maxk, mincount, minlen);
+		}
+		return sum;
+	}
+	
+	private long maskRepeats(){
+		ArrayBlockingQueue<Read> queue=new ArrayBlockingQueue<Read>(map.size());
+		for(Read r : map.values()){queue.add(r);}
+		int numThreads=Tools.min(Shared.THREADS, queue.size());
+		MaskRepeatThread[] threads=new MaskRepeatThread[numThreads];
+		long sum=0;
+		for(int i=0; i<threads.length; i++){threads[i]=new MaskRepeatThread(queue, mink, maxk, mincount, minlen);}
+		for(int i=0; i<threads.length; i++){threads[i].start();}
+		for(int i=0; i<threads.length; i++){
+			while(threads[i].getState()!=Thread.State.TERMINATED){
+				try {
+					threads[i].join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			sum+=threads[i].masked;
+		}
+		return sum;
+	}
+	
+	private class MaskRepeatThread extends Thread{
+		
+		MaskRepeatThread(ArrayBlockingQueue<Read> queue_, int mink_, int maxk_, int mincount_, int minlen_){
+			queue=queue_;
+			mink=mink_;
+			maxk=maxk_;
+			mincount=mincount_;
+			minlen=minlen_;
+		}
+		
+		@Override
+		public void run(){
+			for(Read r=queue.poll(); r!=null; r=queue.poll()){
+				masked+=maskRepeats(r, mink, maxk, mincount, minlen);
+			}
+		}
+		
+		final ArrayBlockingQueue<Read> queue;
+		final int mink;
+		final int maxk;
+		final int mincount;
+		final int minlen;
+		long masked=0;
+		
+	}
+	
+	private static int maskRepeats(Read r, int mink, int maxk, int mincount, int minlen){
+		final byte[] bases=r.bases;
+		final BitSet bs=(BitSet)r.obj;
 		
 		int before=bs.cardinality();
 //		System.err.println("\nbefore="+before+"\n"+new String(bases)+"\n"+bs);
@@ -529,7 +1053,6 @@ public class BBMask{
 	
 	
 	private static void maskRepeats(final byte[] bases, final BitSet bs, final int k, final int minlen){
-		
 		final int lim=bases.length-k;
 		final int mask=(k>15 ? -1 : ~((-1)<<(2*k)));
 		for(int loc=0; loc<lim; loc++){
@@ -601,11 +1124,12 @@ public class BBMask{
 		outstream.println("qout=auto        \tASCII offset for output quality.  May be set to 33 (Sanger), 64 (Illumina), or auto (meaning same as input)");
 	}
 
+	/*--------------------------------------------------------------*/
 
 	/*--------------------------------------------------------------*/
 
 	private LinkedHashMap<String, Read> map=null;
-
+	
 	private long refReads=0;
 	private long refBases=0;
 //	private long repeatsMasked=0;
@@ -637,21 +1161,35 @@ public class BBMask{
 	private byte qin=-1;
 	private byte qout=-1;
 
-	private int mink=0;
-	private int maxk=0;
+	private boolean processRepeats=false;
+	private int mink=5;
+	private int maxk=5;
 	private int minlen=30;
 	private int mincount=3;
+
+	private boolean processEntropy=true;
+	private boolean entropyMode=true;
+	private int mink2=5;
+	private int maxk2=5;
+	private int window=80;
+	private float ratio=0.35f;
+	private float entropyCutoff=0.75f;
 
 	private final FileFormat ffinRef;
 	private final FileFormat[] ffinSam;
 
 	private final FileFormat ffoutRef;
 
+	private PrintStream outstream=System.err;
+
+	private final double[] entropy;
+	private final double entropyMult;
 
 	/*--------------------------------------------------------------*/
-
-	private PrintStream outstream=System.err;
+	
 	public static boolean verbose=false;
 	public static boolean CONVERT_NON_ACGTN=true;
+	private static boolean verify=false;
+	private static boolean MaskByLowercase=false;
 
 }

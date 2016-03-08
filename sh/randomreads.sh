@@ -53,9 +53,9 @@ calcXmx () {
 calcXmx "$@"
 
 randomreads() {
-	module unload oracle-jdk
-	module load oracle-jdk/1.7_64bit
-	module load pigz
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
 	local CMD="java -ea $z -cp $CP align2.RandomReads3 build=1 $@"
 	echo $CMD >&2
 	$CMD

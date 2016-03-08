@@ -130,6 +130,8 @@ public class ErrorCorrectMT extends Thread{
 				}
 				FASTQ.ASCII_OFFSET=FASTQ.ASCII_OFFSET_OUT=q;
 				FASTQ.DETECT_QUALITY=false;
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("asciiin") || a.equals("qualityin") || a.equals("qualin") || a.equals("qin")){
 				if(args[i].indexOf('=')>0){
 					byte ascii_offset=Byte.parseByte(b);

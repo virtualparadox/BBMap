@@ -54,9 +54,9 @@ calcXmx () {
 calcXmx "$@"
 
 kmercount() {
-	module unload oracle-jdk
-	module load oracle-jdk/1.7_64bit
-	module load pigz
+	#module unload oracle-jdk
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
 	local CMD="java -ea $z -cp $CP jgi.KmerCoverage prefilter=true bits=16 interleaved=false $@"
 	echo $CMD >&2
 	$CMD

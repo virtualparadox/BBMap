@@ -280,6 +280,8 @@ public class KmerNormalize {
 				auto=Tools.parseBoolean(b);
 			}else if(a.equals("parsecustom")){
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
+			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
+				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}

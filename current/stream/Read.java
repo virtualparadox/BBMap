@@ -72,7 +72,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 					"# qualities="+qualityOriginal.length+", # bases="+s_.length+"\n\n"+
 					FASTQ.qualToString(qualityOriginal)+"\n"+new String(s_)+"\n";
 		
-		assert(basesOriginal.length<2 || basesOriginal[1]=='N' || basesOriginal[1]=='.' || basesOriginal[1]=='-' || colorspace()!=Character.isLetter(basesOriginal[1])) : 
+		assert(basesOriginal==null || basesOriginal.length<2 || basesOriginal[1]=='N' || basesOriginal[1]=='.' || basesOriginal[1]=='-' || colorspace()!=Character.isLetter(basesOriginal[1])) : 
 			"\nAn input file appears to be misformatted.  The character with ASCII code "+basesOriginal[1]+" appeared where a base was expected.\n" +
 					colorspace()+", "+Arrays.toString(basesOriginal);
 		
@@ -139,26 +139,32 @@ public final class Read implements Comparable<Read>, Cloneable{
 			
 			bases=basesOriginal;
 			quality=qualityOriginal;
-			
-			if(quality!=null){
-				for(int i=0; i<quality.length; i++){
-					byte b=bases[i];
-					byte q=quality[i];
-					if(AminoAcid.isFullyDefined(b)){
-						if(q<MIN_CALLED_QUALITY){
-//							assert(false) : (char)b+", "+q;
-							quality[i]=MIN_CALLED_QUALITY;
+
+			if(bases!=null){
+				if(quality!=null){
+					for(int i=0; i<quality.length; i++){
+						byte b=bases[i];
+						byte q=quality[i];
+						if(AminoAcid.isFullyDefined(b)){
+							if(q<MIN_CALLED_QUALITY){
+								//							assert(false) : (char)b+", "+q;
+								quality[i]=MIN_CALLED_QUALITY;
+							}
+						}else{
+							//						assert(false) : (char)b+", "+q;
+							quality[i]=0;
+							if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]='N';}
 						}
-					}else{
-//						assert(false) : (char)b+", "+q;
-						quality[i]=0;
-						if(b=='-' || b=='.'){bases[i]='N';}
+						if(TO_UPPER_CASE && b>90){bases[i]-=32;}
+						else if(LOWER_CASE_TO_N && b>90){bases[i]='N';}
 					}
-					if(TO_UPPER_CASE && b>90){bases[i]-=32;}
+				}else if(TO_UPPER_CASE){
+					for(int i=0; i<bases.length; i++){if(bases[i]>90){bases[i]-=32;}}
+				}else if(LOWER_CASE_TO_N){
+					for(int i=0; i<bases.length; i++){if(bases[i]>90){bases[i]='N';}}
 				}
-			}else if(TO_UPPER_CASE){
-				for(int i=0; i<bases.length; i++){if(bases[i]>90){bases[i]-=32;}}
 			}
+//			for(int i=0; i<bases.length; i++){assert(bases[i]<=90) : (char)bases[i];}
 		}
 		
 		chrom=chrom_;
@@ -170,7 +176,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 				Arrays.toString(quality)+"\n"+Arrays.toString(bases)+"\n";
 		numericID=numericID_;
 		
-		mapLength=bases.length;
+		mapLength=(bases==null ? 0 : bases.length);
 	}
 	
 	private static final int absdif(int a, int b){
@@ -2513,6 +2519,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	private static final byte ASCII_OFFSET=33;
 	public static byte MIN_CALLED_QUALITY=2;
 	public static boolean TO_UPPER_CASE=false;
+	public static boolean LOWER_CASE_TO_N=false;
 	
 	public static boolean COMPRESS_MATCH_BEFORE_WRITING=true;
 	public static boolean DECOMPRESS_MATCH_ON_LOAD=true; //Set to false for some applications, like sorting, perhaps

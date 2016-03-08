@@ -16,11 +16,11 @@ calcXmx () {
 calcXmx "$@"
 
 function reformat() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP jgi.ReformatReads $@"
 	echo $CMD >&2
 	$CMD
@@ -56,6 +56,8 @@ function usage(){
 	echo "qfout2=<.qual file>	Write qualities from this qual file, for the reads coming from 'out2=<fasta file>'"
 	echo "verifyinterleaved=f	(vint) When true, checks a file to see if the names look paired.  Prints an error message if not."
 	echo "tossbrokenreads=f	(tbr) Discard reads that have different numbers of bases and qualities.  By default this will be detected and cause a crash."
+	echo "ignorebadquality=f	(ibq) Fix out-of-range quality values instead of crashing with a warning."
+	echo "addslash=f		Append ' /1' and ' /2' to read names, if not already present.  Also add 'int=t' if the reads are interleaved."
 	echo ""
 	echo "Sampling parameters:"
 	echo "reads=-1 		Set to a positive number to only process this many INPUT reads (or pairs), then quit."

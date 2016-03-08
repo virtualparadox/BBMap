@@ -86,13 +86,13 @@ public final class BBMapThread extends AbstractMapThread{
 			int MAX_SITESCORES_TO_PRINT_, boolean PRINT_SECONDARY_ALIGNMENTS_,
 			boolean REQUIRE_CORRECT_STRANDS_PAIRS_, boolean SAME_STRAND_PAIRS_, boolean KILL_BAD_PAIRS_, boolean RCOMP_MATE_,
 			boolean PERFECTMODE_, boolean SEMIPERFECTMODE_, boolean FORBID_SELF_MAPPING_, int TIP_DELETION_SEARCH_RANGE_,
-			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, int KFILTER_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_,
+			boolean AMBIGUOUS_RANDOM_, boolean AMBIGUOUS_ALL_, int KFILTER_, boolean TRIM_LEFT_, boolean TRIM_RIGHT_, boolean UNTRIM_, byte TRIM_QUAL_, int TRIM_MIN_LEN_,
 			boolean LOCAL_ALIGN_, boolean RESCUE_, boolean STRICT_MAX_INDEL_, String MSA_TYPE_){
 		
 		super(cris_,
 				outStream_, outStreamMapped_, outStreamUnmapped_, outStreamBlack_,
 				colorspace_, SMITH_WATERMAN_, LOCAL_ALIGN_, REMOVE_DUPLICATE_BEST_ALIGNMENTS_, 
-				AMBIGUOUS_RANDOM_, AMBIGUOUS_ALL_, TRIM_LEFT_, TRIM_RIGHT_, UNTRIM_, TRIM_QUAL_, THRESH_, 
+				AMBIGUOUS_RANDOM_, AMBIGUOUS_ALL_, TRIM_LEFT_, TRIM_RIGHT_, UNTRIM_, TRIM_QUAL_, TRIM_MIN_LEN_, THRESH_, 
 				minChrom_, maxChrom_, KFILTER_, KILL_BAD_PAIRS_, SAVE_AMBIGUOUS_XY_,
 				translateToBaseSpace_, REQUIRE_CORRECT_STRANDS_PAIRS_,
 				SAME_STRAND_PAIRS_, RESCUE_, STRICT_MAX_INDEL_, SLOW_ALIGN_PADDING_, SLOW_RESCUE_PADDING_,

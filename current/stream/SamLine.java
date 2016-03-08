@@ -361,7 +361,8 @@ public class SamLine {
 					}
 				}
 			}
-			sb.append(' ');
+//			sb.append(' ');
+			sb.append(" align2.");
 			sb.append(Shared.BBMAP_CLASS);
 			if(Shared.COMMAND_LINE!=null){
 				for(String s : Shared.COMMAND_LINE){
@@ -1389,7 +1390,7 @@ public class SamLine {
 		int start_=start();
 		int stop_=stop();
 		assert(start_<=stop_) : start_+", "+stop_;
-		boolean cs_=colorspace();
+		boolean cs_=false; //colorspace();
 		
 		if(Data.GENOME_BUILD>=0 && rname!=null && (rname.length!=1 || rname[0]!='*')){
 			ScafLoc sc=Data.getScafLoc(rname);
@@ -1724,8 +1725,7 @@ public class SamLine {
 	}
 	
 	public boolean colorspace(){
-//		for(int i=0; i<seq.length(); i++){
-//			char c=seq.charAt(i);
+		if(seq==null){return false;}
 		for(int i=0; i<seq.length; i++){
 			char c=(char)seq[i];
 			if(c=='0' || c=='1' || c=='2' || c=='3'){return true;}

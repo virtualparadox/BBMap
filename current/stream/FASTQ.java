@@ -740,16 +740,22 @@ public class FASTQ {
 				}
 			}
 			if(quals[i]<-5){
-				if(!negativeFive){
-					for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)33);}
-					System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly; quality value below -5.\n" +
-							"Please re-run with the flag 'qin=33'.\nProblematic read number "+numericID+":\n" +
+				
+				if(IGNORE_BAD_QUALITY){
+					quals[i]=0;
+				}else{
+					if(!negativeFive){
+						for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)33);}
+						System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly, or the reads are corrupt; quality value below -5.\n" +
+								"Please re-run with the flag 'qin=33' or 'ignorebadquality'.\nProblematic read number "+numericID+":\n" +
 
 						"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n");
+					}
+					errorState=true;
+					negativeFive=true;
+					return null;
 				}
-				errorState=true;
-				negativeFive=true;
-				return null;
+				
 			}
 			assert(quals[i]>=-5);
 			//				assert(quals[i]>=-5) : "The ASCII quality encoding level is not set correctly.  Quality value below -5:" +
@@ -853,8 +859,9 @@ public class FASTQ {
 	public static boolean DETECT_QUALITY=true;
 	public static boolean DETECT_QUALITY_OUT=true;
 	public static boolean ADD_PAIRNUM_TO_CUSTOM_ID=true;
-	
+
 	public static final int QUAL_THRESH=54;
+	public static boolean IGNORE_BAD_QUALITY=false;
 	public static boolean verbose=false;
 	
 }

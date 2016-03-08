@@ -203,7 +203,8 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 		for(int i=0; i<bases.length; i++){
 			byte c=bases[i];
 			byte r=ref[start+i];
-			assert(Character.isUpperCase(c) && Character.isUpperCase(r));
+			assert(Character.isUpperCase(c) && Character.isUpperCase(r)) : "Lowercase letters detected: ref="+(char)r+", read="+(char)c+"\n"+new String(bases)+"\n"+
+					"Please re-run with the 'tuc=t' flag (touppercase=true).";
 
 			if((c!=r /* && (Character.toUpperCase(c)!=Character.toUpperCase(r))*/) || c=='N'){
 				return false;

@@ -55,11 +55,11 @@ calcXmx "$@"
 
 
 bbmap() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP align2.BBMap build=1 overwrite=true match=long  fastareadlen=500 $@"
 	echo $CMD >&2
 	$CMD
@@ -98,11 +98,10 @@ usage(){
 	echo "build=1          		Designate index to use.  Corresponds to the number specified when building the index."
 	echo "in=<file>        		Primary reads input; required parameter."
 	echo "in2=<file>      		For paired reads in two files."
-	echo "qin=auto         		Set to 33 or 64 to specify input quality value ASCII offset."
 	echo "interleaved=auto  		True forces paired/interleaved input; false forces single-ended mapping."
 	echo "                 		If not specified, interleaved status will be autodetected from read names."
 	echo "fastareadlen=500  		Break up FASTA reads longer than this.  Max is 500.  Only works for FASTA input."
-	echo "fakequality=-1     		Set to a positive number 1-50 to generate fake quality strings for fasta input reads."
+	echo "unpigz=f          		Spawn a pigz (parallel gzip) process for faster decompression than using Java.  Requires pigz to be installed."
 	#echo "parsecustom=f      		Specially process read headers from my random read generator, to determine true and false positive rates."
 	echo ""
 	echo "Sampling Parameters:"
@@ -112,6 +111,7 @@ usage(){
 	#echo "sampleseed=1  	  	Set to a positive number N set the RNG seed for sampling at the samplerate,"
 	#echo "                 		or a negative number to select a random seed (for nondeterministic sampling)."
 	echo "skipreads=0      		Set to a number N to skip the first N reads (or pairs), then map the rest."
+	echo "touppercase=t      		(tuc) Convert lowercase letters in reads to upper case (otherwise they will not match the reference)."
 	echo ""
 	echo "Mapping Parameters:"
 	echo "fast=f  			This flag is a macro which sets other paramters to run faster, at reduced sensitivity.  Bad for RNA-seq."
@@ -138,9 +138,17 @@ usage(){
 	echo "pairedonly=f  	 		(po) Treat unpaired reads as unmapped.  Thus they will be sent to 'outu' but not 'outm'."
 	echo "rcompmate=f      		Reverse complement second read in each pair prior to mapping."
 	echo "pairlen=32000    		Set max allowed distance between paired reads.  (insert size)=(pairlen)+(read1 length)+(read2 length)"
-	echo "trim=f      		 	Quality-trim ends to Q5 before mapping.  Options are 'l' (left), 'r' (right), and 'lr' (both)."
-	echo "untrim=f         		Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings."
 	echo "bandwidthratio=0  		(bwr) If above zero, restrict alignment band to this fraction of read length.  Faster but less accurate."
+	echo ""
+	echo "Quality and Trimming Parameters:"
+	echo "qin=auto         		Set to 33 or 64 to specify input quality value ASCII offset.  33 is Sanger, 64 is old Solexa."
+	echo "qout=auto         		Set to 33 or 64 to specify output quality value ASCII offset (only if output format is fastq)."
+	echo "qtrim=f      		 	Quality-trim ends before mapping.  Options are 'f' (false), 'l' (left), 'r' (right), and 'lr' (both)."
+	echo "untrim=f         		Undo trimming after mapping.  Untrimmed bases will be soft-clipped in cigar strings."
+	echo "trimq=7         		Trim regions with average quality below this (phred algorithm)."
+	echo "mintl=60         		(mintrimlength) Don't trim reads to be shorter than this."
+	echo "fakequality=-1     		Set to a positive number 1-50 to generate fake quality strings for fasta input reads."
+	echo "ignorebadquality=f		(ibq) Keep going, rather than crashing, if a read has out-of-range quality values."
 	echo ""
 	echo "Output Parameters:"
 	echo "outputunmapped=t     		Set to false if unmapped reads should not be printed to 'out=' target (saves time and disk space)."
@@ -170,7 +178,9 @@ usage(){
 	echo "                 		secondstrand, or unstranded libraries.  Needed by Cufflinks.  JGI mainly uses 'firststrand'."
 	echo "stoptag=t        		Write a tag indicating read stop location, prefixed by YS:i:"
 	echo "idtag=t          		Write a tag indicating percent identity, prefixed by YI:f:"
-	echo "ziplevel=2          		(zl) Set to true to write a tag indicating percent identity, prefixed by YI:f:"
+	echo "inserttag=f         		Write a tag indicating insert size, prefixed by X8:Z:"
+	echo "ziplevel=2          		(zl) Compression level for zip or gzip output."
+	echo "pigz=f          		Spawn a pigz (parallel gzip) process for faster compression than using Java.  Requires pigz to be installed."
 	echo "machineout=f         		Set to true to output statistics in machine-friendly 'key=value' format."
 	echo ""
 	echo "Java Parameters:"

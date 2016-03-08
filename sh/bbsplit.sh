@@ -53,11 +53,11 @@ calcXmx () {
 calcXmx "$@"
 
 function bbsplit() {
-	module unload oracle-jdk
-	module unload samtools
-	module load oracle-jdk/1.7_64bit
-	module load pigz
-	module load samtools
+	#module unload oracle-jdk
+	#module unload samtools
+	#module load oracle-jdk/1.7_64bit
+	#module load pigz
+	#module load samtools
 	local CMD="java -ea $z -cp $CP align2.BBSplitter build=1 overwrite=true match=long fastareadlen=500 minhits=2 minratio=0.9 maxindel=20 trim=both untrim=true $@"
 	echo $CMD >&2
 	$CMD

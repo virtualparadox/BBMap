@@ -122,7 +122,7 @@ public final class RandomReads3 {
 				adapter=b;
 			}else if(a.equals("amp")){
 				AMP=Integer.parseInt(b);
-			}else if(a.equals("slashes") || a.equals("addslashes") || a.equals("slash") || a.equals("addpairnum") || a.equals("pairnum")){
+			}else if(a.equals("slashes") || a.equals("addslashes") || a.equals("slash") || a.equals("addslash") || a.equals("addpairnum") || a.equals("pairnum")){
 				FASTQ.ADD_PAIRNUM_TO_CUSTOM_ID=Tools.parseBoolean(b);
 			}else if(a.equals("snprate")){
 				snpRate=Float.parseFloat(b);

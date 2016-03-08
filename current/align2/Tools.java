@@ -767,9 +767,21 @@ public final class Tools {
 		return x;
 	}
 	
+	public static int cardinality(short[] array){
+		int x=0;
+		for(int y : array){if(y!=0){x++;}}
+		return x;
+	}
+	
 	public static long sum(int[] array){
 		long x=0;
 		for(int y : array){x+=y;}
+		return x;
+	}
+	
+	public static int cardinality(int[] array){
+		int x=0;
+		for(int y : array){if(y!=0){x++;}}
 		return x;
 	}
 	
