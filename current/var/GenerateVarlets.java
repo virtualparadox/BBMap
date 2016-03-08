@@ -26,6 +26,7 @@ import fileIO.ReadWrite;
 import fileIO.TextFile;
 
 import align2.ListNum;
+import align2.MSA;
 import align2.MultiStateAligner9ts;
 import align2.Tools;
 import align2.TranslateColorspaceRead;
@@ -520,6 +521,7 @@ public class GenerateVarlets {
 					System.err.println("Mapped Length: "+(r.stop-r.start+1));
 				}
 				tcr.realign_new(r, 20, true, 0, false); //Also generates the match string
+				
 				if(TranslateColorspaceRead.perfectMatch(r.match)){return;}
 				if(flag){
 					System.err.println("new match string:\n"+(r.match==null ? null : new String(r.match)));

@@ -3,6 +3,8 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 
+import jgi.CoveragePileup;
+
 import stream.FastaReadInputStream;
 import stream.ReadStreamWriter;
 import stream.SamLine;
@@ -26,6 +28,7 @@ public final class BBMap extends AbstractMapper {
 		Timer t=new Timer();
 		t.start();
 		BBMap mapper=new BBMap(args);
+		args=Tools.condenseStrict(args);
 		if(!INDEX_LOADED){mapper.loadIndex();}
 		if(Data.scaffoldPrefixes){mapper.processAmbig2();}
 		mapper.testSpeed(args);
@@ -91,6 +94,25 @@ public final class BBMap extends AbstractMapper {
 			keyDensity*=0.9f;
 			maxKeyDensity*=0.9f;
 			minKeyDensity*=0.9f;
+		}else if(vslow){
+			ArrayList<String> list=new ArrayList<String>();
+			list.add("tipsearch="+(TIP_SEARCH_DIST*3)/2);
+			list.add("minhits=1");
+			list.add("minratio=0.25");
+			
+			BBIndex.setFractionToExclude(0);
+			
+			for(String s : args){if(s!=null){list.add(s);}}
+			args=list.toArray(new String[list.size()]);
+			
+			SLOW_ALIGN_PADDING=SLOW_ALIGN_PADDING*2+2;
+			SLOW_RESCUE_PADDING=SLOW_RESCUE_PADDING*2+2;
+
+			AbstractIndex.SLOW=true;
+			AbstractIndex.VSLOW=true;
+			keyDensity*=2.5f;
+			maxKeyDensity*=2.5f;
+			minKeyDensity*=2.5f;
 		}else if(slow){
 			ArrayList<String> list=new ArrayList<String>();
 			list.add("tipsearch="+(TIP_SEARCH_DIST*3)/2);
@@ -153,7 +175,7 @@ public final class BBMap extends AbstractMapper {
 			if(ERROR_ON_NO_OUTPUT && !OUTPUT_READS && in1!=null){throw new RuntimeException("Error: no output file, and ERROR_ON_NO_OUTPUT="+ERROR_ON_NO_OUTPUT);}
 		}
 
-		assert(readlen<BBMapThread.ALIGN_ROWS);
+		assert(synthReadlen<BBMapThread.ALIGN_ROWS);
 		
 		if(MSA.bandwidth>0){
 			int halfwidth=MSA.bandwidth/2;
@@ -208,15 +230,19 @@ public final class BBMap extends AbstractMapper {
 		if(!setxs){SamLine.MAKE_XS_TAG=(SamLine.INTRON_LIMIT<1000000000);}
 		if(setxs && !setintron){SamLine.INTRON_LIMIT=10;}
 		
-		if(outFile==null && outFile2==null && outFileM==null && outFileM2==null && outFileU==null && outFileU2==null && outFileB==null && outFileB2==null && BBSplitter.streamTable==null){
+		if(outFile==null && outFile2==null && outFileM==null && outFileM2==null && outFileU==null && outFileU2==null
+				&& outFileB==null && outFileB2==null && splitterOutputs==null && BBSplitter.streamTable==null){
 			sysout.println("No output file.");
 			OUTPUT_READS=false;
 		}else{
 			OUTPUT_READS=true;
 			if(bamscript!=null){
-				BBSplitter.makeBamScript(bamscript, outFile, outFile2, outFileM, outFileM2, outFileU, outFileU2, outFileB, outFileB2);
+				BBSplitter.makeBamScript(bamscript, splitterOutputs, outFile, outFile2, outFileM, outFileM2, outFileU, outFileU2, outFileB, outFileB2);
 			}
 		}
+//		assert(false) : bamscript+", "+BBSplitter.streamTable+", "+OUTPUT_READS;
+		
+		
 		
 		FastaReadInputStream.MIN_READ_LEN=Tools.max(keylen+2, FastaReadInputStream.MIN_READ_LEN);
 		assert(FastaReadInputStream.settingsOK());
@@ -364,6 +390,16 @@ public final class BBMap extends AbstractMapper {
 			t.start();
 		}
 		
+		if(coverageBinned!=null || coverageBase!=null || coverageHist!=null || coverageStats!=null){
+			String[] cvargs=("covhist="+coverageHist+"\tcovstats="+coverageStats+"\tbasecov="+coverageBase+"\tbincov="+coverageBinned+
+					"\t32bit="+cov32bit+"\tnzo="+covNzo+"\ttwocolumn="+covTwocolumn+"\tsecondary="+covSecondary+"\tcovminscaf="+coverageMinScaf+
+					"\tksb="+covKsb+"\tbinsize="+covBinSize+"\tstartcov="+covStartOnly+"\tstrandedcov="+covStranded+
+					(covSetbs ? ("\tbitset="+covBitset+"\tarrays="+covArrays) : "")).split("\t");
+			pileup=new CoveragePileup(cvargs);
+			pileup.createDataStructures();
+			pileup.loadScaffoldsFromIndex(minChrom, maxChrom);
+		}
+		
 		if(!forceanalyze && (in1==null || maxReads==0)){return;}
 		
 		BBIndex.analyzeIndex(minChrom, maxChrom, colorspace, BBIndex.FRACTION_GENOME_TO_EXCLUDE, keylen);
@@ -395,13 +431,13 @@ public final class BBMap extends AbstractMapper {
 		for(int i=0; i<mtts.length; i++){
 			try {
 				mtts[i]=new BBMapThread(cris, keylen, 
-						colorspace, SLOW_ALIGN, THRESH, minChrom, 
+						pileup, colorspace, SLOW_ALIGN, THRESH, minChrom, 
 						maxChrom, keyDensity, maxKeyDensity, minKeyDensity, maxDesiredKeys, REMOVE_DUPLICATE_BEST_ALIGNMENTS, 
 						SAVE_AMBIGUOUS_XY, MINIMUM_ALIGNMENT_SCORE_RATIO, TRIM_LIST, MAKE_MATCH_STRING, QUICK_MATCH_STRINGS, rosA, rosM, rosU, rosB, translateToBaseSpace,
 						SLOW_ALIGN_PADDING, SLOW_RESCUE_PADDING, DONT_OUTPUT_UNMAPPED_READS, DONT_OUTPUT_BLACKLISTED_READS, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS,
 						REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, KILL_BAD_PAIRS, rcompMate, 
 						PERFECTMODE, SEMIPERFECTMODE, FORBID_SELF_MAPPING, TIP_SEARCH_DIST,
-						ambiguousRandom, ambiguousAll, KFILTER, TRIM_LEFT, TRIM_RIGHT, UNTRIM, TRIM_QUALITY, MIN_TRIM_LENGTH, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
+						ambiguousRandom, ambiguousAll, KFILTER, IDFILTER, TRIM_LEFT, TRIM_RIGHT, UNTRIM, TRIM_QUALITY, MIN_TRIM_LENGTH, LOCAL_ALIGN, RESCUE, STRICT_MAX_INDEL, MSA_TYPE);
 			} catch (Exception e) {
 				e.printStackTrace();
 				abort(mtts, "Aborting due to prior error.");
@@ -429,7 +465,7 @@ public final class BBMap extends AbstractMapper {
 		closeStreams(cris, rosA, rosM, rosU, rosB);
 		sysout.println();
 		printSettings(keylen);
-		printOutput(mtts, t, keylen, paired, false);
+		printOutput(mtts, t, keylen, paired, false, pileup);
 		if(broken>0 || errorState){throw new RuntimeException("BBMap terminated in an error state; the output may be corrupt.");}
 	}
 	

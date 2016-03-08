@@ -120,6 +120,7 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 						if(r!=null){
 							
 							if(verbose && r.numSites()>0){
+								int ssnum=0;
 								final Read clone=r.clone();
 								for(SiteScore ss : r.sites){
 									
@@ -127,8 +128,8 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 									clone.setSecondary(true);
 									SamLine sl=new SamLine(clone, 0);
 
-									System.err.println("\n@************************************\n\n"+ss+"\n\n"+clone+"\n\n"+sl+"\n\n+************************************\n");
-									
+									System.err.println("\n[*** ss"+ssnum+":\n"+ss+"\n*** clone: \n"+clone+"\n*** sl: \n"+sl+"\n***]\n");
+									ssnum++;
 								}
 							}
 							
@@ -444,8 +445,6 @@ public class ReadStreamByteWriter extends ReadStreamWriter {
 	}
 
 	private static final boolean buffered=true;
-	private static final boolean ASSERT_CIGAR=false;
 	private static final boolean verbose=false;
-	public static boolean ignorePairAssertions=false;
 	
 }

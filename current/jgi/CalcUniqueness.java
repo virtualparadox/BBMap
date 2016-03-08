@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import kmer.AbstractKmerTable;
-import kmer.HashArray;
+import kmer.HashArray1D;
 import kmer.HashForest;
 import kmer.KmerTable;
 
@@ -79,6 +79,8 @@ public class CalcUniqueness {
 				//do nothing
 			}else if(a.equals("null") || a.equals(parser.in2)){
 				// do nothing
+			}else if(a.equals("printlastbin") || a.equals("plb")){
+				printLastBin=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 				ByteFile1.verbose=verbose;
@@ -136,6 +138,7 @@ public class CalcUniqueness {
 		
 		k=k_;
 		k2=k-1;
+		assert(k>0 && k<32) : "k="+k+"; valid range is 1-31";
 		
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
 			in2=in1.replace("#", "2");
@@ -193,11 +196,11 @@ public class CalcUniqueness {
 		//Initialize tables
 		for(int j=0; j<WAYS; j++){
 			if(useForest){
-				keySets[j]=new HashForest(initialSize, true);
+				keySets[j]=new HashForest(initialSize, true, false);
 			}else if(useTable){
 				keySets[j]=new KmerTable(initialSize, true);
 			}else if(useArray){
-				keySets[j]=new HashArray(initialSize, true);
+				keySets[j]=new HashArray1D(initialSize, true);
 			}else{
 				throw new RuntimeException("Must use forest, table, or array data structure.");
 			}
@@ -217,7 +220,7 @@ public class CalcUniqueness {
 		
 		void increment(final long kmer){
 			AbstractKmerTable table=keySets[(int)(kmer%WAYS)];
-			int count=table.getCount(kmer);
+			int count=table.getValue(kmer);
 			if(count<1){
 				table.set(kmer, mask);
 				misses++;
@@ -299,16 +302,6 @@ public class CalcUniqueness {
 		long pairsProcessed=0;
 		long readsProcessed=0;
 		long basesProcessed=0;
-		
-		//Counters for hashtable hits and misses of different kmers
-		final Counter r1CounterFirst=new Counter(1);
-		final Counter r1CounterRand=new Counter(2);
-		final Counter r2CounterFirst=new Counter(4);
-		final Counter r2CounterRand=new Counter(8);
-		final Counter pairCounter=new Counter(16);
-
-		final Counter bothCounterFirst=new Counter(32);
-		final Counter bothCounterRand=new Counter(64);
 		
 		//Counter for display intervals
 		long remaining=interval;
@@ -395,61 +388,13 @@ public class CalcUniqueness {
 					remaining--;
 					if(remaining<=0){
 						
-						//Display data for the last interval
-						sb.append(pairsProcessed);
+						printCountsToBuffer(sb, pairsProcessed, paired);
 						
-						if(showPercents){
-							sb.append('\t');
-							sb.append(bothCounterFirst.percentS());
-							sb.append('\t');
-							sb.append(bothCounterRand.percentS());
-							if(paired){
-								sb.append('\t');
-								sb.append(r1CounterFirst.percentS());
-								sb.append('\t');
-								sb.append(r1CounterRand.percentS());
-								sb.append('\t');
-								sb.append(r2CounterFirst.percentS());
-								sb.append('\t');
-								sb.append(r2CounterRand.percentS());
-								sb.append('\t');
-								sb.append(pairCounter.percentS());
-							}
-						}
-						
-						if(showCounts){
-							sb.append('\t');
-							sb.append(bothCounterFirst.misses());
-							sb.append('\t');
-							sb.append(bothCounterRand.misses());
-							if(paired){
-								sb.append('\t');
-								sb.append(r1CounterFirst.misses());
-								sb.append('\t');
-								sb.append(r1CounterRand.misses());
-								sb.append('\t');
-								sb.append(r2CounterFirst.misses());
-								sb.append('\t');
-								sb.append(r2CounterRand.misses());
-								sb.append('\t');
-								sb.append(pairCounter.misses());
-							}
-						}
-						
-						sb.append('\n');
 						tsw.print(sb.toString());
 						
 						//Reset things
 						sb.setLength(0);
 						remaining=interval;
-
-						bothCounterFirst.reset();
-						bothCounterRand.reset();
-						r1CounterFirst.reset();
-						r1CounterRand.reset();
-						r2CounterFirst.reset();
-						r2CounterRand.reset();
-						pairCounter.reset();
 					}
 				}
 				
@@ -462,6 +407,18 @@ public class CalcUniqueness {
 				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
 			}
 		}
+		
+		if(remaining<interval && printLastBin){
+			
+			printCountsToBuffer(sb, pairsProcessed, paired);
+			
+			tsw.print(sb.toString());
+			
+			//Reset things
+			sb.setLength(0);
+			remaining=interval;
+		}
+		
 		
 		//Close things
 		errorState|=ReadWrite.closeStream(cris);
@@ -495,6 +452,62 @@ public class CalcUniqueness {
 			throw new RuntimeException("CalcUniqueness terminated in an error state; the output may be corrupt.");
 		}
 	}
+	
+	
+	private void printCountsToBuffer(StringBuilder sb, long pairsProcessed, boolean paired){
+		
+		//Display data for the last interval
+		sb.append(pairsProcessed);
+		
+		if(showPercents){
+			sb.append('\t');
+			sb.append(bothCounterFirst.percentS());
+			sb.append('\t');
+			sb.append(bothCounterRand.percentS());
+			if(paired){
+				sb.append('\t');
+				sb.append(r1CounterFirst.percentS());
+				sb.append('\t');
+				sb.append(r1CounterRand.percentS());
+				sb.append('\t');
+				sb.append(r2CounterFirst.percentS());
+				sb.append('\t');
+				sb.append(r2CounterRand.percentS());
+				sb.append('\t');
+				sb.append(pairCounter.percentS());
+			}
+		}
+		
+		if(showCounts){
+			sb.append('\t');
+			sb.append(bothCounterFirst.misses());
+			sb.append('\t');
+			sb.append(bothCounterRand.misses());
+			if(paired){
+				sb.append('\t');
+				sb.append(r1CounterFirst.misses());
+				sb.append('\t');
+				sb.append(r1CounterRand.misses());
+				sb.append('\t');
+				sb.append(r2CounterFirst.misses());
+				sb.append('\t');
+				sb.append(r2CounterRand.misses());
+				sb.append('\t');
+				sb.append(pairCounter.misses());
+			}
+		}
+		
+		sb.append('\n');
+
+		bothCounterFirst.reset();
+		bothCounterRand.reset();
+		r1CounterFirst.reset();
+		r1CounterRand.reset();
+		r2CounterFirst.reset();
+		r2CounterRand.reset();
+		pairCounter.reset();
+	}
+	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Helper Methods        ----------------*/
@@ -560,6 +573,19 @@ public class CalcUniqueness {
 	
 	/*--------------------------------------------------------------*/
 	
+	//Counters for hashtable hits and misses of different kmers
+	private final Counter r1CounterFirst=new Counter(1);
+	private final Counter r1CounterRand=new Counter(2);
+	private final Counter r2CounterFirst=new Counter(4);
+	private final Counter r2CounterRand=new Counter(8);
+	private final Counter pairCounter=new Counter(16);
+
+	private final Counter bothCounterFirst=new Counter(32);
+	private final Counter bothCounterRand=new Counter(64);
+	
+	/*--------------------------------------------------------------*/
+	
+	
 	private long maxReads=-1;
 	private float samplerate=1f;
 	private long sampleseed=-1;
@@ -568,6 +594,7 @@ public class CalcUniqueness {
 	private boolean cumulative=false;
 	private boolean showPercents=true;
 	private boolean showCounts=false;
+	private boolean printLastBin=false;
 
 	private final int k, k2;
 	private static final int WAYS=31;

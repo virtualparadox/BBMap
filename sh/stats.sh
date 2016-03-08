@@ -4,7 +4,7 @@
 usage(){
 	echo "Calculates basic statistics of assembly fasta files."
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified November 13, 2014"
 	echo ""
 	echo "Description:  Generates basic assembly statistics such as scaffold count, N50, L50, GC content, gap percent, etc."
 	echo ""
@@ -22,8 +22,9 @@ usage(){
 	echo "phs=<f>	       	(printheaderstats) Set to true to print total size of headers."
 	echo "pdl=<f>	       	(printduplicatelines) Set to true to print lines in the scaffold size table where the counts did not change."
 	echo "n_=<t>         	This flag will prefix the terms 'contigs' and 'scaffolds' with 'n_' in formats 3-6."
+	echo "addname=<f>    	Adds a column for input file name, for formats 3-6."
 	echo ""
-	echo "format=<1 through 6>	Format of the stats information."
+	echo "format=<1 - 6> 	Format of the stats information."
 	echo "	format=1 uses variable units like MB and KB, and is designed for compatibility with existing tools."
 	echo "	format=2 uses only whole numbers of bases, with no commas in numbers, and is designed for machine parsing."
 	echo "	format=3 outputs stats in 2 rows of tab-delimited columns: a header row and a data row."
@@ -31,7 +32,8 @@ usage(){
 	echo "	format=5 is like 3 but with contig data only."
 	echo "	format=6 is like 3 but the header starts with a #."
 	echo ""
-	echo "gcformat=<1 or 2>	Select GC output format."
+	echo "gcformat=<0 - 4>	Select GC output format."
+	echo "	gcformat=0:	(no base content info printed)"
 	echo "	gcformat=1:	name	start	stop	A	C	G	T	N	GC"
 	echo "	gcformat=2:	name	GC"
 	echo "	gcformat=4:	name	length	GC"
@@ -61,6 +63,7 @@ calcXmx "$@"
 stats() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
+	#module load pigz
 	local CMD="java $EA $z -cp $CP jgi.AssemblyStats2 $@"
 #	echo $CMD >&2
 	$CMD

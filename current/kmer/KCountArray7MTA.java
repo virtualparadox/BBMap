@@ -271,9 +271,30 @@ public final class KCountArray7MTA extends KCountArray {
 		throw new RuntimeException("Operation not supported.");
 	}
 	
-	/** Returns unincremented value */
-	public int incrementAndReturnUnincremented(long key, int incr){
-		throw new RuntimeException("Operation not supported.");
+	public int incrementAndReturnUnincremented(final long rawKey, final int incr){
+
+		if(verbose){System.err.println("\n*** Incrementing raw key "+rawKey+" ***");}
+		
+		if(prefilter!=null){
+			int x=prefilter.read(rawKey);
+			if(x<prefilter.maxValue){return x;}
+		}
+		
+		long key2=rawKey;
+		int value=maxValue;
+		for(int i=0; i<hashes; i++){
+			key2=hash(key2, i);
+			if(verbose){System.err.println("key2="+key2+", value="+readHashed(key2));}
+//			assert(readHashed(key2)==0);
+			
+//			int bnum=(int)(key2&arrayMask);
+			int x=incrementHashedLocalAndReturnUnincremented(key2, incr);
+			value=min(value, x);
+//			assert(read(rawKey)<=min+incr) : "i="+i+", original="+min+", new should be <="+(min+incr)+", new="+read(rawKey)+", max="+maxValue+", key="+rawKey;
+//			assert(readHashed(key2)>=min+incr) : "i="+i+", original="+min+", new should be <="+(min+incr)+", new="+read(rawKey)+", max="+maxValue+", key="+rawKey;
+			key2=Long.rotateRight(key2, hashBits);
+		}
+		return value;
 	}
 	
 	public long[] transformToFrequency(){
@@ -497,6 +518,25 @@ public final class KCountArray7MTA extends KCountArray {
 			value=((word>>>cellShift)&valueMask);
 			value=min(value+1, maxValue);
 			word2=(value<<cellShift)|(word&~((valueMask)<<cellShift));
+		}while(word!=word2 && !array.compareAndSet(index, word, word2));
+//		if(value==1){cellsUsedPersonal.incrementAndGet(num);}
+		return value;
+	}
+	
+	private int incrementHashedLocalAndReturnUnincremented(long key, int incr){
+		assert(incr>=0);
+		final int num=(int)(key&arrayMask);
+		final AtomicIntegerArray array=matrix[num];
+		key=(key>>>arrayBits)%(cellMod);
+//		key=(key>>>(arrayBits+1))%(cellMod);
+		int index=(int)(key>>>indexShift);
+		int cellShift=(int)(cellBits*key);
+		int value, word, word2;
+		do{
+			word=array.get(index);
+			value=((word>>>cellShift)&valueMask);
+			int value2=min(value+incr, maxValue);
+			word2=(value2<<cellShift)|(word&~((valueMask)<<cellShift));
 		}while(word!=word2 && !array.compareAndSet(index, word, word2));
 //		if(value==1){cellsUsedPersonal.incrementAndGet(num);}
 		return value;

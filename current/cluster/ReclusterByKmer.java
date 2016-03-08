@@ -76,7 +76,7 @@ public class ReclusterByKmer {
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
-			}else if(parser.parseQuality(arg, a, b)){
+			}else if(Parser.parseQuality(arg, a, b)){
 				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing

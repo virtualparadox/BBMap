@@ -13,6 +13,10 @@ public final class LongList{
 		array=new long[initial];
 	}
 	
+	public void clear(){
+		size=0;
+	}
+	
 	public final void set(int loc, long value){
 		if(loc>=array.length){
 			resize((loc+1L)*2);
@@ -100,6 +104,10 @@ public final class LongList{
 		return sb.toString();
 	}
 	
+	public void sort() {
+		if(size>1){Arrays.sort(array, 0, size);}
+	}
+	
 	private static final long min(long x, long y){return x<y ? x : y;}
 	private static final long max(long x, long y){return x>y ? x : y;}
 	
@@ -107,6 +115,7 @@ public final class LongList{
 	private static final int max(int x, int y){return x>y ? x : y;}
 	
 	public long[] array;
+	/** Highest occupied index plus 1, i.e., lowest unoccupied index */
 	public int size=0;
 	
 }

@@ -2,9 +2,9 @@
 #testformat in=<infile>
 
 usage(){
-	echo "Tests the format of a sequence file."
+	echo "Tests the format of a sequence file based on name and contents."
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified October 23, 2014"
 	echo ""
 	echo "Description:  Tests the file extensions and contente of filee to determine format, quality, compression, and interleaving."
 	echo ""

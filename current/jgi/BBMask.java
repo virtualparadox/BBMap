@@ -89,7 +89,7 @@ public class BBMask{
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
 				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
 			}else if(a.equals("bf1")){
@@ -289,8 +289,16 @@ public class BBMask{
 		{
 			t.start();
 			outstream.println("Loading input");
+			
+			boolean oldTI=FASTQ.TEST_INTERLEAVED;
+			boolean oldFI=FASTQ.FORCE_INTERLEAVED;
+			FASTQ.TEST_INTERLEAVED=false;
+			FASTQ.FORCE_INTERLEAVED=false;
 			map=hashRef();
+			FASTQ.TEST_INTERLEAVED=oldTI;
+			FASTQ.FORCE_INTERLEAVED=oldFI;
 			t.stop();
+			
 			outstream.println("Loading Time:                 \t"+t);
 		}
 		

@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicLongArray;
 
 import stream.SiteScore;
 
+import dna.CoverageArray;
 import dna.Data;
 
 public final class Tools {
@@ -37,6 +38,61 @@ public final class Tools {
 					
 					set.add(s);
 				}		
+			}
+		}
+		return true;
+	}
+	
+	/** Checks for permission to read files, and input name collisions. */
+	public static boolean testInputFiles(boolean allowDuplicates, boolean throwException, String[]...args){
+		if(args==null || args.length==0){return true;}
+		for(String[] s : args){
+			if(!testInputFiles(allowDuplicates, throwException, s)){return false;}
+		}
+		return true;
+	}
+	
+	/** Checks for permission to read files, and input name collisions. */
+	public static boolean testInputFiles(boolean allowDuplicates, boolean throwException, String...args){
+		if(args==null || args.length==0){return true;}
+		HashSet<String> set=new HashSet<String>(args.length*2);
+		int terms=0;
+		for(String s : args){
+			if(s!=null){
+				String s2=s.toLowerCase();
+				if(canRead(s)){
+					terms++;
+				}else{
+					if(throwException){throw new RuntimeException("Can't read file '"+s+"'");}
+					return false;
+				}
+
+				if(!allowDuplicates && set.contains(s2)){
+					if(throwException){throw new RuntimeException("Duplicate file "+s+" was specified for multiple input streams.");}
+					return false;
+				}
+
+				set.add(s2);
+			}
+		}
+		return true;
+	}
+	
+	/** Checks for permission to overwrite files, and output name collisions. 
+	 * @return True if no problems are detected */
+	public static boolean testForDuplicateFiles(boolean throwException, String...args){
+		if(args==null || args.length==0){return true;}
+		HashSet<String> set=new HashSet<String>(args.length*2);
+		int terms=0;
+		for(String s0 : args){
+			if(s0!=null){
+				String s=s0.toLowerCase();
+				terms++;
+				if(set.contains(s) && !s.equals("stdout") && !s.startsWith("stdout.")){
+					if(throwException){throw new RuntimeException("File '"+s0+"' was specified multiple times.");}
+					return false;
+				}
+				set.add(s);
 			}
 		}
 		return true;
@@ -130,6 +186,24 @@ public final class Tools {
 			assert(x==null);
 		}
 		return removed;
+	}
+	
+	/** Removes null elements by shrinking the array.  Will not change array order. */
+	public static final <X> X[] condenseStrict(X[] array){
+		if(array==null){return array;}
+		int nulls=0;
+		for(X x : array){if(x==null){nulls++;}}
+		if(nulls==0){return array;}
+		X[] array2=Arrays.copyOf(array, array.length-nulls);
+		
+		int j=0;
+		for(X x : array){
+			if(x!=null){
+				array2[j]=x;
+				j++;
+			}
+		}
+		return array2;
 	}
 	
 	/** Creates a new list without null elements. */
@@ -371,8 +445,7 @@ public final class Tools {
 								}
 							}else if(subsumeInexact || (a.start==b.start && (subsumeIfOnlyStartMatches || a.stop==b.stop))){
 								assert(!a.semiperfect && !a.perfect && !b.semiperfect && !b.perfect);
-								a.start=min(a.start, b.start);
-								a.stop=max(a.stop, b.stop);
+								a.setLimits(min(a.start, b.start), max(a.stop, b.stop));
 								a.score=max(a.score, b.score);
 								a.slowScore=max(a.slowScore, b.slowScore);
 								a.pairedScore=max(a.pairedScore, b.pairedScore);
@@ -726,6 +799,16 @@ public final class Tools {
 //	}
 	
 	
+	public static boolean equals(int[] a, int[] b){
+		if(a==b){return true;}
+		if(a==null || b==null){return false;}
+		if(a.length!=b.length){return false;}
+		for(int i=0; i<a.length; i++){
+			if(a[i]!=b[i]){return false;}
+		}
+		return true;
+	}
+	
 	public static boolean equals(byte[] a, byte[] b){
 		if(a==b){return true;}
 		if(a==null || b==null){return false;}
@@ -797,6 +880,20 @@ public final class Tools {
 		return x;
 	}
 	
+	public static long minHistogram(long[] array){
+		for(int i=0; i<array.length; i++){
+			if(array[i]>0){return i;}
+		}
+		return 0;
+	}
+	
+	public static long maxHistogram(long[] array){
+		for(int i=array.length-1; i>=0; i--){
+			if(array[i]>0){return i;}
+		}
+		return 0;
+	}
+	
 	public static long sum(AtomicIntegerArray array){
 		long x=0;
 		for(int i=0; i<array.length(); i++){x+=array.get(i);}
@@ -806,6 +903,18 @@ public final class Tools {
 	public static long sum(AtomicLongArray array){
 		long x=0;
 		for(int i=0; i<array.length(); i++){x+=array.get(i);}
+		return x;
+	}
+	
+	public static long[] toArray(AtomicLongArray array){
+		long[] x=new long[array.length()];
+		for(int i=0; i<array.length(); i++){x[i]=array.get(i);}
+		return x;
+	}
+	
+	public static long[] toArray(CoverageArray array){
+		long[] x=new long[array.maxIndex+1];
+		for(int i=0; i<=array.maxIndex; i++){x[i]=array.get(i);}
 		return x;
 	}
 	
@@ -1072,11 +1181,10 @@ public final class Tools {
 	}
 	
 	public static long parseKMG(String b){
-
+		if(b==null){return 0;}
 		char c=Character.toLowerCase(b.charAt(b.length()-1));
-		if(!Character.isLetter(c) && !b.contains(".")){
-			return Long.parseLong(b);
-		}
+		boolean dot=b.indexOf('.')>=0;
+		if(!Character.isLetter(c) && !dot){return Long.parseLong(b);}
 		
 		long mult=1;
 		if(Character.isLetter(c)){
@@ -1088,8 +1196,9 @@ public final class Tools {
 			b=b.substring(0, b.length()-1);
 		}
 		
-		return ((long)Double.parseDouble(b))*mult;
+		if(!dot){return Long.parseLong(b)*mult;}
 		
+		return ((long)Double.parseDouble(b))*mult;
 	}
 	
 	public static boolean parseBoolean(String s){
@@ -1213,7 +1322,6 @@ public final class Tools {
 	 * @return
 	 */
 	public static int average(short[] array) {
-		// TODO Auto-generated method stub
 		return (int)(array==null || array.length==0 ? 0 : sum(array)/array.length);
 	}
 	
@@ -1222,7 +1330,6 @@ public final class Tools {
 	 * @return
 	 */
 	public static int average(int[] array) {
-		// TODO Auto-generated method stub
 		return (int)(array==null || array.length==0 ? 0 : sum(array)/array.length);
 	}
 	
@@ -1365,6 +1472,17 @@ public final class Tools {
 	
 	public static final int maxIndex(int[] array){
 		int max=array[0], maxIndex=0;
+		for(int i=1; i<array.length; i++){
+			if(array[i]>max){max=array[i];maxIndex=i;}
+		}
+		return maxIndex;
+	}
+	
+	public static final double max(double[] array){return array[maxIndex(array)];}
+	
+	public static final int maxIndex(double[] array){
+		double max=array[0];
+		int maxIndex=0;
 		for(int i=1; i<array.length; i++){
 			if(array[i]>max){max=array[i];maxIndex=i;}
 		}

@@ -44,6 +44,14 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 		}
 	}
 	
+	public void returnList(boolean poison){
+		if(poison){
+			depot.full.add(new ArrayList<Read>(0));
+		}else{
+			depot.empty.add(new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		}
+	}
+	
 	@Override
 	public void run() {
 //		producer.start();
@@ -52,7 +60,7 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 		if(producer.preferLists()){
 			readLists();
 			//System.err.println("Done reading lists.");
-		}else if(producer.preferBlocks()){
+		}else if(producer.preferArrays()){
 			readBlocks();
 		}else{
 			readSingles();
@@ -155,8 +163,14 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 					//Then do a quicker bulk operation
 					list.addAll(buffer);
 					for(Read a : buffer){
-						bases+=(a.bases==null ? 0 : a.bases.length);
-						bases+=(a.mate==null || a.mate.bases==null ? 0 : a.mate.bases.length);
+						readsIn++;
+						basesIn+=a.length();
+						bases+=a.length();
+						if(a.mate!=null){
+							readsIn++;
+							basesIn+=a.mate.length();
+							bases+=a.mate.length();
+						}
 					}
 					generated+=buffer.size();
 					next=0;
@@ -164,6 +178,12 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 				}else{
 					while(next<buffer.size() && list.size()<depot.bufferSize && generated<maxReads && bases<MAX_DATA){
 						Read r=buffer.get(next);
+						readsIn++;
+						basesIn+=r.length();
+						if(r.mate!=null){
+							readsIn++;
+							basesIn+=r.mate.length();
+						}
 						if(randy==null || randy.nextFloat()<samplerate){
 							list.add(r);
 							bases+=r.length();
@@ -214,6 +234,12 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 				if(buffer==null){break;}
 				while(next<buffer.length && list.size()<depot.bufferSize && generated<maxReads && bases<MAX_DATA){
 					Read r=buffer[next];
+					readsIn++;
+					basesIn+=r.length();
+					if(r.mate!=null){
+						readsIn++;
+						basesIn+=r.mate.length();
+					}
 					if(randy==null || randy.nextFloat()<samplerate){
 						list.add(r);
 						bases+=r.length();
@@ -248,7 +274,9 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 		shutdown=false;
 		producer.restart();
 		depot=new ConcurrentDepot<Read>(BUF_LEN, NUM_BUFFS);
-		generated=0;
+		generated=0;	
+		basesIn=0;
+		readsIn=0;
 	}
 	
 	@Override
@@ -279,6 +307,9 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 		}
 	}
 	
+	public long basesIn(){return basesIn;}
+	public long readsIn(){return readsIn;}
+	
 	@Override
 	public boolean errorState(){return errorState || (producer!=null && producer.errorState());}
 	/** TODO */
@@ -293,6 +324,10 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 
 	public final ReadInputStream producer;
 	private ConcurrentDepot<Read> depot;
+	
+	private long basesIn=0;
+	private long readsIn=0;
+	
 	private long maxReads;
 	private long generated=0;
 	private long listnum=0;

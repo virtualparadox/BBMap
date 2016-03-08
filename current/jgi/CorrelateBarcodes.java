@@ -28,7 +28,7 @@ import align2.Tools;
 
 /**
  * @author Brian Bushnell
- * @date Sep 11, 2012
+ * @date June 20, 2014
  *
  */
 public class CorrelateBarcodes {

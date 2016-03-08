@@ -99,7 +99,7 @@ public class RenameReads {
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("bf1")){
@@ -187,8 +187,12 @@ public class RenameReads {
 				setInterleaved=true;
 			}else if(a.equals("renamebyinsert")){
 				renameByInsert=Tools.parseBoolean(b);
+			}else if(a.equals("renamebymapping")){
+				renameByMapping=Tools.parseBoolean(b);
 			}else if(a.equals("renamebytrim")){
 				renameByTrim=Tools.parseBoolean(b);
+			}else if(a.equals("addprefix")){
+				addPrefix=Tools.parseBoolean(b);
 			}else if(a.equals("interleaved") || a.equals("int")){
 				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
 				else{
@@ -253,7 +257,8 @@ public class RenameReads {
 				printOptions();
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
-			out1="stdout";
+			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//			out1="stdout";
 		}
 		
 		if(!setInterleaved){
@@ -350,6 +355,32 @@ public class RenameReads {
 						}
 					}
 					
+				}
+				if(renameByMapping){
+					assert(false) : "TODO";
+				}else if(r2!=null && (renameByInsert || renameByTrim)){
+					
+					r1.setMapped(true);
+					r2.setMapped(true);
+					x=Read.insertSizeMapped(r1, r2, false);
+					if(verbose){System.err.println("True Insert: "+x);}
+					if(renameByTrim){
+						r1.id=r1.numericID+"_"+r1.length()+"_"+Tools.min(x, r1.length())+" /1";
+						r2.id=r2.numericID+"_"+r2.length()+"_"+Tools.min(x, r2.length())+" /2";
+					}else{
+						r1.id=prefix+x;
+						if(r2!=null){
+							r1.id=r1.id+" /1";
+							r2.id=prefix+x+" /2";
+						}
+					}
+					
+				}else if(addPrefix){
+					r1.id=prefix+r1.id;
+					if(r1.mate!=null){
+						r2.id=prefix+r2.id;
+					}
+					x++;
 				}else{
 					r1.id=prefix+x;
 					if(r1.mate!=null){
@@ -402,8 +433,10 @@ public class RenameReads {
 	private long maxReads=-1;
 	public boolean errorState=false;
 
+	public boolean renameByMapping=false;
 	public boolean renameByInsert=false;
 	public boolean renameByTrim=false;
+	public boolean addPrefix=false;
 	
 	private byte qin=-1;
 	private byte qout=-1;

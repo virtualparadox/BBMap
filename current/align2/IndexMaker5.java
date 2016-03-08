@@ -338,7 +338,7 @@ public class IndexMaker5 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(array[a]==idb){
 						int key=ca.getNumber(a, b);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
 							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+
 								", "+ca.getString(a, b)+"\n"+minIndex+", "+maxIndex+"\n";
 							sizes[key]++;
@@ -410,7 +410,7 @@ public class IndexMaker5 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.array[a]==idb){
 						int key=ca.getNumber(a, b);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
 							assert(key>=minIndex && key<=maxIndex);
 							int number=toNumber(a, chrom);
 							assert(numberToChrom(number, baseChrom)==chrom);
@@ -454,7 +454,7 @@ public class IndexMaker5 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.getNumber(a)==id){
 						int key=ca.getNumber(a, b, COLORSPACE);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
 							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+", "+ca.getString(a, b)+"\n"
 									+minIndex+", "+maxIndex+"\n";
 							sizes[key]++;
@@ -495,7 +495,7 @@ public class IndexMaker5 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.array[a]==idb){
 						int key=ca.getNumber(a, b, COLORSPACE);
-						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0 || (AminoAcid.reverseComplementBinaryFast(key, KEYLEN))%MODULO==0)){
 							assert(key>=minIndex && key<=maxIndex);
 							int number=toNumber(a, chrom);
 							assert(numberToChrom(number, baseChrom)==chrom);
@@ -610,6 +610,6 @@ public class IndexMaker5 {
 
 	public static boolean ALLOW_POLYMERS=false;
 	public static boolean USE_MODULO=false;
-	private static final int MODULO=5;
+	private static final int MODULO=IndexMaker4.MODULO;
 	
 }

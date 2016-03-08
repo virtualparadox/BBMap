@@ -57,7 +57,8 @@ function usage(){
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
-z="-Xmx200m"
+z="-Xmx1g"
+z2="-Xms1g"
 EA="-ea"
 set=0
 
@@ -69,6 +70,12 @@ fi
 calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
+	if [[ $set == 1 ]]; then
+		return
+	fi
+	freeRam 3200m 84
+	z="-Xmx${RAM}m"
+	z2="-Xms${RAM}m"
 }
 calcXmx "$@"
 
@@ -78,7 +85,7 @@ function merge() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java $EA $z -cp $CP jgi.MateReadsMT $@"
+	local CMD="java $EA $z $z2 -cp $CP jgi.MateReadsMT $@"
 	echo $CMD >&2
 	$CMD
 }

@@ -1,6 +1,7 @@
 package jgi;
 
 import java.io.File;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -148,9 +149,9 @@ public class MateReadsMT {
 			}else if(a.equals("maxbadbases")){
 				DEFAULT_BADLIMIT_FOR_BASE_MATCHING=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads_G=Long.parseLong(b);
+				maxReads_G=Tools.parseKMG(b);
 			}else if(a.equals("tablereads") || a.startsWith("tablereads")){
-				tableReads_G=Long.parseLong(b);
+				tableReads_G=Tools.parseKMG(b);
 			}else if(a.startsWith("gap")){
 				if(b.equalsIgnoreCase("true") || b.equalsIgnoreCase("null")){
 					b="";
@@ -519,7 +520,7 @@ public class MateReadsMT {
 		long sum=correctCountTotal+incorrectCountTotal;
 		
 		double div=100d/readsProcessedTotal;
-		System.err.println("Reads:       \t"+readsProcessedTotal);
+		System.err.println("Pairs:       \t"+readsProcessedTotal);
 		System.err.println("Joined:      \t"+sum+String.format((sum<10000 ? "       " : "   ")+"\t%.3f%%", sum*div));
 		if(FASTQ.PARSE_CUSTOM){
 			System.err.println("Correct:     \t"+correctCountTotal+String.format((correctCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", correctCountTotal*div));
@@ -723,7 +724,7 @@ public class MateReadsMT {
 		errorState|=ReadWrite.closeStreams(cris, rosgood, rosbad, rosinsert);
 		
 		talign.stop();
-		System.err.println("Align time: "+talign);
+//		System.err.println("Align time: "+talign);
 	}
 	
 
@@ -1414,8 +1415,8 @@ public class MateReadsMT {
 								final int len1=r1.bases.length, len2=r2.bases.length;
 								for(int trims=0, q=trimq; trims<TRIM_ON_OVERLAP_FAILURE && !qtrim && bInsert<0 /*&& !bAmbig*/; trims++, q+=8){
 //									System.err.println(trims+", "+q);
-									Object old1=r1.obj;
-									Object old2=r2.obj;
+									Serializable old1=r1.obj;
+									Serializable old2=r2.obj;
 									tr1=TrimRead.trim(r1, false, true, q, 1+len1*4/10); //r1.bases.length);
 									tr2=TrimRead.trim(r2, true, false, q, 1+len2*4/10); //r2.bases.length);
 									r1.obj=old1;

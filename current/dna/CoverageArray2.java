@@ -152,7 +152,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 			if(val>Character.MAX_VALUE){
 				val=Character.MAX_VALUE;
 				 if(!OVERFLOWED){
-					 System.err.println("Note: Coverage capped at "+Character.MAX_VALUE);
+					 System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE));
 					 OVERFLOWED=true;
 				 }
 			}
@@ -175,7 +175,7 @@ public class CoverageArray2 extends CoverageArray implements Serializable {
 		}
 		
 		if(val>Character.MAX_VALUE && !OVERFLOWED){
-			System.err.println("Note: Coverage capped at "+Character.MAX_VALUE);
+			System.err.println("Note: Coverage capped at "+(int)(Character.MAX_VALUE));
 			OVERFLOWED=true;
 		}
 		array[loc]=(val>Character.MAX_VALUE ? Character.MAX_VALUE : (char)val);

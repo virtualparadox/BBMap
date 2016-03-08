@@ -120,6 +120,7 @@ public class ByteFile1 extends ByteFile {
 	}
 	
 	public final byte[] readLine(){
+		if(verbose){System.err.println("Reading line "+this.getClass().getName()+" for "+name()+"; open="+open+"; errorState="+errorState);}
 		
 		if(!open || is==null){
 			if(Data.WINDOWS){System.err.println("Attempting to read from a closed file: "+name());}

@@ -92,7 +92,7 @@ public class CalcTrueQuality {
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
 				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
 			}else if(a.equals("build") || a.equals("genome")){
@@ -753,7 +753,7 @@ public class CalcTrueQuality {
 	/*--------------------------------------------------------------*/
 	
 	private static double modify(final double sum, final double bad, final int phred, final long cutoff){
-		double expected=QualityTools.phredToProbError(phred);
+		double expected=QualityTools.PROB_ERROR[phred];
 
 		double sum2=sum+cutoff;
 		double bad2=bad+expected*cutoff;

@@ -60,12 +60,17 @@ public class Scaffold implements Comparable<Scaffold> {
 	public String assembly;
 	public int length=-1;
 	public long basehits=0;
+	public long readhits=0;
+	public long readhitsMinus=0;
 	
 	/** {A,C,G,T,N} */
 	public long[] basecount;
 	public float gc;
 	
 	/** For attaching things */
-	public Object obj;
+	public Object obj1;
+	
+	/** For attaching more things */
+	public Object obj2;
 	
 }

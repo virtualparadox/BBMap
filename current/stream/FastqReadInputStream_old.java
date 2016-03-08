@@ -58,7 +58,7 @@ public class FastqReadInputStream_old extends ReadInputStream {
 		}
 		
 		tf=new TextFile(ff.name(), false, false);
-		interleaved=((tf.is==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(tf.name));
+		interleaved=((tf.is==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(tf.name, false));
 		
 	}
 

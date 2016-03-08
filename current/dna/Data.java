@@ -37,6 +37,30 @@ public class Data {
 		chromosomePlusMatrix=null;
 		chromosomeMinusMatrix=null;
 		AbstractIndex.clear();
+		
+		numChroms=0;
+		numBases=0;
+		numDefinedBases=0;
+		numContigs=0;
+		numScaffolds=0;
+		interScaffoldPadding=0;
+		chromLengths=null;
+		chromDefinedBases=null;
+		chromUndefinedBases=null;
+		chromContigs=null;
+		chromScaffolds=null;
+		chromStartPad=null;
+		
+		scaffoldNames=null;
+		scaffoldLocs=null;
+		scaffoldLengths=null;
+		
+		scaffoldNameTable=null;
+		genomeSource=null;
+		name=null;
+		
+		GENOME_BUILD=-1;
+		genome_set_to=-1;
 	}
 	
 	
@@ -165,7 +189,7 @@ public class Data {
 	
 	public static ChromosomeArray getChromosome(int chrom){
 		assert(chromosomePlusMatrix!=null); 
-		assert(chromosomePlusMatrix.length>chrom) : chromosomePlusMatrix.length+", "+chrom; 
+		assert(chromosomePlusMatrix.length>chrom) : chromosomePlusMatrix.length+", "+chrom;
 		if(chromosomePlusMatrix[chrom]==null){
 			synchronized(CHROMLOCKS[chrom%CHROMLOCKS.length]){
 				if(chromosomePlusMatrix[chrom]==null){loadChromosome(chrom);}
@@ -262,7 +286,7 @@ public class Data {
 	private static void loadChromosome(int chrom){
 //		assert(false);
 		assert(chromosomePlusMatrix[chrom]==null);
-		assert(chrom>0) : chrom;
+//		assert(chrom>0) : chrom; //No longer valid since chrom 0 is now semi-allowed
 		
 		String fname=chromFname(chrom, GENOME_BUILD);
 		sysout.println("Loading "+fname);
@@ -768,7 +792,7 @@ public class Data {
 	
 	
 	public static final synchronized void setGenome(int g){
-		assert(g>0);
+		assert(g>0) : "Genome build number must be at least 1.";
 		if(genome_set_to==g){return;}
 		if(genome_set_to<0){
 			setGenome2(g);
@@ -791,13 +815,13 @@ public class Data {
 		scaffoldPrefixes=false;
 		long fastabytes=-1;
 		long fastatime=-1;
-		final int currentVersion=FastaToChromArrays.currentVersion();
+		final int currentVersion=FastaToChromArrays2.currentVersion();
 		int version=0;
 		
-		if(GENOME_BUILD==FastaToChromArrays.LISTBUILD && FastaToChromArrays.SUMMARY_LIST!=null){
-			for(int i=0; i<FastaToChromArrays.SUMMARY_LIST.size(); i++){
-				final String s=FastaToChromArrays.SUMMARY_LIST.get(i);
-				FastaToChromArrays.SUMMARY_LIST.set(i, null);
+		if(GENOME_BUILD==FastaToChromArrays2.LISTBUILD && FastaToChromArrays2.SUMMARY_LIST!=null){
+			for(int i=0; i<FastaToChromArrays2.SUMMARY_LIST.size(); i++){
+				final String s=FastaToChromArrays2.SUMMARY_LIST.get(i);
+				FastaToChromArrays2.SUMMARY_LIST.set(i, null);
 				if(s.charAt(0)=='#'){
 					if(s.startsWith("#Version")){
 						String[] split=s.split("\t");
@@ -822,7 +846,7 @@ public class Data {
 					else{assert(version<currentVersion) : "In array: Unknown term "+s;}
 				}
 			}
-			FastaToChromArrays.SUMMARY_LIST=null;
+			FastaToChromArrays2.SUMMARY_LIST=null;
 		}else{
 			String s;
 			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/summary.txt", false, false);
@@ -862,7 +886,7 @@ public class Data {
 			if(new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt").exists()){new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt").delete();}
 			if(new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").exists()){new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").delete();}
 			sysout.println("Regenerating genome info in new format, version "+currentVersion+".");
-			dna.FastaToChromArrays.writeInfo(GENOME_BUILD, numChroms, name, genomeSource, true, scaffoldPrefixes);
+			dna.FastaToChromArrays2.writeInfo(GENOME_BUILD, numChroms, name, genomeSource, true, scaffoldPrefixes);
 			genome_set_to=-1;
 			setGenome2(g);
 			return;
@@ -885,10 +909,10 @@ public class Data {
 		scaffoldLocs=new int[numChroms+1][];
 		scaffoldLengths=new int[numChroms+1][];
 		
-		if(GENOME_BUILD==FastaToChromArrays.LISTBUILD && FastaToChromArrays.INFO_LIST!=null){
-			for(int i=0; i<FastaToChromArrays.INFO_LIST.size(); i++){
-				final String s=FastaToChromArrays.INFO_LIST.get(i);
-				FastaToChromArrays.INFO_LIST.set(i, null);
+		if(GENOME_BUILD==FastaToChromArrays2.LISTBUILD && FastaToChromArrays2.INFO_LIST!=null){
+			for(int i=0; i<FastaToChromArrays2.INFO_LIST.size(); i++){
+				final String s=FastaToChromArrays2.INFO_LIST.get(i);
+				FastaToChromArrays2.INFO_LIST.set(i, null);
 				if(s.charAt(0)=='#'){
 					if(s.startsWith("#Version")){
 						String[] split=s.split("\t");
@@ -908,7 +932,7 @@ public class Data {
 					
 				}
 			}
-			FastaToChromArrays.INFO_LIST=null;
+			FastaToChromArrays2.INFO_LIST=null;
 		}else{
 			String s;
 			TextFile tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false, false);
@@ -936,7 +960,7 @@ public class Data {
 						if(new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt").exists()){new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt").delete();}
 						if(new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").exists()){new File(ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz").delete();}
 						sysout.println("Regenerating genome info in new format.");
-						dna.FastaToChromArrays.writeInfo(GENOME_BUILD, numChroms, name, genomeSource, true, scaffoldPrefixes);
+						dna.FastaToChromArrays2.writeInfo(GENOME_BUILD, numChroms, name, genomeSource, true, scaffoldPrefixes);
 						tf=new TextFile(ROOT_GENOME+GENOME_BUILD+"/info.txt", false, false);
 					}
 				}
@@ -947,7 +971,8 @@ public class Data {
 		}
 		
 		String fname=ROOT_GENOME+GENOME_BUILD+"/scaffolds.txt.gz";
-		boolean hasList=(GENOME_BUILD==FastaToChromArrays.LISTBUILD && FastaToChromArrays.SCAF_LIST!=null);
+		boolean hasList=(GENOME_BUILD==FastaToChromArrays2.LISTBUILD && FastaToChromArrays2.SCAF_LIST!=null);
+		
 		if(!LOAD_SCAFFOLDS || (!hasList && !new File(fname).exists())){
 			for(int i=0; i<scaffoldNames.length; i++){
 				scaffoldNames[i]=new byte[][] {("chr"+i).getBytes()};
@@ -972,14 +997,14 @@ public class Data {
 			
 			if(hasList){
 				
-				if(verbose){System.err.println("Fetching scaffold names from list:\n\n"+FastaToChromArrays.SCAF_LIST+"\n\n");}
+				if(verbose){System.err.println("Fetching scaffold names from list:\n\n"+FastaToChromArrays2.SCAF_LIST+"\n\n");}
 				
-				for(int i=0; i<FastaToChromArrays.SCAF_LIST.size(); i++){
-					final String s=FastaToChromArrays.SCAF_LIST.get(i);
+				for(int i=0; i<FastaToChromArrays2.SCAF_LIST.size(); i++){
+					final String s=FastaToChromArrays2.SCAF_LIST.get(i);
 					
 					if(verbose){System.err.println("Processing "+s);}
 					
-					FastaToChromArrays.SCAF_LIST.set(i, null);
+					FastaToChromArrays2.SCAF_LIST.set(i, null);
 					if(s.charAt(0)=='#'){
 						if(verbose){System.err.println("Control string");}
 						if(s.startsWith("#Version")){
@@ -1002,7 +1027,7 @@ public class Data {
 						if(verbose){System.err.println("Set scaffoldNames["+chrom+"]["+x+" to "+(scaffoldNames[chrom][x]==null ? "null" : new String(scaffoldNames[chrom][x])));}
 					}
 				}
-				FastaToChromArrays.SCAF_LIST=null;
+				FastaToChromArrays2.SCAF_LIST=null;
 			}else{
 
 				String s;
@@ -1032,6 +1057,8 @@ public class Data {
 				tf.close();
 			}
 		}
+		
+//		assert(false) : (numChroms+1)+", "+(scaffoldLengths==null)+", "+(scaffoldLengths[0]==null)+", "+(scaffoldLengths[1]==null);
 		
 //		for(int i=1; i<scaffoldNames.length; i++){
 //			stdout.println(Arrays.toString(scaffoldLocs[i]));
@@ -1367,9 +1394,11 @@ public class Data {
 		return HOSTNAME;
 	}
 	
+	public static String ROOT(){return ROOT;}
+	
 	
 	/** Should be the same as ROOT_BASE but is found dynamically */
-	public static final String ROOT;
+	private static String ROOT;
 	
 	public static String ROOT_BASE;
 	public static String ROOT_OUTPUT;
@@ -1571,7 +1600,7 @@ public class Data {
 //	private static final boolean SAMTOOLS=testExecute("samtools --help");
 
 	public static boolean GUNZIP(){return GUNZIP==0 ? GZIP() : GUNZIP>0;}
-	public static boolean UNPIGZ(){return UNPIGZ==0 ? PIGZ() : UNPIGZ>0;}
+//	public static boolean UNPIGZ(){return UNPIGZ==0 ? PIGZ() : UNPIGZ>0;}
 	public static boolean GZIP(){
 		if(GZIP==0 && !WINDOWS){
 			synchronized(SUBPROCSYNC){
@@ -1585,8 +1614,24 @@ public class Data {
 			synchronized(SUBPROCSYNC){
 				if(PIGZ==0){PIGZ=testExecute("pigz --version");}
 			}
-		} 
+		}
 		return PIGZ>0;
+	}
+	public static boolean BZIP2(){
+		if(BZIP2==0 && !WINDOWS){
+			synchronized(SUBPROCSYNC){
+				if(BZIP2==0){BZIP2=testExecute("bzip2 --version");}
+			}
+		} 
+		return BZIP2>0;
+	}
+	public static boolean PBZIP2(){
+		if(PBZIP2==0 && !WINDOWS){
+			synchronized(SUBPROCSYNC){
+				if(PBZIP2==0){PBZIP2=testExecute("pbzip2 --version");}
+			}
+		} 
+		return PBZIP2>0;
 	}
 	public static boolean SAMTOOLS(){
 		if(SAMTOOLS==0 && !WINDOWS){
@@ -1612,9 +1657,11 @@ public class Data {
 	
 	/* Set these to zero to enable or -1 to disable */
 	private static int GUNZIP=-1;
-	private static int UNPIGZ=0;
+//	private static int UNPIGZ=0;
 	private static int GZIP=0;
 	private static int PIGZ=0;
+	private static int BZIP2=0;
+	private static int PBZIP2=0;
 	private static int SAMTOOLS=0;
 	private static int SH=0;
 	

@@ -1,10 +1,10 @@
 #!/bin/bash
-#stats in=<infile>
+#readlength in=<infile>
 
 usage(){
 	echo "Generates a length histogram of input reads."
 	echo "Written by Brian Bushnell"
-	echo "Last modified June 25, 2014"
+	echo "Last modified July 9, 2014"
 	echo ""
 	echo "Usage:	readlength.sh in=<input file>"
 	echo ""
@@ -12,7 +12,7 @@ usage(){
 	echo "in2=<file>   	Use this if 2nd read of pairs are in a different file."
 	echo "out=<file>   	Write the histogram to this file.  Default is stdout."
 	echo "bin=10       	Set the histogram bin size."
-	echo "max=40000    	Set the number of bins.  Max read length tracked will be (bin*max)."
+	echo "max=80000    	Set the max read length to track."
 	echo "round=f      	Places reads in the closest bin, rather than the highest bin of at least readlength."
 	echo "nzo=f        	(nonzeroonly) Do not print empty bins."
 	echo ""

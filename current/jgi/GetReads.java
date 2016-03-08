@@ -124,7 +124,7 @@ public class GetReads {
 				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
 				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("build") || a.equals("genome")){
 				Data.setGenome(Integer.parseInt(b));
 			}else if(a.equals("in") || a.equals("input") || a.equals("in1") || a.equals("input1")){

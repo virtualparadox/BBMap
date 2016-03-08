@@ -2,10 +2,11 @@ package pacbio;
 
 import java.io.File;
 
+import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.ChromosomeArrayCompressed;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import dna.Gene;
 import fileIO.ReadWrite;
 
@@ -54,7 +55,7 @@ public class RemoveNFromChromosome {
 			
 		}
 		
-		FastaToChromArrays.writeInfo(outgenome, Data.numChroms, Data.name, Data.genomeSource, false, false);
+		FastaToChromArrays2.writeInfo(outgenome, Data.numChroms, Data.name, Data.genomeSource, false, false);
 		
 	}
 	

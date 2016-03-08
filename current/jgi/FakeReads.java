@@ -86,7 +86,7 @@ public class FakeReads {
 			}else if(a.equals("addspacer") || a.equals("addspace") || a.equals("usespacer")){
 				addSpacer=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
 				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
 			}else if(a.equals("bf1")){
@@ -218,7 +218,8 @@ public class FakeReads {
 				printOptions();
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
-			out1="stdout";
+			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//			out1="stdout";
 		}
 
 		if(out1!=null && out1.equalsIgnoreCase("null")){out1=null;}
@@ -300,13 +301,13 @@ public class FakeReads {
 					}
 					assert(r.mate==null);
 					
-					boolean remove=r.bases.length<minReadLength;
+					boolean remove=r.bases.length<minReadLength || (minReadLength+overlap)<2;
 					
 					if(remove){
 						//Do nothing
 					}else{
 						int len=Tools.min(r.bases.length, desiredLength);
-						if(SPLITMODE){len=Tools.min(r.bases.length, r.bases.length/2+overlap);}
+						if(SPLITMODE){len=Tools.min(r.bases.length, (r.bases.length+overlap+1)/2);}
 						
 						byte[] bases1=Arrays.copyOfRange(r.bases, 0, len);
 						byte[] bases2=Arrays.copyOfRange(r.bases, r.bases.length-len, r.bases.length);

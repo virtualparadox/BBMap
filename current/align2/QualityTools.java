@@ -23,6 +23,13 @@ public class QualityTools {
 
 	public static void main(String[] args){
 		
+		for(int i=0; i<MATRIX_SIZE; i++){
+			for(int j=0; j<MATRIX_SIZE; j++){
+				System.err.print((int)qualsToPhred((byte)i, (byte)j)+",");
+			}
+			System.err.println();
+		}
+		
 //		byte[] quals=new byte[] {15, 12, 20, 9, 10, 16, 14, 7, 11, 10, 10, 10, 10, 4, 4, 30, 30, 30, 30};
 //		float[] probs=makeKeyProbs(quals, 4);
 //		float[] probs2=makeKeyProbs(quals, 4);
@@ -226,7 +233,7 @@ public class QualityTools {
 					
 					if(b=='N'){len=0;}else{len++;}
 					if(len>=keylen){
-						if(kmer%5!=rkmer%5){
+						if(kmer%IndexMaker4.MODULO!=0 && rkmer%IndexMaker4.MODULO!=0){
 							out[i-keylen+1]=1f;
 //							assert(false) : kmer;
 						}
@@ -260,7 +267,7 @@ public class QualityTools {
 					
 					if(b=='N'){len=0;}else{len++;}
 					if(len>=keylen){
-						if(kmer%5!=rkmer%5){
+						if(kmer%IndexMaker4.MODULO!=0 && rkmer%IndexMaker4.MODULO!=0){
 							out[i-keylen+1]=1f;
 //							assert(false) : kmer;
 						}
@@ -430,6 +437,13 @@ public class QualityTools {
 		return (qa<=qb) ? ERROR_MATRIX[qa][qb] : ERROR_MATRIX[qb][qa];
 	}
 
+	public static byte[] fakeQuality(int q, int len){
+		assert(q>=0 && q<=127);
+		byte[] r=new byte[len];
+		Arrays.fill(r, (byte)q);
+		return r;
+	}
+	
 	/*-------------------- Fields --------------------*/
 
 	/*-------------------- Final Fields --------------------*/
@@ -439,7 +453,7 @@ public class QualityTools {
 	public static final byte MATRIX_SIZE=50;
 	
 	/** Probability that this base is an error */
-	public static final float[] PROB_ERROR=makeQualityToFloat(96);
+	public static final float[] PROB_ERROR=makeQualityToFloat(127);
 	/** 1/PROB */
 	public static final float[] PROB_ERROR_INVERSE=makeInverse(PROB_ERROR);
 	
@@ -456,7 +470,7 @@ public class QualityTools {
 
 	/*-------------------- Initializers --------------------*/
 	
-	public static final double phredToProbError(int phred){
+	private static final double phredToProbError(int phred){
 		if(phred<1){return 1;}
 		return Math.pow(10, 0-.1*phred);
 	}

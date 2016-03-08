@@ -7,14 +7,17 @@ public abstract class ReadInputStream {
 
 	public abstract Read next();
 	
-//	public abstract Read[] nextBlock();
-	
 	public Read[] nextBlock(){
 		throw new RuntimeException("Deprecated, use nextList() instead.");
 	}
 	
-//	public ArrayList<Read> nextList(){
-//		throw new RuntimeException("Not supported.");
+//	public final ArrayList<Read> fetchAll(){
+//		ArrayList<Read> out=new ArrayList<Read>();
+//		for(ArrayList<Read> list=nextList(); list!=null && list.size()>0; list=nextList()){
+//			out.addAll(list);
+//		}
+//		close();
+//		return out;
 //	}
 	
 	public abstract ArrayList<Read> nextList();
@@ -42,7 +45,6 @@ public abstract class ReadInputStream {
 
 	public abstract boolean preferArrays();
 	public final boolean preferLists(){return !preferArrays();}
-	public final boolean preferBlocks(){return preferArrays();}
 
 	public abstract void start();
 	

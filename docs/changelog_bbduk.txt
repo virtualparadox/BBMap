@@ -1,6 +1,65 @@
 BBDuk readme by Brian Bushnell
-Last updated June 10, 2014.
+Last updated November 21, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
+
+Version 28:
+Added qskip flag.  Allows skipping query kmers to increase speed.
+
+Version 27:
+Added kmer table dumping (dump flag).
+findbestmatch mode is now much faster, using variable rather than fixed-length counters.
+
+Version 26:
+Added per-reference-file stats counting, and "refstats" flag.
+Implemented restrictleft and restrictright for BBDuk2.
+Added "nzo" flag (nonzeroonly).
+Added sdriscoll's reformatted shellscript help menu.
+Added "rename" and "refnames" flags.
+
+Version 25:
+Fixed a bug related to clearing data too early.  Noted by Brian Foster.
+
+Version 24:
+Added HashArrayA, HashForestA, KmerNodeA and updated AbstractKmerTable to allow sets of values per kmer.
+Refactored all AbstractKmerTable subclasses.
+Added scaffold length tracking (for RPKM).
+Added RPKM output (enable with "rpkm" flag).
+BBDuk now unloads kmers after finishing processing reads.
+Counter arrays are now local per-thread, to prevent cache-thrashing.
+
+Version 23:
+Now tracks #contaminant bases as well as #contaminant reads per scaffold for stats.
+Additional flag "columns=5" enables this output.  Default is currently columns=3 but this will change in the future.
+Stats are now sorted by #bases, not #reads.
+Counting arrays changed from int to long to handle potential overflow.
+
+Version 22:
+Fixed a bug in kmask mode in which all bases in a masked read were assigned quality 0.  Noted by luc (SeqAnswers).
+Added preallocation (prealloc flag).  This is not recommended for BBDuk2, only BBDuk.
+Added "restrictleft" and "restrictright" flags to BBDuk (not BBDuk2).  These allow only looking for kmer matches in the leftmost or rightmost X bases.  Requested by lankage (SeqAnswers).
+
+Version 21:
+Fixed bounds of kmer masking; they were off by 2 (too big).
+
+Version 20:
+Added tracking of scaffold name statistics when trimming/masking.
+
+Version 19:
+Clarified some error messages.
+Made duplicate filename detection more robust.
+Improved support for interleaved fasta files.
+
+Version 18:
+Added obqhist.
+Fixed bug in which "interleaved=true" would load the reference interleaved in addition to the reads.
+
+Version 17:
+Added aqhist and mhist.
+Added outsingle.
+Improved kmer masking; now masks each individual instance of a kmer in the input.
+
+Version 16:
+Added minoverlap, mininsert, and qahist.
 
 Version 15:
 Added ehist, idhist, indelhist, lhist, gchist.
@@ -20,9 +79,6 @@ Fixed a bug in BBDuk2 where kmer trimming was sometimes not performed.
 Version 11:
 Created BBDuk2, which can kfilter, kmask, ktrimleft, and ktrimright in one pass with 4 different kmer tables.
 Created bbduk2.sh.
-
-TODO:
-Add masking for multiple kmers in a single read.
 
 Verison 10:
 Added "trimpad" flag, allowing easier trimming of adapters with some wildcard bases.  Requested by Alicia Clum.

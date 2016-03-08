@@ -8,9 +8,10 @@ import java.util.Arrays;
 import align2.IndexMaker4;
 import align2.ReadStats;
 import align2.Tools;
+import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import dna.Gene;
 import dna.Timer;
 import fileIO.ReadWrite;
@@ -91,7 +92,7 @@ public class ApplyVarsToReference {
 			process(inPattern.replaceFirst("#", ""+chrom), outName, chrom);
 		}
 		
-		FastaToChromArrays.writeInfo(outgenome, maxChrom, (name==null ? Data.name : name), ""+Data.GENOME_BUILD+"_plus_variations", false, false);
+		FastaToChromArrays2.writeInfo(outgenome, maxChrom, (name==null ? Data.name : name), ""+Data.GENOME_BUILD+"_plus_variations", false, false);
 		
 		t.stop();
 		

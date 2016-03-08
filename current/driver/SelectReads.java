@@ -31,7 +31,7 @@ public final class SelectReads {
 		char symbol='D';
 		if(args.length>2){symbol=(char)args[2].charAt(0);}
 		if(args.length>3){minlen=Integer.parseInt(args[3]);}
-		if(args.length>4){reads=Long.parseLong(args[4]);}
+		if(args.length>4){reads=Tools.parseKMG(args[4]);}
 		
 		symbol=Character.toUpperCase(symbol);
 		if(symbol=='='){symbol='M';}

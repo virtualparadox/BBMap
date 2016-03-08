@@ -34,7 +34,7 @@ public class GradeSamFile {
 			}else if(a.equals("in") || a.equals("in1")){
 				in=b;
 			}else if(a.equals("reads")){
-				reads=Long.parseLong(b);
+				reads=Tools.parseKMG(b);
 			}else if(a.equals("parsecustom")){
 				parsecustom=Tools.parseBoolean(b);
 			}else if(a.equals("thresh")){
@@ -56,7 +56,7 @@ public class GradeSamFile {
 			}else if(i==0 && args[i].indexOf('=')<0 && (a.startsWith("stdin") || new File(args[0]).exists())){
 				in=args[0];
 			}else if(i==1 && args[i].indexOf('=')<0 && Character.isDigit(a.charAt(0))){
-				reads=Long.parseLong(a);
+				reads=Tools.parseKMG(a);
 			}else{
 				throw new RuntimeException("Unknown parameter "+arg);
 			}

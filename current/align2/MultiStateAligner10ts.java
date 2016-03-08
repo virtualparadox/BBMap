@@ -147,7 +147,7 @@ public final class MultiStateAligner10ts extends MSA{
 		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
-		minScore-=120; //Increases quality trivially
+		minScore-=MIN_SCORE_ADJUST; //Increases quality trivially
 		
 		assert(rows<=maxRows) : "Check that values are in-bounds before calling this function: "+rows+", "+maxRows+"\n"+
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";
@@ -622,7 +622,7 @@ public final class MultiStateAligner10ts extends MSA{
 		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
-		minScore-=120; //Increases quality trivially
+		minScore-=MIN_SCORE_ADJUST; //Increases quality trivially
 		
 		assert(rows<=maxRows) : "Check that values are in-bounds before calling this function: "+rows+", "+maxRows+"\n"+
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";
@@ -1079,7 +1079,7 @@ public final class MultiStateAligner10ts extends MSA{
 		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
-		minScore-=120; //Increases quality trivially
+		minScore-=MIN_SCORE_ADJUST; //Increases quality trivially
 		
 		assert(rows<=maxRows) : "Check that values are in-bounds before calling this function: "+rows+", "+maxRows+"\n"+
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";

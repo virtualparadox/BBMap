@@ -6,7 +6,6 @@ import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongArray;
 
@@ -163,9 +162,9 @@ public class ReadKmerDepthDistribution {
 			}else if(a.equals("threads") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("tablereads") || a.startsWith("buildreads")){
-				tablereads=Long.parseLong(b);
+				tablereads=Tools.parseKMG(b);
 			}else if(a.equals("out") || a.equals("outk") || a.equals("outkeep") || a.equals("outgood")){
 				outKeep=b;
 //				outstream.println("k:"+b);

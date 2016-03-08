@@ -1,5 +1,6 @@
 package align2;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import stream.Read;
@@ -14,7 +15,12 @@ import dna.Gene;
  * @date Mar 15, 2013
  *
  */
-public final class TrimRead {
+public final class TrimRead implements Serializable {
+	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 8791743639124592480L;
 	
 	public static void main(String[] args){
 		byte[] bases=args[0].getBytes();
@@ -245,7 +251,8 @@ public final class TrimRead {
 //			float probError=(b=='N' ? nprob : ADJUST_QUALITY ? CalcTrueQuality.estimateErrorProbGeoAvg(qual, bases, i) : QualityTools.PROB_ERROR[q]);
 //			float probError=(b=='N' ? nprob : ADJUST_QUALITY ? CalcTrueQuality.estimateErrorProb2(qual, bases, i) : QualityTools.PROB_ERROR[q]);
 
-			float probError=(b=='N' ? nprob : q==1 ? PROB1 : QualityTools.PROB_ERROR[q]);
+//			float probError=(b=='N' ? nprob : q==1 ? PROB1 : QualityTools.PROB_ERROR[q]);
+			float probError=(b=='N' ? nprob : QualityTools.PROB_ERROR[q]);
 			
 //			assert(q>0 || b=='N') : "index "+i+": q="+q+", b="+(char)b+"\n"+new String(bases)+"\n"+Arrays.toString(qual)+"\n";
 			
@@ -445,8 +452,7 @@ public final class TrimRead {
 			}
 			ss.match=match2;
 		}
-		ss.start-=lt;
-		ss.stop+=rt;
+		ss.setLimits(ss.start-lt, ss.stop+rt);
 		if(returnToShort){ss.match=Read.toShortMatchString(ss.match);}
 		return true;
 	}
@@ -494,7 +500,8 @@ public final class TrimRead {
 	public int leftTrimmed;
 	public int rightTrimmed;
 	
-	/** Require this many consecutive good bases to stop trimming.  Minimum is 1. */
+	/** Require this many consecutive good bases to stop trimming.  Minimum is 1. 
+	 * This is for the old trimming mode and not really used anymore */
 	public static int minGoodInterval=2;
 	
 	public static boolean verbose=false;
@@ -502,7 +509,7 @@ public final class TrimRead {
 	public static float optimalBias=-1f;
 	
 	private static final float NPROB=0.75f;
-	public static float PROB1=QualityTools.PROB_ERROR[1];
+//	public static float PROB1=QualityTools.PROB_ERROR[1];
 	public static boolean ADJUST_QUALITY=false;
 	
 	

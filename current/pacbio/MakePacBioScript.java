@@ -51,7 +51,7 @@ public class MakePacBioScript {
 //					"out=run.sh template="+(Data.WINDOWS ? "" : "/house/homedirs/b/bushnell/template/")+"cleanPacbioTemplate.sh " +
 //					"targetsize=5.4m threads=24 noderam=256");
 //			System.out.println("\n\nOr to be concise:");
-			System.out.println("java -ea -Xmx64m"+(Data.WINDOWS ? "" : " -cp "+Data.ROOT)+" jgi.MakePacBioScript " +
+			System.out.println("java -ea -Xmx64m"+(Data.WINDOWS ? "" : " -cp "+Data.ROOT())+" jgi.MakePacBioScript " +
 					"d=subreads.fa c=illumina.fq tpl=template.sh ts=5.4m t=24 nm=256");
 			System.out.println("\n\nInput files can optionally be comma-seperated lists of files, and absolute pathing can be used.");
 			System.out.println("All input files may be raw, gzipped, or bzipped as long as they have the correct file extension.");
@@ -75,7 +75,7 @@ public class MakePacBioScript {
 			System.out.println("b=,build=        \tPrefix for index build number.  Default is 2, yielding successively improved builds 2, 200, 201, 202, ... 208");
 			System.out.println("rb=,refbuild=    \tReference build number.  Default is 1.");
 			System.out.println("cp=,classpath=   \tClasspath to the program.  If unspecified, will be autodetected as "+
-					(Data.WINDOWS ? "/house/homedirs/b/bushnell/beta19/" : Data.ROOT));
+					(Data.WINDOWS ? "/house/homedirs/b/bushnell/beta19/" : Data.ROOT()));
 //			r=ref.fa o=run.sh 
 			System.exit(0);
 		}
@@ -88,7 +88,7 @@ public class MakePacBioScript {
 		String template=null;
 		String output="run.sh";
 		String extra="";
-		String classpath=(Data.WINDOWS ? "/house/homedirs/b/bushnell/beta19/" : Data.ROOT);
+		String classpath=(Data.WINDOWS ? "/house/homedirs/b/bushnell/beta19/" : Data.ROOT());
 		String sort_in="";
 		String sorted="sorted_topo#.txt.gz";
 		String sorted_out="sorted_topo1.txt.gz";
@@ -137,7 +137,7 @@ public class MakePacBioScript {
 			}else if(a.equals("mode")){
 				mode=b;
 			}else if(a.startsWith("reads") || a.startsWith("maxreads") || a.equals("rd")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("build") || a.startsWith("genome") || a.equals("b")){
 				build=Integer.parseInt(b);
 				String s=Data.chromFname(1, build);

@@ -12,41 +12,46 @@ public final class MultiStateAligner11ts extends MSA{
 	
 	
 	public static void main(String[] args){
-		byte[] read=args[0].getBytes();
-		byte[] ref=args[1].getBytes();
 		
-		byte[] original=ref;
+		int x=Integer.parseInt(args[0]);
+		MultiStateAligner11ts msa=new MultiStateAligner11ts(100, 100, false);
+		System.out.println(msa.calcDelScore(x, true));
 		
-		boolean colorspace=false;
-		
-		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
-			colorspace=true;
-			read=AminoAcid.toColorspace(read);
-			ref=AminoAcid.toColorspace(ref);
-		}
-		
-		MultiStateAligner11ts msa=new MultiStateAligner11ts(read.length, ref.length, colorspace);
-		
-		System.out.println("Initial: ");
-		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
-		
-		int[] max=msa.fillLimited(read, ref, 0, ref.length-1, 0, null);
-		
-		System.out.println("Max: "+Arrays.toString(max));
-		
-		System.out.println("Final: ");
-		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
-		
-		byte[] out=msa.traceback(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
-		
-		int[] score=null;
-		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
-		
-		if(colorspace){System.out.println(new String(original));}
-		System.out.println(new String(ref));
-		System.out.println(new String(read));
-		System.out.println(new String(out));
-		System.out.println("Score: "+Arrays.toString(score));
+//		byte[] read=args[0].getBytes();
+//		byte[] ref=args[1].getBytes();
+//		
+//		byte[] original=ref;
+//		
+//		boolean colorspace=false;
+//		
+//		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
+//			colorspace=true;
+//			read=AminoAcid.toColorspace(read);
+//			ref=AminoAcid.toColorspace(ref);
+//		}
+//		
+//		MultiStateAligner11ts msa=new MultiStateAligner11ts(read.length, ref.length, colorspace);
+//		
+//		System.out.println("Initial: ");
+//		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
+//		
+//		int[] max=msa.fillLimited(read, ref, 0, ref.length-1, 0, null);
+//		
+//		System.out.println("Max: "+Arrays.toString(max));
+//		
+//		System.out.println("Final: ");
+//		printMatrix(msa.packed, read.length, ref.length, TIMEMASK, SCOREOFFSET);
+//		
+//		byte[] out=msa.traceback(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
+//		
+//		int[] score=null;
+//		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
+//		
+//		if(colorspace){System.out.println(new String(original));}
+//		System.out.println(new String(ref));
+//		System.out.println(new String(read));
+//		System.out.println(new String(out));
+//		System.out.println("Score: "+Arrays.toString(score));
 	}
 	
 	
@@ -153,7 +158,7 @@ public final class MultiStateAligner11ts extends MSA{
 		final int BARRIER_I2=rows-BARRIER_I1, BARRIER_I2b=columns-1;
 		final int BARRIER_D2=rows-BARRIER_D1;
 		
-		minScore-=120; //Increases quality trivially
+		minScore-=MIN_SCORE_ADJUST; //Increases quality trivially
 		
 		assert(rows<=maxRows) : "Check that values are in-bounds before calling this function: "+rows+", "+maxRows+"\n"+
 			refStartLoc+", "+refEndLoc+", "+rows+", "+maxRows+", "+columns+", "+maxColumns+"\n"+new String(read)+"\n";
@@ -1092,8 +1097,8 @@ public final class MultiStateAligner11ts extends MSA{
 	public final byte[] traceback(byte[] read, byte[] ref, int refStartLoc, int refEndLoc, int row, int col, int state, boolean gapped){
 		if(gapped){
 			final byte[] gref=grefbuffer;
-			int gstart=translateToGappedCoordinate(refStartLoc, gref);
-			int gstop=translateToGappedCoordinate(refEndLoc, gref);
+			int gstart=translateToGappedCoordinate(refStartLoc, gref, read);
+			int gstop=translateToGappedCoordinate(refEndLoc, gref, read);
 			byte[] out=traceback2(read, gref, gstart, gstop, row, col, state);
 			return out;
 		}else{
@@ -1246,8 +1251,8 @@ public final class MultiStateAligner11ts extends MSA{
 				System.err.println("origin="+grefRefOrigin+", "+refStartLoc+", "+refEndLoc+", "+maxRow+", "+maxCol);
 			}
 			final byte[] gref=grefbuffer;
-			int gstart=translateToGappedCoordinate(refStartLoc, gref);
-			int gstop=translateToGappedCoordinate(refEndLoc, gref);
+			int gstart=translateToGappedCoordinate(refStartLoc, gref, read);
+			int gstop=translateToGappedCoordinate(refEndLoc, gref, read);
 			
 			assert(translateFromGappedCoordinate(gstart, gref)==refStartLoc); //TODO: Remove slow assertions
 			assert(translateFromGappedCoordinate(gstop, gref)==refEndLoc);
@@ -1258,10 +1263,10 @@ public final class MultiStateAligner11ts extends MSA{
 			int[] out=score2(read, gref, gstart, gstop, maxRow, maxCol, maxState);
 			if(verbose){System.err.println("got score "+Arrays.toString(out));}
 			
-			assert(out[1]==translateToGappedCoordinate(translateFromGappedCoordinate(out[1], gref), gref)) :
+			assert(out[1]==translateToGappedCoordinate(translateFromGappedCoordinate(out[1], gref), gref, read)) :
 				"Verifying: "+out[1]+" -> "+translateFromGappedCoordinate(out[1], gref)+" -> "+
-				translateToGappedCoordinate(translateFromGappedCoordinate(out[1], gref), gref);
-			assert(out[2]==translateToGappedCoordinate(translateFromGappedCoordinate(out[2], gref), gref));
+				translateToGappedCoordinate(translateFromGappedCoordinate(out[1], gref), gref, read);
+			assert(out[2]==translateToGappedCoordinate(translateFromGappedCoordinate(out[2], gref), gref, read));
 			
 			out[1]=translateFromGappedCoordinate(out[1], gref);
 			out[2]=translateFromGappedCoordinate(out[2], gref);
@@ -1581,7 +1586,7 @@ public final class MultiStateAligner11ts extends MSA{
 		throw new RuntimeException("Out of bounds.");
 	}
 	
-	private final int translateToGappedCoordinate(int point, byte[] gref){
+	private final int translateToGappedCoordinate(int point, byte[] gref, byte[] read){
 		if(verbose){System.err.println("translateToGappedCoordinate("+point+"), gro="+grefRefOrigin+", grl="+greflimit);}
 		if(point<=grefRefOrigin){return point-grefRefOrigin;}
 		for(int i=0, j=grefRefOrigin; i<greflimit2; i++){
@@ -1599,9 +1604,10 @@ public final class MultiStateAligner11ts extends MSA{
 //			else{j+=GAPLEN;}
 		}
 
-		System.err.println(grefRefOrigin);
-		System.err.println(point);
-		System.err.println(new String(gref));
+		System.err.println("\ngrefRefOrigin="+grefRefOrigin);
+		System.err.println("point="+point);
+		System.err.println("read="+new String(read));
+		System.err.println("gref="+new String(gref));
 		
 		throw new RuntimeException("Out of bounds.");
 	}

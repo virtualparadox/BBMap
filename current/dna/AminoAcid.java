@@ -120,6 +120,12 @@ public final class AminoAcid {
 		'X',' ',' ',' ',' ',' ',' ',' ', //16-23
 	};
 	
+	public static final byte[] degenerateBases={
+		' ',' ',' ','M',' ','R','S','V', //0-7
+		' ','W','Y','H','K','D','B',' ', //8-15
+		' ',' ',' ',' ',' ',' ',' ',' ', //16-23
+	};
+	
 	public static final byte[] numberToComplementaryBaseExtended={
 		' ','T','G','K','C','Y','W','B', //0-7
 		'A','S','R','D','M','H','V','N', //8-15

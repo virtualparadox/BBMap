@@ -63,6 +63,14 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 		}
 	}
 	
+	public void returnList(boolean poison){
+		if(poison){
+			depot.full.add(new ArrayList<Read>(0));
+		}else{
+			depot.empty.add(new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		}
+	}
+	
 	@Override
 	public void run() {
 //		producer.start();
@@ -133,6 +141,12 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 				Read a=producer1.get((int)generated);
 				Read b=(producer2==null ? null : producer2.get((int)generated));
 				if(a==null){break;}
+				readsIn++;
+				basesIn+=a.length();
+				if(b!=null){
+					readsIn++;
+					basesIn+=b.length();
+				}
 				if(randy==null || randy.nextFloat()<samplerate){
 					list.add(a);
 					if(b!=null){
@@ -173,7 +187,9 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	public synchronized void restart(){
 		shutdown=false;
 		depot=new ConcurrentDepot<Read>(BUF_LEN, NUM_BUFFS);
-		generated=0;
+		generated=0;	
+		basesIn=0;
+		readsIn=0;
 		nextProgress=PROGRESS_INCR;
 	}
 	
@@ -250,6 +266,9 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 		}
 	}
 	
+	public long basesIn(){return basesIn;}
+	public long readsIn(){return readsIn;}
+	
 	@Override
 	public boolean errorState(){return errorState;}
 	/** TODO */
@@ -265,6 +284,9 @@ public class ConcurrentCollectionReadInputStream implements ConcurrentReadStream
 	public final List<Read> producer1;
 	public final List<Read> producer2;
 	private ConcurrentDepot<Read> depot;
+	
+	private long basesIn=0;
+	private long readsIn=0;
 	
 	private long maxReads;
 	private long generated=0;

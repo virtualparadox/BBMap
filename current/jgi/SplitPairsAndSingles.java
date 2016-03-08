@@ -78,7 +78,7 @@ public final class SplitPairsAndSingles {
 		FastaReadInputStream.SPLIT_READS=false;
 		ByteFile.FORCE_MODE_BF2=Shared.THREADS>2;
 		boolean setOut=false, setOuts=false, trimRight_=false, trimLeft_=false;
-		boolean setInterleaved=false, fixInterleaving_=false, repair_=false;
+		boolean setInterleaved=false, fixInterleaving_=false, repair_=false, allowIdenticalPairNames_=false;
 		
 		{
 			boolean b=false;
@@ -134,7 +134,7 @@ public final class SplitPairsAndSingles {
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("trim") || a.equals("qtrim")){
@@ -159,6 +159,8 @@ public final class SplitPairsAndSingles {
 				trimq=Byte.parseByte(b);
 			}else if(a.equals("fixinterleaving") || a.equals("fi") || a.equals("fint") || a.equals("fixint")){
 				fixInterleaving_=Tools.parseBoolean(b);
+			}else if(a.equals("allowidenticalnames") || a.equals("ain")){
+				allowIdenticalPairNames_=Tools.parseBoolean(b);
 			}else if(a.equals("repair") || a.equals("rp")){
 				repair_=Tools.parseBoolean(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength") || a.equals("minreadlength")){
@@ -199,6 +201,7 @@ public final class SplitPairsAndSingles {
 			}
 		}
 
+		allowIdenticalPairNames=allowIdenticalPairNames_;
 		fixInterleaving=fixInterleaving_;
 		repair=repair_;
 		assert(!repair || ! fixInterleaving) : "ERROR: Choose 'fixInterleaving' or 'repair', but not both.";
@@ -255,7 +258,8 @@ public final class SplitPairsAndSingles {
 		}
 
 		if(!setOut){
-			out1="stdout.fq";
+			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//			out1="stdout.fq";
 			outstream=System.err;
 			out2=null;
 		}else if("stdout".equalsIgnoreCase(out1) || "standarddout".equalsIgnoreCase(out1)){
@@ -508,7 +512,7 @@ public final class SplitPairsAndSingles {
 //				if(verbose){System.err.println("Fetched "+current);}
 				
 				if(prev!=null){
-					boolean b=FASTQ.testPairNames(prev, current);
+					boolean b=FASTQ.testPairNames(prev, current, allowIdenticalPairNames);
 					if(b){
 						if(verbose){System.err.println("A");}
 						processPair(prev, current, pairs, singles);
@@ -531,7 +535,7 @@ public final class SplitPairsAndSingles {
 			reads=(ln!=null ? ln.list : null);
 			
 			if((ln==null || reads==null || reads.isEmpty()) && prev!=null){ //Process last read
-				boolean b=FASTQ.testPairNames(prev, current);
+				boolean b=FASTQ.testPairNames(prev, current, allowIdenticalPairNames);
 				if(b){
 					if(verbose){System.err.println("C");}
 					processPair(prev, current, pairs, singles);
@@ -680,10 +684,17 @@ public final class SplitPairsAndSingles {
 		
 		readsIn++;
 		basesIn+=r.length();
+		final String id=r.id;
 		
-		assert(r.id!=null) : "Read number "+r.numericID+" has no name and thus cannot be re-paired.  To ignore this, run with the -da flag.";
-		if(r.id==null){return null;}
-		String[] split=r.id.split("\\s+");
+		assert(id!=null) : "Read number "+r.numericID+" has no name and thus cannot be re-paired.  To ignore this, run with the -da flag.";
+		if(id==null){return null;}
+		final int slash=id.indexOf('/');
+		String[] split=id.split("\\s+");
+		
+		if(split.length==1 && slash>0){
+			split=new String[] {id.substring(0, slash), id.substring(slash)};
+		}
+		
 		assert(split.length>0);
 		String prefix=split[0];
 		String suffix=(split.length==1 ? null : split[split.length-1]);
@@ -692,8 +703,8 @@ public final class SplitPairsAndSingles {
 				r.setPairnum(0);
 			}else if(suffix.startsWith("/2") || suffix.startsWith("2:")){
 				r.setPairnum(1);
-			}else if(r.id.contains("/1") || r.id.contains("/2")){
-				split=r.id.split("/");
+			}else if(id.contains("/1") || id.contains("/2")){
+				split=id.split("/");
 				prefix=split[0];
 				suffix=(split.length==1 ? null : split[split.length-1]);
 				
@@ -765,6 +776,7 @@ public final class SplitPairsAndSingles {
 
 	private final boolean EA;
 	private final boolean fixInterleaving;
+	private final boolean allowIdenticalPairNames;
 	private final boolean repair;
 	
 	private static PrintStream outstream=System.err;

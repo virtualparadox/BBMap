@@ -6,22 +6,28 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 
-import align2.ReadStats;
+import stream.CrisWrapper;
+import stream.FASTQ;
+import stream.FastaReadInputStream;
+import stream.Read;
+
+import align2.Shared;
 import align2.Tools;
 
+import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import fileIO.TextFile;
 import fileIO.TextStreamWriter;
 
 /**
+ * Replaces FastaToChromArrays with a more general solution that can handle fastq.
  * @author Brian Bushnell
- * @date Jul 10, 2012
+ * @date Jul 18, 2014
  *
  */
-public class FastaToChromArrays {
+public class ChromArrayMaker {
 	
 //	Example:
-//	jgi.FastaToChromArrays ecoli_K12.fa 1 writeinthread=false genscaffoldinfo=true retain waitforwriting=false 
+//	dna.ChromArrayMaker ecoli_K12.fa 1 writeinthread=false genscaffoldinfo=true retain waitforwriting=false 
 //	gzip=true chromc=false maxlen=536670912 writechroms=true minscaf=1 midpad=300 startpad=8000 stoppad=8000 nodisk=false
 	
 	public static void main(String[] args){
@@ -96,7 +102,7 @@ public class FastaToChromArrays {
 					MERGE_SCAFFOLDS=Tools.parseBoolean(b);
 					System.err.println("Set MERGE_SCAFFOLDS="+MERGE_SCAFFOLDS);
 				}else if(a.startsWith("maxlen") || a.startsWith("chromlen")){
-					long len=Long.parseLong(b);
+					long len=Tools.parseKMG(b);
 					assert(len>0 && len<=Integer.MAX_VALUE);
 					MAX_LENGTH=(int)len;
 				}else if(a.equals("writechroms")){
@@ -149,15 +155,24 @@ public class FastaToChromArrays {
 			}
 			String outRoot=Data.ROOT_GENOME+genome+"/";
 			
-			FastaToChromArrays ftca=new FastaToChromArrays();
-			ftca.makeChroms(infile, outRoot, name, genScaffoldInfo, writeChroms, r, scafprefixes);
+			ChromArrayMaker ftca=new ChromArrayMaker();
+			
+			{
+				boolean oldTI=FASTQ.TEST_INTERLEAVED;
+				boolean oldFI=FASTQ.FORCE_INTERLEAVED;
+				FASTQ.TEST_INTERLEAVED=false;
+				FASTQ.FORCE_INTERLEAVED=false;
+				ftca.makeChroms(infile, outRoot, name, genScaffoldInfo, writeChroms, r, scafprefixes);
+				FASTQ.TEST_INTERLEAVED=oldTI;
+				FASTQ.FORCE_INTERLEAVED=oldFI;
+			}
 		}
 		
 		WRITE_IN_THREAD=oldWIT;
 		return r;
 	}
 	
-	private FastaToChromArrays(){}
+	private ChromArrayMaker(){}
 	
 	
 	private static int[] countInfo(ChromosomeArray ca){
@@ -281,7 +296,16 @@ public class FastaToChromArrays {
 			}
 		}
 		
-		TextFile tf=new TextFile(fname, false, false);
+		final FileFormat ffin=FileFormat.testInput(fname, FileFormat.FASTA, null, true, true);
+		
+		final boolean OLD_SPLIT_READS=FastaReadInputStream.SPLIT_READS;
+		FastaReadInputStream.SPLIT_READS=false;
+		final int oldNum=Shared.READ_BUFFER_NUM_BUFFERS;
+		Shared.READ_BUFFER_NUM_BUFFERS=4;
+		final CrisWrapper criswrapper=new CrisWrapper(-1, false, false, ffin, null, null, null);
+		Shared.READ_BUFFER_NUM_BUFFERS=oldNum;
+		
+		
 		int chrom=1;
 		
 		TextStreamWriter infoWriter=null, scafWriter=null;
@@ -341,8 +365,8 @@ public class FastaToChromArrays {
 		}
 		
 		
-		for(ChromosomeArray ca=makeNextChrom(tf, chrom, infoWriter, scafWriter, infolist, scaflist); ca!=null; 
-				ca=makeNextChrom(tf, chrom, infoWriter, scafWriter, infolist, scaflist)){
+		for(ChromosomeArray ca=makeNextChrom(criswrapper, chrom, infoWriter, scafWriter, infolist, scaflist); ca!=null; 
+				ca=makeNextChrom(criswrapper, chrom, infoWriter, scafWriter, infolist, scaflist)){
 			if(ca.array.length>ca.maxIndex+1){ca.resize(ca.maxIndex+1);}
 			if(RETAIN){r.add(ca);}
 			
@@ -355,14 +379,13 @@ public class FastaToChromArrays {
 				}else{
 					ReadWrite.writeObjectInThread(ca, x, false);
 				}
-//				System.err.println("Writing "+x);
 				System.err.println("Writing chunk "+chrom);
 			}
 			chrom++;
 		}
-		lastHeader=nextHeader=null;
 		
-		tf.close();
+		FastaReadInputStream.SPLIT_READS=OLD_SPLIT_READS;
+		
 		if(infoWriter!=null){infoWriter.poison();}
 		if(scafWriter!=null){
 			//System.err.println("*123 Killing ScafWriter; "+ReadWrite.countActiveThreads()+", "+ReadWrite.USE_GZIP+", "+ReadWrite.USE_PIGZ);
@@ -434,36 +457,33 @@ public class FastaToChromArrays {
 		return chrom-1;
 	}
 	
-	private ChromosomeArray makeNextChrom(TextFile tf, int chrom, TextStreamWriter infoWriter, TextStreamWriter scafWriter, ArrayList<String> infolist, ArrayList<String> scaflist){
+	private ChromosomeArray makeNextChrom(CrisWrapper criswrapper, int chrom, TextStreamWriter infoWriter, TextStreamWriter scafWriter, ArrayList<String> infolist, ArrayList<String> scaflist){
+		assert(FastaReadInputStream.SPLIT_READS==false);
 		ChromosomeArray ca=new ChromosomeArray(chrom, (byte)Gene.PLUS, 0, 120000+START_PADDING, false);
 		ca.maxIndex=-1;
 		for(int i=0; i<START_PADDING; i++){ca.set(i, 'N');}
 		
-		if(verbose){System.err.println("chrom="+chrom+", lastHeader="+lastHeader+", nextHeader="+nextHeader);}
+		if(verbose){System.err.println("chrom="+chrom+", currentScaffold="+(currentScaffold==null ? "null" : currentScaffold.id));}
 		
 		int scaffolds=0;
 		if(currentScaffold!=null && currentScaffold.length()>0){
 			assert(currentScaffold.length()>0);
-			assert(lastHeader!=null);
 			assert(currentScaffold.length()+END_PADDING+ca.maxIndex<MAX_LENGTH);
 			
-//			System.err.println("A: Writing a scaffold because currentScaffold = "+currentScaffold);
+			if(verbose){System.err.println("A: Writing a scaffold because currentScaffold = "+currentScaffold);}
 			scaffoldSum++;
-			if(scafWriter!=null){scafWriter.print(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+lastHeader+"\n");}
-			if(scaflist!=null && lastHeader!=null){
-				scaflist.add(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+lastHeader);
+			if(scafWriter!=null){scafWriter.print(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+currentScaffold.id+"\n");}
+			if(scaflist!=null && currentScaffold!=null){
+				scaflist.add(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+currentScaffold.id);
 				if(verbose){System.err.println("A: Added to scaflist: "+scaflist.get(scaflist.size()-1));}
 			}
-			ca.set(ca.maxIndex+1, currentScaffold);
+			ca.set(ca.maxIndex+1, currentScaffold.bases);
 			scaffolds++;
 			
-			currentScaffold.setLength(0);
-			lastHeader=nextHeader;
+			currentScaffold=null;
 		}
 		
-//		if()
-		
-		while((currentScaffold=nextScaffold(currentScaffold, tf))!=null){
+		while((currentScaffold=criswrapper.next())!=null){
 			if(currentScaffold.length()+MID_PADDING+END_PADDING+ca.maxIndex>MAX_LENGTH){break;}
 			if(scaffolds>0 && !MERGE_SCAFFOLDS){break;}
 			
@@ -473,22 +493,20 @@ public class FastaToChromArrays {
 				}
 			}
 			if(currentScaffold.length()>=MIN_SCAFFOLD){
-//				System.err.println("B: Writing a scaffold because currentScaffold = "+currentScaffold);
+				if(verbose){System.err.println("B: Writing a scaffold because currentScaffold = "+currentScaffold);}
 				scaffoldSum++;
-				if(scafWriter!=null){scafWriter.print(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+lastHeader+"\n");}
+				if(scafWriter!=null){scafWriter.print(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+currentScaffold.id+"\n");}
 				if(scaflist!=null){
-					scaflist.add(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+lastHeader);
+					scaflist.add(chrom+"\t"+scaffoldSum+"\t"+(ca.maxIndex+1)+"\t"+currentScaffold.length()+"\t"+currentScaffold.id);
 					if(verbose){System.err.println("B: Added to scaflist: "+scaflist.get(scaflist.size()-1));}
 				}
-				ca.set(ca.maxIndex+1, currentScaffold);
+				ca.set(ca.maxIndex+1, currentScaffold.bases);
 				scaffolds++;
 			}
-			
-			currentScaffold.setLength(0);
-			lastHeader=nextHeader;
+			currentScaffold=null;
 		}
 		
-		if(verbose){System.err.println("lastHeader="+lastHeader);}
+//		if(verbose){System.err.println("lastHeader="+lastHeader);}
 		
 		if(scaffolds==0){return null;}
 		
@@ -528,29 +546,9 @@ public class FastaToChromArrays {
 		return ca;
 	}
 	
-	
-	private StringBuilder nextScaffold(StringBuilder sb, TextFile tf){
-		if(sb==null){sb=new StringBuilder(100);}
-		else{sb.setLength(0);}
-		String s=tf.nextLine();
-		
-		for(; s!=null && s.charAt(0)!='>'; s=tf.nextLine()){
-			sb.append(s);
-//			for(int i=0; i<s.length(); i++){
-//				char c=s.charAt(i);
-//				assert(Character.isLetter(c));
-//				sb.append(Character.toUpperCase(c));
-//			}
-		}
-		
-		nextHeader=(s==null ? null : s.substring(1));
-		if(s==null && sb.length()==0){return null;}
-		return sb;
-	}
-	
-	private String lastHeader;
-	private String nextHeader;
-	private StringBuilder currentScaffold;
+//	private String lastHeader;
+//	private String nextHeader;
+	private Read currentScaffold;
 	private long scaffoldSum=0;
 	private long lengthSum=0;
 	private long definedSum=0;

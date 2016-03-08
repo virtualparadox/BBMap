@@ -1,5 +1,7 @@
 package cluster;
 
+import java.io.Serializable;
+
 import stream.Read;
 import align2.Tools;
 
@@ -8,8 +10,13 @@ import align2.Tools;
  * @date Mar 24, 2014
  *
  */
-class ReadTag{
+class ReadTag implements Serializable{
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -6186366525723397478L;
+
 	public ReadTag(Read r_){
 		r=r_;
 		strand=r.strand();

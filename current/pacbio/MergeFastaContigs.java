@@ -68,7 +68,7 @@ public class MergeFastaContigs {
 			}else if(a.equals("maxchroms")){
 				maxChromsOut=Integer.parseInt(b);
 			}else if(a.equals("maxdata")){
-				maxDataOut=Long.parseLong(b);
+				maxDataOut=Tools.parseKMG(b);
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){

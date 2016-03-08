@@ -91,7 +91,7 @@ public static void main(String[] args){
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(i==0 && in==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in=args[i];
 			}else if(i==1 && out==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){

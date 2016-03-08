@@ -1,15 +1,15 @@
 #!/bin/bash
-#khist in=<infile> out=<outfile>
+#dedupe in=<infile> out=<outfile>
 
 usage(){
-	echo "Written by Brian Bushnell"
-	echo "Last modified June 19, 2014"
+	echo "Written by Brian Bushnell and Jonathan Rood"
+	echo "Last modified October 23, 2014"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."
 	echo "Can also find overlapping sequences and group them into clusters."
 	echo ""
-	echo "Usage:	dedupe.sh in=<file or stdin> out=<file or stdout>"
+	echo "Usage:	dedupe2.sh in=<file or stdin> out=<file or stdout>"
 	echo ""
 	echo "Input may be stdin or a fasta, fastq, or sam file, compressed or uncompressed."
 	echo "Output may be stdout or a file.  With no output parameter, data will be written to stdout."
@@ -44,11 +44,13 @@ usage(){
 	echo "findoverlap=f         (fo) Find overlaps between contigs (containments and non-containments).  Necessary for clustering."
 	echo "uniqueonly=f          (uo) If true, all copies of duplicate reads will be discarded, rather than keeping 1."
 	echo "rmn=f                 (requirematchingnames) If true, both names and sequence must match."
+	echo "usejni=f              (jni) Do alignments in C code, which is faster, if an edit distance is allowed."
+	echo "                      This will require compiling the C code; details are in /jni/README.txt."
 	echo ""
 	echo "Clustering Parameters"
 	echo ""
 	echo "cluster=f             (c) Group overlapping contigs into clusters."
-	echo "pto=f                 (preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster."
+	echo "pto=f                 (preventtransitiveoverlaps) Do not look for new edges between nodes in the same cluster."
 	echo "minclustersize=1      (mcs) Do not output clusters smaller than this."
 	echo ""
 	echo "Cluster Postprocessing Parameters"
@@ -60,6 +62,7 @@ usage(){
 	echo "cc=t                  (canonicizeclusters) Flip contigs so clusters have a single orientation."
 	echo "fcc=f                 (fixcanoncontradictions) Truncate graph at nodes with canonization disputes."
 	echo "foc=f                 (fixoffsetcontradictions) Truncate graph at nodes with offset disputes."
+	echo "mst=f                 (maxspanningtree) Remove cyclic edges, leaving only the longest edges that form a tree."
 	echo ""
 	echo "Overlap Detection Parameters"
 	echo ""
@@ -79,6 +82,11 @@ usage(){
 #	echo "ignoreaffix1=f        (ia1) Ignore first affix (for testing)."
 #	echo "storesuffix=f         (ss) Store suffix as well as prefix.  Automatically set to true when doing inexact matches."
 	echo ""
+	echo "Other Parameters"
+	echo ""
+	echo "forcetrimleft=-1      (ftl) If positive, trim bases to the left of this position (exclusive, 0-based)."
+	echo "forcetrimright=-1     (ftr) If positive, trim bases to the right of this position (exclusive, 0-based)."
+	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
 	echo "				-Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max is typically 85% of physical memory."
@@ -91,6 +99,7 @@ usage(){
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+NATIVELIBDIR="$DIR""jni/"
 
 z="-Xmx1g"
 z2="-Xms1g"
@@ -118,7 +127,7 @@ dedupe() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
-	local CMD="java $EA $z $z2 -cp $CP jgi.Dedupe2 $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z $z2 -cp $CP jgi.Dedupe2 $@"
 	echo $CMD >&2
 	$CMD
 }

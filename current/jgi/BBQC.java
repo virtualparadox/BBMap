@@ -75,6 +75,8 @@ public class BBQC {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
 				// do nothing
 			}else if(a.equals("verbose")){
@@ -145,6 +147,10 @@ public class BBQC {
 				rnaFlag=Tools.parseBoolean(b);
 			}else if(a.equals("phix")){
 				phixFlag=Tools.parseBoolean(b);
+//			}else if(a.equals("tbo")){
+//				tboFlag=Tools.parseBoolean(b);
+//			}else if(a.equals("tpe")){
+//				tpeFlag=Tools.parseBoolean(b);
 			}else if(a.equals("ktrim")){
 				ktrim=b;
 			}else if(a.equals("mink")){
@@ -194,6 +200,18 @@ public class BBQC {
 				hashes=Integer.parseInt(b);
 			}else if(a.equals("bits")){
 				bits=Integer.parseInt(b);
+			}else if(a.equals("minratio")){
+				minratio=Float.parseFloat(b);
+			}else if(a.equals("maxindel")){
+				maxindel=Integer.parseInt(b);
+			}else if(a.equals("kfilter")){
+				kfilter=Integer.parseInt(b);
+			}else if(a.equals("hits") || a.equals("minhits")){
+				minhits=Integer.parseInt(b);
+			}else if(a.equals("fast")){
+				fast=Tools.parseBoolean(b);
+			}else if(a.equals("local")){
+				local=Tools.parseBoolean(b);
 			}else if(a.equals("qtrim")){
 				if(b==null){qtrim="rl";}
 				else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrim="l";}
@@ -323,16 +341,24 @@ public class BBQC {
 		final String humanPrefix="TEMP_HUMAN_"+tempSalt+"_";
 		final String filterPrefix="TEMP_FILTER_"+tempSalt+"_";
 		
-		trim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, trimPrefix);
+		int oldZL=ReadWrite.ZIPLEVEL;
+		ReadWrite.ZIPLEVEL=2;
+		ReadWrite.ALLOW_ZIPLEVEL_CHANGE=false;
+		
+		ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, trimPrefix);
 		filter(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, trimPrefix, filterPrefix, true);
 		delete(trimPrefix,  out1, out2, qfout1, qfout2);
 		if(normalize || ecc){
 			dehumanize(out1, out2, out1, out2, qfout1, qfout2, filterPrefix, humanPrefix, true, true);
 			delete(filterPrefix,  out1, out2, qfout1, qfout2);
 			Data.unloadAll();
+			ReadWrite.ZIPLEVEL=oldZL;
+			ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
 			normalize(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, humanPrefix, true);
 			delete(humanPrefix, out1, out2, qfout1, qfout2);
 		}else{
+			ReadWrite.ZIPLEVEL=oldZL;
+			ReadWrite.ALLOW_ZIPLEVEL_CHANGE=true;
 			dehumanize(out1, out2, out1, out2, qfout1, qfout2, filterPrefix, "", true, false);
 			delete(filterPrefix,  out1, out2, qfout1, qfout2);
 			Data.unloadAll();
@@ -363,6 +389,93 @@ public class BBQC {
 		
 	}
 	
+	
+	/**
+	 * Runs BBDuk to perform:
+	 * Kmer trimming, short read removal.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param out1 Primary output reads file (required)
+	 * @param out2 Secondary output reads file
+	 * @param qfin1 Primary input qual file
+	 * @param qfin2 Secondary input qual file
+	 * @param qfout1 Primary output qual file
+	 * @param qfout2 Secondary output qual file
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void ktrim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String outPrefix){
+		
+		log("ktrim start", true);
+		System.err.println("\nAdapter Trimming Phase Start");
+		
+		ArrayList<String> argList=new ArrayList<String>();
+		
+		{//Fill list with BBDuk arguments
+			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
+			if(minLen>0){argList.add("minlen="+minLen);}
+			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+			argList.add("mink="+mink);
+			if("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim)){
+				argList.add("tbo");
+				argList.add("tpe");
+			}
+			argList.add("k="+trim_k);
+			argList.add("hdist="+hdist_trim);
+			
+			//Pass along uncaptured arguments
+			for(String s : primaryArgList){argList.add(s);}
+
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+in1);}
+			if(in2!=null){argList.add("in2="+in2);}
+			if(out1!=null){argList.add("out1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out1);}
+			if(out2!=null){argList.add("out2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out2);}
+			if(qfin1!=null){argList.add("qfin1="+qfin1);}
+			if(qfin2!=null){argList.add("qfin2="+qfin2);}
+			if(qfout1!=null){argList.add("qfout1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout1);}
+			if(qfout2!=null){argList.add("qfout2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout2);}
+
+//			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName_kt);} //Old style for 2 log files
+			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
+			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName_kt);}
+			if(scaffoldStatsName!=null){argList.add("stats="+scaffoldStatsName_kt);}
+		}
+		
+		{//Add BBDuk references
+			trimrefs.add(fragAdapters);
+
+			StringBuilder refstring=new StringBuilder();
+			for(String ref : trimrefs){
+				if(ref!=null){
+					refstring.append(refstring.length()==0 ? "ref=" : ",");
+					refstring.append(ref);
+				}
+			}
+
+			if(refstring!=null && refstring.length()>0){
+				argList.add(refstring.toString());
+			}
+		}
+		
+		String[] dukargs=argList.toArray(new String[0]);
+		
+		{//run BBDuk
+			BBDukF duk=new BBDukF(dukargs);
+			try {
+				duk.process();
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		//Optionally append files to file list here
+		
+		log("ktrim finish", true);
+	}
+	
 	/**
 	 * Runs BBDuk to perform:
 	 * Quality filtering, quality trimming, n removal, short read removal, artifact removal (via kmer filtering), phiX removal.
@@ -381,6 +494,7 @@ public class BBQC {
 			String outPrefix, boolean prependIndir){
 		
 		log("filter start", true);
+		System.err.println("\nArtifact Filter/Quality Trim Phase Start");
 		
 		ArrayList<String> argList=new ArrayList<String>();
 		
@@ -390,7 +504,7 @@ public class BBQC {
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 			argList.add("k="+filter_k);
-			argList.add("hdist=1");
+			argList.add("hdist="+hdist_filter);
 			
 			if(qtrim!=null && trimAfterFiltering){
 				argList.add("trimq="+trimq);
@@ -472,25 +586,31 @@ public class BBQC {
 			String outPrefix, boolean prependIndir, boolean prependOutdir){
 		
 		log("dehumanize start", true);
+		System.err.println("\nHuman Removal Phase Start");
 		
 		ArrayList<String> argList=new ArrayList<String>();
 		
 		{
 			
-//			argList.add("kfilter="+47);
-			argList.add("minratio=0.84");
-			argList.add("maxindel=6");
-			argList.add("tipsearch=4");
+			if(kfilter>map_k){argList.add("kfilter="+kfilter);}
+			if(local){argList.add("local");}
+			argList.add("minratio="+minratio);
+			argList.add("maxindel="+maxindel);
+			argList.add("fast="+fast);
+			argList.add("minhits="+minhits);
+			argList.add("tipsearch="+Tools.min(4, maxindel));
 			argList.add("bw=18");
 			argList.add("bwr=0.18");
-			argList.add("minhits=2");
-			argList.add("path="+humanPath);
 			argList.add("quickmatch=f");
 			argList.add("k="+map_k);
-			argList.add("fast=t");
 //			argList.add("cigar=f");
 			argList.add("idtag=t");
 			argList.add("sam=1.4");
+			argList.add("usemodulo");
+			argList.add("printunmappedcount");
+			argList.add("usejni");
+			argList.add("ow="+overwrite);
+			argList.add("path="+humanPath);
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -523,7 +643,7 @@ public class BBQC {
 	}
 	
 	/**
-	 * Runs BBNorm to preform:
+	 * Runs BBNorm to perform:
 	 * Error correction, error marking, quality trimming, normalization
 	 * 
 	 * @param in1 Primary input reads file (required)
@@ -538,7 +658,8 @@ public class BBQC {
 	 */
 	private void normalize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, boolean prependIndir){
 		
-		log("filter start", true);
+		log("normalization start", true);
+		System.err.println("\nNormalization/Error Correction Phase Start");
 		
 		ArrayList<String> argList=new ArrayList<String>();
 		
@@ -602,92 +723,6 @@ public class BBQC {
 		//Optionally append files to file list here
 		
 		log("normalization finish", true);
-	}
-	
-	
-	/**
-	 * Runs BBDuk to perform:
-	 * Kmer trimming, short read removal.
-	 * 
-	 * @param in1 Primary input reads file (required)
-	 * @param in2 Secondary input reads file
-	 * @param out1 Primary output reads file (required)
-	 * @param out2 Secondary output reads file
-	 * @param qfin1 Primary input qual file
-	 * @param qfin2 Secondary input qual file
-	 * @param qfout1 Primary output qual file
-	 * @param qfout2 Secondary output qual file
-	 * @param outPrefix Append this prefix to output filenames
-	 */
-	private void trim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String outPrefix){
-		
-		log("ktrim start", true);
-		
-		ArrayList<String> argList=new ArrayList<String>();
-		
-		{//Fill list with BBDuk arguments
-			argList.add("mink="+mink);
-			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
-			if("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim)){
-				argList.add("tbo");
-				argList.add("tpe");
-			}
-			if(minLen>0){argList.add("minlen="+minLen);}
-			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
-			argList.add("k="+trim_k);
-			argList.add("hdist=1");
-			
-			//Pass along uncaptured arguments
-			for(String s : primaryArgList){argList.add(s);}
-
-			//Set read I/O files
-			if(in1!=null){argList.add("in1="+in1);}
-			if(in2!=null){argList.add("in2="+in2);}
-			if(out1!=null){argList.add("out1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out1);}
-			if(out2!=null){argList.add("out2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+out2);}
-			if(qfin1!=null){argList.add("qfin1="+qfin1);}
-			if(qfin2!=null){argList.add("qfin2="+qfin2);}
-			if(qfout1!=null){argList.add("qfout1="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout1);}
-			if(qfout2!=null){argList.add("qfout2="+(tmpDir==null ? outDir : tmpDir)+outPrefix+qfout2);}
-
-//			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName_kt);} //Old style for 2 log files
-			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
-			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName_kt);}
-			if(scaffoldStatsName!=null){argList.add("stats="+scaffoldStatsName_kt);}
-		}
-		
-		{//Add BBDuk references
-			trimrefs.add(fragArtifacts);
-
-			StringBuilder refstring=new StringBuilder();
-			for(String ref : trimrefs){
-				if(ref!=null){
-					refstring.append(refstring.length()==0 ? "ref=" : ",");
-					refstring.append(ref);
-				}
-			}
-
-			if(refstring!=null && refstring.length()>0){
-				argList.add(refstring.toString());
-			}
-		}
-		
-		String[] dukargs=argList.toArray(new String[0]);
-		
-		{//run BBDuk
-			BBDukF duk=new BBDukF(dukargs);
-			try {
-				duk.process();
-			} catch (Exception e) {
-				e.printStackTrace();
-				log("failed", true);
-				System.exit(1);
-			}
-		}
-		
-		//Optionally append files to file list here
-		
-		log("ktrim finish", true);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -818,6 +853,12 @@ public class BBQC {
 	private boolean rnaFlag=false;
 	/** True if phix should be filtered out */
 	private boolean phixFlag=true;
+	
+	/** Unused */
+	private boolean tboFlag=false;
+	/** Unused */
+	private boolean tpeFlag=false;
+	
 	/** Toss reads shorter than this */
 	private int minLen=40;
 	/** Toss reads shorter than this fraction of initial length, after trimming */
@@ -842,6 +883,18 @@ public class BBQC {
 	private int mink=11;
 	/** Throw away reads containing more than this many Ns.  Default: 1 */
 	private int maxNs=1;
+	/** Use this Hamming distance when kmer filtering */
+	private int hdist_filter=1;
+	/** Use this Hamming distance when kmer trimming */
+	private int hdist_trim=1;
+	
+
+	private float minratio=0.84f;
+	private int maxindel=6;
+	private int kfilter=0;
+	private int minhits=1;
+	private boolean fast=true;
+	private boolean local=true;
 	
 	private boolean verbose=false;
 	private boolean overwrite=true;
@@ -913,7 +966,7 @@ public class BBQC {
 	private String phixRef = "/global/dna/shared/rqc/ref_databases/qaqc/databases/phix174_ill.ref.fa";
 
 	private String allArtifactsLatest = "/global/projectb/sandbox/rqc/qcdb/illumina.artifacts/Illumina.artifacts.fa";
-	private String fragArtifacts = "/global/projectb/sandbox/gaag/bbtools/data/adapters.fa";
+	private String fragAdapters = "/global/projectb/sandbox/gaag/bbtools/data/adapters.fa";
 	private String humanPath = "/global/projectb/sandbox/gaag/bbtools/hg19/";
 	
 	/*--------------------------------------------------------------*/

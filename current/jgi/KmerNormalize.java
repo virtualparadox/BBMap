@@ -32,6 +32,7 @@ import dna.AminoAcid;
 import dna.Data;
 import dna.Parser;
 import dna.Timer;
+import fileIO.ByteStreamWriter;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
 import fileIO.TextStreamWriter;
@@ -85,6 +86,7 @@ public class KmerNormalize {
 		
 		int k=31;
 		int cbits=32;
+		int precbits=2;
 		int cbits1=-1;
 		int gap=0;
 		int hashes=3;
@@ -107,8 +109,10 @@ public class KmerNormalize {
 		long precells=-1;
 		String khistFile=null;
 		String rhistFile=null;
+		String peakFile=null;
 		String khistFileOut=null;
 		String rhistFileOut=null;
+		String peakFileOut=null;
 		int threads=-1;
 		ReadWrite.ZIPLEVEL=2;
 		
@@ -205,6 +209,8 @@ public class KmerNormalize {
 				cbits=Integer.parseInt(b);
 			}else if(a.equals("bits1") ||a.equals("cbits1") || a.equals("cellbits1")){
 				cbits1=Integer.parseInt(b);
+			}else if(a.equals("prefilterbits") ||a.equals("prebits")){
+				precbits=Integer.parseInt(b);
 			}else if(a.equals("histlen") ||a.equals("histogramlen")){
 				HIST_LEN_PRINT=Tools.min(Integer.MAX_VALUE, Long.parseLong(b)+1);
 			}else if(a.equals("gap")){
@@ -255,9 +261,9 @@ public class KmerNormalize {
 			}else if(a.equals("rn") || a.equals("rename") || a.equals("renamereads")){
 				renameReads=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("tablereads") || a.equals("buildreads")){
-				tablereads=Long.parseLong(b);
+				tablereads=Tools.parseKMG(b);
 			}else if(a.equals("out") || a.equals("out1") || a.equals("outk") || a.equals("outkeep") || a.equals("outgood")){
 				outKeep1=b;
 			}else if(a.equals("outt") || a.equals("outt1") || a.equals("outtoss") || a.equals("outoss") || a.equals("outbad")){
@@ -294,6 +300,10 @@ public class KmerNormalize {
 				khistFileOut=b;
 			}else if(a.equals("rhistout")){
 				rhistFileOut=b;
+			}else if(a.equals("peaks")){
+				peakFile=b;
+			}else if(a.equals("peaksout")){
+				peakFileOut=b;
 			}else if(a.equals("verbose")){
 				verbose=Tools.parseBoolean(b);
 			}else if(a.equals("ordered") || a.equals("ord")){
@@ -412,7 +422,7 @@ public class KmerNormalize {
 				TRIM_AFTER_MARKING=Tools.parseBoolean(b);
 			}else if(a.equals("markwith1") || a.equals("markwithone") || a.equals("mw1")){
 				MARK_WITH_1=Tools.parseBoolean(b);
-				TrimRead.PROB1=10;
+//				TrimRead.PROB1=10;
 			}else if(a.equals("aec") || a.equals("aecc") || a.equals("aggressiveerrorcorrection")){
 				boolean x=Tools.parseBoolean(b);
 				if(x){
@@ -473,10 +483,26 @@ public class KmerNormalize {
 				SUFFIX_LEN=Integer.parseInt(b);
 			}else if(a.equals("pl") || a.equals("prelen") || a.equals("prefixlen")){
 				PREFIX_LEN=Integer.parseInt(b);
+			}else if(a.equals("histcol") || a.equals("histcolumns") || a.equals("histogramcolumns")){
+				HIST_COLUMNS=Integer.parseInt(b);
 			}else if(a.equals("usegzip") || a.equals("gzip")){
 				ReadWrite.USE_GZIP=Tools.parseBoolean(b);
+			}else if(a.equals("minheight")){
+				minHeight=Long.parseLong(b);
+			}else if(a.equals("minvolume")){
+				minVolume=Long.parseLong(b);
+			}else if(a.equals("minwidth")){
+				minWidth=Integer.parseInt(b);
+			}else if(a.equals("minpeak")){
+				minPeak=Integer.parseInt(b);
+			}else if(a.equals("maxpeak")){
+				maxPeak=Integer.parseInt(b);
+			}else if(a.equals("maxpeakcount") || a.equals("maxpc") || a.equals("maxpeaks")){
+				maxPeakCount=Integer.parseInt(b);
 			}else if(a.equals("usetmpdir")){
 				USE_TMPDIR=Tools.parseBoolean(b);
+			}else if(a.equals("uselowerdepth") || a.equals("uld")){
+				USE_LOWER_DEPTH=Tools.parseBoolean(b);
 			}else if(a.equals("tmpdir")){
 				TMPDIR=b;
 				if(b!=null){
@@ -505,7 +531,7 @@ public class KmerNormalize {
 			"\noutLow, outMid, outHigh, and outUnc don't work with multiple passes.  Set passes=1 or eliminate those output streams.";
 		
 		assert(in1!=null && !in1.equalsIgnoreCase("stdin") && !in1.toLowerCase().startsWith("stdin.")) : 
-			"\nThis program does not allow input from standard in,\nbecause it needs to read the input multiple times.\nOnly real files are permitted.";
+			"\nThis program does not allow input from standard in,\nbecause it needs to read the input multiple times.\nOnly files are permitted.";
 		
 		if(MARK_ERRORS_ONLY){
 			MAX_ERRORS_TO_CORRECT=Tools.max(MAX_ERRORS_TO_CORRECT, 9999);
@@ -539,7 +565,7 @@ public class KmerNormalize {
 		
 		if(DETERMINISTIC){ordered=true;}
 		
-		boolean ok=Tools.testOutputFiles(overwrite, append, false, outKeep1, outToss1, outKeep2, outToss2, khistFile, khistFileOut, rhistFile, rhistFileOut);
+		boolean ok=Tools.testOutputFiles(overwrite, append, false, outKeep1, outToss1, outKeep2, outToss2, khistFile, khistFileOut, rhistFile, rhistFileOut, peakFile, peakFileOut);
 		
 //		assert(Tools.canWrite(outKeep, overwrite)) : outKeep+" already exists, and overwrite="+overwrite;
 //		assert(Tools.canWrite(outToss, overwrite)) : outToss+" already exists, and overwrite="+overwrite;
@@ -584,13 +610,14 @@ public class KmerNormalize {
 //		}
 		
 		if(threads<=0){
-			if(auto){THREADS=Shared.THREADS;}
-			else{THREADS=8;}
+			THREADS=Shared.THREADS;
 		}else{
 			THREADS=threads;
 		}
 //		KmerCount7MTA.THREADS=Tools.min(THREADS,6);
 		KmerCount7MTA.THREADS=THREADS;
+		
+//		assert(false) : THREADS;
 		
 //		System.err.println("THREADS="+THREADS+", KmerCount7MTA.THREADS="+KmerCount7MTA.THREADS);
 		
@@ -629,12 +656,12 @@ public class KmerNormalize {
 					CORRECT_ERRORS_THIS_PASS=USE_ECC1;
 					TRIM_LEFT_THIS_PASS=(pass==1 && TRIM_LEFT);
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
-					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
+					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precbits, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
 							tempOut1, tempOutToss1, null, null, null, null, 
 							tempOut2, tempOutToss2, null, null, null, null, 
-							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? peakFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 2), Tools.min(minKmersOverMinDepth, 5), 
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), false, rbb, true,
 							highPercentile, 0, (errorDetectRatio>100 ? 100+(errorDetectRatio-100)/2 : errorDetectRatio), hthresh, lthresh, false, false, false);
@@ -670,12 +697,12 @@ public class KmerNormalize {
 					CORRECT_ERRORS_THIS_PASS=USE_ECC1;
 					TRIM_LEFT_THIS_PASS=(pass==1 && TRIM_LEFT);
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
-					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
+					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precbits, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
 							tempOut1, tempOutToss1, null, null, null, null, 
 							tempOut2, tempOutToss2, null, null, null, null, 
-							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? peakFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
@@ -704,12 +731,12 @@ public class KmerNormalize {
 					CORRECT_ERRORS_THIS_PASS=USE_ECC1;
 					TRIM_LEFT_THIS_PASS=(pass==1 && TRIM_LEFT);
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
-					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
+					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precbits, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
 							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
 							tempOut1, tempOutToss1, null, null, null, null, 
 							tempOut2, tempOutToss2, null, null, null, null, 
-							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
+							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? peakFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
@@ -726,41 +753,41 @@ public class KmerNormalize {
 			CORRECT_ERRORS_THIS_PASS=USE_ECCF;
 			TRIM_LEFT_THIS_PASS=false;
 			TRIM_RIGHT_THIS_PASS=false;
-			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
+			bases+=runPass(auto, memory, cbits, cells, precbits, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
 					lastTemp1, lastTemp2,
 					outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
 					outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, 
-					null, null, null,
+					null, null, null, null,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF,
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}else{
 			CORRECT_ERRORS_THIS_PASS=(USE_ECC1 || USE_ECCF);
 			TRIM_LEFT_THIS_PASS=(TRIM_LEFT);
 			TRIM_RIGHT_THIS_PASS=(TRIM_RIGHT);
-			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
+			bases+=runPass(auto, memory, cbits, cells, precbits, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
 					in1, in2,
 					outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
 					outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, 
-					khistFile, rhistFile, extra,
+					khistFile, rhistFile, peakFile, extra,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF, 
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}
 		
-		if(outKeep1!=null && (khistFileOut!=null || rhistFileOut!=null)){
+		if(outKeep1!=null && (khistFileOut!=null || rhistFileOut!=null || peakFileOut!=null)){
 			outstream.println("\n   ***********   Output Histogram Generation   **********   \n");
 			FASTQ.TEST_INTERLEAVED=true;
 			FASTQ.FORCE_INTERLEAVED=(paired && outKeep2==null);
 			CORRECT_ERRORS_THIS_PASS=false;
 			TRIM_LEFT_THIS_PASS=false;
 			TRIM_RIGHT_THIS_PASS=false;
-			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
+			bases+=runPass(auto, memory, cbits, cells, precbits, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
 					outKeep1, outKeep2, 
 					null, null, null, null, null, null,
 					null, null, null, null, null, null, 
-					khistFileOut, rhistFileOut, extra,
+					khistFileOut, rhistFileOut, peakFileOut, extra,
 					99999999, 99999999, 99999999, 99999999, 0, 0, .5f, false, rbb, false, 
 					1, 0, 100, 10, 3, fixSpikes, false, false);
 		}
@@ -864,12 +891,12 @@ public class KmerNormalize {
 		return true;
 	}
 	
-	private static long runPass(boolean auto, long memory, int cbits, long cells, long precells, int buildpasses, int hashes, int prehashes, int k,
+	private static long runPass(boolean auto, long memory, int cbits, long cells, int pcbits, long precells, int buildpasses, int hashes, int prehashes, int k,
 			long maxReads, long tablereads, int minq, int buildStepsize,
 			String in1, String in2,
 			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1,
 			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2,
-			String khistFile, String rhistFile, List<String> extra,
+			String khistFile, String rhistFile, String peakFile, List<String> extra,
 			int targetDepth, int targetDepthBadLow, int targetDepthBadHigh, int maxDepth, int minDepth, 
 			int minKmersOverMinDepth, float depthPercentile, boolean tossErrorReads, boolean rbb, boolean discardBadOnly, 
 			float highPercentile, float lowPercentile, int errorDetectRatio, int hthresh, int lthresh, boolean fixSpikes, boolean countup,
@@ -901,7 +928,7 @@ public class KmerNormalize {
 		FIX_SPIKES=fixSpikes;
 		
 		{
-			if(khistFile!=null){USE_KHISTOGRAM=true;}
+			if(khistFile!=null || peakFile!=null){USE_KHISTOGRAM=true;}
 			if(rhistFile!=null){USE_RHISTOGRAM=true;}
 			
 			final int maxCount=(int)(cbits>16 ? Integer.MAX_VALUE : (1L<<cbits)-1);
@@ -923,7 +950,7 @@ public class KmerNormalize {
 		
 		if(auto && cells==-1){
 			final long usable=(long)Tools.max(((memory-96000000)*.73), memory*0.45);
-			long mem=usable-(khistogram!=null ? (HIST_LEN*8*(1)) : 0)-(rhistogram!=null ? (HIST_LEN*8*(1)) : 0)-(bhistogram!=null ? (HIST_LEN*8*(1)) : 0);
+			long mem=usable-(khistogram!=null ? (HIST_LEN*16L*(1)) : 0)-(rhistogram!=null ? (HIST_LEN*8L*(1)) : 0)-(bhistogram!=null ? (HIST_LEN*8L*(1)) : 0);
 			if(buildpasses>1){mem/=2;}
 			
 			FILTERBYTES=(COUNTUP ? mem/2 : mem);
@@ -941,7 +968,7 @@ public class KmerNormalize {
 			if(precells<1){
 				long totalbits=cells*cbits;
 				long prebits=(long)(totalbits*0.35);
-				precells=prebits/2;
+				precells=prebits/pcbits;
 				cells=(totalbits-prebits+cbits-1)/cbits; //Steal memory from cell allocation
 			}
 			if(prehashes<1){
@@ -961,7 +988,7 @@ public class KmerNormalize {
 			outstream.println("cells:            \t"+Tools.toKMG(cells));
 			outstream.println("hashes:           \t"+hashes);
 			if(prefilter){
-				outstream.println("prefilter bits:   \t"+2);
+				outstream.println("prefilter bits:   \t"+pcbits);
 //				outstream.println("matrixbits: \t"+matrixbits);
 				outstream.println("prefilter cells:  \t"+(precells>0 && prehashes>0 ? Tools.toKMG(precells) : "?"));
 				outstream.println("prefilter hashes: \t"+(precells>0 && prehashes>0 ? ""+prehashes : "?"));
@@ -1003,7 +1030,7 @@ public class KmerNormalize {
 		KCountArray prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
-			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, 2, 0, precells, prehashes, minq, true, tablereads, 1, buildStepsize, 1, 1, null);
+			prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, pcbits, 0, precells, prehashes, minq, true, tablereads, 1, buildStepsize, 1, 1, null);
 			outstream.println("Made prefilter:   \t"+prefilterArray.toShortString(prehashes));
 			double uf=prefilterArray.usedFraction();
 			if(uf>0.6){
@@ -1084,10 +1111,10 @@ public class KmerNormalize {
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
 				bases+=count(list1, list2, kca, k, maxReads, null, null, null, null, null, null, 
-						null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
+						null, null, null, null, null, null, false, overwrite, null, null, null, estUnique, storage);
 			}else{
 				bases+=count(in1, in2, kca, k, maxReads, null, null, null, null, null, null, 
-						null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
+						null, null, null, null, null, null, false, overwrite, null, null, null, estUnique, storage);
 			}
 			inMemorySort(storage, tempOut1, false);
 			storage=null;
@@ -1106,10 +1133,10 @@ public class KmerNormalize {
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
 				bases+=count(list1, list2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
-						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, peakFile, estUnique, null);
 			}else{
 				bases+=count(in1, in2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
-						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, peakFile, estUnique, null);
 			}
 			
 		}else{
@@ -1119,10 +1146,10 @@ public class KmerNormalize {
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
 				bases+=count(list1, list2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1,
-						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, peakFile, estUnique, null);
 			}else{
 				bases+=count(in1, in2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
-						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, peakFile, estUnique, null);
 			}
 		}
 		
@@ -1161,7 +1188,7 @@ public class KmerNormalize {
 	public static long count(String in1, String in2, KCountArray kca, int k, long maxReads, 
 			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1, 
 			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2, 
-			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
+			boolean ordered, boolean overwrite, String khistFile, String rhistFile, String peakFile, long estUnique, ArrayList<Read> storage) {
 		final ConcurrentReadStreamInterface cris;
 		{
 			FileFormat ff1=FileFormat.testInput(in1, FileFormat.FASTQ, null, true, true);
@@ -1335,7 +1362,7 @@ public class KmerNormalize {
 			outstream.println("Started output threads.");
 		}
 		
-		long bases=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, overwrite, estUnique, storage);
+		long bases=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, peakFile, overwrite, estUnique, storage);
 		
 		errorState|=ReadWrite.closeStreams(cris, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc);
 		if(verbose){System.err.println("Closed streams");}
@@ -1347,7 +1374,7 @@ public class KmerNormalize {
 	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads, 
 			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1, 
 			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2, 
-			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
+			boolean ordered, boolean overwrite, String khistFile, String rhistFile, String peakFile, long estUnique, ArrayList<Read> storage) {
 		
 		RTextOutputStream3 rosKeep=null, rosToss=null, rosLow=null, rosMid=null, rosHigh=null, rosUnc=null;
 		String[] outKeep1a=null, outKeep2a=null;
@@ -1619,7 +1646,7 @@ public class KmerNormalize {
 			boolean paired=cris.paired();
 			if(verbose){System.err.println("Paired: "+paired);}
 
-			bases+=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, overwrite, estUnique, storage);
+			bases+=downsample(cris, kca, k, maxReads, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, khistFile, rhistFile, peakFile, overwrite, estUnique, storage);
 
 			errorState|=ReadWrite.closeStream(cris);
 			if(verbose){System.err.println("Closed stream");}
@@ -1635,7 +1662,7 @@ public class KmerNormalize {
 	
 	public static long downsample(ConcurrentReadStreamInterface cris, KCountArray kca, int k, long maxReads, 
 			RTextOutputStream3 rosKeep, RTextOutputStream3 rosToss, RTextOutputStream3 rosLow, RTextOutputStream3 rosMid, RTextOutputStream3 rosHigh, RTextOutputStream3 rosUnc, 
-			String khistFile, String rhistFile, boolean overwrite, long estUnique, ArrayList<Read> storage) {
+			String khistFile, String rhistFile, String peakFile, boolean overwrite, long estUnique, ArrayList<Read> storage) {
 		Timer tdetect=new Timer();
 		tdetect.start();
 
@@ -1667,72 +1694,75 @@ public class KmerNormalize {
 		long errorsCorrected=0;
 		long basesTrimmed=0;
 		
-		KCountArray kcaup=null;
-		if(COUNTUP){
-			final int bits;
-			if(TARGET_DEPTH<=15){
-				bits=4;
-			}else if(TARGET_DEPTH<=255){
-				bits=8;
-			}else{
-				bits=16;
+		{
+			KCountArray kcaup=null;
+			if(COUNTUP){
+				final int bits;
+				if(TARGET_DEPTH<=15){
+					bits=4;
+				}else if(TARGET_DEPTH<=255){
+					bits=8;
+				}else{
+					bits=16;
+				}
+
+				long cells=(FILTERBYTES*8)/bits;
+				int kbits=2*k;
+				kcaup=KCountArray.makeNew(1L<<kbits, cells, bits, 0, 3, null); 
 			}
-			
-			long cells=(FILTERBYTES*8)/bits;
-			int kbits=2*k;
-			kcaup=KCountArray.makeNew(1L<<kbits, cells, bits, 0, 3, null); 
-		}
-		
-//		assert(false) : THREADS;
-		ProcessThread[] pta=new ProcessThread[THREADS];
-		for(int i=0; i<pta.length; i++){
-			pta[i]=new ProcessThread(cris, kca, kcaup, k, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, storage);
-			pta[i].start();
-		}
-		
-		for(int i=0; i<pta.length; i++){
-			ProcessThread ct=pta[i];
-			synchronized(ct){
-				while(ct.getState()!=State.TERMINATED){
-					try {
-						ct.join(1000);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+
+			ProcessThread[] pta=new ProcessThread[THREADS];
+			for(int i=0; i<pta.length; i++){
+				pta[i]=new ProcessThread(cris, kca, kcaup, k, rosKeep, rosToss, rosLow, rosMid, rosHigh, rosUnc, storage);
+				pta[i].start();
+			}
+
+			kca=kcaup=null;
+
+			for(int i=0; i<pta.length; i++){
+				ProcessThread ct=pta[i];
+				synchronized(ct){
+					while(ct.getState()!=State.TERMINATED){
+						try {
+							ct.join(1000);
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 					}
-				}
-				totalBases+=ct.totalBases;
-				totalReads+=ct.totalReads;
-				errorReads+=ct.errorReads;
-				errorPairs+=ct.errorPairs;
-				errorType1+=ct.errorType1;
-				errorType2+=ct.errorType2;
-				errorType3+=ct.errorType3;
+					totalBases+=ct.totalBases;
+					totalReads+=ct.totalReads;
+					errorReads+=ct.errorReads;
+					errorPairs+=ct.errorPairs;
+					errorType1+=ct.errorType1;
+					errorType2+=ct.errorType2;
+					errorType3+=ct.errorType3;
 
-				readsKept+=ct.readsKept;
-				readsTossed+=ct.readsTossed;
-				readsLowBin+=ct.readsLowBin;
-				readsMidBin+=ct.readsMidBin;
-				readsHighBin+=ct.readsHighBin;
-				readsUncorrected+=ct.readsUncorrected;
-				
-				basesKept+=ct.basesKept;
-				basesTossed+=ct.basesTossed;
-				basesLowBin+=ct.basesLowBin;
-				basesMidBin+=ct.basesMidBin;
-				basesHighBin+=ct.basesHighBin;
-				basesUncorrected+=ct.basesUncorrected;
+					readsKept+=ct.readsKept;
+					readsTossed+=ct.readsTossed;
+					readsLowBin+=ct.readsLowBin;
+					readsMidBin+=ct.readsMidBin;
+					readsHighBin+=ct.readsHighBin;
+					readsUncorrected+=ct.readsUncorrected;
 
-				errorsDetected+=ct.errorsDetected;
-				errorsMarked+=ct.errorsMarked;
-				errorsCorrected+=ct.errorsCorrected;
-				basesTrimmed+=ct.basesTrimmed;
+					basesKept+=ct.basesKept;
+					basesTossed+=ct.basesTossed;
+					basesLowBin+=ct.basesLowBin;
+					basesMidBin+=ct.basesMidBin;
+					basesHighBin+=ct.basesHighBin;
+					basesUncorrected+=ct.basesUncorrected;
 
-				for(int j=0; j<ct.hist.length; j++){
-					khistogram.addAndGet(j, ct.hist[j]);
-				}
-				for(int j=0; j<ct.qhist.length; j++){
-					qhist_total[j]+=ct.qhist[j];
+					errorsDetected+=ct.errorsDetected;
+					errorsMarked+=ct.errorsMarked;
+					errorsCorrected+=ct.errorsCorrected;
+					basesTrimmed+=ct.basesTrimmed;
+
+					for(int j=0; j<ct.hist.length; j++){
+						khistogram.addAndGet(j, ct.hist[j]);
+					}
+					for(int j=0; j<ct.qhist.length; j++){
+						qhist_total[j]+=ct.qhist[j];
+					}
 				}
 			}
 		}
@@ -1824,12 +1854,32 @@ public class KmerNormalize {
 		
 //		outstream.println();
 		if(khistogram!=null){
-			TextStreamWriter tswh=null;
-			StringBuilder sb=new StringBuilder(100);
+			
+			if(peakFile!=null){
+				CallPeaks.printClass=false;
+				long[] array=Tools.toArray(khistogram);
+				for(int i=0; i<array.length; i++){
+					long x=array[i];
+					long y=((x+i/2)/(i<1 ? 1 : i)); //x+i/2 rounds to compensate for colliding kmers being put in an overly high bin
+					array[i]=y;
+				}
+				
+				CallPeaks.printPeaks(array, peakFile, overwrite, minHeight, minVolume, minWidth, minPeak, maxPeak, maxPeakCount);
+			}
+			
+			ByteStreamWriter bsw=null;
 			if(USE_KHISTOGRAM && khistFile!=null){
-				tswh=new TextStreamWriter(khistFile, overwrite, false, false);
-				tswh.start();
-				tswh.print("#Depth\tRaw_Count\tUnique_Kmers\n");
+				bsw=new ByteStreamWriter(khistFile, overwrite, false, false);
+				bsw.start();
+
+				if(HIST_COLUMNS==1){
+					bsw.print("#tUnique_Kmers\n");
+				}else if(HIST_COLUMNS==2){
+					bsw.print("#Depth\tUnique_Kmers\n");
+				}else if(HIST_COLUMNS==3){
+					bsw.print("#Depth\tRaw_Count\tUnique_Kmers\n");
+				}
+				
 			}
 			int lim=(int)(HIST_LEN_PRINT-1);
 			long remaining=Tools.sum(khistogram);
@@ -1845,14 +1895,19 @@ public class KmerNormalize {
 				sumRaw1+=x;
 				sum1+=y;
 				sumsquare+=(x*Tools.max(1, i));
-				if(tswh!=null){
-					if(PRINT_ZERO_COVERAGE /*|| x>0*/ || y>0){
-						sb.append(i).append('\t');
-						sb.append(x).append('\t');
-						sb.append(y).append('\n');
+				if(bsw!=null){
+					if(PRINT_ZERO_COVERAGE /*|| x>0*/ || y>0 || HIST_COLUMNS==1){
+						if(HIST_COLUMNS>1){
+							bsw.print(i);
+							bsw.print('\t');
+						}
+						if(HIST_COLUMNS==3){
+							bsw.print(x);
+							bsw.print('\t');
+						}
+						bsw.print(y);
+						bsw.print('\n');
 					}
-					tswh.print(sb.toString());
-					sb.setLength(0);
 				}
 				if(sumRaw1>=remaining){break;} //Stop once there is no more coverage, even if PRINT_ZERO_COVERAGE is not set.
 			}
@@ -1863,15 +1918,20 @@ public class KmerNormalize {
 //				long y=((x)/(i<1 ? 1 : i));
 				sum2+=y;
 			}
-			if(tswh!=null){
+			if(bsw!=null){
 				if(sumRaw2>0 || sum2>0){
-					sb.append(lim).append('\t');
-					sb.append(sumRaw2).append('\t');
-					sb.append(sum2).append('\n');
+					if(HIST_COLUMNS>1){
+						bsw.print(lim);
+						bsw.print('\t');
+					}
+					if(HIST_COLUMNS==3){
+						bsw.print(sumRaw2);
+						bsw.print('\t');
+					}
+					bsw.print(sum2);
+					bsw.print('\n');
 				}
-				tswh.print(sb.toString());
-				tswh.poison();
-				tswh.waitForFinish();
+				bsw.poisonAndWait();
 				outstream.println("\nWrote histogram to "+khistFile);
 			}
 			
@@ -3026,31 +3086,34 @@ public class KmerNormalize {
 						maxDepth=targetDepth;
 					}
 					
-
-					final int lowerdepthAL=(depthAL1>=0 ? (depthAL2>=0 ? Tools.min(depthAL1, depthAL2) : depthAL1) : depthAL2); //The lower of depth1 and depth2
-					final int lowertruedepth=(r2==null ? truedepth1 : Tools.min(truedepth1, truedepth2));
+					final int minAL=(depthAL1>=0 ? (depthAL2>=0 ? Tools.min(depthAL1, depthAL2) : depthAL1) : depthAL2);
+					final int maxAL=Tools.max(depthAL1, depthAL2);
+					final int minTrueDepth=(r2==null ? truedepth1 : Tools.min(truedepth1, truedepth2));
+					final int maxTrueDepth=Tools.max(truedepth1, truedepth2);
+					final int depthproxyAL=USE_LOWER_DEPTH ? minAL : maxAL;
+					final int truedepthproxy=USE_LOWER_DEPTH ? minTrueDepth : maxTrueDepth;
 					long coin=0;
-					if(lowerdepthAL>maxDepth && (error1 || error2 || !DISCARD_BAD_ONLY)){
+					if(depthproxyAL>maxDepth && (error1 || error2 || !DISCARD_BAD_ONLY)){
 						if(r.rand<0){
-							coin=randy.nextLong(lowerdepthAL)+1;
+							coin=randy.nextLong(depthproxyAL)+1;
 						}else{
-							coin=((long)(r.rand*lowerdepthAL))+1;
+							coin=((long)(r.rand*depthproxyAL))+1;
 						}
 					}
 					
 					totalReads+=readcount;
 					totalBases+=basecount;
 					
-					boolean toss=(lowerdepthAL<0 || coin>targetDepth || (r!=null && r.bases.length<minlength) || (r2!=null && r2.bases.length<minlength));
+					boolean toss=(depthproxyAL<0 || coin>targetDepth || (r!=null && r.bases.length<minlength) || (r2!=null && r2.bases.length<minlength));
 					if(TOSS_ERROR_READS && (error1 || error2)){
-						if(SAVE_RARE_READS && lowerdepthAL<=targetDepth && lowerdepthAL>=HTHRESH){
+						if(SAVE_RARE_READS && depthproxyAL<=targetDepth && depthproxyAL>=HTHRESH){
 							//do nothing
 						}else if(!REQUIRE_BOTH_BAD || r2==null || (error1 && error2)){
 							toss=true;
 						}
 					}
 					
-					if(TOSS_BY_LOW_TRUEDEPTH && !SAVE_RARE_READS && lowertruedepth<MIN_DEPTH && (!REQUIRE_BOTH_BAD || (mintruedepth1<MIN_DEPTH && mintruedepth2<MIN_DEPTH))){
+					if(TOSS_BY_LOW_TRUEDEPTH && !SAVE_RARE_READS && maxTrueDepth<MIN_DEPTH && (!REQUIRE_BOTH_BAD || (mintruedepth1<MIN_DEPTH && mintruedepth2<MIN_DEPTH))){
 						toss=true;
 					}
 					
@@ -3432,9 +3495,17 @@ public class KmerNormalize {
 	
 	public static PrintStream outstream=Data.sysout;
 
+	private static long minHeight=2;
+	private static long minVolume=2;
+	private static int minWidth=2;
+	private static int minPeak=2;
+	private static int maxPeak=Integer.MAX_VALUE;
+	private static int maxPeakCount=8;
+
 	public static int THREAD_HIST_LEN=1<<12;
 	public static int HIST_LEN=1<<20;
 	public static long HIST_LEN_PRINT=HIST_LEN;
+	public static long HIST_COLUMNS=3;
 	public static boolean USE_KHISTOGRAM=false;
 	public static boolean USE_RHISTOGRAM=false;
 	public static boolean PRINT_ZERO_COVERAGE=false;
@@ -3443,7 +3514,7 @@ public class KmerNormalize {
 	public static AtomicLongArray bhistogram;
 	public static long[] qhist_total;
 	
-	private static int THREADS=8;
+	private static int THREADS=Shared.THREADS;
 	private static boolean verbose=false;
 	private static boolean errorState=false;
 	
@@ -3469,6 +3540,8 @@ public class KmerNormalize {
 	/** Position in sorted kmer depths array to use as proxy for overall read depth */
 	private static float DEPTH_PERCENTILE=0.54f;
 	
+	/** Normalize based on depth of read with lower depth, instead of read with higher depth */
+	public static boolean USE_LOWER_DEPTH=true;
 	/** Throw out reads with depth at absolute depth percentile below mindepth */
 	public static boolean TOSS_BY_LOW_TRUEDEPTH=true;
 	/** Throw out reads containing errors in the current pass */

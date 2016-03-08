@@ -86,9 +86,9 @@ public class ErrorCorrect extends Thread{
 			}else if(a.equals("threads") || a.equals("t")){
 				System.err.println("Can't change threadcount for this class."); //THREADS=Integer.parseInt(b);
 			}else if(a.startsWith("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("tablereads")){
-				tablereads=Long.parseLong(b);
+				tablereads=Tools.parseKMG(b);
 			}else if(a.startsWith("build") || a.startsWith("genome")){
 				Data.setGenome(Integer.parseInt(b));
 				Data.sysout.println("Set genome to "+Data.GENOME_BUILD);

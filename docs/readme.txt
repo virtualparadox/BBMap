@@ -1,9 +1,13 @@
 BBMap readme by Brian Bushnell
-Last updated June 26, 2014.
+Last updated November 21, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
-BBMap is free to use for noncommercial purposes, and investigators are free to publish results derived from the program, as long as the source code is not published or modified.
+BBMap and all other BBTools are free to use for noncommercial purposes, and investigators are free to publish results derived from them, as long as the source code is not published without explicit permission.
+The BBTools package was written by Brian Bushnell, with the exception of the (optional, but faster) C and JNI components, which were written by Jonathan Rood.
 
-This is the official release of BBMAP, version 33.x
+Special thanks for help with shellscripts goes to:
+Alex Copeland (JGI), Douglas Jacobsen (JGI/NERSC), and sdriscoll (SeqAnswers).
+
+This is the official release of BBMap, version 33.x
 
 
 Basic Syntax:
@@ -20,7 +24,7 @@ java -ea -Xmx31g -cp <PATH> align2.BBMap ref=<reference.fa>
 To map:
 java -ea -Xmx31g -cp <PATH> align2.BBMap in=<reads.fq> out=<mapped.sam>
 
-...where "<PATH>" should indicate the path to the directory containing all the source code directories; e.g. "/usr/bin/bbtools/current"
+...where "<PATH>" should indicate the path to the directory containing all the source code directories; e.g. "/usr/bin/bbmap/current"
 
 Please note, the reference is only needed for building the index the first time; subsequently, just specify the build number which corresponds to that reference.
 So for example the first time you map to e.coli you might specify "ref=ecoli_reference.fa build=3"; after that, just specify "build=3".
@@ -40,7 +44,7 @@ midpad=<300>		Put this many "N" in between scaffolds when making the index.  300
 startpad=<8000> 	Put this many "N" at the beginning of a "chrom" file when making index.  It's best if this is longer than your longest expected read.
 stoppad=<8000>		Put this many "N" at the end of a "chrom" file when making index.  It's best if this is longer than your longest expected read.
 minscaf=<1>		Do not include scaffolds shorter than this when generating index.  Useful for assemblies with millions of fairly worthless unscaffolded contigs under 100bp.  There's no reason to make this shorter than the kmer length.
-usemodulo=<f>		Throw away kmers that are not equal to their reverse modulo 5.  Reduces memory usage and sensitivity.  Must be specified when indexing and when mapping.
+usemodulo=<f>		Throw away ~80% of kmers based on their remainder modulo a number.  Reduces memory usage by around 50%, and reduces sensitivity slightly.  Must be specified when indexing and when mapping.
 
 
 Input Parameters:
@@ -70,7 +74,8 @@ idmodulo=<1>		Set to a higher number if you want to map only every Nth read (for
 Mapping Parameters:
 fast=<f>		The fast flag is a macro.  It will set many other paramters so that BBMap will run much faster, at slightly reduced sensitivity for most applications.  Not recommended for RNAseq, cross-species alignment, or other situations where long deletions or low identity matches are expected.
 minratio=<0.56>		Alignment sensitivity as a fraction of a read's max possible mapping score.  Lower is slower and more sensitive but gives more false positives.  Ranges from 0 (very bad alignment) to 1 (perfect alignment only).  Default varies between BBMap versions. 
-minidentity=<>		Or "minid".  Use this flag to set minratio more easily.  If you set minid=0.9, for example, minratio will be set to a value that will be approximately equivalent to 90% identity alignments.
+minidentity=<>		Or "minid".  Use this flag to set minratio more easily.  If you set minid=0.9, for example, minratio will be set to a value that will be APPROXIMATELY equivalent to 90% identity alignments.
+idfilter=<0>		Different than "minid".  No alignments will be allowed with an identity score lower than this value.  This filter occurs at the very end and is unrelated to minratio, and has no effect on speed unless set to 1.  Range is 0-1.
 minapproxhits=<1>	Controls minimum number of seed hits to examine a site.  Higher is less accurate but faster (on large genomes).  2 is maybe 2.5x as fast and 3 is maybe 5x as fast on a genome with of gigabases.  Does not speed up genomes under 100MB or so very much.
 padding=<4>		Sets extra padding for slow-aligning.  Higher numbers are more accurate for indels near the tips of reads, but slower.
 tipsearch=<100>		Controls how far to look for possible deletions near tips of reads by brute force.  tipsearch=0 disables this function.  Higher is more accurate.
@@ -92,6 +97,9 @@ bandwidth=0		Or "bw".  When above zero, restricts alignment band to this width. 
 bandwidthratio=0	Or "bwr".  When above zero, restricts alignment band to this fraction of a read's length.  Runs faster, but with reduced accuracy for reads with many or long indels.
 usequality=<t>		Or "uq".  Set to false to ignore quality values when mapping.  This will allow very low quality reads to be attempted to be mapped rather than discarded.
 keepbadkeys=<f>		Or "kbk".  With kbk=false (default), read keys (kmers) have their probability of being incorrect evaluated from quality scores, and keys with a 94%+ chance of being wrong are discarded.  This increases both speed and accuracy.
+usejni=<f>		Or "jni".  Do alignments in C code, which is faster.  Requires first compiling the C code; details are in /jni/README.txt.  This will produce identical output.
+maxsites2=<800>		Don't analyze (or print) more than this many alignments per read.
+minaveragequality=<0>	(maq) Discard reads with average quality below this.
 
 
 Output Parameters:
@@ -106,14 +114,6 @@ ambiguous=<best>		Or "ambig". Sets how to handle ambiguous reads.  "first" or "b
 ambiguous2=<best>		Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
 outputunmapped=<t>	Outputs unmapped reads to primary output stream (otherwise they are dropped).
 outputblacklisted=<t>	Outputs blacklisted reads to primary output stream (otherwise they are dropped).
-cigar=<t>		Generate cigar strings (for bread format, this means match strings).  cigar=false is faster.  "cigar=" is synonymous with "match=".  This must be enabled if match/insertion/deletion/substitution statistics are desired, but the program will run faster with cigar strings disabled.
-keepnames=<f>		Retain original names of paired reads, rather than ensuring both reads have the same name when written in sam format by renaming read2 to the same as read1.  If this is set to true then the output may not be sam compliant.
-mdtag=<f>		Generate MD tags for SAM files.  Requires that cigar=true.  I do not recommend generating MD tags for RNASEQ or other data where long deletions are expected because they will be incredibly long.
-xstag=<f>		Generate XS (strand) tags for Cufflinks.  This should be used with a stranded RNA-seq protocol.
-xmtag=<t>		Generate XM tag.  Indicates number of best alignments.
-intronlen=<999999999>	Set to a lower number like 10 to change 'D' to 'N' in cigar strings for deletions of at least that length.  This is used by Cufflinks; 'N' implies an intron while 'D' implies a deletion, but they are otherwise identical.
-stoptag=<f>		Allows generation of custom SAM tag YS:i:<read stop location>
-idtag=<f>		Allows generation of custom SAM tag YI:f:<percent identity>
 ordered=<f>		Set to true if you want reads to be output in the same order they were input.  This takes more memory, and can be slower, due to buffering in multithreaded execution.  Not needed for singlethreaded execution.
 ziplevel=<2>		Sets output compression level, from 1 (fast) to 9 (slow).  I/O is multithreaded, and thus faster when writing paired reads to two files rather than one interleaved file.
 nodisk=<f>		"true" will not write the index to disk, and may load slightly faster.   Prevents collisions between multiple bbmap instances writing indexes to the same location at the same time.
@@ -121,35 +121,76 @@ usegzip=<f>		If gzip is installed, output file compression is done with a gzip s
 usegunzip=<f>		If gzip is installed, input file decompression is done with a gzip subprocess instead of with Java's native inflate method.  Can be faster when set to true.
 pigz=<f>          	Spawn a pigz (parallel gzip) process for faster compression than Java or gzip.  Requires pigz to be installed.
 unpigz=<f>        	Spawn a pigz process for faster decompression than Java or gzip.  Requires pigz to be installed.
-samversion=<1.3>  	SAM specification version. Set to 1.3 for cigar strings with 'M' or 1.4 for cigar strings with '=' and 'X'.  Default is currently 1.3 because samtools 0.1.18 and earlier is incompatible with sam format version 1.4.
 bamscript=<filename>	(bs for short) Writes a shell script to <filename> with the command line to translate the sam output of BBMap into a sorted bam file, assuming you have samtools in your path.
 maxsites=<5>		Sets maximum alignments to print per read, if secondary alignments are allowed.  Currently secondary alignments may lack cigar strings.
 secondary=<f>		Print secondary alignments.
-sssr=<0.95>		(secondarysitescoreratio) Print only secondary alignments with score of at least this fraction of primary.
-ssao=<f>			(secondarysiteasambiguousonly) Only print secondary alignments for ambiguously-mapped reads.
+sssr=<0.95>  		(secondarysitescoreratio) Print only secondary alignments with score of at least this fraction of primary.
+ssao=<f>     		(secondarysiteasambiguousonly) Only print secondary alignments for ambiguously-mapped reads.
 quickmatch=<f>		Generate cigar strings during the initial alignment (before the best site is known).  Currently, this must be enabled to generate cigar strings for secondary alignments.  It increases overall speed but may in some very rare cases yield inferior alignments due to less padding.
 local=<f>          	Output local alignments instead of global alignments.  The mapping will still be based on the best global alignment, but the mapping score, cigar string, and mapping coordinate will reflect a local alignment (using the same affine matrix as the global alignment).
 sortscaffolds=<f> 	Sort scaffolds alphabetically in SAM headers to allow easier comparisons with Tophat (in cuffdif, etc).  Default is in same order as source fasta.
 trimreaddescriptions=<f>	(trd) Truncate read names at the first whitespace, assuming that the remaineder is a comment or description.
-saa=<t>           	(secondaryalignmentasterisks) Use asterisks instead of bases for sam secondary alignments.
 machineout=<f>    	Set to true to output statistics in machine-friendly 'key=value' format.
+forcesectionname=<f>	All fasta reads get an _# at the end of their name.  The number is 1 for the first shred and continues ascending.
+
+
+Sam settings and flags:
+samversion=<1.4>  	SAM specification version. Set to 1.3 for cigar strings with 'M' or 1.4 for cigar strings with '=' and 'X'.  Samtools 0.1.18 and earlier are incompatible with sam format version 1.4 and greater.
+saa=<t>           	(secondaryalignmentasterisks) Use asterisks instead of bases for sam secondary alignments.
+cigar=<t>		Generate cigar strings (for bread format, this means match strings).  cigar=false is faster.  "cigar=" is synonymous with "match=".  This must be enabled if match/insertion/deletion/substitution statistics are desired, but the program will run faster with cigar strings disabled.
+keepnames=<f>		Retain original names of paired reads, rather than ensuring both reads have the same name when written in sam format by renaming read2 to the same as read1.  If this is set to true then the output may not be sam compliant.
+mdtag=<f>		Generate MD tags for SAM files.  Requires that cigar=true.  I do not recommend generating MD tags for RNASEQ or other data where long deletions are expected because they will be incredibly long.
+xstag=<f>		Generate XS (strand) tags for Cufflinks.  This should be used with a stranded RNA-seq protocol.
+xmtag=<t>		Generate XM tag.  Indicates number of best alignments.  May only work correctly with ambig=all.
+nhtag=<f>             	Write NH tags.
+intronlen=<999999999>	Set to a lower number like 10 to change 'D' to 'N' in cigar strings for deletions of at least that length.  This is used by Cufflinks; 'N' implies an intron while 'D' implies a deletion, but they are otherwise identical.
+stoptag=<f>		Allows generation of custom SAM tag YS:i:<read stop location>
+idtag=<f>		Allows generation of custom SAM tag YI:f:<percent identity>
+scoretag=<f>		Allows generation of custom SAM tag YR:i:<raw mapping score>
+inserttag=<f>		Write a tag indicating insert size, prefixed by X8:Z:
+rgid=<>     		Set readgroup ID.  All other readgroup fields can be set similarly, with the flag rgXX=value.
+noheader=<f>		Suppress generation of output header lines.
 
 
 Statistics and Histogram Parameters:
 showprogress=<f>	Set to true to print out a '.' once per million reads processed.  You can also change the interval with e.g. showprogress=20000.
-qhist=<filename>	Output a per-base average quality histogram to <filename>.
-mhist=<filename>	Output a per-base match histogram to <filename>.  Requires cigar strings to be enabled.  The columns give fraction of bases at each position having each match string operation: match, substitution, deletion, insertion, N, or other.
-qahist=<filename>	Output a per-quality match histogram to <filename>.
-ihist=<filename>	Output a per-read-pair insert size histogram to <filename>.
-bhist=<filename>	Output a per-base composition histogram to <filename>.
+qhist=<file>		Output a per-base average quality histogram to <file>.
+aqhist=<file>		Write histogram of average read quality to <file>.
+bqhist=<file>		Write a quality histogram designed for box plots to <file>.
+obqhist=<file>		Write histogram of overall base counts per quality score to <file>.
+qahist=<file>		Quality accuracy histogram; correlates claimed phred quality score with observed quality based on substitution, insertion, and deletion rates.
+mhist=<file>		Output a per-base match histogram to <file>.  Requires cigar strings to be enabled.  The columns give fraction of bases at each position having each match string operation: match, substitution, deletion, insertion, N, or other.
+ihist=<file>		Output a per-read-pair insert size histogram to <file>.
+bhist=<file>		Output a per-base composition histogram to <file>.
 indelhist=<file>  	Output an indel length histogram.
 lhist=<file>      	Output a read length histogram.
 ehist=<file>      	Output an errors-per-read histogram.
 gchist=<file>     	Output a gc content histogram.
+gchistbins=<100>	(gcbins) Set the number of bins in the gc content histogram.
 idhist=<file>    	Write a percent identity histogram.
-scafstats=<filename>	Track mapping statistics per scaffold, and output to <filename>.
-refstats=<filename>	For BBSplitter, enable or disable tracking of read mapping statistics on a per-reference-set basis, and output to <filename>.
+idhistbins=<100>	(idbins) Set the number of bins in the identity histogram.
+scafstats=<file>	Track mapping statistics per scaffold, and output to <file>.
+refstats=<file>		For BBSplitter, enable or disable tracking of read mapping statistics on a per-reference-set basis, and output to <file>.
 verbosestats=<0>	From 0-3; higher numbers will print more information about internal program counters.
+printunmappedcount=<f>	Set true to print the count of reads that were unmapped.  For paired reads this only includes reads whose mate was also unmapped.
+
+
+Coverage output parameters (these may reduce speed and use more RAM):
+covstats=<file>		Per-scaffold coverage info.
+covhist=<file>		Histogram of # occurrences of each depth level.
+basecov=<file>		Coverage per base location.
+bincov=<file>		Print binned coverage per location (one line per X bases).
+covbinsize=1000		Set the binsize for binned coverage output.
+nzo=f			Only print scaffolds with nonzero coverage.
+twocolumn=f		Change to true to print only ID and Avg_fold instead of all 6 columns to the 'out=' file.
+uscov=t			Include secondary alignments when calculating coverage.
+32bit=f			Set to true if you need per-base coverage over 64k.
+bitset=f		Store coverage data in BitSets.
+arrays=t		Store coverage data in Arrays.
+ksb=t			Keep residual bins shorter than binsize.
+strandedcov=f		Track coverage for plus and minus strand independently.  Requires a # symbol in coverage output filenames which will be replaced by 1 for plus strand and 2 for minus strand.
+startcov=f		Only track start positions of reads.
+concisecov=f		Write basecov in a more concise format.
 
 
 Trimming Parameters:
@@ -161,9 +202,10 @@ qtrim=<f>		Options are false, left, right, or both.  Allows quality-trimming of 
 trimq=<5>		Set the quality cutoff.  Bases will be trimmed until there are 2 consecutive bases with quality GREATER than this value; default is 5.  If the read is from fasta and has no quality socres, Ns will be trimmed instead, as long as this is set to at least 1.
 untrim=<f>		Untrim the read after mapping, restoring the trimmed bases.  The mapping position will be corrected (if necessary) and the restored bases will be classified as soft-clipped in the cigar string.
 
+
 Java Parameters:
 -Xmx       		If running from the shellscript, include it with the rest of the arguments and it will be passed to Java to set memory usage, overriding the shellscript's automatic memory detection.  -Xmx20g will specify 20 gigs of RAM, and -Xmx200m will specify 200 megs.  The max allowed is typically 85% of physical memory.
-
+-da			Disable assertions.  Alternative is -ea which is the default.
 
 
 Splitting Parameters:
@@ -183,11 +225,12 @@ Formats and Extensions
 
 
 Different versions:
-BBMap			Fastest version.  Finds single best mapping location.
-BBMapAcc		Slower and more accurate.  Finds single best mapping location.  May currently be broken.
-BBMapPacBio		Optimized for PacBio's error profile (more indels, fewer substitutions).  Finds single best mapping location.  PacBio reads should be in fasta format.
-BBMapPacBioSkimmer	Designed to find ALL mapping locations with alignment score above a certain threshold; also optimized for Pac Bio reads.
-BBSplit			Uses BBMap or BBMapPacBio to map to multiple references simultaneously, and output the reads to the file corresponding to the best-matching reference.  Designed to split metagenomes or contaminated datasets prior to assembly.
+BBMap			(bbmap.sh) Fastest version.  Finds single best mapping location.
+BBMapPacBio		(mapPacBio.sh) Optimized for PacBio's error profile (more indels, fewer substitutions).  Finds single best mapping location.  PacBio reads should be in fasta format.
+BBMapPacBioSkimmer	(bbmapskimmer.sh) Designed to find ALL mapping locations with alignment score above a certain threshold; also optimized for Pac Bio reads.
+BBSplit			(bbsplit.sh) Uses BBMap or BBMapPacBio to map to multiple references simultaneously, and output the reads to the file corresponding to the best-matching reference.  Designed to split metagenomes or contaminated datasets prior to assembly.
+BBWrap			(bbwrap.sh) Maps multiple read files to the same reference, producing one sam file per input file.  The advantage is that the reference/index only needs to be read once.
+
 
 
 
@@ -202,7 +245,392 @@ Added "usemodulo" flag to BBMap.  Allows throwing away 80% of reference kmers to
 Moved GetReads back to jgi package and fixed shellscript.
 Fixed rare crash when using "local" mode on paired-end data on highly-repetitive genomes (Creinhardtii).  Found by Vasanth S.
 Improved "usemodulo" mode - it was biased against minus-strand hits.  Now, it keeps kmers where (kmer%5==rkmer%5).  Result is virtually no reduction in sensitivity (zero in error-free reads, and less than 0.01% in reads with 8% error).
-TODO:  Test forcing msa.scoreNoIndels to always run bidirectionally.
+BBMap will now discard reads shorter than "minlen".
+Added "idhistbins" or "idbins" flag to BBMap; allows setting the number of bins used in the idhist.
+Rescaled BBMap's MAPQ to be lower.  It is now 0 for unmapped, 1-3 for ambiguous, and roughly 4-45 otherwise, with higher values allowed for longer reads.
+Added a much flatter MSA version, "MultiStateAligner9Flat", requested by JJ Chai.
+Fixed SNR output formatting.
+Added "forcesectionname" flag; fasta reads will always get an "_1" at the end, even if they are not broken into multiple pieces. (requested by Shoudan)
+Changed "fastareadlen" suffixes to only be appended when read is > maxlen rather than >=
+Reorganized SamLine and created SamHeader class.
+Modified CountBarcodes to append sub distance from expected barcodes and 'valid' for valid barcodes.
+Fixed null pointer exception related to "qhist", "aqhist", and "qahist".  Noted by Harald (seqanswers).
+Fixed issue of readlength.sh breaking up reads when processing fasta files without a fasta extension.
+Updated BBDuk documentation.
+Added "maxlength" and qahist support to BBDuk.
+Added "minoverlap" and "mininsert" to BBDuk.
+Added "maxlength" to BBMerge.
+Created countbarcodes.sh
+Added edit distance column to CountBarcodes output.
+Added raw mapping score tag, YS:i:, controlled by "scoretag" flag and disabled by default.
+Added 'cq' (changequality) flag to reformat.  Default: true.
+Fixed mhist being generated from sam files.
+Added readgroup support; a readgroup field "xx" can be specified with the flag "rgxx=value".
+Updated 'usemodulo' flag to use (kmer%9==0 || rkmer%9==0).  Requiring the remainders to be equal unevenly affected palindromes and thus even kmer lengths.
+Updated RemoveHuman to use 'usemodulo' flag and reduced RAM allotment from 23g to 10g.  Updated index location of HG19 masked.
+Added "idfilter" to BBMap.
+Made BandedAligner abstract superclass and created BandedAlignerConcrete for the Java implementation, and BandedAlignerJNI for the C version.
+Made file extension detection more robust against capitalization.
+Added outsingle to BBDuk.
+Replaced FastaToChromArrays with ChromArrayMaker.  Now, indexing can be done from fastq files instead of just fasta.
+Fixed MAJOR bug in which reference was split up into pieces (as of 33.12).
+Reverted to old version of reference loader (as of 33.13) as there was still a bug (skipping every other scaffold).
+BBDuk (and BBDuk2) now better support kmer masking!  Every occurance of a kmer is individually masked.
+Added parseQuality (qin, qout, etc) to Dedupe.
+Changed Dedupe default cluster stats cutoff to 2 (from 10), min cluster size to 2, and by default these values are linked.
+Added 'outbest' to Dedupe, writing the representative read per cluster (regardless of 'pbr' flag).  This is mainly for 16s clustering.
+Fixed sorting of depths in pileup.sh.  Noted by Alicia Clum.
+Fixed 'outbest' of Dedupe (was writing to wrong stream).
+Slightly accelerated read trimming.
+Added read/base count tracking to ConcurrentReadStreamInterface.
+Added display of exact number of input and output bases and reads to reformat.sh (requested by Seung-Jin).
+Fixed capital letters changing to lower-case in output filenames when using the "basename" flag with BBSplit.  Noted by Shoudan Liang.
+Added Tools.condenseStrict(array).
+Fixed fast/slow flags with BBSplit.  Noted by Shoudan Liang.
+Added 3-frames option to TranslateSixFrames by adding the flag "frames=3".  Requested by Anne M.
+TranslateSixFrames now defaults to fasta format when the file extension is unclear.
+Added "estherfilter.sh" for filtering blastall queries.
+Added option of getting an input stream from a process with null file argument.
+Wrote FastaToChromArrays2 based on ByteFile/ByteBuilder for slightly better indexing speed and lower memory use.
+Modified ChromosomeArray to work with ByteBuilder.
+Fixed reformat displaying wrong number of input reads when run interleaved (due to recent changes).
+Added minratio, maxindel, minhits, and fast flags to BBQC, for controlling BBMap.
+Fixed "assert(false)" statement accidentally left in SamPileup from testing.  Noted by Brian Foster.
+Added kfilter and local flags to BBQC.
+Fixed "bs" (bamscript) flag with BBSplit.  Previously, it did not include the per-reference output streams.
+Added Jonathan Rood's C code and JNI class for Dedupe.
+Modified dedupe shellscripts to allow JNI code.
+BBSplit was not outputting any reads when reference files had uppercase letters (as a result of the recent case-sensitivity change).  This has been fixed.  Noted by Shoudan Liang.
+BBMap can now output fastq files with reads renamed to indicate mapping location, using the flags "rbm" and "don" (renamebymapping and deleteoldname).
+FastaQualInputStream replaced by FastaQualInputStream3.  At least 2.5x faster, and correctly reads input in which fasta and qual lines are wrapped at different lengths.  Bug noted by Kurt LaButti.
+Added bqhist, which allows box plots of read quality-per-base-location.
+Fixed a slowdown when making quality histograms due to recalculating probability rather than using cached value.
+Default sam format is now 1.4.
+RemoveHuman/BBQC/RQCFilter now default to minhits=1 because 'usemodulo' reduces the number of valid keys.
+Programs no longer default to outputting to stdout when "out=" is not specified because it's annoying.  To write to stdout set "out=stdout.fq" (for example).
+AssemblyStats now counts IUPAC and invalid characters seperately.  X and N now denote gaps between contigs, but no other symbols do.  The code was also cleaned somewhat.  The output formatting changed slightly.
+Preliminarily integrated Jon Rood's JNI versions of BandedAligner and MultiStateAligner into both Java code and shellscripts to test Genepool deployment.
+C code is now in /jni/ folder, at same level as /resources/ and /docs/.
+Clarified documentation of BBMap, BBSplit, and BBWrap to differentiate some parameters.  For example, "refstats" only works with BBSplit.
+Added LW and RW (whisker values) columns to bqhist output, set at the 2nd and 98th percentiles.  Requested by Seung-Jin Sul.
+BBQC will now compress intermediate files to level 2 instead of level 4, to save time.
+Fixed incompatibility of dot graph output and other output in Dedupe.
+Reverted to default "minhits=2" for RemoveHuman, because minhits=1 took 5x as long.
+Added median, mean, and stdev to gchist.  Requested by Seung-Jin.
+Added obqhist (overall base quality histogram).  Requested by Seung-Jin.
+Fixed various places, such as BBDuk, where the "int=true" flag caused references to be loaded interleaved.  Noted by Jessica Jarett.
+Added some parser flags to allow dynamically enabling verbose mode and assertions specifically for certain classes. 
+Fixed a bug in BBMap that made secondary alignments sometimes not get cigar strings.
+Added "addprefix" mode to rename reads, which simply prepends a prefix to the existing name.
+Clarified documentation of different histogram outputs in shellscripts.
+Ported BBMapThread changes over to BBMap variants.
+Restructured SamPileup and renamed it to CoveragePileup.  Now supports Read objects (instead of just SamLines).
+Integrated CoveragePileup with BBMap and documented new flags.
+CoveragePileup: Added a concise coverage output, stranded coverage, and read-start-only coverage.
+Removed an obsolete Java classes and some shellscripts.
+Increased robustness of BBDuk's detection invalid file arguments, and clarified the error messages.  Noted by Scott D.
+Fixed a problem with interleaving not being forced on fasta input.
+Paired output files will now force BBDuk input to be treated as interleaved.
+BBDuk now tracks statistics on which reference sequences were trimmed or masked - previously, it just tracked what was filtered.
+Reverse-complemented Nextera adapters and added them to official release (/resources/nextera.fa.gz).
+Added Illumina adapter sequence legal disclaimer to /docs/Legal_Illumina.txt
+Implemented GC calculation from index, for generating coverage stats while mapping.
+Tracked down strangeness with BBDuk.  It is possible for "rcomp=f" to slightly reduce sensitivity when "mm=t" using an even kmer length, due to asymmetry.  This appears to be correct.
+Merged in revised JNI Dedupe version that should be working correctly.  Verified that it returns same answer as non-JNI version.  Tests indicate roughly triple speed, when working with PacBio reads of insert.
+BBMap JNI version now seems roughly 30% faster than Java version.
+Added insert size quartiles to BBMap and BBMerge.  Requested by Alex Copeland.
+Fixed rare bug related to SiteScore.fixXY(), caused by aligning reads with insufficient padding, fixing the tips, but not changing the start/stop positions.  Found by Brian Foster.
+Fixed a race condition in TextStreamWriter that could randomly cause a deadlock in numerous different programs.  Found by Shoudan Liang.
+Added "maxsites2" flag to allow over 800 alignments for a given read.
+Fixed bounds of kmer masking in BBDuk; they were off by 2 (too big).
+Fixed unintended debug print line.  Noted by Shoudan Liang.
+Updated RandomReadInputStream to work with the newer RandomReads3 class.
+ConcurrentGenericReadInputStream now supports RandomReadInputStream3 as a producer.
+Fixed kmer dumping from CountKmersExact.
+Fixed length of vector created in BBMergeOverlapper (4->5).  Noted by Jon Rood.
+Changed default kmer length in BBDuk to 27 so that the 'maskmiddle' base will be in the middle for both forward and reverse kmers.
+"pairlen" flag accidentally deleted from BBMap; restored.  Noted by HGV (seqanswers).
+BBMerge now has a JNI version from Jonathan Rood - 60% faster than pure Java.  Requires compiling the C code; details are in /jni/README.txt.
+Wrapped BBMerge JNI initializer in a conditional, so it will not try to load unless "usejni" is specified.  
+Added "parseCommonStatic" to BBMerge and BBDuk (to allow JNI flag parsing).
+Commented out "module load" and "module unload" statements in public version.
+Added 'printlastbin' or 'plb' flag to countunique to produce a final bin smaller than binsize.  Suggested for use in cumulative mode.  Requested by Andrew Tritt.
+Added support for bzip2 and pbzip2 compression and decompression.  The programs must be installed to use bz2 format.
+Elminated use of "sh" when launching subprocesses.  This also allows pigz compression support in Windows.
+Files were not being closed after "testInterleaved()".  Fixed.
+Improved error messages when improper quality values are observed.
+Updated hard-coded adapter path to include Nextera adapters.  This affects BBQC and RQCFilter.
+Improved file format detection.  Now FileFormat (testformat.sh) will print a warning when the contents and extension don't match, and it can differentiate between sam and fastq.  Problem noted by Vasanth Singan.
+Fixed issue where "scafstats" output was printing inflated numbers with chimeric paired reads, or pairs with only one mapped read.  Noted by HGV (seqanswers).
+Closed stream after reading in FileFormat.
+Unrolled, debranched, and removed assertion function calls from BBMerge inner loop.
+Fixed a bug in which findTipDeletions was not changing the bounds of the gap array.
+Added getters and setters for SiteScores that enforce gap correctness.
+Improved GapTools to test for and fix non-ascending points.
+Forced use of setters in TranslateColorspaceRead, AbstractMapThread, and BBIndex* classes; this caught some inconsistencies that should increase stability and correctness.
+Enabled jni-mode alignment by default for BBQC and removehuman.
+Added a BBMap output line indicating how many reads survived for use with, e.g., removehuman.  Requested by Brian Foster.
+Added messages to BBQC to indicate which phase is executing.  Requested by Brian Foster.
+SiteScore start and stop are exclusively set by methods now.  Fixed a bug with local flag noted by Vasanth Singan.
+Added MaximumSpanningTree generation to Dedupe (mst flag).
+Merged in faster BBMerge overlapper JNI version; now 90% faster than Java with fastq and 70% faster with fasta.
+Improved Dedupe's support for paired reads: fixed an assertion, and added "in1" and "in2".
+Fixed a assertion involving semiperfect alignments of repetitive reads, that go out of the alignment window.  Found by Alicia Clum.
+Fixed idhist mean calculation.  Added mode, median, stdev, both by read count and base count.
+Better documented ConcurrentReadStreamInterface.
+Fixed a crash in CoveragePileup when using 32-bit mode.
+Fixed a couple instances in which the first two arguments being unrecognized would not be noticed.
+Fixed a bug in pileup causing coverage fraction to be reported incorrectly, if arrays were not being used.  Noted by Vasanth Singan.
+Fixed a twocolumn mode in pileup; it was generating no output.
+Added additional parse flags to pileup, such as "stats" and "outcov".
+Added additional output fields to coverage stats - total number of covered bases, and number of reads mapped to plus and minus strands.
+CountKmersExact: Added preallocation (faster, less memory) and a one-pass-mode for the prefilter (faster, but nondeterministic).
+Replaced most instances of "Long.parseLong" with "Tools.parseKMG" to support kilo, mega, and giga abbreviated suffixes.
+Added jgi.PhylipToFasta and phylip2fasta.sh, for converting interleaved phylip files to fasta.  Requested by Esther Singer.
+v33.58
+Began listing point-version numbers in this readme.
+Added jgi.A_Sample2, an simpler template for a concurrent pipe-filter stage.
+Added jgi.MakeChimeras, a tool for making chimeric PacBio reads from input non-chimeric reads.  Also, makechimeras.sh.  Requested by Esther Singer.
+Added support for normalized binning to CoveragePileup.  Requested by Vasanth Singan.
+v33.59
+Fixed pileup's normalized scaling when dealing with 0-coverage scaffolds.
+v33.60
+Added driver.FilterReadsByName.java and filterbyname.sh.  Allows inclusion or exclusion of reads by name.
+Added midpad flag to RandomReads (allows defining inter-scaffold padding).
+v33.61
+Added ConcurrentReadInputStreamD, prototype for MPI-version of input stream.
+Made Read and all classes that might be attached to reads Serializable.
+Added DemuxByName and demuxbyname.sh which allows a single file to be split into multiple files based on read names.
+v33.62
+Added FilterByCoverage and filterbycoverage.sh to filter assemblies based on contig coverage stats (from Pileup).
+Added CovStatsLine, an object representation of Pileup's coverage stats.
+Added '#' symbol to coverage stats header.
+v33.63
+Fixed path in filterbycoverage.sh
+v33.64
+Added custom scripts driver.MergeCoverageOTU and mergeOTUs.sh for Esther.
+Added DecontaminateByNormalization, for automating SAG plate decontamination.
+Fixed legacy code that set KmerNormalize to use 8 threads in some cases.
+Added "fixquality" for capping quality scores at 41. Requested by Bryce Foster.
+Added fasta output to kmercountexact. Requested by Alex Copeland.
+Added kmer histogram to kmercountexact (2-column and 3-column). Requested by Alex Copeland.
+Added multiple memory-related and output formatting flags to kmercountexact.
+Made KmerNode a subclass of AbstractKmerTable.
+Improved Data's "unloadall" to also clear scaffold-related data.
+Removed obsolete class CoverageArray1.
+v33.65
+Reduced preallocated memory in kmercountexact to avoid a crash on high memory machines.  Also reduced total number of threads.
+v33.66
+"CountKmersExact.java" renamed to "KmerCountExact.java".
+kmercountexact now writes histogram and kmer dump simultaneously in seperate threads.
+kmercountexact.sh now specifies both -Xms and -Xmx.
+CountKmersExact will no longer run out of memory if -Xms is not specified; instead, it will preallocate a smaller table.
+v33.67
+Messed with MDA amp in RandomReads a bit.
+Added parser "ztd" ("zipthreaddivisor") flag.  Defaults to 2 for removehuman.sh.
+Added BBMerge flags "maq" (minaveragequality) and "mee" (mmaxexpectederrors).  Reads violating these will not be attempted to merge.
+Added BBMerge "efilter" flag, to allow disabling of the efilter.  Efilter bans merges of reads that have more than the expected number of errors, based on quality scores.
+Closed A_Sample2 I/O streams after completion.  Noted by Jon Rood.
+Created SynthMDA, a program to make a synthetic MDA'd single cell genome.  This genome would be used as a reference for RandomReads.
+Added Reformat "vpair" or (verifypairing) flag, which allows validation of pair names.  Before, it was just interleaved reads.
+Pair name validation will now accept identical names, if the "ain" (allowidenticalnames) flag is set.
+Updated reformat.sh, repair.sh, bbsplitpairs.sh with new flags.
+Removed FastaReadInputStream_old.java.
+Added "forcelength" flag to MakeChimeras.
+v33.68
+Added "ihist" flag to rqcfilter, default "ihist.txt".  Unless this is set to null, BBMerge will run to generate the insert size histogram after filtering completes.
+AbstractKmerTable preallocation is now multithreaded.  Unfortunately, this did not result in a speedup.
+Added ByteBuilder-related methods to certain Read output formats.
+Added ByteStreamWriter.  This is a threaded writer with low overhead, and is substantially faster than TextStreamWriter (perhaps 2x speed).
+Fixed a bug in KmerNode (traversing wrong branch during dump).
+All AbstractKmerTable subclasses now dump kmers using bsw/ByteBuilder instead of tsw/StringBuilder.
+Added ForceTrimLeft/ForceTrimRight flags to Dedupe (requested by Bryce/Seung-Jin).
+v33.69
+FilterByCoverage (and thus DecontaminatebyNormalization) now produce a log file indicating which contigs were removed.
+FilterByCoverage and DecontaminatebyNormalization can now optionally process coverage before and after normalization, and not remove contigs unless the coverage changes by at least some ratio (default 2).  Enable with "mapraw" and optionally "minratio" flag.
+Added ihist to file-list.txt.  TODO:  Verify success.
+Reads longer than 200bp are now detected as ASCII-33 regardless of their quality values.  This helps with handling PacBio CCS/ROI data.
+Added support in FixPairsAndSingles (repair.sh) for reads with names that do not contain whitespace, but still end with "/1" and "/2".
+Added qout flag to RandomReads3.
+Refactored TextStreamWriter to be more like ByteStreamWriter.
+Added gcformat 0 (no base content info printed) to AssemblyStats2 (stats.sh).
+v33.70
+Updated RQCFilter and BBQC to bring them closer together and improve some of their defaults.  RQCFilter now has more parameters such as k for filtering and trimming.
+RQCFilter now correctly produces the insert size histogram.
+v33.71
+Fixed a bug in Dedupe preventing overlap detection when 'absorb match' and 'absorb containment' were both disabled.  Noted by Shoudan Liang.
+Optimized synthetic MDA procedure.
+v33.72
+Fixed a bug in SynthMDA.java.  Further tweaked parameters.
+Added synthmda.sh.
+v33.73
+Further tweaked SynthMDA defaults to better match some real data sent to me by Shoudan and Alex.
+Fixed a bug in BBDuk's mask mode in which all bases in a masked read were assigned quality 0.  Noted by luc (SeqAnswers).
+Fixed a small error in KmerCountExact's preallocation calculation.
+Added preallocation to BBDuk/BBDuk2.  Not recommended for BBDuk2 because the tables may need unequal sizes.
+Added "restrictleft" and "restrictright" flags to BBDuk (not BBDuk2).  These allow only looking for kmer matches in the leftmost or rightmost X bases.  Requested by lankage (SeqAnswers).
+v33.74
+Added jgi.Shuffle.java to input a read set and output it in random order.  It can also sort by various things (coordinates, sequence, name, and numericID).
+Added CallPeaks, which can call peaks from a histogram.  Requested by Kurt LaButti.
+Integrated peak calling into BBNorm and KmerCountExact.
+BBNorm now has a "histogramcolumns" flag, so it can produce Jellyfish-compatible output.
+Added callpeaks.sh.
+v33.75
+CallPeaks now calls by raw kmer count rather than unique kmer count.  This better detects higher-order peaks.
+Finished CrossContaminate.java and added crosscontaminate.sh.
+Added "header" and "headerpound" to pileup.sh, to control header presence and whether they start with "#".
+Added "prefix" flag to SynthMDA and RandomReads3, to better track origin of reads during cross-contamination trials.
+RQCFilter and BBQC now parse 'usejni' flag; rqcfilter.sh and bbqc.sh default to this being enabled.
+Added "uselowerdepth" flag to BBNorm (default true).  Allows normalization by depth of higher or lower read.  Set to false by DecontaminateByNormalization.
+v33.76
+Fixed a bug in synthmda.sh command line.
+Fixed build number not being parsed by SynthMDA.
+Added some error handling to CrossContaminate, so it shouldn't hang as a result of missing files.
+v33.77
+SynthMDA now nullifies reference in memory prior to generating reads.
+Parser was not correctly setting the number of compression threads when exactly 1 was requested.
+Shuffle is now multithreaded, and CrossContaminate defaults to shufflethreads=3.
+Shuffle now removes reads as they are printed, reducing memory usage.
+Created shellscript templates for generating and assembling full plates of synth MDA data, and ran successfully.
+*SamLine was fixed when generating pnext from clipped reads.  Still needs work; pos1 and pos2 need to be recalculated considering clipping.
+BBDuk now tracks #contaminant bases as well as #contaminant reads per scaffold for stats.  Additional flag "columns=5" enables this output.
+BBDuk stats are now sorted by #bases, not #reads.
+BBDuk counting arrays changed from int to long to handle potential overflow.
+v33.78
+Modified DemuxByName to handle affixes of variable length (though it's less efficient with multiple lengths).
+v33.79
+Changed the way "pos" and "pnext" are calculated for paired reads to be consistent.  Bug had been noted with soft-clipped reads by Rob Egan.
+Changed LOCAL_ALIGN_TIP_LENGTH from 8 to 1.  Previously, soft-clipping would only occur if at least 8 bases would be clipped; not sure why I did that.
+Changed the way "tlen" is calculated to compensate for clipping.
+
+v33.80
+Changed default decontaminate minratio from2 to 0 (disabling it) because of false negatives.
+Changed default decontaminate mincov from 4 to 5 due to a false negative.
+Changed default decontaminate kfilter from 63 to 55 to better reflect Spades defaults.
+Fixed a bug in filterbycoverage which was outputting contaminant contigs instead of clean contigs.
+Added outd (outdirty) flag to FilterByCoverage.
+v33.81
+Changed decontaminate normalization target from 100 to 50, and minlength from 0 to 500.
+Changed decontaminate minc and minp flags from int to float.
+v33.82
+Changed cross contaminate probability root from 2 to 3 (increasing amount of lower-level contamination).
+Fixed a crash bug in sam file generation caused by the change in the way pos was calculated.
+v33.83
+Added aecc=f, cecc=f, minprob=0.5, depthpercentile=0.8 flags to DecontaminateByNormalization.  Defaults are as listed.
+Dropped mindepth to 3 and maxdepth to target; target default changed to 20.
+Changed the way mindepth is handled in normalization; now it is based on the depth of the higher read.
+v33.84
+Added BBNorm prebits flag for setting prefilter cell size (default 2).
+Added Decontaminate filterbits and prefilterbits flags, default 32 and 4.  4 was chosen because MDA data has high error kmer counts.
+v33.85
+Fixed parsing of decontaminate minc and minp (parsed as ints; should have been floats)
+Changed default minc to 3.5.
+Change default ratio to 1.2.
+v33.86
+Changed decontaminate default dp to 0.75.
+Changed decontaminate default prebits to 2.
+Changed decontaminate default minr (min reads) to 20.  Some tiny (~500bp) low-coverage contigs were getting through.
+Changed decontaminate mindepth to 2.
+Decontaminate results now prints extra columns for read counts and pre-norm coverage.
+v33.87
+Added "covminscaf" flag to BBMap and Pileup, to supress output of really short contigs.  Default 0.
+Changed CrossContaminate coverage distribution from cubic to geometric.
+v33.88
+Shuffle removing reads caused incredible slowness; it should have set reads to null.  Fixed.
+v33.89
+Added HashArrayA, HashForestA, KmerNodeA and updated AbstractKmerTable to allow sets of values per kmer.
+Refactored all AbstractKmerTable subclasses.
+Added scaffold length tracking to BBDuk (for RPKM).
+Added RPKM output to BBDuk (enable with "rpkm" flag).
+BBDuk now unloads kmers after finishing processing reads.
+v33.90
+BBDuk counter arrays are now local per-thread, to prevent cache-thrashing.
+Added IntList.toString()
+Created Seal class, based on BBDuk with values stored in arrays.
+Adjusted auto skip settings of BBDuk (increased size threshold for longer skips).
+Added BBDuk skip flag (controls minskip and maxskip).
+Fixed a bug in DemuxByName/DecontaminateByNormalization/CrossContaminate: attempt to read directories as files.
+v33.91
+Fixed a bug in BBDuk related to clearing data too early.  Noted by Brian Foster.
+v33.92
+Added per-reference-file stats counting to BBDuk/Seal, and "refstats" flag.
+Added returnList(boolean) to ConcurrentReadStreamInterface.
+Removed an extra listen() call from ConcurrentReadInputStreamD.
+Documented "addname" flag for stats.sh.
+Implemented restrictleft and restrictright for BBDuk2.
+Added "nzo" flag for BBDuk/Seal.
+Added sdriscoll's reformatted shellscript help for BBDuk and BBMap.  Thanks!
+Added more documentation to bbmap.sh (usequality flag).
+Added maq (minaveragequality) flag to BBMap, at request of sdriscoll.
+Added rename flag to BBDuk/Seal - renames reads based on what sequences they matched.
+Added userefnames flag BBDuk/Seal - the names of reference files are used, rather than scaffold IDs.
+
+v33.93
+maxindel flag now allows KMG suffix.
+Added "speed" flag to BBDuk/Seal.
+Added read processing time to BBDuk/Seal output.
+BBDuk "fbm" (findbestmatch) mode is now much faster, using variable rather than fixed-length counters.
+Fixed BBDuk2 not working when using the "ref" flag rather than "filterref".
+Changed AbstractKmerTable subclass names to *1D and *2D.
+Made KmerNode a superclass of KmerNode1D and KmerNode2D and eliminated redundant methods.
+Eliminated 2D version of HashForest; it now works with 1D and 2D nodes.
+Made HashArray a superclass of HashArray1D and HashArray2D.
+Created HashArrayHybrid.
+Added slow debugging methods to AbstractKmerTable classes, to verify that values were present after being added.
+Fixed bug in KmerNode1D; was never changing its value on 'set'.  Probably only affected Seal.  Seal 1D now appears to produce identical output for prealloc and non-prealloc.
+Finished debugging KmerNode2D, KmerForest, HashArray2D, HashArrayHybrid, and Seal.
+Added "fbm" and "fum" to Seal.
+Seal now defaults to 7 ways.
+Adjusted Seal's memory preallocation.
+Added -Xms flag to BBMergeGapped BBNorm shellscripts.
+v33.94
+Added -Xms flag to BBDuk and Seal.
+Added qskip flag to BBDuk and Seal (for skipping query kmers).
+v33.95
+Seal now defaults to HashArrayHybrid rather than HashArrayArray2D
+
+
+TODO: Benchmark Seal.  Speed seems inconsistent.
+TODO: Locking version of Seal.
+TODO: HashArray resize - grow fast up to a limit, then resize to exactly the max allowable.
+TODO: Alicia BBMap PacBio slowdown (try an older version...)
+TODO: BBMerge rename mode with insert sizes.
+TODO: Dump info about Seal kmer copy histogram.
+TODO: rpkm for pileup / BBMap.
+TODO: qskip (query skip for bbduk/seal)
+TODO: Dedupe crash bug. (Kurt)
+TODO: CallPeaks minwidth should be a subsumption threshold, not creation threshold.
+TODO: CallPeaks should not subsume peaks with valleys in between that are very low.
+*TODO: Make TextStreamWriter an abstract superclass.
+TODO: BBDuk split mode
+TODO: Add option for BBMap to convert U to T. (Asaf Levy)
+TODO: Add dedupe support for graphing containments and matches.
+TODO: Log normalization.
+TODO: Prefilterpasses (prepasses)
+TODO: Test forcing msa.scoreNoIndels to always run bidirectionally.
+TODO: Message for BBNorm indicating pairing (this is nontrivial)
+TODO: Cat and Dog filtering
+TODO: Average quality for pileup.sh
+TODO: Fix ChromArrayMaker which may skip every other scaffold (for now I have reverted to old, correct version). ***Possibly fixed by disabling interleaving; TODO: Test.
+TODO: Modify BBDuk to allow trimming of degenerate bases (with the "cd" or "clonedegenerate" flag).
+TODO: Consider changing ConcurrentGenericReadInputStream to put read/base statistics into incrementGenerated(), or at least in a function.
+TODO: BBSplit produces alignments to the wrong reference in the output for a specific reference. (Shoudan)
+TODO: Change the way Ns are handled in cigar strings, both input and output.
+TODO: Add #clipped reads/bases to BBMap output.
+TODO: Add method for counting number of clipped bases in a read and unclipped length.
+TODO: Orientation statistics for BBMap ihist.
+TODO: Clarify documentation of 'reads' flag to note that it means reads OR pairs.
+TODO: bs flag does not work with BBWrap (Shoudan).
+TODO: Make human removal optional in BBQC, and allow aribtrary reference (such as e.coli) for unit testing.
+TODO: Fasta input tries to sometimes keep reading from the file when a limited number of reads is specified.  Gives error message but output is fine.
+TODO: 'saa' flag sometimes does not work (Shoudan).
+TODO: Kmer transition probabilities for binning.
+TODO: One coverage file per scaffold; abort if over X scaffolds. (Andrew Tritt)
+TODO: Enable JNI by default for BBMap and Dedupe on Genepool.
+TODO: Disable cigar string generation when dumping coverage only (?).  This will disable stats, though.
+TODO: Pipethread spawned when decompressing from standard in with an external process.
+TODO: FileFormat should test interleaving and quality individually on files rather than relying on a static field.
+TODO: Refstats (BBSplit) still reports inflated rates for pairs that don't map to the same reference.  This behavior is difficult to change because it is conflated with BBSPlit's output streams.
 
 
 v32.
@@ -236,7 +664,6 @@ Fixed gaussian insert size distribution in randomreads (it was causing a crash).
 Enabled unpigz support in Windows (decompression only).
 TODO:  BBNorm needs in1/in2/out1/out2 support.
 Added mingc and maxgc to reformat.
-TODO: gchist for reformat.
 Added 'passes' flag to BBQC and reduced default passes to 1 if normalization is disabled.
 Swapped FileFormat's method signature "allowFileRead" and "allowSubprocess" parms for some functions, as they were inconsistent.  This may have unknown effects.
 TODO: unclear if fasta files are currently checked for interleaving.  Method added to "FASTQ".
@@ -408,7 +835,6 @@ TODO:  Support for selecting long-mate-pair orientation has been requested by Al
 Fixed possible bug in read trimming when the entire read was below the quality threshold.
 Fixed trim mode bug: "trim=both" was only trimming the right side.  "qtrim" is also now an alias for "trim".
 Fixed bug in ConcurrentGenericReadInputStream causing an incorrect assertion error for input in paired files and read sampling.  Found by Alex Copeland.
-TODO:  Found some bz2 files that cannot be read.  Decompressing them and recompressing them fixes the problem, but it's unclear why other programs can read them.  Found by Alex Copeland.
 Added insert size histogram: ihist=<file>
 Added "machineout" flag for machine-readable output stats.
 TODO: reads_B1_100000x150bp_0S_0I_0D_0U_0N_interleaved.fq.gz (ecoli) has 0% rescued for read1 and 0.7% rescued for read 2.  After swapping r1 and r2, .664% of r2 is rescued and .001% of r1 is rescued.  Why are they not symmetric?
@@ -471,7 +897,6 @@ Added "fast" flag, which changes some paramters to make mapping go faster, with 
 Improved error handling; corrupt input files should be more likely to crash with an error message and less likely to hang.  Noted by Alex Copeland.
 Improved SAM input, particularly coordinates and cigar-string parsing; this should now be correct but requires an indexed reference.  Of course this information is irrelevant for mapping so this parsing is turned off by default for bbmap.
 Increased maximum read speed with ByteFile2, by using 2 threads per file.  May be useful in input-speed limited scenarios, as when reading compressed input on a node with many cores.  Also accelerates sam input.
-TODO:  Make ByteFile auto-select a subtype based on compression and number of cores.
 TODO:  Consider moving THREADS to Shared.
 Updated match/cigar flag syntax.
 Updated shellscript documentation.
@@ -578,10 +1003,7 @@ Added flag "maxsites" for max alignments to print.
 Added match field to sitescore.
 Made untrim() affect sitescores as well.
 Decreased read array buffer from 500 to 20 in MapPacBio.
-TODO:  sam secondary alignments.  (PARTIALLY DONE)
-TODO:  sam secondary match strings.
 TODO:  stitcher for super long reads.
-TODO:  msa superclass, "MSA".
 TODO:  wrapper for split reference mapping and merging.
 Improved fillAndScoreLimited to return additional information.
 Added flag "secondary" to print secondary alignments.  Does not yet ensure that all secondary alignments will get cigar strings, but most do.

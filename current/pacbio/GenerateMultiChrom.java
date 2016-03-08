@@ -7,10 +7,11 @@ import java.util.Random;
 import align2.Tools;
 
 import dna.AminoAcid;
+import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.ChromosomeArrayCompressed;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import dna.Gene;
 import fileIO.ReadWrite;
 
@@ -72,7 +73,7 @@ public class GenerateMultiChrom {
 				ReadWrite.write(chb, Data.ROOT_GENOME+build+"/chr"+i+Data.chromExtension(), false);
 			}
 		}
-		FastaToChromArrays.writeInfo(build, copies, Data.name, "multiple_"+Data.GENOME_BUILD, false, false);
+		FastaToChromArrays2.writeInfo(build, copies, Data.name, "multiple_"+Data.GENOME_BUILD, false, false);
 		
 	}
 	

@@ -89,10 +89,10 @@ public class ReformatReads {
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("sample") || a.equals("samplereads") || a.equals("samplereadstarget") || a.equals("srt")){
-				sampleReadsTarget=Long.parseLong(b);
+				sampleReadsTarget=Tools.parseKMG(b);
 				sampleReadsExact=(sampleReadsTarget>0);
 			}else if(a.equals("samplebases") || a.equals("samplebasestarget") || a.equals("sbt")){
-				sampleBasesTarget=Long.parseLong(b);
+				sampleBasesTarget=Tools.parseKMG(b);
 				sampleBasesExact=(sampleBasesTarget>0);
 			}else if(a.equals("parsecustom")){
 				parsecustom=Tools.parseBoolean(b);
@@ -102,6 +102,10 @@ public class ReformatReads {
 				uniqueNames=Tools.parseBoolean(b);
 			}else if(a.equals("verifyinterleaved") || a.equals("verifyinterleaving") || a.equals("vint")){
 				verifyinterleaving=Tools.parseBoolean(b);
+			}else if(a.equals("verifypaired") || a.equals("verifypairing") || a.equals("vpair")){
+				verifypairing=Tools.parseBoolean(b);
+			}else if(a.equals("allowidenticalnames") || a.equals("ain")){
+				allowIdenticalPairNames=Tools.parseBoolean(b);
 			}else if(a.equals("rcompmate") || a.equals("rcm")){
 				reverseComplimentMate=Tools.parseBoolean(b);
 				outstream.println("Set RCOMPMATE to "+reverseComplimentMate);
@@ -129,7 +133,7 @@ public class ReformatReads {
 		
 		{//Download parser fields
 			
-			maxReads=parser.maxReads;	
+			maxReads=parser.maxReads;
 			samplerate=parser.samplerate;
 			sampleseed=parser.sampleseed;
 
@@ -175,12 +179,6 @@ public class ReformatReads {
 		
 		if(SamLine.setxs && !SamLine.setintron){SamLine.INTRON_LIMIT=10;}
 		qtrim=qtrimLeft||qtrimRight;
-
-		if(verifyinterleaving){
-			setInterleaved=true;
-//			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
-			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
-		}
 		
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
 			in2=in1.replace("#", "2");
@@ -193,6 +191,13 @@ public class ReformatReads {
 		if(in2!=null){
 			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+		}
+
+		if(verifyinterleaving || (verifypairing && in2==null)){
+			verifypairing=true;
+			setInterleaved=true;
+//			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
+			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
 		}
 		
 		assert(FastaReadInputStream.settingsOK());
@@ -211,7 +216,8 @@ public class ReformatReads {
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
 			if(!parser.setOut){
-				out1="stdout";
+				System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//				out1="stdout";
 			}
 		}
 		
@@ -339,6 +345,10 @@ public class ReformatReads {
 		long readsOut2=0;
 		long readsOutSingle=0;
 		
+		long basesOut1=0;
+		long basesOut2=0;
+		long basesOutSingle=0;
+		
 		long basesTrimmedT=0;
 		long readsTrimmedT=0;
 		
@@ -421,10 +431,10 @@ public class ReformatReads {
 						if(reverseCompliment || reverseComplimentMate){r2.reverseComplement();}
 					}
 					
-					if(verifyinterleaving){
+					if(verifypairing){
 						String s1=r1==null ? null : r1.id;
 						String s2=r2==null ? null : r2.id;
-						boolean b=FASTQ.testPairNames(s1, s2);
+						boolean b=FASTQ.testPairNames(s1, s2, allowIdenticalPairNames);
 						if(!b){
 							outstream.println("Names do not appear to be correctly paired.\n"+s1+"\n"+s2+"\n");
 							ReadWrite.closeStreams(cris, ros);
@@ -635,26 +645,37 @@ public class ReformatReads {
 				}else{
 					listOut=reads;
 				}
-				if(deleteEmptyFiles){
+//				if(deleteEmptyFiles){
 					for(Read r : listOut){
 						if(r!=null){
 							readsOut1++;
+							basesOut1+=r.length();
 							if(r.mate!=null){
 								readsOut2++;
+								basesOut2+=r.mate.length();
 							}
 						}
 					}
-					if(singles!=null){readsOutSingle+=singles.size();}
-				}
+					if(singles!=null){
+						for(Read r : singles){
+							if(r!=null){
+								readsOutSingle++;
+								basesOutSingle+=r.length();
+							}
+						}
+					}
+//				}
 				if(ros!=null){ros.add(listOut, ln.id);}
 				if(rosb!=null){rosb.add(singles, ln.id);}
 
-				cris.returnList(ln, ln.list.isEmpty());
+				cris.returnList(ln, false);
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
 			if(ln!=null){
-				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+//				cris.returnList(ln, ln.list==null || ln.list.isEmpty());
+				assert(ln.list.isEmpty());
+				cris.returnList(ln, true);
 			}
 		}
 		
@@ -684,24 +705,38 @@ public class ReformatReads {
 
 		while(rpstring.length()<8){rpstring=" "+rpstring;}
 		while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-		if(qtrim || forceTrimLeft>0 || forceTrimRight>0 || trimBadSequence){
-			outstream.println("QTrimmed:               \t"+readsTrimmedT+" reads ("+String.format("%.2f",readsTrimmedT*100.0/readsProcessed)+"%) \t"+
-					basesTrimmedT+" bases ("+String.format("%.2f",basesTrimmedT*100.0/basesProcessed)+"%)");
-		}else if(minReadLength>0 || maxReadLength>0){
-			outstream.println("Short Read Discards:    \t"+readShortDiscardsT+" reads ("+String.format("%.2f",readShortDiscardsT*100.0/readsProcessed)+"%) \t"+
-					baseShortDiscardsT+" bases ("+String.format("%.2f",baseShortDiscardsT*100.0/basesProcessed)+"%)");
-		}
-		if(minAvgQuality>0){
-			outstream.println("Low quality discards:   \t"+lowqReadsT+" reads ("+String.format("%.2f",lowqReadsT*100.0/readsProcessed)+"%) \t"+
-					lowqBasesT+" bases ("+String.format("%.2f",lowqBasesT*100.0/basesProcessed)+"%)");
-		}
-		if(filterGC){
-			outstream.println("GC content discards:    \t"+badGcReadsT+" reads ("+String.format("%.2f",badGcReadsT*100.0/readsProcessed)+"%) \t"+
-					badGcBasesT+" bases ("+String.format("%.2f",badGcBasesT*100.0/basesProcessed)+"%)");
+		
+		final long rawReadsIn=cris.readsIn(), rawBasesIn=cris.basesIn();
+		final double rmult=100.0/rawReadsIn, bmult=100.0/rawBasesIn;
+		final double rpmult=100.0/readsProcessed, bpmult=100.0/basesProcessed;
+		
+		outstream.println("Input:                  \t"+cris.readsIn()+" reads          \t"+
+				cris.basesIn()+" bases");
+		if(samplerate!=1f){
+			outstream.println("Processed:              \t"+readsProcessed+" reads          \t"+
+					basesProcessed+" bases");
 		}
 		
-		outstream.println("Time:                         \t"+t);
+		if(qtrim || forceTrimLeft>0 || forceTrimRight>0 || trimBadSequence){
+			outstream.println("QTrimmed:               \t"+readsTrimmedT+" reads ("+String.format("%.2f",readsTrimmedT*rpmult)+"%) \t"+
+					basesTrimmedT+" bases ("+String.format("%.2f",basesTrimmedT*bpmult)+"%)");
+		}else if(minReadLength>0 || maxReadLength>0){
+			outstream.println("Short Read Discards:    \t"+readShortDiscardsT+" reads ("+String.format("%.2f",readShortDiscardsT*rpmult)+"%) \t"+
+					baseShortDiscardsT+" bases ("+String.format("%.2f",baseShortDiscardsT*bpmult)+"%)");
+		}
+		if(minAvgQuality>0){
+			outstream.println("Low quality discards:   \t"+lowqReadsT+" reads ("+String.format("%.2f",lowqReadsT*rpmult)+"%) \t"+
+					lowqBasesT+" bases ("+String.format("%.2f",lowqBasesT*bpmult)+"%)");
+		}
+		if(filterGC){
+			outstream.println("GC content discards:    \t"+badGcReadsT+" reads ("+String.format("%.2f",badGcReadsT*rpmult)+"%) \t"+
+					badGcBasesT+" bases ("+String.format("%.2f",badGcBasesT*bpmult)+"%)");
+		}
+		final long ro=readsOut1+readsOut2+readsOutSingle, bo=basesOut1+basesOut2+basesOutSingle;
+		outstream.println("Output:                 \t"+ro+" reads ("+String.format("%.2f",ro*rmult)+"%) \t"+
+				bo+" bases ("+String.format("%.2f",bo*bmult)+"%)");
+		
+		outstream.println("\nTime:                         \t"+t);
 		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 		outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		if(testsize){
@@ -713,7 +748,7 @@ public class ReformatReads {
 			outstream.println("Bytes Processed:    "+xpstring+" \t"+String.format("%.2fm bytes/sec", xpnano*1000));
 		}
 		
-		if(verifyinterleaving){
+		if(verifypairing){
 			outstream.println("Names appear to be correctly paired.");
 		}
 		
@@ -755,14 +790,18 @@ public class ReformatReads {
 	
 
 	public static void breakReads(ArrayList<Read> list, final int max, int min){
-		if(!containsReadsAboveSize(list, max)){return;}
-		assert(max>0) : "max read length must be positive.";
-		assert(max>=min) : "max read length must be at least min read length: "+max+"<"+min;
+		if(!containsReadsOutsideSizeRange(list, min, max)){return;}
+		assert(max>0 || min>0) : "min or max read length must be positive.";
+		assert(max<1 || max>=min) : "max read length must be at least min read length: "+max+"<"+min;
 		min=Tools.max(0, min);
 		
 		ArrayList<Read> temp=new ArrayList<Read>(list.size()*2);
 		for(Read r : list){
-			if(r==null || r.bases==null || r.bases.length<=max){
+			if(r==null || r.bases==null){
+				temp.add(r);
+			}else if(r.bases.length<min){
+				temp.add(null);
+			}else if(max<1 || r.bases.length<=max){
 				temp.add(r);
 			}else{
 				final byte[] bases=r.bases;
@@ -786,7 +825,10 @@ public class ReformatReads {
 		}
 		list.clear();
 		list.ensureCapacity(temp.size());
-		list.addAll(temp);
+//		list.addAll(temp);
+		for(Read r : temp){
+			if(r!=null){list.add(r);}
+		}
 	}
 	
 	private static boolean containsReadsAboveSize(ArrayList<Read> list, int size){
@@ -794,6 +836,18 @@ public class ReformatReads {
 			if(r!=null && r.bases!=null){
 				if(r.bases.length>size){
 					assert(r.mate==null) : "Read of length "+r.bases.length+">"+size+". Paired input is incompatible with 'breaklength'";
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+	private static boolean containsReadsOutsideSizeRange(ArrayList<Read> list, int min, int max){
+		for(Read r : list){
+			if(r!=null && r.bases!=null){
+				if((max>0 && r.bases.length>max) || r.bases.length<min){
+					assert(r.mate==null) : "Read of length "+r.bases.length+" outside of range "+min+"-"+max+". Paired input is incompatible with 'breaklength'";
 					return true;
 				}
 			}
@@ -891,6 +945,8 @@ public class ReformatReads {
 	private boolean reverseComplimentMate=false;
 	private boolean reverseCompliment=false;
 	private boolean verifyinterleaving=false;
+	private boolean verifypairing=false;
+	private boolean allowIdenticalPairNames=true;
 	private boolean trimBadSequence=false;
 	private boolean deleteEmptyFiles=false;
 	private boolean mappedOnly=false;

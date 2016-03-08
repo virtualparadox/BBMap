@@ -81,7 +81,7 @@ public class MergeReadsAndGenome {
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
 				System.out.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
 			}else if(a.equals("reads")){
-				reads=Long.parseLong(b);
+				reads=Tools.parseKMG(b);
 			}else if(a.equals("readlen") || a.equals("length") || a.equals("len")){
 				readlen=Integer.parseInt(b);
 			}else if(a.equals("ziplevel") || a.equals("zl")){

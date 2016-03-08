@@ -2,7 +2,10 @@ package kmer;
 
 import java.util.ArrayList;
 
+import dna.CoverageArray;
 
+
+import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
 import align2.Tools;
@@ -14,7 +17,15 @@ import align2.Tools;
  */
 public final class HashForest extends AbstractKmerTable {
 	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	public HashForest(int initialSize, boolean autoResize_){
+		this(initialSize, autoResize_, false);
+	}
+	
+	public HashForest(int initialSize, boolean autoResize_, boolean twod_){
 		if(initialSize>1){
 			initialSize=(int)Tools.min(maxPrime, Primes.primeAtLeast(initialSize));
 		}else{
@@ -24,9 +35,24 @@ public final class HashForest extends AbstractKmerTable {
 		sizeLimit=(long) (initialSize*resizeMult);
 		array=new KmerNode[prime];
 		autoResize=autoResize_;
+		TWOD=twod_;
 	}
 	
-	int increment(long kmer){
+	private KmerNode makeNode(long kmer, int val){
+		return (TWOD ? new KmerNode2D(kmer, val) : new KmerNode1D(kmer, val));
+	}
+	
+	private KmerNode makeNode(long kmer, int[] vals){
+		assert(TWOD);
+		return new KmerNode2D(kmer, vals);
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Public Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public int increment(long kmer){
 		final int cell=(int)(kmer%prime);
 		KmerNode n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -34,7 +60,7 @@ public final class HashForest extends AbstractKmerTable {
 			n=(kmer<n.pivot ? n.left : n.right);
 		}
 		if(n==null){
-			n=new KmerNode(kmer, 1);
+			n=makeNode(kmer, 1);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -47,13 +73,13 @@ public final class HashForest extends AbstractKmerTable {
 			}
 			if(autoResize && size>sizeLimit){resize();}
 		}else{
-			n.count++;
-			if(n.count<0){n.count=Integer.MAX_VALUE;}
+			n.increment(kmer);
 		}
-		return n.count;
+		return n.value();
 	}
 	
-	int incrementAndReturnNumCreated(long kmer){
+	@Override
+	public int incrementAndReturnNumCreated(long kmer){
 		final int cell=(int)(kmer%prime);
 		KmerNode n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -61,7 +87,7 @@ public final class HashForest extends AbstractKmerTable {
 			n=(kmer<n.pivot ? n.left : n.right);
 		}
 		if(n==null){
-			n=new KmerNode(kmer, 1);
+			n=makeNode(kmer, 1);
 			size++;
 			if(prev==null){
 				array[cell]=n;
@@ -75,17 +101,76 @@ public final class HashForest extends AbstractKmerTable {
 			if(autoResize && size>sizeLimit){resize();}
 			return 1;
 		}else{
-			n.count++;
-			if(n.count<0){n.count=Integer.MAX_VALUE;}
+			n.increment(kmer);
 			return 0;
 		}
 	}
 	
+//	public final int set_Test(final long kmer, final int v){
+//		assert(TESTMODE);
+//		final int x;
+//		if(TWOD){
+//			int[] old=getValues(kmer, null);
+//			assert(old==null || contains(kmer, old));
+//			x=set0(kmer, v);
+//			assert(old==null || contains(kmer, old));
+//			assert(contains(kmer, v));
+//		}else{
+//			int old=getValue(kmer);
+//			assert(old==0 || old==-1 || contains(kmer, old));
+//			x=set0(kmer, v);
+//			assert(contains(kmer, v)) : "old="+old+", v="+v+", kmer="+kmer+", get(kmer)="+getValue(kmer);
+//			assert(v==old || !contains(kmer, old));
+//		}
+//		return x;
+//	}
+//	
+//	public final int setIfNotPresent_Test(long kmer, int v){
+//		assert(TESTMODE);
+//		final int x;
+//		if(TWOD){
+////			int[] vals=getValues(kmer, null);
+////			assert(vals==null || contains(kmer, vals));
+////			x=setIfNotPresent(kmer, v);
+////			assert(contains(kmer, vals));
+////			assert(contains(kmer, v));
+//			x=0;
+//			assert(false);
+//		}else{
+//			int old=getValue(kmer);
+//			assert(old==0 || old==-1 || contains(kmer, old));
+//			x=setIfNotPresent0(kmer, v);
+//			assert((old<1 && contains(kmer, v)) || (old>0 && contains(kmer, old))) : kmer+", "+old+", "+v;
+//		}
+//		return x;
+//	}
+//	
+//	public final int set_Test(final long kmer, final int v[]){
+//		assert(TESTMODE);
+//		final int x;
+//		if(TWOD){
+//			int[] old=getValues(kmer, null);
+//			assert(old==null || contains(kmer, old));
+//			x=set0(kmer, v);
+//			assert(old==null || contains(kmer, old));
+//			assert(contains(kmer, v));
+//		}else{
+//			int old=getValue(kmer);
+//			assert(old==0 || old==-1 || contains(kmer, old));
+//			x=set0(kmer, v);
+//			assert(contains(kmer, v)) : "old="+old+", v="+v+", kmer="+kmer+", get(kmer)="+getValue(kmer);
+//			assert(v[0]==old || !contains(kmer, old));
+//		}
+//		return x;
+//	}
+	
+	
+	@Override
 	public int set(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerNode n=array[cell];
 		if(n==null){
-			array[cell]=new KmerNode(kmer, value);
+			array[cell]=makeNode(kmer, value);
 		}else{
 			x=n.set(kmer, value);
 		}
@@ -94,11 +179,26 @@ public final class HashForest extends AbstractKmerTable {
 		return x;
 	}
 	
+	@Override
+	public int set(long kmer, int[] vals) {
+		int x=1, cell=(int)(kmer%prime);
+		final KmerNode n=array[cell];
+		if(n==null){
+			array[cell]=makeNode(kmer, vals);
+		}else{
+			x=n.set(kmer, vals);
+		}
+		size+=x;
+		if(autoResize && size>sizeLimit){resize();}
+		return x;
+	}
+	
+	@Override
 	public int setIfNotPresent(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerNode n=array[cell];
 		if(n==null){
-			array[cell]=new KmerNode(kmer, value);
+			array[cell]=makeNode(kmer, value);
 		}else{
 			x=n.setIfNotPresent(kmer, value);
 		}
@@ -107,38 +207,37 @@ public final class HashForest extends AbstractKmerTable {
 		return x;
 	}
 	
+	@Override
+	public final int getValue(long kmer){
+		int cell=(int)(kmer%prime);
+		KmerNode n=array[cell];
+		return n==null ? 0 : n.getValue(kmer);
+	}
+	
+	@Override
+	public int[] getValues(long kmer, int[] singleton){
+		int cell=(int)(kmer%prime);
+		KmerNode n=array[cell];
+		return n==null ? null : n.getValues(kmer, singleton);
+	}
+	
+	@Override
+	public boolean contains(long kmer){
+		return get(kmer)!=null;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------      Nonpublic Methods       ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
 	final KmerNode get(long kmer){
-//		int cell=(int)(kmer%prime);
-//		KmerNode n=array[cell];
-//		return n==null ? null : n.get(kmer);
-		
 		int cell=(int)(kmer%prime);
 		KmerNode n=array[cell];
 		while(n!=null && n.pivot!=kmer){
 			n=(kmer<n.pivot ? n.left : n.right);
 		}
 		return n;
-	}
-	
-	public final int getCount(long kmer){
-//		KmerNode node=get(kmer);
-//		return node==null ? 0 : node.count;
-		
-		int cell=(int)(kmer%prime);
-		KmerNode n=array[cell];
-		while(n!=null && n.pivot!=kmer){
-			n=(kmer<n.pivot ? n.left : n.right);
-		}
-		return n==null ? 0 : n.count;
-	}
-	
-//	int getCount(LongM kmer){
-//		KmerNode node=get(kmer.value());
-//		return node==null ? 0 : node.count;
-//	}
-	
-	public boolean contains(long kmer){
-		return get(kmer)!=null;
 	}
 	
 	boolean insert(KmerNode n){
@@ -152,22 +251,27 @@ public final class HashForest extends AbstractKmerTable {
 		return array[cell].insert(n);
 	}
 	
-	public void rebalance(){
-		ArrayList<KmerNode> list=new ArrayList<KmerNode>(1000);
-		for(int i=0; i<array.length; i++){
-			if(array[i]!=null){array[i]=array[i].rebalance(list);}
-		}
-	}
+	/*--------------------------------------------------------------*/
+	/*----------------       Private Methods        ----------------*/
+	/*--------------------------------------------------------------*/
 	
-//	boolean containsKey(LongM key){
-//		return contains(key.value());
-//	}
+	/*--------------------------------------------------------------*/
+	/*----------------   Resizing and Rebalancing   ----------------*/
+	/*--------------------------------------------------------------*/
 	
-//	boolean put(LongM key, int number){
-//		set(key.value(), number);
-//		return true;
-//	}
+	@Override
+	boolean canResize() {return true;}
 	
+	@Override
+	public boolean canRebalance() {return true;}
+	
+	@Override
+	public long size() {return size;}
+	
+	@Override
+	public int arrayLength() {return array.length;}
+	
+	@Override
 	synchronized void resize(){
 //		assert(false);
 //		System.err.println("Resizing from "+prime+"; load="+(size*1f/prime));
@@ -202,47 +306,73 @@ public final class HashForest extends AbstractKmerTable {
 	}
 	
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k){
-		tsw.print("HashForest:\n");
+	public void rebalance(){
+		ArrayList<KmerNode> list=new ArrayList<KmerNode>(1000);
+		for(int i=0; i<array.length; i++){
+			if(array[i]!=null){array[i]=array[i].rebalance(list);}
+		}
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Info Dumping         ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+//		tsw.print("HashForest:\n");
 		for(int i=0; i<array.length; i++){
 			KmerNode node=array[i];
-			if(node!=null && node.count>0){
-				StringBuilder sb=new StringBuilder();
-				tsw.print(node.dumpKmersAsText(sb, k));
+			if(node!=null && node.value()>=mincount){
+//				StringBuilder sb=new StringBuilder();
+//				tsw.print(node.dumpKmersAsText(sb, k, mincount));
+				node.dumpKmersAsText(tsw, k, mincount);
 			}
 		}
 		return true;
 	}
 	
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#size()
-	 */
 	@Override
-	public long size() {return size;}
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+//		tsw.print("HashForest:\n");
+		for(int i=0; i<array.length; i++){
+			KmerNode node=array[i];
+			if(node!=null && node.value()>=mincount){
+//				StringBuilder sb=new StringBuilder();
+//				tsw.print(node.dumpKmersAsText(sb, k, mincount));
+				node.dumpKmersAsBytes(bsw, k, mincount);
+			}
+		}
+		return true;
+	}
 	
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#arrayLength()
-	 */
 	@Override
-	public int arrayLength() {return array.length;}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canResize()
-	 */
-	@Override
-	boolean canResize() {return true;}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canRebalance()
-	 */
-	@Override
-	public boolean canRebalance() {return true;}
+	public void fillHistogram(CoverageArray ca, int max){
+		for(int i=0; i<array.length; i++){
+			KmerNode node=array[i];
+			if(node!=null){
+				node.fillHistogram(ca, max);
+			}
+		}
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Invalid Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	KmerNode[] array;
 	int prime;
 	long size=0;
 	long sizeLimit;
 	final boolean autoResize;
+	final boolean TWOD;
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Static Fields         ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	final static int maxPrime=(int)Primes.primeAtMost(Integer.MAX_VALUE);
 	final static float resizeMult=2.5f; //Resize by a minimum of this much

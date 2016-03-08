@@ -59,7 +59,7 @@ public class FilterReads {
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(a.equals("reads")){
-				readsOut=Long.parseLong(b);
+				readsOut=Tools.parseKMG(b);
 			}else if(a.equals("readlen")){
 				MIN_LEN=Integer.parseInt(b);
 				MIN_LEN_2=(MIN_LEN*2+2)/3;

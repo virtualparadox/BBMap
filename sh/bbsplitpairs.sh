@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified June 11, 2014"
+	echo "Last modified October 23, 2014"
 	echo ""
 	echo "Description:  Separates paired reads into files of 'good' pairs and 'good' singletons by removing 'bad' reads that are shorter than a min length."
 	echo "Designed to handle situations where reads become too short to be useful after trimming.  This program also optionally performs quality trimming."
@@ -31,6 +31,7 @@ usage(){
 	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
 	echo "fixinterleaving=f	(fint) Fixes corrupted interleaved files by examining pair names.  Only use on files with broken interleaving."
 	echo "repair=f		(rp) Fixes arbitrarily corrupted paired reads by examining read names.  High memory."
+	echo "allowidenticalnames=f	(ain) When detecting pair names, allows identical names, instead of requiring /1 and /2 or 1: and 2:"
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx             	This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -43,7 +44,7 @@ usage(){
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
-z="-Xmx120m"
+z="-Xmx200m"
 EA="-ea"
 set=0
 

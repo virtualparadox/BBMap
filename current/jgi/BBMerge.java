@@ -1,6 +1,7 @@
 package jgi;
 
 import java.io.File;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -36,9 +37,21 @@ public class BBMerge {
 	
 	
 	public static void main(String[] args){
+		if(Parser.parseHelp(args)){
+			printOptions();
+			System.exit(0);
+		}
 		BBMerge mr=new BBMerge(args);
 		mr.process();
 	}
+	
+	
+	private static void printOptions(){
+		System.err.println("Syntax:\n");
+		System.err.println("java -ea -Xmx200m -cp <path> jgi.BBMerge in=<input file> out=<output file>");
+		System.err.println("For more options, please run the shellscript with no arguments, or look at its contents.");
+	}
+	
 	
 	private static String[] preparse(String[] args){
 		if(args==null){return new String[0];}
@@ -85,7 +98,6 @@ public class BBMerge {
 			args2.add("margin=3");
 			args2.add("minqo=10");
 			args2.add("qualiters=2");
-//			args2.add("minoverlap=25");
 			args2.add("minoverlap=14");
 			args2.add("minentropy=56");
 		}else if(vloose){
@@ -98,6 +110,7 @@ public class BBMerge {
 			args2.add("minentropy=26");
 			args2.add("mismatches=4");
 			args2.add("margin=2");
+			args2.add("efilter=t");
 		}else if(loose){
 			strict=false;
 			args2.add("minoverlap=8");
@@ -107,6 +120,7 @@ public class BBMerge {
 			args2.add("minentropy=30");
 			args2.add("mismatches=3");
 			args2.add("margin=2");
+			args2.add("efilter=t");
 		}
 		
 		if(fast){
@@ -162,7 +176,7 @@ public class BBMerge {
 		boolean trimLeft_=false;
 		boolean mm0set=false;
 		byte trimq_=trimq;
-		int minReadLength_=0;
+		int minReadLength_=0, maxReadLength_=-1;
 		KmerCount7MTA.minProb=0f;
 		
 		for(int i=0; i<args.length; i++){
@@ -176,6 +190,8 @@ public class BBMerge {
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null")){
 				// do nothing
@@ -213,7 +229,7 @@ public class BBMerge {
 			}else if(a.equals("threads") || a.equals("t")){
 				THREADS=Shared.THREADS=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("outgood") || a.equals("outmerged") || a.equals("outm") || a.equals("out")){
 				out1=(b==null || b.equals("null") ? null : b);
 			}else if(a.equals("outgood1") || a.equals("outmerged1") || a.equals("outm1") || a.equals("out1")){
@@ -238,6 +254,8 @@ public class BBMerge {
 				OUTPUT_FAILED=Tools.parseBoolean(b);
 			}else if(a.equals("mix")){
 				MIX_BAD_AND_GOOD=Tools.parseBoolean(b);
+			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
+				NONZERO_ONLY=Tools.parseBoolean(b);
 			}else if(a.equals("testinterleaved")){
 				FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
 				System.err.println("Set TEST_INTERLEAVED to "+FASTQ.TEST_INTERLEAVED);
@@ -295,6 +313,18 @@ public class BBMerge {
 				trimLeft_=Tools.parseBoolean(b);
 			}else if(a.equals("trimq") || a.equals("trimquality")){
 				trimq_=Byte.parseByte(b);
+			}else if(a.equals("maxExpectedErrors") || a.equals("mee")){
+				maxExpectedErrors=Float.parseFloat(b);
+				//Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
+			}else if(a.equals("minavgquality") || a.equals("maq")){
+				minAvgQuality=Byte.parseByte(b);
+				//Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
+			}else if(a.equals("minavgquality2") || a.equals("maq2")){
+				minAvgQuality=Byte.parseByte(b);
+				Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
+			}else if(a.equals("minavgquality1") || a.equals("maq1")){
+				minAvgQuality=Byte.parseByte(b);
+				Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
 			}else if(a.equals("q102matrix") || a.equals("q102m")){
 				CalcTrueQuality.q102matrix=b;
 			}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
@@ -303,6 +333,8 @@ public class BBMerge {
 				TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 				minReadLength_=Integer.parseInt(b);
+			}else if(a.equals("maxlen") || a.equals("maxlength")){
+				maxReadLength_=Integer.parseInt(b);
 			}else if(a.equals("mi") || a.equals("minins") || a.equals("mininsert")){
 				minInsert=Integer.parseInt(b);
 			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
@@ -337,12 +369,18 @@ public class BBMerge {
 				filterK=Integer.parseInt(b);
 			}else if(a.equals("hashes")){
 				filterHashes=Integer.parseInt(b);
-			}else if(a.equals("filter")){
-				useFilter=Tools.parseBoolean(b);
+			}else if(a.equals("efilter")){
+				useEfilter=Tools.parseBoolean(b);
+			}else if(a.equals("kfilter")){
+				useKFilter=Tools.parseBoolean(b);
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		
+		
+		BBMergeOverlapper.MIN_OVERLAP_INSERT=Tools.min(BBMergeOverlapper.MIN_OVERLAP_INSERT, minInsert);
+		
 		
 		if(trimByOverlap){
 			join=false;
@@ -377,7 +415,9 @@ public class BBMerge {
 		trimRight=trimRight_;
 		trimLeft=trimLeft_;
 		trimq=trimq_;
+		
 		minReadLength=minReadLength_;
+		maxReadLength=(maxReadLength_<0 ? Integer.MAX_VALUE : maxReadLength_);
 		qtrim=trimLeft_||trimRight_;
 		
 		if(qin!=-1 && qout!=-1){
@@ -403,7 +443,7 @@ public class BBMerge {
 		
 		if(THREADS<1){THREADS=Shared.THREADS;}
 		
-		if(useFilter){
+		if(useKFilter){
 			
 			long memory=Runtime.getRuntime().maxMemory();
 			long tmemory=Runtime.getRuntime().totalMemory();
@@ -416,16 +456,17 @@ public class BBMerge {
 			filterCells=(mem*8)/filterBits;
 			if(filterCells<80000000){
 				System.err.println("Disabling filter due to low memory.  To enable the filter, increase the -Xmx flag.");
-				useFilter=false;
+				useKFilter=false;
 			}
 		}
+		useMEEfilter=maxExpectedErrors>0;
 	}
 	
 	void process(){
 		Timer ttotal=new Timer();
 		ttotal.start();
 		
-		if(useFilter){
+		if(useKFilter){
 			KmerCount7MTA.CANONICAL=true;
 //			assert(false) : filterCells;
 			filter=KmerCount7MTA.makeKca(in1, in2, extraFiles, filterK, filterBits, 0, filterCells, filterHashes, filterMinq, true, filterReads, 1, 1, 1, 1, null);
@@ -448,6 +489,12 @@ public class BBMerge {
 		
 		if(outhist!=null){
 			StringBuilder sb=new StringBuilder();
+			
+			sb.append("#Mean\t"+String.format("%.3f", Tools.averageHistogram(histTotal))+"\n");
+			sb.append("#Median\t"+Tools.percentile(histTotal, 0.5)+"\n");
+			sb.append("#Mode\t"+Tools.calcMode(histTotal)+"\n");
+			sb.append("#STDev\t"+String.format("%.3f", Tools.standardDeviationHistogram(histTotal))+"\n");
+			sb.append("#InsertSize\tCount\n");
 			for(int i=0; i<histTotal.length && i<=insertMaxTotal; i+=bin){
 				int x=0;
 				int y=0;
@@ -456,14 +503,18 @@ public class BBMerge {
 					y++;
 				}
 				x=(x+bin-1)/y;
-				sb.append(i+"\t"+x+"\n");
+				if(x>0 || !NONZERO_ONLY){
+					sb.append(i+"\t"+x+"\n");
+				}
 			}
 			ReadWrite.writeStringInThread(sb, outhist);
 		}
-
+		
 		if(outhist2!=null){
 			StringBuilder sb=new StringBuilder();
-			for(int i=0; i<histTotal.length && i<=insertMaxTotal; i+=bin){
+			sb.append("#InsertSize\tCount\n");
+			int start=(histTotal.length==0 || histTotal[0]>0 ? 0 : 1);
+			for(int i=start; i<histTotal.length && i<=insertMaxTotal; i+=bin){
 				int x=0;
 				int y=0;
 				for(int j=i; j<i+bin && j<histTotal.length; j++){
@@ -509,7 +560,7 @@ public class BBMerge {
 		long sum=correctCountTotal+incorrectCountTotal;
 		
 		double div=100d/readsProcessedTotal;
-		System.err.println("Reads:       \t"+readsProcessedTotal);
+		System.err.println("Pairs:       \t"+readsProcessedTotal);
 		System.err.println("Joined:      \t"+sum+String.format((sum<10000 ? "       " : "   ")+"\t%.3f%%", sum*div));
 		if(FASTQ.PARSE_CUSTOM){
 			System.err.println("Correct:     \t"+correctCountTotal+String.format((correctCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", correctCountTotal*div));
@@ -518,6 +569,7 @@ public class BBMerge {
 		System.err.println("Ambiguous:   \t"+ambiguousCountTotal+String.format((ambiguousCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", ambiguousCountTotal*div));
 		System.err.println("No Solution: \t"+noSolutionCountTotal+String.format((noSolutionCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", noSolutionCountTotal*div));
 		if(minInsert>0){System.err.println("Too Short:   \t"+tooShortCountTotal+String.format((tooShortCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", tooShortCountTotal*div));}
+		if(maxReadLength<Integer.MAX_VALUE){System.err.println("Too Long:    \t"+tooLongCountTotal+String.format((tooLongCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", tooLongCountTotal*div));}
 		System.err.println("Avg Insert:          \t\t"+String.format("%.1f", (insertSumCorrectTotal+insertSumIncorrectTotal)*1d/(correctCountTotal+incorrectCountTotal)));
 		System.err.println("Standard Deviation:  \t\t"+String.format("%.1f", stdev));
 		System.err.println("Mode:                \t"+Tools.calcMode(histTotal));
@@ -529,7 +581,9 @@ public class BBMerge {
 		System.err.println();
 		System.err.println("Insert range:        \t"+insertMinTotal+" - "+insertMaxTotal);
 		System.err.println("90th percentile:     \t"+Tools.percentile(histTotal, .9));
+		System.err.println("75th percentile:     \t"+Tools.percentile(histTotal, .75));
 		System.err.println("50th percentile:     \t"+Tools.percentile(histTotal, .5));
+		System.err.println("25th percentile:     \t"+Tools.percentile(histTotal, .25));
 		System.err.println("10th percentile:     \t"+Tools.percentile(histTotal, .1));
 	}
 	
@@ -622,6 +676,7 @@ public class BBMerge {
 		correctCountTotal=0;
 		ambiguousCountTotal=0;
 		tooShortCountTotal=0;
+		tooLongCountTotal=0;
 		incorrectCountTotal=0;
 		noSolutionCountTotal=0;
 		insertSumCorrectTotal=0;
@@ -641,11 +696,12 @@ public class BBMerge {
 					}
 				}
 				
-				readsProcessedTotal+=ct.readsProcessed;
+				readsProcessedTotal+=ct.pairsProcessed;
 				matedCountTotal+=ct.matedCount;
 				correctCountTotal+=ct.correctCount;
 				ambiguousCountTotal+=ct.ambiguousCount;
 				tooShortCountTotal+=ct.tooShortCount;
+				tooLongCountTotal+=ct.tooLongCount;
 				incorrectCountTotal+=ct.incorrectCount;
 				noSolutionCountTotal+=ct.noSolutionCount;
 				insertSumCorrectTotal+=ct.insertSumCorrect;
@@ -671,7 +727,7 @@ public class BBMerge {
 		errorState|=ReadWrite.closeStreams(cris, rosgood, rosbad, rosinsert);
 		
 		talign.stop();
-		System.err.println("Align time: "+talign);
+//		System.err.println("Align time: "+talign);
 	}
 	
 
@@ -711,6 +767,7 @@ public class BBMerge {
 			
 			final boolean USE_MAPPING=BBMergeOverlapper.USE_MAPPING;
 			final boolean ignoreMappingStrand=BBMergeOverlapper.IGNORE_MAPPING_STRAND;
+			final int[] rvector=new int[5];
 			assert(USE_MAPPING || MATE_BY_OVERLAP);
 
 			ListNum<Read> ln=cris.nextList();
@@ -762,10 +819,21 @@ public class BBMerge {
 						}
 					}
 
-					if(minReadLength>0 && !remove){
+					if(!remove){
 						int rlen=(r1==null ? 0 : r1.length());
 						int rlen2=(r2==null ? 0 : r2.length());
-						if(rlen<minReadLength && rlen2<minReadLength){
+						if(minReadLength>0){
+							remove&=(rlen<minReadLength && rlen2<minReadLength);
+						}
+						if(r1.quality!=null || r2.quality!=null){
+							if(minAvgQuality>0){
+								remove=remove && (r1.avgQuality()<minAvgQuality || r2.avgQuality()<minAvgQuality);
+							}
+							if(useMEEfilter){
+								remove=remove && (r1.expectedErrors()>maxExpectedErrors || r2.expectedErrors()>maxExpectedErrors);
+							}
+						}
+						if(remove){
 							basesTrimmedT+=(rlen+rlen2);
 							remove=true;
 						}
@@ -784,15 +852,15 @@ public class BBMerge {
 							r2.reverseComplement();
 						}
 						
-						readsProcessed++;
-
-						final int[] rvector=new int[5];
+						pairsProcessed++;
+						
+//						Arrays.fill(rvector, 0);
 
 						int bestInsert=-1;
 						int bestScore=-1;
 						int bestGood=-1;
 						int bestBad=999999;
-						boolean ambig, tooShort=false;
+						boolean ambig, tooShort=false, tooLong=false;
 
 						//					assert(false) : r+"\n"+(USE_MAPPING)+", "+(r.chrom==r.mate.chrom)+", "+()+", "+()+", "+()+", "+()+", ";
 
@@ -842,10 +910,26 @@ public class BBMerge {
 										bestGood=rvector[1];
 										bestBad=rvector[2];
 										ambig=(rvector[4]==1);
+//										if(!ambig){break;}
 										break;
 									}
 									
+//									if(x<=0 || ambig){
+//										x=BBMergeOverlapper.mateByOverlap(r1, r2, rvector, MIN_OVERLAPPING_BASES_0-i+20, minOverlap+i+20, 
+//												MISMATCH_MARGIN, MAX_MISMATCHES0+1, MAX_MISMATCHES+1, (byte)(MIN_QUALITY-2*i));
+//										if(x>-1 && (rvector[4]!=1)){
+//											//											System.err.println(trims);
+//											bestInsert=x;
+//											bestScore=rvector[0];
+//											bestGood=rvector[1];
+//											bestBad=rvector[2];
+//											ambig=(rvector[4]==1);
+//											break;
+//										}
+//									}
+									
 								}
+								
 								
 								if(loose && bestInsert<0){//TODO check for estimated number of overlap errors
 									int x=BBMergeOverlapper.mateByOverlap(r1, r2, rvector, MIN_OVERLAPPING_BASES_0-1, minOverlap+2, 
@@ -881,15 +965,16 @@ public class BBMerge {
 //									}
 //								}
 								
-								if(loose && bestInsert>0 && !ambig){
+								//TODO:  Crucial!  This line can vastly reduce merge rate, particularly if quality values are inaccurate. 
+								if(loose && useEfilter && bestInsert>0 && !ambig && r1.quality!=null && r2.quality!=null){
 									float bestExpected=BBMergeOverlapper.expectedMismatches(r1, r2, bestInsert);
 									if((bestExpected+.05f)*10f<bestBad){ambig=true;}
 								}
 								
 								for(int trims=0, q=trimq; trims<TRIM_ON_OVERLAP_FAILURE && !qtrim && bestInsert<0 /*&& !ambig*/; trims++, q+=8){
 //									System.err.println(trims+", "+q);
-									Object old1=r1.obj;
-									Object old2=r2.obj;
+									Serializable old1=r1.obj;
+									Serializable old2=r2.obj;
 									tr1=TrimRead.trim(r1, false, true, q, 1+len1*4/10); //r1.bases.length);
 									tr2=TrimRead.trim(r2, true, false, q, 1+len2*4/10); //r2.bases.length);
 									r1.obj=old1;
@@ -913,6 +998,19 @@ public class BBMerge {
 									}
 								}
 								
+//								if(!ambig && bestInsert<0 && len1>=100 && len2>=100){
+//									int x=BBMergeOverlapper.mateByOverlap(r1, r2, rvector, MIN_OVERLAPPING_BASES_0+20, minOverlap+20, 
+//											MISMATCH_MARGIN, MAX_MISMATCHES0+1, MAX_MISMATCHES+1, (byte)(MIN_QUALITY));
+//									if(x>-1){
+//										//											System.err.println(trims);
+//										bestInsert=x;
+//										bestScore=rvector[0];
+//										bestGood=rvector[1];
+//										bestBad=rvector[2];
+//										ambig=(rvector[4]==1);
+//									}
+//								}
+								
 							}else{
 								ambig=false;
 								bestInsert=-1;
@@ -920,13 +1018,14 @@ public class BBMerge {
 						}
 
 						tooShort=(!ambig && bestInsert>0 && bestInsert<minInsert);
+						tooLong=(!ambig && !tooShort && bestInsert>0 && bestInsert>maxReadLength);
 						
 						if(joinperfectonly && bestBad>0){ambig=true;}
 						
 						Read joined=null;
-						if(bestInsert>-1 && !ambig && !tooShort && r2!=null && (joinReads || useFilter)){
+						if(bestInsert>-1 && !ambig && !tooShort && r2!=null && (joinReads || useKFilter)){
 							joined=r1.joinRead(bestInsert);
-							if(useFilter){
+							if(useKFilter){
 								int cov=BBMergeOverlapper.minCoverage(joined, filter, filterK, true, filterCutoff);
 								if(cov<filterCutoff){bestInsert=-1;}
 							}
@@ -935,6 +1034,7 @@ public class BBMerge {
 
 						if(ambig){ambiguousCount++;}
 						else if(tooShort){tooShortCount++;}
+						else if(tooLong){tooLongCount++;}
 						else if(bestInsert==-1){noSolutionCount++;}
 						else if(bestInsert==trueSize){correctCount++;insertSumCorrect+=bestInsert;}
 						else{incorrectCount++;insertSumIncorrect+=bestInsert;}
@@ -1026,11 +1126,12 @@ public class BBMerge {
 		final long[] hist=new long[histlen];
 		final short[] kmerCounts;
 
-		long readsProcessed=0;
+		long pairsProcessed=0;
 		long matedCount=0;
 		long correctCount=0;
 		long ambiguousCount=0;
 		long tooShortCount=0;
+		long tooLongCount=0;
 		long incorrectCount=0;
 		long noSolutionCount=0;
 		long insertSumCorrect=0;
@@ -1068,8 +1169,11 @@ public class BBMerge {
 	private long maxReads=-1;
 	private boolean join=true;
 	private boolean trimByOverlap=false;
+
+	private boolean useEfilter=false;
+	private boolean useMEEfilter=false;
 	
-	private boolean useFilter=false;
+	private boolean useKFilter=false;
 	private int filterBits=1;
 	private int filterCutoff=(1<<filterBits)-1;
 	private long filterCells=-1;
@@ -1095,7 +1199,10 @@ public class BBMerge {
 	static boolean trimLeft=false;
 	static boolean untrim=false;
 	static byte trimq=6;
+	static byte minAvgQuality=0;
+	static float maxExpectedErrors=0;
 	static int minReadLength=0;
+	static int maxReadLength=-1;
 	static int minInsert=35;
 	static boolean qtrim=false;
 	static int TRIM_ON_OVERLAP_FAILURE=1;
@@ -1116,6 +1223,7 @@ public class BBMerge {
 	static long correctCountTotal=0;
 	static long ambiguousCountTotal=0;
 	static long tooShortCountTotal=0;
+	static long tooLongCountTotal=0;
 	static long incorrectCountTotal=0;
 	static long noSolutionCountTotal=0;
 	static long insertSumCorrectTotal=0;
@@ -1137,12 +1245,13 @@ public class BBMerge {
 	private static boolean SKIP_MATED_READS=false;
 	private static boolean OUTPUT_FAILED=true;
 	private static boolean MIX_BAD_AND_GOOD=false;
+	private static boolean NONZERO_ONLY=true;
 	
 	private static boolean overwrite=true;
 	private static boolean append=false;
 	private static boolean verbose=false;
 	
 	private static int THREADS=-1;
-	private static float version=4.2f;
+	private static float version=5.1f;
 	
 }

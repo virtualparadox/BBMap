@@ -2,7 +2,10 @@ package kmer;
 
 import java.util.ArrayList;
 
+import dna.CoverageArray;
 
+
+import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
 import align2.Tools;
@@ -13,6 +16,10 @@ import align2.Tools;
  *
  */
 public final class KmerTable extends AbstractKmerTable {
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	public KmerTable(int initialSize, boolean autoResize_){
 		if(initialSize>1){
@@ -26,9 +33,12 @@ public final class KmerTable extends AbstractKmerTable {
 		autoResize=autoResize_;
 	}
 	
-
-
-	int increment(long kmer){
+	/*--------------------------------------------------------------*/
+	/*----------------        Public Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public int increment(long kmer){
 		final int cell=(int)(kmer%prime);
 		KmerLink n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -50,8 +60,9 @@ public final class KmerTable extends AbstractKmerTable {
 		}
 		return n.count;
 	}
-
-	int incrementAndReturnNumCreated(long kmer){
+	
+	@Override
+	public int incrementAndReturnNumCreated(long kmer){
 		final int cell=(int)(kmer%prime);
 		KmerLink n=array[cell], prev=null;
 		while(n!=null && n.pivot!=kmer){
@@ -75,7 +86,7 @@ public final class KmerTable extends AbstractKmerTable {
 		}
 	}
 	
-	
+	@Override
 	public int set(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerLink n=array[cell];
@@ -89,6 +100,12 @@ public final class KmerTable extends AbstractKmerTable {
 		return x;
 	}
 	
+	@Override
+	public int set(long kmer, int[] vals) {
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	@Override
 	public int setIfNotPresent(long kmer, int value){
 		int x=1, cell=(int)(kmer%prime);
 		final KmerLink n=array[cell];
@@ -102,35 +119,37 @@ public final class KmerTable extends AbstractKmerTable {
 		return x;
 	}
 	
-	KmerLink get(long kmer){
-//		int cell=(int)(kmer%prime);
-//		KmerLink n=array[cell];
-//		return n==null ? null : n.get(kmer);
-		
-		int cell=(int)(kmer%prime);
-		KmerLink n=array[cell];
-		while(n!=null && n.pivot!=kmer){n=n.next;}
-		return n;
-	}
-	
-	public int getCount(long kmer){
-//		KmerLink node=get(kmer);
-//		return node==null ? 0 : node.count;
-		
+	@Override
+	public int getValue(long kmer){
 		int cell=(int)(kmer%prime);
 		KmerLink n=array[cell];
 		while(n!=null && n.pivot!=kmer){n=n.next;}
 		return n==null ? 0 : n.count;
 	}
 	
-//	int getCount(LongM kmer){
-//		KmerLink node=get(kmer.value());
-//		return node==null ? 0 : node.count;
-//	}
+	@Override
+	public int[] getValues(long kmer, int[] singleton){
+		assert(array.length==0);
+		singleton[0]=getValue(kmer);
+		return singleton;
+	}
 	
+	@Override
 	public boolean contains(long kmer){
 		KmerLink node=get(kmer);
 		return node!=null;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------      Nonpublic Methods       ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	KmerLink get(long kmer){
+		int cell=(int)(kmer%prime);
+		KmerLink n=array[cell];
+		while(n!=null && n.pivot!=kmer){n=n.next;}
+		return n;
 	}
 	
 	boolean insert(KmerLink n){
@@ -143,22 +162,31 @@ public final class KmerTable extends AbstractKmerTable {
 		return array[cell].insert(n);
 	}
 	
-	public void rebalance(){
-		ArrayList<KmerLink> list=new ArrayList<KmerLink>(1000);
-		for(int i=0; i<array.length; i++){
-			if(array[i]!=null){array[i]=array[i].rebalance(list);}
-		}
-	}
+	/*--------------------------------------------------------------*/
+	/*----------------       Private Methods        ----------------*/
+	/*--------------------------------------------------------------*/
 	
-//	boolean containsKey(LongM key){
-//		return contains(key.value());
-//	}
-//	
-//	boolean put(LongM key, int number){
-//		set(key.value(), number);
-//		return true;
-//	}
+	/*--------------------------------------------------------------*/
+	/*----------------       Invalid Methods        ----------------*/
+	/*--------------------------------------------------------------*/
 	
+	/*--------------------------------------------------------------*/
+	/*----------------   Resizing and Rebalancing   ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	boolean canResize() {return true;}
+	
+	@Override
+	public boolean canRebalance() {return false;}
+	
+	@Override
+	public long size() {return size;}
+	
+	@Override
+	public int arrayLength() {return array.length;}
+	
+	@Override
 	synchronized void resize(){
 //		assert(false);
 //		System.err.println("Resizing from "+prime+"; load="+(size*1f/prime));
@@ -193,40 +221,48 @@ public final class KmerTable extends AbstractKmerTable {
 	}
 	
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k){
-//		for()
-		throw new RuntimeException();
+	public void rebalance(){
+		ArrayList<KmerLink> list=new ArrayList<KmerLink>(1000);
+		for(int i=0; i<array.length; i++){
+			if(array[i]!=null){array[i]=array[i].rebalance(list);}
+		}
 	}
 	
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#size()
-	 */
-	@Override
-	public long size() {return size;}
+	/*--------------------------------------------------------------*/
+	/*----------------         Info Dumping         ----------------*/
+	/*--------------------------------------------------------------*/
 	
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#arrayLength()
-	 */
+	@Deprecated
 	@Override
-	public int arrayLength() {return array.length;}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canResize()
-	 */
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+		throw new RuntimeException("TODO");
+	}
+	
+	@Deprecated
 	@Override
-	boolean canResize() {return true;}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canRebalance()
-	 */
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+		throw new RuntimeException("TODO");
+	}
+	
+	@Deprecated
 	@Override
-	public boolean canRebalance() {return false;}
+	public void fillHistogram(CoverageArray ca, int max){
+		throw new RuntimeException("TODO");
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	KmerLink[] array;
 	int prime;
 	long size=0;
 	long sizeLimit;
 	final boolean autoResize;
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Static Fields         ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	final static int maxPrime=(int)Primes.primeAtMost(Integer.MAX_VALUE);
 	final static float resizeMult=2f; //Resize by a minimum of this much

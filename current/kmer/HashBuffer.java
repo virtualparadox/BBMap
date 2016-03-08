@@ -1,5 +1,7 @@
 package kmer;
 
+import dna.CoverageArray;
+import fileIO.ByteStreamWriter;
 import fileIO.TextStreamWriter;
 
 /**
@@ -9,6 +11,10 @@ import fileIO.TextStreamWriter;
  */
 public class HashBuffer extends AbstractKmerTable {
 	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	public HashBuffer(AbstractKmerTable[] tables_, int buflen_){
 		tables=tables_;
 		buflen=buflen_;
@@ -17,21 +23,13 @@ public class HashBuffer extends AbstractKmerTable {
 		sizes=new short[ways];
 		buffers=new long[ways][buflen];
 	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#increment(long)
-	 */
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Public Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	@Override
-	int increment(long kmer) {
-		throw new RuntimeException("Not supported");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#increment(long)
-	 */
-	@Override
-	public
-	int incrementAndReturnNumCreated(long kmer) {
+	public int incrementAndReturnNumCreated(long kmer) {
 		final int way=(int)(kmer%ways);
 		long[] buffer=buffers[way];
 		buffer[sizes[way]]=kmer;
@@ -41,6 +39,60 @@ public class HashBuffer extends AbstractKmerTable {
 		}
 		return 0;
 	}
+	
+	@Override
+	public final long flush(){
+		long added=0;
+		for(int i=0; i<ways; i++){added+=incrementBuffer(i);}
+		return added;
+	}
+	
+	@Override
+	public int set(long kmer, int value) {
+		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
+	}
+	
+	@Override
+	public int set(long kmer, int[] vals) {
+		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
+	}
+	
+	@Override
+	public int setIfNotPresent(long kmer, int value) {
+		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
+	}
+	
+	@Override
+	public int getValue(long kmer) {
+		final int way=(int)(kmer%ways);
+		return tables[way].getValue(kmer);
+	}
+	
+	@Override
+	public int[] getValues(long kmer, int[] singleton){
+		final int way=(int)(kmer%ways);
+		return tables[way].getValues(kmer, singleton);
+	}
+	
+	@Override
+	public boolean contains(long kmer) {
+		final int way=(int)(kmer%ways);
+		return tables[way].contains(kmer);
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------      Nonpublic Methods       ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	Object get(long kmer) {
+		final int way=(int)(kmer%ways);
+		return tables[way].get(kmer);
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Private Methods        ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	private int incrementBuffer(final int way){
 		final int size=sizes[way];
@@ -58,103 +110,79 @@ public class HashBuffer extends AbstractKmerTable {
 		return added;
 	}
 	
-	public final long flush(){
-		long added=0;
-		for(int i=0; i<ways; i++){added+=incrementBuffer(i);}
-		return added;
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#set(long, int)
-	 */
-	@Override
-	public int set(long kmer, int value) {
-		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#setIfNotPresent(long, int)
-	 */
-	@Override
-	public int setIfNotPresent(long kmer, int value) {
-		throw new RuntimeException("Unimplemented method; this class lacks value buffers");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#get(long)
-	 */
-	@Override
-	Object get(long kmer) {
-		final int way=(int)(kmer%ways);
-		return tables[way].get(kmer);
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#getCount(long)
-	 */
-	@Override
-	public int getCount(long kmer) {
-		final int way=(int)(kmer%ways);
-		return tables[way].getCount(kmer);
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#contains(long)
-	 */
-	@Override
-	public boolean contains(long kmer) {
-		final int way=(int)(kmer%ways);
-		return tables[way].contains(kmer);
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#rebalance()
-	 */
-	@Override
-	public void rebalance() {
-		throw new RuntimeException("Unimplemented method");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#resize()
-	 */
-	@Override
-	void resize() {
-		throw new RuntimeException("Unimplemented method");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#size()
-	 */
-	@Override
-	public long size() {
-		throw new RuntimeException("Unimplemented method");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#arrayLength()
-	 */
-	@Override
-	public int arrayLength() {
-		throw new RuntimeException("Unimplemented method");
-	}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canResize()
-	 */
+	/*--------------------------------------------------------------*/
+	/*----------------   Resizing and Rebalancing   ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	@Override
 	final boolean canResize() {return false;}
-
-	/* (non-Javadoc)
-	 * @see jgi.AbstractKmerTable#canRebalance()
-	 */
+	
 	@Override
 	public final boolean canRebalance() {return false;}
 	
+	@Deprecated
 	@Override
-	public boolean dumpKmersAsText(TextStreamWriter tsw, int k){
-		throw new RuntimeException("Unimplemented method");
+	public long size() {
+		throw new RuntimeException("Unimplemented.");
 	}
+	
+	@Deprecated
+	@Override
+	public int arrayLength() {
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	@Deprecated
+	@Override
+	void resize() {
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	@Deprecated
+	@Override
+	public void rebalance() {
+		throw new RuntimeException("Unimplemented.");
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Info Dumping         ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public boolean dumpKmersAsText(TextStreamWriter tsw, int k, int mincount){
+		for(AbstractKmerTable table : tables){
+			dumpKmersAsText(tsw, k, mincount);
+		}
+		return true;
+	}
+	
+	@Override
+	public boolean dumpKmersAsBytes(ByteStreamWriter bsw, int k, int mincount){
+		for(AbstractKmerTable table : tables){
+			dumpKmersAsBytes(bsw, k, mincount);
+		}
+		return true;
+	}
+	
+	@Override
+	public void fillHistogram(CoverageArray ca, int max){
+		for(AbstractKmerTable table : tables){
+			fillHistogram(ca, max);
+		}
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Invalid Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public int increment(long kmer) {
+		throw new RuntimeException("Unsupported");
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	private final AbstractKmerTable[] tables;
 	private final int buflen;

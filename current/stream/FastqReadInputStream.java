@@ -62,8 +62,8 @@ public class FastqReadInputStream extends ReadInputStream {
 			}
 		}
 		
+		interleaved=(ff.stdio()) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(ff.name(), false);
 		tf=ByteFile.makeByteFile(ff, false);
-		interleaved=((tf.is()==System.in || stdin) ? FASTQ.FORCE_INTERLEAVED : FASTQ.isInterleaved(tf.name()));
 //		assert(false) : interleaved;
 	}
 

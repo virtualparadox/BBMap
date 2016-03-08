@@ -31,7 +31,15 @@ import align2.Tools;
  *
  */
 public class A_Sample {
-
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/**
+	 * Code entrance from the command line.
+	 * @param args Command line arguments
+	 */
 	public static void main(String[] args){
 		Timer t=new Timer();
 		t.start();
@@ -39,6 +47,10 @@ public class A_Sample {
 		mb.process(t);
 	}
 	
+	/**
+	 * Constructor.
+	 * @param args Command line arguments
+	 */
 	public A_Sample(String[] args){
 		
 		if(Parser.parseHelp(args)){
@@ -197,9 +209,14 @@ public class A_Sample {
 		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
 		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
 	}
+
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Outer Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	
 	void process(Timer t){
-		
 		
 		final ConcurrentReadStreamInterface cris;
 		final Thread cristhread;
@@ -311,6 +328,8 @@ public class A_Sample {
 	}
 	
 	/*--------------------------------------------------------------*/
+	/*----------------         Inner Methods        ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	private void printOptions(){
 		assert(false) : "printOptions: TODO";
@@ -328,6 +347,9 @@ public class A_Sample {
 	}
 	
 	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	private String in1=null;
@@ -355,6 +377,8 @@ public class A_Sample {
 	private long maxReads=-1;
 	
 	/*--------------------------------------------------------------*/
+	/*----------------         Final Fields         ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	private final FileFormat ffin1;
 	private final FileFormat ffin2;
@@ -362,7 +386,8 @@ public class A_Sample {
 	private final FileFormat ffout1;
 	private final FileFormat ffout2;
 	
-	
+	/*--------------------------------------------------------------*/
+	/*----------------        Common Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	private PrintStream outstream=System.err;

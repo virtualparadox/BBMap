@@ -17,6 +17,7 @@ import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
 
 import align2.ListNum;
+import align2.ReadStats;
 import align2.Tools;
 
 /**
@@ -49,6 +50,10 @@ public class MakeLengthHistogram {
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
+			}else if(a.equals("append") || a.equals("app")){
+				append=ReadStats.append=Tools.parseBoolean(b);
+			}else if(a.equals("overwrite") || a.equals("ow")){
+				overwrite=Tools.parseBoolean(b);
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -56,7 +61,7 @@ public class MakeLengthHistogram {
 			}else if(a.equals("out") || a.equals("hist") || a.equals("lhist")){
 				out=b;
 			}else if(a.equals("max") || a.equals("maxlength")){
-				MAX_BINS=Integer.parseInt(b);
+				MAX_LENGTH=Integer.parseInt(b);
 			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
 				NON_ZERO_ONLY=Tools.parseBoolean(b);
 			}else if(a.startsWith("mult") || a.startsWith("div") || a.startsWith("bin")){
@@ -74,7 +79,7 @@ public class MakeLengthHistogram {
 			}
 		}
 		
-		MAX_BINS/=MULT;
+		MAX_LENGTH/=MULT;
 		
 		calc(in1, in2, out);
 		t.stop();
@@ -82,12 +87,10 @@ public class MakeLengthHistogram {
 	}
 	
 	public static void calc(String in1, String in2, String out){
-		if(fileIO.FileFormat.hasFastaExtension(in1)){
-			FastaReadInputStream.SPLIT_READS=false;
-			FastaReadInputStream.MIN_READ_LEN=1;
-		}else{
-			FASTQ.PARSE_CUSTOM=false;
-		}
+		FastaReadInputStream.SPLIT_READS=false;
+		FastaReadInputStream.MIN_READ_LEN=1;
+		FASTQ.PARSE_CUSTOM=false;
+		
 		long maxReads=-1;
 		
 		final ConcurrentReadStreamInterface cris;
@@ -103,7 +106,7 @@ public class MakeLengthHistogram {
 //		if(verbose){System.err.println("Paired: "+paired);}
 		
 		
-		final int max=MAX_BINS;
+		final int max=MAX_LENGTH;
 		long[] readHist=new long[max+1];
 		long[] baseHist=new long[max+1];
 		
@@ -153,11 +156,11 @@ public class MakeLengthHistogram {
 				ln=cris.nextList();
 				reads=(ln!=null ? ln.list : null);
 			}
-			System.err.println("Finished reading");
+			if(verbose){System.err.println("Finished reading");}
 			cris.returnList(ln, ln.list.isEmpty());
-			System.err.println("Returned list");
+			if(verbose){System.err.println("Returned list");}
 			ReadWrite.closeStream(cris);
-			System.err.println("Closed stream");
+			if(verbose){System.err.println("Closed stream");}
 			System.err.println("Processed "+readsProcessed+" reads.");
 		}
 		
@@ -188,7 +191,7 @@ public class MakeLengthHistogram {
 			baseHistF[i]=baseHist[i]*100d/baseHistC[0];
 		}
 
-		TextStreamWriter tsw=new TextStreamWriter(out==null ? "stdout" : out, true, false, false);
+		TextStreamWriter tsw=new TextStreamWriter(out==null ? "stdout" : out, overwrite, append, false);
 		tsw.start();
 		tsw.println("#Reads:\t"+readsProcessed);
 		tsw.println("#Bases:\t"+baseHistC[0]);
@@ -211,9 +214,13 @@ public class MakeLengthHistogram {
 	}
 	
 	public static long readsProcessed=0;
-	public static int MAX_BINS=40000;
+	public static int MAX_LENGTH=80000;
 	public static int MULT=10;
 	public static boolean ROUND_BINS=false;
 	public static boolean NON_ZERO_ONLY=false;
+	
+	public static boolean append=false;
+	public static boolean overwrite=true;
+	public static boolean verbose=false;
 	
 }

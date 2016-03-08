@@ -86,7 +86,7 @@ public class PartitionReads {
 				overwrite=Tools.parseBoolean(b);
 				System.out.println("Set overwrite to "+overwrite);
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("out") || a.equals("out1")){
 				if(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none") || split.length==1){
 					System.out.println("No output file.");

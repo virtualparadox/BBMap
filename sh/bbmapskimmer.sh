@@ -6,6 +6,7 @@ usage(){
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+NATIVELIBDIR="$DIR""jni/"
 
 z="-Xmx1g"
 z2="-Xms1g"
@@ -35,7 +36,7 @@ mapPacBioSkimmer() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java $EA $z -cp $CP align2.BBMapPacBioSkimmer build=1 overwrite=true minratio=0.40 fastareadlen=6000 ambig=all minscaf=100 startpad=10000 stoppad=10000 midpad=6000 $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBMapPacBioSkimmer build=1 overwrite=true minratio=0.40 fastareadlen=6000 ambig=all minscaf=100 startpad=10000 stoppad=10000 midpad=6000 $@"
 	echo $CMD >&2
 	$CMD
 }

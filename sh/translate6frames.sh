@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified July 29, 2014"
 	echo ""
 	echo "Description:  Translates nucleotide sequences to all 6 amino acid frames."
 	echo ""
@@ -30,6 +30,7 @@ usage(){
 	echo "fastawrap=80     	Length of lines in fasta output."
 	echo "qout=auto        	Output quality offset: 33 (Sanger), 64, or auto."
 	echo "tag=t            	Tag read id with the frame, adding e.g. ' fr1'"
+	echo "frames=6         	Only print this many frames.  e.g. if you already know the sense, set 'frames=3'"
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."

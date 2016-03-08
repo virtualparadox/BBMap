@@ -65,20 +65,24 @@ public final class TranslateColorspaceRead {
 		MSA temp=new MultiStateAligner9ts(500, 2400, false);
 		TranslateColorspaceRead tcr=new TranslateColorspaceRead(temp);
 		
-		RandomReads rr=new RandomReads(false);
+		RandomReads3 rr=new RandomReads3(false);
 		
 		int maxSnps=2, maxInss=2, maxDels=2, maxSubs=2, maxErrors=2;
 		float snpRate=.3f, insRate=.3f, delRate=.3f, subRate=.3f;
 		int maxIndelLen=5;
 		int maxSubLen=5;
 		
-		Read[] reads=rr.makeRandomReadsX(rounds, length, maxSnps, maxInss, maxDels, maxSubs,
-				snpRate, insRate, delRate, subRate, 
-				maxIndelLen, maxIndelLen, maxSubLen, (byte)21, (byte)21, true, 5, 20, 30);
+		ArrayList<Read> reads=rr.makeRandomReadsX(rounds, length, length, 
+				maxSnps, maxInss, maxDels, maxSubs, 0,
+				snpRate, insRate, delRate, subRate, 0,
+				maxIndelLen, maxIndelLen, maxSubLen, 1,
+				1, 1, 1, 1,
+				(byte)21, (byte)21, true, 
+				5, 20, 30);
 		
 		t.start();
-		for(int i=0; i<reads.length; i++){
-			Read r=reads[i];
+		for(int i=0; i<reads.size(); i++){
+			Read r=reads.get(i);
 
 			if(r.strand()==Gene.MINUS){
 				Tools.reverseInPlace(r.bases);
@@ -140,10 +144,6 @@ public final class TranslateColorspaceRead {
 		}
 		sb.append('\n');
 		return sb.toString();
-	}
-	
-	public void realign_new(final Read r, final int padding, final boolean recur, final int minValidScore, boolean forbidIndels){
-		realign_new(r, r.colorspace() ? msaCS : msaBS, padding, recur, minValidScore, forbidIndels);
 	}
 	
 	public void realignByReversingRef(final Read r, final int padding, final boolean recur){
@@ -324,410 +324,22 @@ public final class TranslateColorspaceRead {
 //		assert(r.match[r.match.length-1]!='X') : r.toText(false);
 	}
 	
-	/** For some reason realign was making the match string backwards... */
-	public static void realign_new(final Read r, final MSA msa, int padding, final boolean recur, int minValidScore, boolean forbidIndels){
-		if(r.shortmatch()){
-			r.match=null;
-			r.setShortMatch(false);
-		}
-		if(verbose){System.err.println("Padding = "+padding+"; msa.maxColumns = "+msa.maxColumns+"; maplen = "+(r.stop-r.start+1)+"; gaps = "+Arrays.toString(r.gaps));}
-		
-		assert(padding>=0) : padding+", "+r;
-		padding=Tools.min(padding, (msa.maxColumns-r.bases.length)/2-20);
-		if(verbose){System.err.println("Padding = "+padding);}
-		assert(padding>=0) : padding+", "+r;
-		padding=Tools.max(padding, 0);
-		if(verbose){System.err.println("Padding = "+padding);}
-		assert(padding>=0) : padding+", "+r;
-
-		
-		assert(r.colorspace()==msa.colorspace);
-		final ChromosomeArray chacs=Data.getChromosome(r.chrom);
-		if(verbose){
-			System.err.println("Realigning.");
-			System.err.println("Original: "+r.start+", "+r.stop+", "+Gene.strandCodes[r.strand()]);
-			if(verbose){System.err.println("A. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-		}
-		
-		{
-			int expectedLen=GapTools.calcGrefLen(r.start, r.stop, r.gaps);
-			if(expectedLen>msa.maxColumns-20){
-				//TODO: Alternately, I could kill the site.
-				r.stop=r.start+Tools.min(r.bases.length+40, msa.maxColumns-20);
-				if(r.gaps!=null){r.gaps=GapTools.fixGaps(r.start, r.stop, r.gaps, Shared.MINGAP);}
-			}
-		}
-		
-		if(r.start<0){r.start=0;} //Prevents assertion errors.  This change should be reset by the realignment so it shouldn't matter.
-		if(r.stop>chacs.maxIndex){r.stop=chacs.maxIndex;} //Also to prevent a potential assertion error in unpadded references
-		assert(0<=r.start) : "\nchr"+r.chrom+": r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-			", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-		assert(chacs.maxIndex>=r.stop) : "\nchr"+r.chrom+": r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-			", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-
-		{
-			assert(r.stop>=r.start); //Otherwise this is pointless...
-			int a=r.bases.length;
-			int b=r.stop-r.start+1;
-			if(b<a){
-				int c=Tools.min(r.bases.length, a-b+10)/2;
-				padding=Tools.max(padding, c+1);
-//				if(verbose){System.err.println("Padding = "+padding);}
-//				assert(padding>=0) : padding;
-			}
-		}
-		
-		if(verbose){System.err.println("Padding = "+padding);}
-		
-		padding=Tools.min(padding, (msa.maxColumns-Tools.max(r.bases.length, GapTools.calcGrefLen(r.start, r.stop, r.gaps)))/2-1);
-		if(forbidIndels){padding=0;}
-		if(verbose){System.err.println("Padding = "+padding);}
-		assert(padding>=0) : r.numericID+", "+padding;
-		
-		
-		final int maxQ=msa.maxQuality(r.bases.length);
-		final int maxI=msa.maxImperfectScore(r.bases.length);
-
-		if(r.strand()==Gene.PLUS){
-			assert(maxQ>maxI);
-
-			byte[][] matchR=new byte[1][];
-			if(r.match!=null && r.match.length==r.bases.length){
-				matchR[0]=r.match;
-			}else{
-				//				System.err.println(new String(r.match));
-				matchR[0]=r.match=new byte[r.bases.length];
-			}
-			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(r.bases, chacs.array, r.start, matchR);
-			r.match=matchR[0];
-			
-			assert(0<=r.start) : "\nchr"+r.chrom+": r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-			assert(chacs.maxIndex>=r.stop) : "\nchr"+r.chrom+": r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-			
-			if(verbose){System.err.println("B. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-			
-			if(scoreNoIndel>=maxI || forbidIndels){
-				if(verbose){System.err.println("Quick match.");}
-//				assert(r.match[0]!='X') : r.toText(false);
-//				assert(r.match[r.match.length-1]!='X') : r.toText(false);
-				//				assert(r.stop==r.start+r.bases.length-1);
-				r.stop=r.start+r.bases.length-1;
-				r.mapScore=scoreNoIndel;
-			}else{
-				if(verbose){System.err.println("Slow match.");}
-				
-//				int minLoc=Tools.max(r.start-padding, chacs.minIndex);
-				int minLoc=Tools.max(r.start-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-				int maxLoc=Tools.min(r.stop+padding, chacs.maxIndex);
-				
-				if(verbose){System.err.println("minLoc = "+minLoc+", maxLoc = "+maxLoc);}
-				if(verbose){System.err.println("C. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-				if(verbose){System.err.println("C. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
-				
-				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
-				assert(minLoc<=r.start) : "\nchr"+r.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-					", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-				assert(maxLoc>=r.stop) : "\nchr"+r.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", r.start="+r.start+", r.stop="+r.stop+", padding="+padding+
-					", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+r.toText(false);
-
-				//			System.err.println("Aligning:\n"+new String(r.bases)+"\n"+chacs.getString(minLoc, maxLoc));
-				
-				int[] max=null;
-				int[] score=null;
-				try {
-					if(verbose){
-						System.err.println("Calling fillLimited(bases, chacs, "+minLoc+", "+maxLoc+", "+
-								Tools.max(scoreNoIndel, minValidScore)+", "+(r.gaps==null ? "null" : Arrays.toString(r.gaps))+")");
-					}
-					max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-					score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-					if(verbose){System.err.println("D. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-					
-					if(score!=null && score.length>6){
-						int[] oldArray=score.clone();
-						assert(score.length==8);
-						int extraPadLeft=score[6];
-						int extraPadRight=score[7];
-						
-						if(r.gaps==null){
-							assert(maxLoc-minLoc+1<=msa.maxColumns);
-							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns-80){
-								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-							}else{
-								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-								extraPadLeft=Tools.max(x, extraPadLeft);
-								extraPadRight=Tools.max(x, extraPadRight);
-							}
-						}else{
-							//TODO: In this case the alignment will probably be wrong.
-							int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
-							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns-80){
-								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-							}else{
-								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-								extraPadLeft=Tools.max(x, extraPadLeft);
-								extraPadRight=Tools.max(x, extraPadRight);
-							}
-						}
-						
-						assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+r;
-						minLoc=Tools.max(0, minLoc-extraPadLeft);
-						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
-
-						if(verbose){System.err.println("E. Estimated greflen: "+GapTools.calcGrefLen(r.start, r.stop, r.gaps));}
-						if(verbose){System.err.println("E. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));}
-						max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-						score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-						
-						if(score==null || score[0]<oldArray[0]){
-							if(!Shared.anomaly){System.err.println("Read "+r.numericID+": Padded match string alignment result was inferior.  Triple-aligning. :(");}
-							
-							if(r.gaps==null){
-								assert(maxLoc-minLoc+1<=msa.maxColumns);
-								int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns-80){
-									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-								}else{
-									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-									extraPadLeft=Tools.max(x, extraPadLeft);
-									extraPadRight=Tools.max(x, extraPadRight);
-								}
-							}else{
-								//TODO: In this case the alignment will probably be wrong.
-								int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
-								int newlen=(greflen+1+extraPadLeft+extraPadRight);
-								if(newlen>=msa.maxColumns-80){
-									while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-									while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-									while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-								}else{
-									int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-									extraPadLeft=Tools.max(x, extraPadLeft);
-									extraPadRight=Tools.max(x, extraPadRight);
-								}
-							}
-							
-							assert(extraPadLeft>=0 && extraPadRight>=0) : extraPadLeft+", "+extraPadRight+"\n"+r;
-							minLoc=Tools.max(0, minLoc-extraPadLeft);
-							maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
-							
-							max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-							score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-							
-							if(minLoc>0 && maxLoc<chacs.maxIndex && (score==null || score[0]<oldArray[0])){
-								if(!Shared.anomaly){System.err.println("Still inferior.");}
-								minLoc=Tools.max(r.start-8, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-								maxLoc=Tools.min(r.stop+8, chacs.maxIndex);
-								max=msa.fillUnlimited(r.bases, chacs.array, minLoc, maxLoc, r.gaps);
-								score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-							}
-						}
-					}
-				} catch (Exception e) {
-					System.err.println("Caught exception:\n");
-					e.printStackTrace();
-					assert(false) : r.toText(false);
-				}
-				
-				if(max!=null){
-					r.match=msa.traceback(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null);
-					r.start=score[1];
-					r.stop=score[2];
-					r.mapScore=score[0];
-				}else{
-					r.stop=r.start+r.bases.length-1;
-					r.mapScore=scoreNoIndel;
-				}
-			}
-		}else{
-			assert(maxQ>maxI);
-
-			byte[][] matchR=new byte[1][];
-			if(r.match!=null && r.match.length==r.bases.length){
-				matchR[0]=r.match;
-			}else{
-				matchR[0]=r.match=new byte[r.bases.length];
-			}
-			
-			if(verbose){
-				System.err.println("Before reversed:");
-				System.err.println(toStringCS(r.bases));
-			}
-			
-			if(r.colorspace()){
-				Tools.reverseInPlace(r.bases);
-			}else{
-				AminoAcid.reverseComplementBasesInPlace(r.bases);
-			}
-			
-			if(verbose){
-				System.err.println("Reversed.");
-				System.err.println(toStringCS(r.bases));
-			}
-			
-			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(r.bases, chacs.array, r.start, matchR);
-			r.match=matchR[0];
-			
-			if(scoreNoIndel>=maxI || forbidIndels){
-				if(verbose){System.err.println("Quick match.");}
-				assert(r.match[0]!='X') : r.toText(false);
-				assert(r.match[r.match.length-1]!='X') : r.toText(false);
-				r.stop=r.start+r.bases.length-1;
-				r.mapScore=scoreNoIndel;
-//				Tools.reverseInPlace(r.match);
-			}else{
-				if(verbose){System.err.println("Slow match.");}
-				
-				int minLoc=Tools.max(r.start-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-				int maxLoc=Tools.min(r.stop+padding, chacs.maxIndex);
-				if(verbose){System.err.println("Slow match "+minLoc+" ~ "+maxLoc);}
-
-				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
-				assert(minLoc<=r.start) : "\nchr"+r.chrom+": "+minLoc+", "+maxLoc+", "+r.start+", "+r.stop+
-					", "+chacs.minIndex+", "+chacs.maxIndex+"\n"+r.toText(false);
-				assert(maxLoc>=r.stop) : "\nchr"+r.chrom+": "+minLoc+", "+maxLoc+", "+r.start+", "+r.stop+
-					", "+chacs.minIndex+", "+chacs.maxIndex+"\n"+r.toText(false);
-
-				if(verbose){System.err.println("Aligning:\n"+new String(r.bases)+"\n"+chacs.getString(minLoc, maxLoc));}
-				int[] max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-				if(verbose){System.err.println("Aligned: {rows, maxC, maxS, max} = "+Arrays.toString(max));}
-				int[] score=null;
-				score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-				
-				if(score!=null && score.length>6){
-					if(verbose){System.err.println("Entering condition because score="+Arrays.toString(score));}
-					int[] oldArray=score.clone();
-					assert(score.length==8);
-					int extraPadLeft=score[6];
-					int extraPadRight=score[7];
-					
-					if(r.gaps==null){
-						assert(maxLoc-minLoc+1<=msa.maxColumns);
-						int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns-80){
-							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-						}
-					}else{
-						//TODO: In this case the alignment will probably be wrong.
-						int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
-						int newlen=(greflen+1+extraPadLeft+extraPadRight);
-						if(newlen>=msa.maxColumns-80){
-							while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-							while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-							while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-						}else{
-							int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-							extraPadLeft=Tools.max(x, extraPadLeft);
-							extraPadRight=Tools.max(x, extraPadRight);
-						}
-					}
-					
-					minLoc=Tools.max(0, minLoc-extraPadLeft);
-					maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
-					if(verbose){System.err.println("Set extraPadLeft="+extraPadLeft+", extraPadRight="+extraPadRight);}
-					if(verbose){System.err.println("Set minLoc="+minLoc+", maxLoc="+maxLoc);}
-					
-					max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-					score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-					
-					if(score==null || score[0]<oldArray[0]){
-						if(!Shared.anomaly){System.err.println("Read "+r.numericID+": Padded match string alignment result was inferior.  Triple-aligning. :(");}
-						
-						if(r.gaps==null){
-							assert(maxLoc-minLoc+1<=msa.maxColumns);
-							int newlen=(maxLoc-minLoc+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns-80){
-								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-							}else{
-								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-								extraPadLeft=Tools.max(x, extraPadLeft);
-								extraPadRight=Tools.max(x, extraPadRight);
-							}
-						}else{
-							//TODO: In this case the alignment will probably be wrong.
-							int greflen=Tools.max(r.bases.length, GapTools.calcGrefLen(minLoc, maxLoc, r.gaps));
-							int newlen=(greflen+1+extraPadLeft+extraPadRight);
-							if(newlen>=msa.maxColumns-80){
-								while(newlen>=msa.maxColumns-80 && extraPadLeft>extraPadRight){newlen--;extraPadLeft--;}
-								while(newlen>=msa.maxColumns-80 && extraPadLeft<extraPadRight){newlen--;extraPadRight--;}
-								while(newlen>=msa.maxColumns-80){newlen-=2;extraPadLeft--;extraPadRight--;}
-							}else{
-								int x=Tools.max(0, Tools.min(20, ((msa.maxColumns-newlen)/2)-40));
-								extraPadLeft=Tools.max(x, extraPadLeft);
-								extraPadRight=Tools.max(x, extraPadRight);
-							}
-						}
-						
-						minLoc=Tools.max(0, minLoc-extraPadLeft);
-						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
-						max=msa.fillLimited(r.bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), r.gaps);
-						score=(max==null ? null : msa.score(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null));
-					}
-				}
-				
-				
-				if(verbose){System.err.println(Arrays.toString(max));}
-				
-				if(max!=null){
-					r.match=msa.traceback(r.bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], r.gaps!=null);
-					r.start=score[1];
-					r.stop=score[2];
-					r.mapScore=score[0];
-					if(verbose){System.err.println("Aligned:\n"+new String(r.bases)+"\n"+chacs.getString(r.start, r.stop)+"\n"+new String(r.match));}
-				}else{
-					assert(r.match[0]!='X') : r.toText(false);
-					assert(r.match[r.match.length-1]!='X') : r.toText(false);
-					r.stop=r.start+r.bases.length-1;
-					r.mapScore=scoreNoIndel;
-				}
-			}
-
-			if(r.colorspace()){
-				Tools.reverseInPlace(r.bases);
-			}else{
-				AminoAcid.reverseComplementBasesInPlace(r.bases);
-			}
-		}
-		if(verbose){System.err.println("Final: "+r.start+", "+r.stop+", "+Gene.strandCodes[r.strand()]);}
-		
-		if(recur && r.stop<chacs.maxIndex && r.start>0 && (r.match[0]=='X' || r.match[0]=='I' || 
-				r.match[r.match.length-1]=='Y' || r.match[r.match.length-1]=='X' || r.match[r.match.length-1]=='I')){
-			int xy=0;
-			for(int i=0; i<r.match.length; i++){
-				byte b=r.match[i];
-				if(b=='X' || b=='Y' || b=='I'){xy++;}
-			}
-//			System.err.println("xy = "+xy);
-			
-			r.gaps=GapTools.fixGaps(r.start, r.stop, r.gaps, Shared.MINGAP);
-			
-			int p_temp=Tools.min(10+padding+2*xy, (msa.maxColumns-r.bases.length)/2-20);
-			
-			realign_new(r, msa, p_temp, false, minValidScore, forbidIndels);
-		}
+	public void realign_new(Read r, int padding, boolean recur, int minScore, boolean forbidIndels){
+		SiteScore ss=r.toSite();
+		TranslateColorspaceRead.realign_new(ss, r.bases, msaBS, padding, recur ? 1 : 0, minScore, forbidIndels, true, r.numericID);
+		r.setFromSite(ss);
 	}
 	
 	/** For some reason realign was making the match string backwards... */
-	public static void realign_new(final SiteScore ss, final byte[] bases, final MSA msa, int padding, final boolean recur, int minValidScore, boolean forbidIndels, final long id){
+	public static void realign_new(final SiteScore ss, final byte[] bases, final MSA msa, int padding, final int recur, int minValidScore, 
+			boolean forbidIndels, boolean fixXY, final long id){
+		if(ss.matchContainsXY()){ss.fixXY(bases, false, msa);} //This must run regardless of 'fixXY' or else an XY read could be semiperfect but not marked as such 
+		assert(Read.CHECKSITE(ss, bases, id));
 		boolean colorspace=false;
 		assert(colorspace==msa.colorspace);
 //		final byte[] bases=ss.plus() ? basesP : basesM;
 		
-		if(verbose){System.err.println("Padding = "+padding+"; msa.maxColumns = "+msa.maxColumns+"; maplen = "+(ss.stop-ss.start+1)+"; gaps = "+Arrays.toString(ss.gaps));}
+		if(verbose){System.err.println("Padding = "+padding+"; msa.maxColumns = "+msa.maxColumns+"; maplen = "+(ss.stop()-ss.start()+1)+"; gaps = "+Arrays.toString(ss.gaps));}
 		
 		assert(padding>=0) : padding+", id="+id+", "+ss;
 		padding=Tools.min(padding, (msa.maxColumns-bases.length)/2-20);
@@ -741,31 +353,35 @@ public final class TranslateColorspaceRead {
 		final ChromosomeArray chacs=Data.getChromosome(ss.chrom);
 		if(verbose){
 			System.err.println("Realigning.");
-			System.err.println("Original: "+ss.start+", "+ss.stop+", "+Gene.strandCodes[ss.strand()]);
-			if(verbose){System.err.println("F. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+			System.err.println("Original: "+ss.start()+", "+ss.stop()+", "+Gene.strandCodes[ss.strand()]);
+			if(verbose){System.err.println("F. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 		}
+		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
+		
 		
 		{
-			int expectedLen=GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps);
+			int expectedLen=GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps);
 			if(expectedLen>msa.maxColumns-20){
 				//TODO: Alternately, I could kill the site.
-				ss.stop=ss.start+Tools.min(bases.length+40, msa.maxColumns-20);
-				if(ss.gaps!=null){ss.gaps=GapTools.fixGaps(ss.start, ss.stop, ss.gaps, Shared.MINGAP);}
+				ss.setStop(ss.start()+Tools.min(bases.length+40, msa.maxColumns-20));
+				if(ss.gaps!=null){ss.gaps=GapTools.fixGaps(ss.start(), ss.stop(), ss.gaps, Shared.MINGAP);} //Still needed?
 			}
-			if(verbose){System.err.println("F. Estimated greflen2: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+			if(verbose){System.err.println("F. Estimated greflen2: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
+			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 		}
 		
-		if(ss.start<0){ss.start=0;} //Prevents assertion errors.  This change should be reset by the realignment so it shouldn't mattess.
-		if(ss.stop>chacs.maxIndex){ss.stop=chacs.maxIndex;} //Also to prevent a potential assertion error in unpadded references
-		assert(0<=ss.start) : "\nchr"+ss.chrom+": ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+		if(ss.start()<0){ss.setStart(0);} //Prevents assertion errors.  This change should be reset by the realignment so it shouldn't mattess.
+		if(ss.stop()>chacs.maxIndex){ss.setStop(chacs.maxIndex);} //Also to prevent a potential assertion error in unpadded references
+		assert(0<=ss.start()) : "\nchr"+ss.chrom+": ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 			", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
-		assert(chacs.maxIndex>=ss.stop) : "\nchr"+ss.chrom+": ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+		assert(chacs.maxIndex>=ss.stop()) : "\nchr"+ss.chrom+": ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 			", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
+		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 
 		{
-			assert(ss.stop>=ss.start); //Otherwise this is pointless...
+			assert(ss.stop()>=ss.start()); //Otherwise this is pointless...
 			int a=bases.length;
-			int b=ss.stop-ss.start+1;
+			int b=ss.stop()-ss.start()+1;
 			if(b<a){
 				int c=Tools.min(bases.length, a-b+10)/2;
 				padding=Tools.max(padding, c+1);
@@ -773,26 +389,28 @@ public final class TranslateColorspaceRead {
 //				assert(padding>=0) : padding;
 			}
 		}
+		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 		
 		if(verbose){System.err.println("Padding = "+padding);}
 		
 		{
 			int oldPadding=padding;
-			padding=Tools.max(0, Tools.min(padding, (msa.maxColumns-Tools.max(bases.length, GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps)))/2-100));
+			padding=Tools.max(0, Tools.min(padding, (msa.maxColumns-Tools.max(bases.length, GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps)))/2-100));
 			if(forbidIndels){padding=0;}
 			if(verbose){
 				System.err.println("oldPadding="+oldPadding+", padding="+padding);
-				System.err.println("L. calcGrefLen1 = "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));
-				System.err.println("L. calcGrefLen2 = "+GapTools.calcGrefLen(ss.start-oldPadding, ss.stop+oldPadding, ss.gaps));
-				System.err.println("L. calcGrefLen3 = "+GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps));
+				System.err.println("L. calcGrefLen1 = "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));
+				System.err.println("L. calcGrefLen2 = "+GapTools.calcGrefLen(ss.start()-oldPadding, ss.stop()+oldPadding, ss.gaps));
+				System.err.println("L. calcGrefLen3 = "+GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps));
 			}
 
 
 			assert(padding>=0) : id+", "+padding;
 
-//			assert(GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps)<msa.maxColumns) : 
-//				oldPadding+", "+padding+", "+bases.length+", "+GapTools.calcGrefLen(ss.start-padding, ss.stop+padding, ss.gaps)+", "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps);
+//			assert(GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps)<msa.maxColumns) : 
+//				oldPadding+", "+padding+", "+bases.length+", "+GapTools.calcGrefLen(ss.start()-padding, ss.stop()+padding, ss.gaps)+", "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps);
 		}
+		assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 		
 		final int maxQ=msa.maxQuality(bases.length);
 		final int maxI=msa.maxImperfectScore(bases.length);
@@ -807,44 +425,47 @@ public final class TranslateColorspaceRead {
 				//				System.err.println(new String(ss.match));
 				matchR[0]=ss.match=new byte[bases.length];
 			}
-			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(bases, chacs.array, ss.start, matchR);
+			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(bases, chacs.array, ss.start(), matchR);
 			ss.match=matchR[0];
 			
-			assert(0<=ss.start) : "\nchr"+ss.chrom+": ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+			assert(0<=ss.start()) : "\nchr"+ss.chrom+": ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
-			assert(chacs.maxIndex>=ss.stop) : "\nchr"+ss.chrom+": ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+			assert(chacs.maxIndex>=ss.stop()) : "\nchr"+ss.chrom+": ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 				", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
 			
-			if(verbose){System.err.println("G. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+			if(verbose){System.err.println("G. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
+			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			
 			if(scoreNoIndel>=maxI || forbidIndels){
 				if(verbose){System.err.println("Quick match.");}
 //				assert(ss.match[0]!='X') : ss.toText();
 //				assert(ss.match[ss.match.length-1]!='X') : ss.toText();
-				//				assert(ss.stop==ss.start+bases.length-1);
-				ss.stop=ss.start+bases.length-1;
+				//				assert(ss.setStop()=ss.start()+bases.length-1);
+				ss.setStop(ss.start()+bases.length-1);
 				ss.slowScore=scoreNoIndel;
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}else{
 				if(verbose){System.err.println("Slow match.");}
 				
-//				int minLoc=Tools.max(ss.start-padding, chacs.minIndex);
-				int minLoc=Tools.max(ss.start-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-				int maxLoc=Tools.min(ss.stop+padding, chacs.maxIndex);
+//				int minLoc=Tools.max(ss.start()-padding, chacs.minIndex);
+				int minLoc=Tools.max(ss.start()-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
+				int maxLoc=Tools.min(ss.stop()+padding, chacs.maxIndex);
 				
 				if(verbose){System.err.println("minLoc = "+minLoc+", maxLoc = "+maxLoc);}
-				if(verbose){System.err.println("H. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+				if(verbose){System.err.println("H. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 				if(verbose){System.err.println("H. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 				
 				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
-				assert(minLoc<=ss.start) : "\nchr"+ss.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+				assert(minLoc<=ss.start()) : "\nchr"+ss.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 					", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
-				assert(maxLoc>=ss.stop) : "\nchr"+ss.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", ss.start="+ss.start+", ss.stop="+ss.stop+", padding="+padding+
+				assert(maxLoc>=ss.stop()) : "\nchr"+ss.chrom+": minloc="+minLoc+", maxLoc="+maxLoc+", ss.setStart()"+ss.start()+", ss.setStop()"+ss.stop()+", padding="+padding+
 					", chacs.minIndex="+chacs.minIndex+", chacs.maxIndex="+chacs.maxIndex+"\nread:\n"+ss.toText();
 
 				//			System.err.println("Aligning:\n"+new String(bases)+"\n"+chacs.getString(minLoc, maxLoc));
 				
 				int[] max=null;
 				int[] score=null;
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 				try {
 					if(verbose){
 						System.err.println("Calling fillLimited(bases, chacs, "+minLoc+", "+maxLoc+", "+
@@ -852,7 +473,7 @@ public final class TranslateColorspaceRead {
 					}
 					max=msa.fillLimited(bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), ss.gaps);
 					score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
-					if(verbose){System.err.println("I. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+					if(verbose){System.err.println("I. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 					
 					if(score!=null && score.length>6){
 						int[] oldArray=score.clone();
@@ -891,7 +512,7 @@ public final class TranslateColorspaceRead {
 						minLoc=Tools.max(0, minLoc-extraPadLeft);
 						maxLoc=Tools.min(chacs.maxIndex, maxLoc+extraPadRight);
 
-						if(verbose){System.err.println("J. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+						if(verbose){System.err.println("J. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 						if(verbose){System.err.println("J. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 						max=msa.fillLimited(bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), ss.gaps);
 						score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
@@ -935,8 +556,8 @@ public final class TranslateColorspaceRead {
 							
 							if(minLoc>0 && maxLoc<chacs.maxIndex && (score==null || score[0]<oldArray[0])){
 								if(!Shared.anomaly){System.err.println("Still inferior.");}
-								minLoc=Tools.max(ss.start-8, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-								maxLoc=Tools.min(ss.stop+8, chacs.maxIndex);
+								minLoc=Tools.max(ss.start()-8, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
+								maxLoc=Tools.min(ss.stop()+8, chacs.maxIndex);
 								max=msa.fillUnlimited(bases, chacs.array, minLoc, maxLoc, ss.gaps);
 								score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
 							}
@@ -947,17 +568,19 @@ public final class TranslateColorspaceRead {
 					e.printStackTrace();
 					assert(false) : ss.toText();
 				}
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 				
 				if(max!=null){
 					ss.match=msa.traceback(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null);
-					ss.start=score[1];
-					ss.stop=score[2];
+					ss.setLimits(score[1], score[2]);
 					ss.slowScore=score[0];
 				}else{
-					ss.stop=ss.start+bases.length-1;
+					ss.setStop(ss.start()+bases.length-1);
 					ss.slowScore=scoreNoIndel;
 				}
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}
+			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 		}else{
 			assert(maxQ>maxI);
 
@@ -968,34 +591,34 @@ public final class TranslateColorspaceRead {
 				matchR[0]=ss.match=new byte[bases.length];
 			}
 			
-			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(bases, chacs.array, ss.start, matchR);
+			int scoreNoIndel=msa.scoreNoIndelsAndMakeMatchString(bases, chacs.array, ss.start(), matchR);
 			ss.match=matchR[0];
 			
 			if(scoreNoIndel>=maxI || forbidIndels){
 				if(verbose){System.err.println("Quick match.");}
 				assert(ss.match[0]!='X') : ss.toText();
 				assert(ss.match[ss.match.length-1]!='X') : ss.toText();
-				ss.stop=ss.start+bases.length-1;
+				ss.setStop(ss.start()+bases.length-1);
 				ss.slowScore=scoreNoIndel;
 //				Tools.reverseInPlace(ss.match);
 			}else{
 				if(verbose){System.err.println("Slow match.");}
 				
-				int minLoc=Tools.max(ss.start-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
-				int maxLoc=Tools.min(ss.stop+padding, chacs.maxIndex);
+				int minLoc=Tools.max(ss.start()-padding, 0); //It's OK to be off the beginning as long as bases prior to the true start are 'N'
+				int maxLoc=Tools.min(ss.stop()+padding, chacs.maxIndex);
 				if(verbose){System.err.println("Slow match "+minLoc+" ~ "+maxLoc);}
-				if(verbose){System.err.println("K. Estimated greflen: "+GapTools.calcGrefLen(ss.start, ss.stop, ss.gaps));}
+				if(verbose){System.err.println("K. Estimated greflen: "+GapTools.calcGrefLen(ss.start(), ss.stop(), ss.gaps));}
 				if(verbose){System.err.println("K. Estimated greflen2: "+GapTools.calcGrefLen(minLoc, maxLoc, ss.gaps));}
 
 				//These assertions are not too important... they indicate the read mapped off the end of the chromosome.
-				assert(minLoc<=ss.start) : "\nchr"+ss.chrom+": "+minLoc+", "+maxLoc+", "+ss.start+", "+ss.stop+
+				assert(minLoc<=ss.start()) : "\nchr"+ss.chrom+": "+minLoc+", "+maxLoc+", "+ss.start()+", "+ss.stop()+
 					", "+chacs.minIndex+", "+chacs.maxIndex+"\n"+ss.toText();
-				assert(maxLoc>=ss.stop) : "\nchr"+ss.chrom+": "+minLoc+", "+maxLoc+", "+ss.start+", "+ss.stop+
+				assert(maxLoc>=ss.stop()) : "\nchr"+ss.chrom+": "+minLoc+", "+maxLoc+", "+ss.start()+", "+ss.stop()+
 					", "+chacs.minIndex+", "+chacs.maxIndex+"\n"+ss.toText();
 
 				if(verbose){System.err.println("Aligning:\n"+new String(bases)+"\n"+chacs.getString(minLoc, maxLoc));}
 				int[] max=msa.fillLimited(bases, chacs.array, minLoc, maxLoc, Tools.max(scoreNoIndel, minValidScore), ss.gaps);
-				if(verbose){System.err.println("Aligned: {rows, maxC, maxS, max} = "+Arrays.toString(max));}
+				if(verbose){System.err.println("Aligned3: {rows, maxC, maxS, max} = "+Arrays.toString(max));}
 				int[] score=null;
 				score=(max==null ? null : msa.score(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null));
 				
@@ -1076,37 +699,48 @@ public final class TranslateColorspaceRead {
 				
 				
 				if(verbose){System.err.println(Arrays.toString(max));}
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 				
 				if(max!=null){
 					ss.match=msa.traceback(bases, chacs.array, minLoc, maxLoc, max[0], max[1], max[2], ss.gaps!=null);
-					ss.start=score[1];
-					ss.stop=score[2];
+					ss.setLimits(score[1], score[2]);
 					ss.slowScore=score[0];
-					if(verbose){System.err.println("Aligned:\n"+new String(bases)+"\n"+chacs.getString(ss.start, ss.stop)+"\n"+new String(ss.match));}
+					if(verbose){System.err.println("Aligned4:\n"+new String(bases)+"\n"+chacs.getString(ss.start(), ss.stop())+"\n"+new String(ss.match));}
 				}else{
 					assert(ss.match[0]!='X') : ss.toText();
 					assert(ss.match[ss.match.length-1]!='X') : ss.toText();
-					ss.stop=ss.start+bases.length-1;
+					ss.setStop(ss.start()+bases.length-1);
 					ss.slowScore=scoreNoIndel;
 				}
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}
+			assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 		}
-		if(verbose){System.err.println("Final: "+ss.start+", "+ss.stop+", "+Gene.strandCodes[ss.strand()]);}
+		if(verbose){System.err.println("Final: "+ss.start()+", "+ss.stop()+", "+Gene.strandCodes[ss.strand()]+", recur="+recur);}
 		
-		if(recur && ss.stop<chacs.maxIndex && ss.start>0 && (ss.match[0]=='X' || ss.match[0]=='I' || 
+		if(ss.stop()<chacs.maxIndex && ss.start()>0 && (ss.match[0]=='X' || ss.match[0]=='I' || 
 				ss.match[ss.match.length-1]=='Y' || ss.match[ss.match.length-1]=='X' || ss.match[ss.match.length-1]=='I')){
-			int xy=0;
-			for(int i=0; i<ss.match.length; i++){
-				byte b=ss.match[i];
-				if(b=='X' || b=='Y' || b=='I'){xy++;}
+			if(recur>0){
+				int xy=0;
+				for(int i=0; i<ss.match.length; i++){
+					byte b=ss.match[i];
+					if(b=='X' || b=='Y' || b=='I'){xy++;}
+				}
+				//			System.err.println("xy = "+xy);
+
+				ss.gaps=GapTools.fixGaps(ss.start(), ss.stop(), ss.gaps, Shared.MINGAP);
+
+				int p_temp=Tools.min(10+padding+2*xy, (msa.maxColumns-bases.length)/2-20);
+
+				realign_new(ss, bases, msa, p_temp, recur-1, minValidScore, forbidIndels, fixXY, id);
+			}else{
+//				int len1=Read.calcMatchLength(ss.match);
+//				int len2=ss.stop()-ss.start()+1;
+				if(fixXY && ss.matchContainsXY()){
+					ss.fixXY(bases, false, msa);
+				}
+				assert(ss.gaps==null || (ss.gaps[0]==ss.start() && ss.gaps[ss.gaps.length-1]==ss.stop())) : id+"\n"+new String(bases); //123
 			}
-//			System.err.println("xy = "+xy);
-			
-			ss.gaps=GapTools.fixGaps(ss.start, ss.stop, ss.gaps, Shared.MINGAP);
-			
-			int p_temp=Tools.min(10+padding+2*xy, (msa.maxColumns-bases.length)/2-20);
-			
-			realign_new(ss, bases, msa, p_temp, false, minValidScore, forbidIndels, id);
 		}
 		ss.setPerfect(bases);
 	}
@@ -1385,7 +1019,8 @@ public final class TranslateColorspaceRead {
 			if(verbose){
 				System.err.println("Making slow BS match:");
 			}
-			realign_new(r2, 4, true, 0, false);
+			realign_new(r2.toSite(), r2.bases, msaBS, 4, 1, 0, false, true, r2.numericID);
+			assert(false) : "TODO: move ss locs back to read.";
 			
 //			int padding=4;
 //			{
@@ -3005,8 +2640,8 @@ public final class TranslateColorspaceRead {
 	}
 	
 
-	protected MSA msaBS;
-	protected MSA msaCS;
+	public MSA msaBS;
+	public MSA msaCS;
 
 	public static boolean verbose=false;
 	

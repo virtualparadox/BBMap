@@ -94,7 +94,7 @@ public class AddAdapters {
 				stream.FastqReadInputStream.verbose=verbose;
 				ReadWrite.verbose=verbose;
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("t") || a.equals("threads")){
 				Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
 			}else if(a.equals("bf1")){
@@ -257,7 +257,8 @@ public class AddAdapters {
 				printOptions();
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
-			out1="stdout.fq";
+			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//			out1="stdout";
 		}
 		
 		if(!setInterleaved){
@@ -312,6 +313,17 @@ public class AddAdapters {
 	}
 	
 	private final ArrayList<byte[]> makeAdapterList(){
+		boolean oldTI=FASTQ.TEST_INTERLEAVED;
+		boolean oldFI=FASTQ.FORCE_INTERLEAVED;
+		FASTQ.TEST_INTERLEAVED=false;
+		FASTQ.FORCE_INTERLEAVED=false;
+		ArrayList<byte[]> x=makeAdapterList2();
+		FASTQ.TEST_INTERLEAVED=oldTI;
+		FASTQ.FORCE_INTERLEAVED=oldFI;
+		return x;
+	}
+	
+	private final ArrayList<byte[]> makeAdapterList2(){
 		if(ffa==null && literals==null){return null;}
 		ArrayList<byte[]> list=new ArrayList<byte[]>();
 		if(ffa!=null){

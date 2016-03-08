@@ -1,5 +1,5 @@
 ReformatReads readme by Brian Bushnell
-Last updated May 12, 2014.
+Last updated August 29, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 
 This is currently a stub.
@@ -36,3 +36,5 @@ Added "mingc" and "maxgc".
 Fixed a bug in which tabs were not allowed in fasta headers.
 Added mappedonly flag.
 Added ehist, idhist, indelhist, lhist, gchist.
+Added obqhist.
+

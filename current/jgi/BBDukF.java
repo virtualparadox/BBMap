@@ -4,16 +4,13 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 
 import kmer.AbstractKmerTable;
-import kmer.HashArray;
-import kmer.HashForest;
-import kmer.KmerTable;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -22,6 +19,7 @@ import stream.FastaReadInputStream;
 import stream.RTextOutputStream3;
 import stream.Read;
 
+import align2.IntList;
 import align2.ListNum;
 import align2.ReadStats;
 import align2.Shared;
@@ -31,6 +29,7 @@ import dna.AminoAcid;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
+import fileIO.ByteStreamWriter;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
 import fileIO.TextStreamWriter;
@@ -48,7 +47,6 @@ public class BBDukF {
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
 	/*--------------------------------------------------------------*/
-	
 	
 	/**
 	 * Code entrance from the command line.
@@ -136,8 +134,8 @@ public class BBDukF {
 		boolean addTrimmedToBad_=true;
 		boolean rcomp_=true;
 		boolean forbidNs_=false;
-		boolean useForest_=false, useTable_=false, useArray_=true;
-		int k_=28, kbig_=-1;
+		boolean useForest_=false, useTable_=false, useArray_=true, prealloc_=false;
+		int k_=27, kbig_=-1;
 		int mink_=-1;
 		int ways_=-1; //Currently disabled
 		int maxBadKmers_=0;
@@ -150,16 +148,18 @@ public class BBDukF {
 		boolean trimPairsEvenly_=false;
 		byte trimq_=6;
 		byte minAvgQuality_=0;
-		int minReadLength_=10;
+		int minReadLength_=10, maxReadLength_=-1;
 		float minLenFraction_=0f;
 		int maxNs_=-1;
 		boolean removePairsIfEitherBad_=true;
 		boolean ordered_=false;
-		
-		
-		
+		int minoverlap_=-1, mininsert_=-1;
+		int restrictLeft_=0, restrictRight_=0, speed_=0, qSkip_=1;
+		boolean printNonZeroOnly_=true;
+		boolean rename_=false, useRefNames_=false;
 		
 		scaffoldNames.add(""); //Necessary so that the first real scaffold gets an id of 1, not zero
+		scaffoldLengths.add(0);
 		
 		{
 			boolean b=false;
@@ -183,6 +183,8 @@ public class BBDukF {
 				//do nothing
 			}else if(Parser.parseHist(arg, a, b)){
 				//do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -200,8 +202,14 @@ public class BBDukF {
 				setOut=true;
 			}else if(a.equals("outb2") || a.equals("outm2") || a.equals("outbad2") || a.equals("outmatch2")){
 				outb2=b;
+			}else if(a.equals("outs") || a.equals("outsingle")){
+				outsingle=b;
 			}else if(a.equals("stats")){
 				outstats=b;
+			}else if(a.equals("refstats")){
+				outrefstats=b;
+			}else if(a.equals("rpkm") || a.equals("fpkm") || a.equals("cov") || a.equals("coverage")){
+				outrpkm=b;
 			}else if(a.equals("duk") || a.equals("outduk")){
 				outduk=b;
 			}else if(a.equals("rqc")){
@@ -226,12 +234,6 @@ public class BBDukF {
 				if(useArray_){useTable_=useForest_=false;}
 			}else if(a.equals("ways")){
 				ways_=Integer.parseInt(b);
-			}else if(a.equals("bf1")){
-				ByteFile.FORCE_MODE_BF1=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF2=!ByteFile.FORCE_MODE_BF1;
-			}else if(a.equals("bf2")){
-				ByteFile.FORCE_MODE_BF2=Tools.parseBoolean(b);
-				ByteFile.FORCE_MODE_BF1=!ByteFile.FORCE_MODE_BF2;
 			}else if(a.equals("ordered") || a.equals("ord")){
 				ordered_=Tools.parseBoolean(b);
 				System.err.println("Set ORDERED to "+ordered_);
@@ -241,10 +243,8 @@ public class BBDukF {
 					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
 					outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				}
-			}else if(a.equals("tuc") || a.equals("touppercase")){
-				Read.TO_UPPER_CASE=Tools.parseBoolean(b);
 			}else if(a.equals("k")){
-				assert(b!=null) : "\nThe k key needs an integer value greater than 0, such as k=28\n";
+				assert(b!=null) : "\nThe k key needs an integer value greater than 0, such as k=27\n";
 				k_=Integer.parseInt(b);
 				if(k_>31){
 					kbig_=k_;
@@ -252,7 +252,7 @@ public class BBDukF {
 				}else{
 					kbig_=-1;
 				}
-				assert(k_>0 && k_<32) : "k must be at least 1; default is 28.";
+				assert(k_>0 && k_<32) : "k must be at least 1; default is 27.";
 			}else if(a.equals("mink") || a.equals("kmin")){
 				mink_=Integer.parseInt(b);
 				assert(mink_<0 || (mink_>0 && mink_<32)) : "kmin must be between 1 and 31; default is 4, negative numbers disable it.";
@@ -266,12 +266,19 @@ public class BBDukF {
 			}else if(a.equals("edits") || a.equals("edist") || a.equals("editdistance")){
 				editDistance=Integer.parseInt(b);
 				assert(editDistance>=0 && editDistance<3) : "edit distance must be between 0 and 2; default is 0.";
-			}else if(a.equals("maxskip") || a.equals("mxs")){
+			}else if(a.equals("maxskip") || a.equals("maxrskip") || a.equals("mxs")){
 				maxSkip=Integer.parseInt(b);
-			}else if(a.equals("minskip") || a.equals("mns")){
+			}else if(a.equals("minskip") || a.equals("minrskip") || a.equals("mns")){
 				minSkip=Integer.parseInt(b);
+			}else if(a.equals("skip") || a.equals("refskip") || a.equals("rskip")){
+				minSkip=maxSkip=Integer.parseInt(b);
+			}else if(a.equals("qskip")){
+				qSkip_=Integer.parseInt(b);
+			}else if(a.equals("speed")){
+				speed_=Integer.parseInt(b);
+				assert(speed_>=0 && speed_<=16) : "Speed range is 0 to 15.  Value: "+speed_;
 			}else if(a.equals("skipreads")){
-				skipreads_=Long.parseLong(b);
+				skipreads_=Tools.parseKMG(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
 			}else if(a.equals("maxbadkmers") || a.equals("mbk")){
@@ -297,7 +304,7 @@ public class BBDukF {
 			}else if(a.equals("forbidns") || a.equals("forbidn") || a.equals("fn")){
 				forbidNs_=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("removeifeitherbad") || a.equals("rieb")){
 				removePairsIfEitherBad_=Tools.parseBoolean(b);
 			}else if(a.equals("fastawrap")){
@@ -320,6 +327,16 @@ public class BBDukF {
 				}else{
 					boolean x=Tools.parseBoolean(b);
 					assert(!x) : "\nInvalid setting for ktrim - values must be f (false), l (left), r (right), or n.";
+					ktrimRight_=ktrimLeft_=ktrimN_=x;
+				}
+			}else if(a.equals("kmask")){
+				if(Tools.parseBoolean(b)){b="N";}
+				if(b.length()==1 && !b.equalsIgnoreCase("f")){
+					ktrimLeft_=false;ktrimRight_=false;ktrimN_=true;
+					TRIM_SYMBOL_=(byte)b.charAt(0);
+				}else{
+					boolean x=Tools.parseBoolean(b);
+					assert(!x) : "\nInvalid setting for kmask - values must be f (false), t (true), or a single character for replacement.";
 					ktrimRight_=ktrimLeft_=ktrimN_=x;
 				}
 			}else if(a.equals("ktrimright")){
@@ -374,6 +391,8 @@ public class BBDukF {
 				addTrimmedToBad_=Tools.parseBoolean(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength")){
 				minReadLength_=Integer.parseInt(b);
+			}else if(a.equals("maxlen") || a.equals("maxlength")){
+				maxReadLength_=Integer.parseInt(b);
 			}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 				minLenFraction_=Float.parseFloat(b);
 			}else if(a.equals("fastawrap")){
@@ -403,6 +422,34 @@ public class BBDukF {
 				qout=x;
 			}else if(a.equals("qauto")){
 				FASTQ.DETECT_QUALITY=FASTQ.DETECT_QUALITY_OUT=true;
+			}else if(a.equals("minoverlap")){
+				minoverlap_=Integer.parseInt(b);
+			}else if(a.equals("mininsert")){
+				mininsert_=Integer.parseInt(b);
+			}else if(a.equals("prealloc") || a.equals("preallocate")){
+				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
+					prealloc_=Tools.parseBoolean(b);
+				}else{
+					preallocFraction=Tools.max(0, Double.parseDouble(b));
+					prealloc_=(preallocFraction>0);
+				}
+			}else if(a.equals("restrictleft")){
+				restrictLeft_=Integer.parseInt(b);
+			}else if(a.equals("restrictright")){
+				restrictRight_=Integer.parseInt(b);
+			}else if(a.equals("statscolumns") || a.equals("columns") || a.equals("cols")){
+				STATS_COLUMNS=Integer.parseInt(b);
+				assert(STATS_COLUMNS==3 || STATS_COLUMNS==5) : "statscolumns bust be either 3 or 5. Invalid value: "+STATS_COLUMNS;
+			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
+				printNonZeroOnly_=Tools.parseBoolean(b);
+			}else if(a.equals("rename")){
+				rename_=Tools.parseBoolean(b);
+			}else if(a.equals("refnames") || a.equals("userefnames")){
+				useRefNames_=Tools.parseBoolean(b);
+			}else if(a.equals("initialsize")){
+				initialSize=(int)Tools.parseKMG(b);
+			}else if(a.equals("dump")){
+				dump=b;
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
 			}else if(i==1 && out1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
@@ -413,6 +460,23 @@ public class BBDukF {
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		if(ref!=null){
+			for(String s : ref){refNames.add(s);}
+		}
+		if(literal!=null){refNames.add("literal");}
+		refScafCounts=new int[refNames.size()];
+		
+		if(minoverlap_>=0){
+			minOverlap0=Tools.min(minOverlap0, minoverlap_);
+			minOverlap=Tools.min(minOverlap, minoverlap_);
+		}
+		
+		if(mininsert_>=0){
+			minOverlap0=Tools.min(minOverlap0, mininsert_);
+			minOverlap=Tools.min(minOverlap, mininsert_);
+			BBMergeOverlapper.MIN_OVERLAP_INSERT=mininsert_;
 		}
 		
 		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
@@ -435,14 +499,24 @@ public class BBDukF {
 		trimPairsEvenly=trimPairsEvenly_;
 		minAvgQuality=minAvgQuality_;
 		minReadLength=minReadLength_;
+		maxReadLength=(maxReadLength_<0 ? Integer.MAX_VALUE : maxReadLength_);
 		minLenFraction=minLenFraction_;
 		removePairsIfEitherBad=removePairsIfEitherBad_;
 		maxNs=maxNs_;
 		ORDERED=ordered_;
 		forceTrimLeft=forceTrimLeft_;
 		forceTrimRight=forceTrimRight_;
+		restrictLeft=Tools.max(restrictLeft_, 0);
+		restrictRight=Tools.max(restrictRight_, 0);
+		printNonZeroOnly=printNonZeroOnly_;
+		rename=rename_;
+		useRefNames=useRefNames_;
+		speed=speed_;
+		qSkip=qSkip_;
+		noAccel=(speed<1 && qSkip<2);
 		
 		MAKE_QUALITY_HISTOGRAM=ReadStats.COLLECT_QUALITY_STATS;
+		MAKE_QUALITY_ACCURACY=ReadStats.COLLECT_QUALITY_ACCURACY;
 		MAKE_MATCH_HISTOGRAM=ReadStats.COLLECT_MATCH_STATS;
 		MAKE_BASE_HISTOGRAM=ReadStats.COLLECT_BASE_STATS;
 		MAKE_EHIST=ReadStats.COLLECT_ERROR_STATS;
@@ -451,14 +525,26 @@ public class BBDukF {
 		MAKE_GCHIST=ReadStats.COLLECT_GC_STATS;
 		MAKE_IDHIST=ReadStats.COLLECT_IDENTITY_STATS;
 		
-//		if(maxReads>0){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
-		
-//		if(ways_==-1){
-//			while(Shared.THREADS<WAYS){WAYS-=2;}
-//		}else{
-//			WAYS=ways_;
-//		}
-//		WAYS=Tools.max(WAYS, 1);
+		{
+			long usableMemory;
+			long tableMemory;
+
+			{
+				long memory=Runtime.getRuntime().maxMemory();
+				double xmsRatio=Shared.xmsRatio();
+				usableMemory=(long)Tools.max(((memory-96000000-(20*400000 /* for atomic arrays */))*(xmsRatio>0.97 ? 0.82 : 0.75)), memory*0.45);
+				tableMemory=(long)(usableMemory*.95);
+			}
+
+			if(initialSize<1){
+				final long memOverWays=tableMemory/(12*WAYS);
+				final double mem2=(prealloc_ ? preallocFraction : 1)*tableMemory;
+				initialSize=(prealloc_ || memOverWays<initialSizeDefault ? (int)Tools.min(2142000000, (long)(mem2/(12*WAYS))) : initialSizeDefault);
+				if(initialSize!=initialSizeDefault){
+					System.err.println("Initial size set to "+initialSize);
+				}
+			}
+		}
 		
 		if(ktrimLeft_ || ktrimRight_ || ktrimN_){
 			if(kbig_>k_){
@@ -468,6 +554,19 @@ public class BBDukF {
 				System.err.println("***********************************************************"); 
 				kbig_=k_;
 			}
+		}
+		
+		if((speed>0 || qSkip>1) && kbig_>k_){
+			System.err.println("***********************   WARNING   ***********************"); 
+			System.err.println("WARNING: When speed>0 or qskip>1, the maximum value of K is "+k_+".");
+			System.err.println("K has been reduced from "+kbig_+" to "+k_+".");
+			System.err.println("***********************************************************"); 
+			kbig_=k_;
+		}
+		
+		if((speed>0 && qSkip>1) || (qSkip>0 && maxSkip>1) || (speed>0 && maxSkip>1)){
+			System.err.println("WARNING: It is not recommended to use more than one of 'qskip', 'speed', and 'rskip/maxskip' together.");
+			System.err.println("qskip="+qSkip+", speed="+speed+", maxskip="+maxSkip);
 		}
 		
 		k=k_;
@@ -505,7 +604,7 @@ public class BBDukF {
 		
 		middleMask=maskMiddle ? ~(3L<<(2*(k/2))) : -1L;
 		
-		hitCounts=(outduk==null ? null : new AtomicLongArray(1001));
+		hitCounts=(outduk==null ? null : new long[HITCOUNT_LEN+1]);
 		
 		
 		/* Adjust I/O settings and filenames */
@@ -557,9 +656,15 @@ public class BBDukF {
 			outb1=a+1+b;
 			outb2=a+2+b;
 		}
+		
+		if((out2!=null || outb2!=null) && (in1!=null && in2==null)){
+			if(!FASTQ.FORCE_INTERLEAVED){System.err.println("Forcing interleaved input because paired output was specified for a single input file.");}
+			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
+		}
 
 		if(!setOut){
-//			out1="stdout.fq";
+			System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//			out1="stdout";
 //			outstream=System.err;
 //			out2=null;
 			out1=out2=null;
@@ -568,15 +673,21 @@ public class BBDukF {
 			outstream=System.err;
 			out2=null;
 		}
-		if(out1!=null && !Tools.canWrite(out1, overwrite)){throw new RuntimeException("Output file "+out1+" already exists, and overwrite="+overwrite);}
-
-		assert(!in1.equalsIgnoreCase(out1));
-		assert(!in1.equalsIgnoreCase(outb1));
-		assert(!in1.equalsIgnoreCase(in2));
-		assert(out1==null || !out1.equalsIgnoreCase(out2));
-		assert(out1==null || !out1.equalsIgnoreCase(outb1));
-		assert(outb1==null || !outb1.equalsIgnoreCase(outb2));
-		assert(THREADS>0);
+		
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outsingle, outstats, outrpkm, outduk, outrqc, outrefstats)){
+			throw new RuntimeException("\nCan't write to some output files; overwrite="+overwrite+"\n");
+		}
+		if(!Tools.testInputFiles(false, true, in1, in2)){
+			throw new RuntimeException("\nCan't read to some input files.\n");
+		}
+		if(!Tools.testInputFiles(true, true, ref)){
+			throw new RuntimeException("\nCan't read to some reference files.\n");
+		}
+		if(!Tools.testForDuplicateFiles(true, in1, in2, out1, out2, outb1, outb2, outsingle, outstats, outrpkm, outduk, outrqc, outrefstats)){
+			throw new RuntimeException("\nSome file names were specified multiple times.\n");
+		}
+		
+		assert(THREADS>0) : "THREADS must be greater than 0.";
 
 		assert(in1==null || in1.toLowerCase().startsWith("stdin") || in1.toLowerCase().startsWith("standardin") || new File(in1).exists()) : "Can't find "+in1;
 		assert(in2==null || in2.toLowerCase().startsWith("stdin") || in2.toLowerCase().startsWith("standardin") || new File(in2).exists()) : "Can't find "+in2;
@@ -600,17 +711,8 @@ public class BBDukF {
 		}
 		
 		//Initialize tables
-		for(int i=0; i<keySets.length; i++){
-			if(useForest){
-				keySets[i]=new HashForest(initialSize, true);
-			}else if(useTable){
-				keySets[i]=new KmerTable(initialSize, true);
-			}else if(useArray){
-				keySets[i]=new HashArray(initialSize, true);
-			}else{
-				throw new RuntimeException("Must use forest, table, or array data structure.");
-			}
-		}
+		final int tableType=(useForest ? AbstractKmerTable.FOREST1D : useTable ? AbstractKmerTable.TABLE : useArray ? AbstractKmerTable.ARRAY1D : 0);
+		keySets=AbstractKmerTable.preallocate(WAYS, tableType, initialSize, (!prealloc_ || preallocFraction<1));
 	}
 
 	
@@ -622,7 +724,9 @@ public class BBDukF {
 	public void process(){
 		
 		/* Check for output file collisions */
-		Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outstats, outduk, outrqc);
+		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2, outb1, outb2, outstats, outrpkm, outduk, outrqc, outrefstats)){
+			throw new RuntimeException("One or more output files were duplicate or could not be written to.  Check the names or set the 'overwrite=true' flag.");
+		}
 		
 		/* Start overall timer */
 		Timer t=new Timer();
@@ -681,21 +785,50 @@ public class BBDukF {
 		}
 		
 		/* Fill tables with reference kmers */
-		storedKmers=spawnLoadThreads();
+		{
+			boolean oldTI=FASTQ.TEST_INTERLEAVED; //TODO: This needs to be changed to a non-static field, or somehow 'read mode' and 'ref mode' need to be distinguished.
+			boolean oldFI=FASTQ.FORCE_INTERLEAVED;
+			FASTQ.TEST_INTERLEAVED=false;
+			FASTQ.FORCE_INTERLEAVED=false;
+			storedKmers=spawnLoadThreads();
+			FASTQ.TEST_INTERLEAVED=oldTI;
+			FASTQ.FORCE_INTERLEAVED=oldFI;
+			if(useRefNames){toRefNames();}
+			t.stop();
+		}
 		
-//		if(THREADS>=4){
-//			fillSet_MT();
-//		}else{
-//			fillSet_ST(); //Still in BBDukF_old
-//		}
+		{
+			long ram=freeMemory();
+			ALLOW_LOCAL_ARRAYS=(scaffoldNames!=null && Tools.max(THREADS, 1)*3*8*scaffoldNames.size()<ram*5);
+		}
+		
+		/* Dump kmers to text */
+		if(dump!=null){
+			ByteStreamWriter bsw=new ByteStreamWriter(dump, overwrite, false, true);
+			bsw.start();
+			for(AbstractKmerTable set : keySets){
+				set.dumpKmersAsBytes(bsw, k, 0);
+			}
+			bsw.poisonAndWait();
+		}
 		
 		/* Do kmer matching of input reads */
 		spawnProcessThreads(t);
 		
-		/* Write statistics to files */
-		writeStats(t);
+		/* Write legacy duk statistics (which requires tables) */
 		writeDuk(System.nanoTime()-startTime);
+		
+		/* Unload kmers to save memory */
+		if(RELEASE_TABLES){unloadKmers();}
+		
+		/* Write statistics to files */
+		writeStats();
+		writeRPKM();
+		writeRefStats();
 		writeRqc();
+		
+		/* Unload sequence data to save memory */
+		if(RELEASE_TABLES){unloadScaffolds();}
 		
 		outstream.println("\nInput:                  \t"+readsIn+" reads \t\t"+basesIn+" bases.");
 		
@@ -725,37 +858,165 @@ public class BBDukF {
 	}
 	
 	/**
-	 * Write statistics about how many reads matched each reference scaffold.
-	 * @param t Phase timer
+	 * Clear stored kmers.
 	 */
-	private void writeStats(Timer t){
+	public void unloadKmers(){
+		if(keySets!=null){
+			for(int i=0; i<keySets.length; i++){keySets[i]=null;}
+		}
+	}
+	
+	/**
+	 * Clear stored sequence data.
+	 */
+	public void unloadScaffolds(){
+		if(scaffoldNames!=null && !scaffoldNames.isEmpty()){
+			scaffoldNames.clear();
+			scaffoldNames.trimToSize();
+		}
+		scaffoldReadCounts=null;
+		scaffoldBaseCounts=null;
+		hitCounts=null;
+		scaffoldLengths=null;
+	}
+	
+	/**
+	 * Write statistics about how many reads matched each reference scaffold.
+	 */
+	private void writeStats(){
 		if(outstats==null){return;}
 		final TextStreamWriter tsw=new TextStreamWriter(outstats, overwrite, false, false);
 		tsw.start();
 		
-		long sum=0;
+		long rsum=0, bsum=0;
 		
 		/* Create StringNum list of scaffold names and hitcounts */
 		ArrayList<StringNum> list=new ArrayList<StringNum>();
 		for(int i=1; i<scaffoldNames.size(); i++){
-			final int num=scaffoldCounts.get(i);
-			if(num>0){
-				sum+=num;
+			final long num1=scaffoldReadCounts.get(i), num2=scaffoldBaseCounts.get(i);
+			if(num1>0 || !printNonZeroOnly){
+				rsum+=num1;
+				bsum+=num2;
 				final String s=scaffoldNames.get(i);
-				final StringNum sn=new StringNum(s, num);
+				final int len=scaffoldLengths.get(i);
+				final StringNum sn=new StringNum(s, len, num1, num2);
 				list.add(sn);
 			}
 		}
 		Collections.sort(list);
 		final double rmult=100.0/(readsIn>0 ? readsIn : 1);
+		final double bmult=100.0/(basesIn>0 ? basesIn : 1);
 		
 		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
-		tsw.print(String.format("#Total\t%d\n",readsIn));
-		tsw.print(String.format("#Matched\t%d\t%.5f%%\n",sum,rmult*sum));
-		for(int i=0; i<list.size(); i++){
-			StringNum sn=list.get(i);
-			double pct=sn.n*rmult;
-			tsw.print(sn.toString()+String.format("\t%.5f%%\n",pct));
+		
+		if(STATS_COLUMNS==3){
+			tsw.print(String.format("#Total\t%d\n",readsIn));
+			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum));
+			tsw.print("#Name\tReads\tReadsPct\n");
+			for(int i=0; i<list.size(); i++){
+				StringNum sn=list.get(i);
+				tsw.print(String.format("%s\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult)));
+			}
+		}else{
+			tsw.print(String.format("#Total\t%d\t%d\n",readsIn,basesIn));
+			tsw.print(String.format("#Matched\t%d\t%.5f%%\n",rsum,rmult*rsum,bsum,bsum*bmult));
+			tsw.print("#Name\tReads\tReadsPct\tBases\tBasesPct\n");
+			for(int i=0; i<list.size(); i++){
+				StringNum sn=list.get(i);
+				tsw.print(String.format("%s\t%d\t%.5f%%\t%d\t%.5f%%\n",sn.name,sn.reads,(sn.reads*rmult),sn.bases,(sn.bases*bmult)));
+			}
+		}
+		tsw.poisonAndWait();
+	}
+	
+	/**
+	 * Write RPKM statistics.
+	 */
+	private void writeRPKM(){
+		if(outrpkm==null){return;}
+		final TextStreamWriter tsw=new TextStreamWriter(outrpkm, overwrite, false, false);
+		tsw.start();
+
+		/* Count mapped reads */
+		long mapped=0;
+		for(int i=0; i<scaffoldReadCounts.length(); i++){
+			mapped+=scaffoldReadCounts.get(i);
+		}
+		
+		/* Print header */
+		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
+		tsw.print(String.format("#Reads\t%d\n",readsIn));
+		tsw.print(String.format("#Mapped\t%d\n",mapped));
+		tsw.print(String.format("#RefSequences\t%d\n",Tools.max(0, scaffoldNames.size()-1)));
+		tsw.print("#Name\tLength\tBases\tCoverage\tReads\tRPKM\n");
+		
+		final float mult=1000000000f/Tools.max(1, mapped);
+		
+		/* Print data */
+		for(int i=1; i<scaffoldNames.size(); i++){
+			final long reads=scaffoldReadCounts.get(i);
+			final long bases=scaffoldBaseCounts.get(i);
+			final String s=scaffoldNames.get(i);
+			final int len=scaffoldLengths.get(i);
+			final double invlen=1.0/Tools.max(1, len);
+			final double mult2=mult*invlen;
+			if(reads>0 || !printNonZeroOnly){
+				tsw.print(String.format("%s\t%d\t%d\t%.4f\t%d\t%.4f\n",s,len,bases,bases*invlen,reads,reads*mult2));
+			}
+		}
+		tsw.poisonAndWait();
+	}
+	
+	/**
+	 * Write statistics on a per-reference basis.
+	 */
+	private void writeRefStats(){
+		if(outrefstats==null){return;}
+		final TextStreamWriter tsw=new TextStreamWriter(outrefstats, overwrite, false, false);
+		tsw.start();
+		
+		/* Count mapped reads */
+		long mapped=0;
+		for(int i=0; i<scaffoldReadCounts.length(); i++){
+			mapped+=scaffoldReadCounts.get(i);
+		}
+		
+		final int numRefs=refNames.size();
+		long[] refReadCounts=new long[numRefs];
+		long[] refBaseCounts=new long[numRefs];
+		long[] refLengths=new long[numRefs];
+		
+		for(int r=0, s=1; r<numRefs; r++){
+			final int lim=s+refScafCounts[r];
+			while(s<lim){
+				refReadCounts[r]+=scaffoldReadCounts.get(s);
+				refBaseCounts[r]+=scaffoldBaseCounts.get(s);
+				refLengths[r]+=scaffoldLengths.get(s);
+				s++;
+			}
+		}
+		
+		/* Print header */
+		tsw.print("#File\t"+in1+(in2==null ? "" : "\t"+in2)+"\n");
+		tsw.print(String.format("#Reads\t%d\n",readsIn));
+		tsw.print(String.format("#Mapped\t%d\n",mapped));
+		tsw.print(String.format("#References\t%d\n",Tools.max(0, refNames.size())));
+		tsw.print("#Name\tLength\tScaffolds\tBases\tCoverage\tReads\tRPKM\n");
+		
+		final float mult=1000000000f/Tools.max(1, mapped);
+		
+		/* Print data */
+		for(int i=0; i<refNames.size(); i++){
+			final long reads=refReadCounts[i];
+			final long bases=refBaseCounts[i];
+			final long len=refLengths[i];
+			final int scafs=refScafCounts[i];
+			final String name=ReadWrite.stripToCore(refNames.get(i));
+			final double invlen=1.0/Tools.max(1, len);
+			final double mult2=mult*invlen;
+			if(reads>0 || !printNonZeroOnly){
+				tsw.print(String.format("%s\t%d\t%d\t%d\t%.4f\t%d\t%.4f\n",name,len,scafs,bases,bases*invlen,reads,reads*mult2));
+			}
 		}
 		tsw.poisonAndWait();
 	}
@@ -879,17 +1140,34 @@ public class BBDukF {
 		sb.append("## Histogram of kmer occurance for reads with at least one occurance ##\n");
 		sb.append("#NumOcc\tNumReads\tPercentage\n");
 		
-		long sum=0;
-		for(int i=0; i<hitCounts.length(); i++){sum+=hitCounts.get(i);}
+		long sum=Tools.sum(hitCounts);
 		double mult=100.0/(sum<1 ? 1 : sum);
-		for(int i=0; i<hitCounts.length(); i++){
-			long x=hitCounts.get(i);
+		for(int i=0; i<hitCounts.length; i++){
+			long x=hitCounts[i];
 			if(x>0){
 				sb.append(i).append('\t').append(x).append('\t').append(String.format("%.4f",(x*mult))).append('\n');
 			}
 		}
 		
 		return sb.toString();
+	}
+	
+	/**
+	 * Fills the scaffold names array with reference names.
+	 */
+	private void toRefNames(){
+		final int numRefs=refNames.size();
+		for(int r=0, s=1; r<numRefs; r++){
+			final int scafs=refScafCounts[r];
+			final int lim=s+scafs;
+			final String name=ReadWrite.stripToCore(refNames.get(r));
+//			System.err.println("r="+r+", s="+s+", scafs="+scafs+", lim="+lim+", name="+name);
+			while(s<lim){
+//				System.err.println(r+", "+s+". Setting "+scaffoldNames.get(s)+" -> "+name);
+				scaffoldNames.set(s, name);
+				s++;
+			}
+		}
 	}
 	
 	
@@ -916,6 +1194,7 @@ public class BBDukF {
 		}
 		
 		/* For each reference file... */
+		int refNum=0;
 		if(ref!=null){
 			for(String refname : ref){
 
@@ -926,17 +1205,24 @@ public class BBDukF {
 				cristhread.start();
 				ListNum<Read> ln=cris.nextList();
 				ArrayList<Read> reads=(ln!=null ? ln.list : null);
-
+				
 				/* Iterate through read lists from the input stream */
 				while(reads!=null && reads.size()>0){
 					{
 						/* Assign a unique ID number to each scaffold */
 						ArrayList<Read> reads2=new ArrayList<Read>(reads);
-						for(Read r : reads2){
+						for(Read r1 : reads2){
+							final Read r2=r1.mate;
 							final Integer id=scaffoldNames.size();
-							scaffoldNames.add(r.id==null ? id.toString() : r.id);
-							r.obj=id;
-							if(r.mate!=null){r.mate.obj=id;}
+							refScafCounts[refNum]++;
+							scaffoldNames.add(r1.id==null ? id.toString() : r1.id);
+							int len=r1.length();
+							r1.obj=id;
+							if(r2!=null){
+								r2.obj=id;
+								len+=r2.length();
+							}
+							scaffoldLengths.add(len);
 						}
 
 						/* Send a pointer to the read list to each LoadThread */
@@ -962,6 +1248,7 @@ public class BBDukF {
 				/* Cleanup */
 				cris.returnList(ln, ln.list.isEmpty());
 				errorState|=ReadWrite.closeStream(cris);
+				refNum++;
 			}
 		}
 
@@ -973,8 +1260,10 @@ public class BBDukF {
 			/* Assign a unique ID number to each literal sequence */
 			for(int i=0; i<literal.length; i++){
 				final Integer id=scaffoldNames.size();
-				Read r=new Read(literal[i].getBytes(), null, id);
+				final Read r=new Read(literal[i].getBytes(), null, id);
+				refScafCounts[refNum]++;
 				scaffoldNames.add(id.toString());
+				scaffoldLengths.add(r.length());
 				r.obj=id;
 				list.add(r);
 			}
@@ -1018,17 +1307,19 @@ public class BBDukF {
 					e.printStackTrace();
 				}
 			}
-			added+=lt.added;
+			added+=lt.addedT;
 			refKmers+=lt.refKmersT;
 			refBases+=lt.refBasesT;
 			refReads+=lt.refReadsT;
+			modsum+=lt.modsumT;
 		}
 		//Correct statistics for number of threads, since each thread processes all reference data
 		refKmers/=WAYS;
 		refBases/=WAYS;
 		refReads/=WAYS;
 		
-		scaffoldCounts=new AtomicIntegerArray(scaffoldNames.size());
+		scaffoldReadCounts=new AtomicLongArray(scaffoldNames.size());
+		scaffoldBaseCounts=new AtomicLongArray(scaffoldNames.size());
 
 		t.stop();
 		if(DISPLAY_PROGRESS){
@@ -1041,7 +1332,7 @@ public class BBDukF {
 			TextStreamWriter tsw=new TextStreamWriter("stdout", false, false, false, FileFormat.TEXT);
 			tsw.start();
 			for(AbstractKmerTable table : keySets){
-				table.dumpKmersAsText(tsw, k);
+				table.dumpKmersAsText(tsw, k, 1);
 			}
 			tsw.poisonAndWait();
 		}
@@ -1054,6 +1345,7 @@ public class BBDukF {
 	 * @param t
 	 */
 	private void spawnProcessThreads(Timer t){
+		t.start();
 		
 		/* Create read input stream */
 		final ConcurrentReadStreamInterface cris;
@@ -1068,24 +1360,30 @@ public class BBDukF {
 		outstream.println("Input is being processed as "+(paired ? "paired" : "unpaired"));
 		
 		/* Create read output streams */
-		RTextOutputStream3 ros=null, rosb=null;
+		final RTextOutputStream3 ros, rosb, ross;
 		if(out1!=null){
 			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
 			FileFormat ff1=FileFormat.testOutput(out1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			FileFormat ff2=FileFormat.testOutput(out2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			ros=new RTextOutputStream3(ff1, ff2, null, null, buff, null, true);
 			ros.start();
-		}
+		}else{ros=null;}
 		if(outb1!=null){
 			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
 			FileFormat ff1=FileFormat.testOutput(outb1, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			FileFormat ff2=FileFormat.testOutput(outb2, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
 			rosb=new RTextOutputStream3(ff1, ff2, null, null, buff, null, true);
 			rosb.start();
-		}
-		if(ros!=null || rosb!=null){
+		}else{rosb=null;}
+		if(outsingle!=null){
+			final int buff=(!ORDERED ? 12 : Tools.max(32, 2*Shared.THREADS));
+			FileFormat ff=FileFormat.testOutput(outsingle, FileFormat.FASTQ, null, true, overwrite, append, ORDERED);
+			ross=new RTextOutputStream3(ff, null, null, null, buff, null, true);
+			ross.start();
+		}else{ross=null;}
+		if(ros!=null || rosb!=null || ross!=null){
 			t.stop();
-			outstream.println("Started output stream:\t"+t);
+			outstream.println("Started output streams:\t"+t);
 			t.start();
 		}
 		
@@ -1098,13 +1396,10 @@ public class BBDukF {
 			
 			while(skipped<skipreads && reads!=null && reads.size()>0){
 				skipped+=reads.size();
-				if(rosb!=null){
-					rosb.add(new ArrayList<Read>(1), ln.id);
-				}
 				
-				if(ros!=null){
-					ros.add(new ArrayList<Read>(1), ln.id);
-				}
+				if(rosb!=null){rosb.add(new ArrayList<Read>(1), ln.id);}
+				if(ros!=null){ros.add(new ArrayList<Read>(1), ln.id);}
+				if(ross!=null){ross.add(new ArrayList<Read>(1), ln.id);}
 				
 				cris.returnList(ln, ln.list.isEmpty());
 				ln=cris.nextList();
@@ -1112,7 +1407,7 @@ public class BBDukF {
 			}
 			cris.returnList(ln, ln.list.isEmpty());
 			if(reads==null || reads.isEmpty()){
-				ReadWrite.closeStreams(cris, ros, rosb);
+				ReadWrite.closeStreams(cris, ros, rosb, ross);
 				System.err.println("Skipped all of the reads.");
 				System.exit(0);
 			}
@@ -1120,7 +1415,7 @@ public class BBDukF {
 		
 		/* Create ProcessThreads */
 		ArrayList<ProcessThread> alpt=new ArrayList<ProcessThread>(THREADS);
-		for(int i=0; i<THREADS; i++){alpt.add(new ProcessThread(cris, ros, rosb));}
+		for(int i=0; i<THREADS; i++){alpt.add(new ProcessThread(cris, ros, rosb, ross, ALLOW_LOCAL_ARRAYS));}
 		for(ProcessThread pt : alpt){pt.start();}
 		
 		/* Wait for threads to die, and gather statistics */
@@ -1147,11 +1442,29 @@ public class BBDukF {
 			basesTrimmedByOverlap+=pt.basesTrimmedByOverlapT;
 			readsQFiltered+=pt.readsQFilteredT;
 			basesQFiltered+=pt.basesQFilteredT;
+			
+			if(hitCounts!=null){
+				for(int i=0; i<hitCounts.length; i++){hitCounts[i]+=pt.hitCountsT[i];}
+				pt.hitCountsT=null;
+			}
+			if(pt.scaffoldReadCountsT!=null){
+				for(int i=0; i<pt.scaffoldReadCountsT.length; i++){scaffoldReadCounts.addAndGet(i, pt.scaffoldReadCountsT[i]);}
+				pt.scaffoldReadCountsT=null;
+			}
+			if(pt.scaffoldBaseCountsT!=null){
+				for(int i=0; i<pt.scaffoldBaseCountsT.length; i++){scaffoldBaseCounts.addAndGet(i, pt.scaffoldBaseCountsT[i]);}
+				pt.scaffoldBaseCountsT=null;
+			}
 		}
 		
 		/* Shut down I/O streams; capture error status */
-		errorState|=ReadWrite.closeStreams(cris, ros, rosb);
+		errorState|=ReadWrite.closeStreams(cris, ros, rosb, ross);
 		errorState|=ReadStats.writeAll(paired);
+		
+		t.stop();
+		if(showSpeed){
+			outstream.println("Processing time:   \t\t"+t);
+		}
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -1197,9 +1510,9 @@ public class BBDukF {
 					final int rblen=(r==null ? 0 : r.length());
 					final int rblen2=(r2==null ? 0 : r2.length());
 					
-					added+=addToMap(r, rblen>10000000 ? k : rblen>1000000 ? 11 : rblen>100000 ? 2 : 0);
+					addedT+=addToMap(r, rblen>20000000 ? k : rblen>5000000 ? 11 : rblen>500000 ? 2 : 0);
 					if(r.mate!=null){
-						added+=addToMap(r.mate, rblen2>10000000 ? k : rblen2>1000000 ? 11 : rblen2>100000 ? 2 : 0);
+						addedT+=addToMap(r.mate, rblen2>20000000 ? k : rblen2>5000000 ? 11 : rblen2>500000 ? 2 : 0);
 					}
 				}
 				reads=fetch();
@@ -1226,15 +1539,15 @@ public class BBDukF {
 			long rkmer=0;
 			long added=0;
 			int len=0;
-
+			
 			if(bases!=null){
 				refReadsT++;
 				refBasesT+=bases.length;
 			}
-			if(bases==null || bases.length<k){return -1;}
+			if(bases==null || bases.length<k){return 0;}
 			
 			final int id=(Integer)r.obj;
-
+			
 			if(skip>1){ //Process while skipping some kmers
 				for(int i=0; i<bases.length; i++){
 					byte b=bases[i];
@@ -1360,6 +1673,7 @@ public class BBDukF {
 			final long added;
 			if(hammingDistance==0){
 				final long key=toValue(kmer, rkmer, kmask0);
+				if(speed>0 && ((key/WAYS)&15)<speed){return 0;}
 				if(key%WAYS!=tnum){return 0;}
 				if(verbose){System.err.println("addToMap_B: "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+" = "+key);}
 				added=map.setIfNotPresent(key, id);
@@ -1444,13 +1758,15 @@ public class BBDukF {
 		/*--------------------------------------------------------------*/
 		
 		/** Number of kmers stored by this thread */
-		public long added=0;
+		public long addedT=0;
 		/** Number of items encountered by this thread */
 		public long refKmersT=0, refReadsT=0, refBasesT=0;
 		/** Thread number; used to determine which kmers to store */
 		public final int tnum;
 		/** Buffer of input read lists */
 		public final ArrayBlockingQueue<ArrayList<Read>> queue=new ArrayBlockingQueue<ArrayList<Read>>(32);
+		/** Used to trick compiler */
+		public long modsumT=0; //123
 		
 		/** Destination for storing kmers */
 		private final AbstractKmerTable map;
@@ -1470,15 +1786,34 @@ public class BBDukF {
 		 * @param ros_ Unmatched read output stream (optional)
 		 * @param rosb_ Matched read output stream (optional)
 		 */
-		public ProcessThread(ConcurrentReadStreamInterface cris_, RTextOutputStream3 ros_, RTextOutputStream3 rosb_){
+		public ProcessThread(ConcurrentReadStreamInterface cris_, RTextOutputStream3 ros_, RTextOutputStream3 rosb_, RTextOutputStream3 ross_, boolean localArrays){
 			cris=cris_;
 			ros=ros_;
 			rosb=rosb_;
+			ross=ross_;
 			
 			readstats=(MAKE_QUALITY_HISTOGRAM || MAKE_MATCH_HISTOGRAM || MAKE_BASE_HISTOGRAM || MAKE_EHIST || MAKE_INDELHIST || MAKE_LHIST || MAKE_GCHIST || MAKE_IDHIST) ? 
 					new ReadStats() : null;
-			countVector=findBestMatch ? new int[scaffoldNames.size()+1] : null;
+			
+			if(findBestMatch){
+				countVector=new IntList(1000);
+				idList=new IntList();
+				countList=new IntList();
+			}else{
+				countVector=idList=countList=null;
+			}
+			
 			overlapVector=(trimByOverlap ? new int[5] : null);
+			
+			hitCountsT=(hitCounts==null ? null : new long[hitCounts.length]);
+			
+			final int alen=(scaffoldNames==null ? 0 : scaffoldNames.size());
+			if(localArrays && alen>0 && alen<10000){
+				scaffoldReadCountsT=new long[alen];
+				scaffoldBaseCountsT=new long[alen];
+			}else{
+				scaffoldReadCountsT=scaffoldBaseCountsT=null;
+			}
 		}
 		
 		@Override
@@ -1486,6 +1821,7 @@ public class BBDukF {
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			ArrayList<Read> bad=(rosb==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+			ArrayList<Read> single=new ArrayList<Read>(Shared.READ_BUFFER_LENGTH);
 			
 			//While there are more reads lists...
 			while(reads!=null && reads.size()>0){
@@ -1501,6 +1837,7 @@ public class BBDukF {
 						if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r1);}
 						if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r1);}
 						if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r1);}
+						if(MAKE_QUALITY_ACCURACY){readstats.addToQualityAccuracy(r1);}
 
 						if(MAKE_EHIST){readstats.addToErrorHistogram(r1);}
 						if(MAKE_INDELHIST){readstats.addToIndelHistogram(r1);}
@@ -1573,19 +1910,37 @@ public class BBDukF {
 							int rlen1=0, rlen2=0;
 							int xsum=0;
 							int rktsum=0;
-							if(r1!=null){
-								int x=ktrim(r1, keySets);
-								xsum+=x;
-								rktsum+=(x>0 ? 1 : 0);
-								rlen1=r1.length();
-								if(rlen1<minlen1){r1.setDiscarded(true);}
-							}
-							if(r2!=null){
-								int x=ktrim(r2, keySets);
-								xsum+=x;
-								rktsum+=(x>0 ? 1 : 0);
-								rlen2=r2.length();
-								if(rlen2<minlen2){r2.setDiscarded(true);}
+							
+							if(ktrimN){
+								if(r1!=null){
+									int x=kmask(r1, keySets);
+									xsum+=x;
+									rktsum+=(x>0 ? 1 : 0);
+									rlen1=r1.length();
+									if(rlen1<minlen1){r1.setDiscarded(true);}
+								}
+								if(r2!=null){
+									int x=kmask(r2, keySets);
+									xsum+=x;
+									rktsum+=(x>0 ? 1 : 0);
+									rlen2=r2.length();
+									if(rlen2<minlen2){r2.setDiscarded(true);}
+								}
+							}else{
+								if(r1!=null){
+									int x=ktrim(r1, keySets);
+									xsum+=x;
+									rktsum+=(x>0 ? 1 : 0);
+									rlen1=r1.length();
+									if(rlen1<minlen1){r1.setDiscarded(true);}
+								}
+								if(r2!=null){
+									int x=ktrim(r2, keySets);
+									xsum+=x;
+									rktsum+=(x>0 ? 1 : 0);
+									rlen2=r2.length();
+									if(rlen2<minlen2){r2.setDiscarded(true);}
+								}
 							}
 							
 							if((removePairsIfEitherBad && (r1.discarded() || (r2!=null && r2.discarded()))) || 
@@ -1621,9 +1976,9 @@ public class BBDukF {
 								if(r2!=null && b>maxBadKmers){r2.setDiscarded(true);}
 								
 							}else{
-								final int a=findBestMatch(r1, keySets, countVector);
-								final int b=findBestMatch(r2, keySets, countVector);
-
+								final int a=findBestMatch(r1, keySets);
+								final int b=findBestMatch(r2, keySets);
+								
 								if(r1!=null && a>0){r1.setDiscarded(true);}
 								if(r2!=null && b>0){r2.setDiscarded(true);}
 							}
@@ -1685,7 +2040,7 @@ public class BBDukF {
 								readsQTrimmedT+=(x>0 ? 1 : 0);
 							}
 							rlen1=r1.length();
-							if(rlen1<minlen1){r1.setDiscarded(true);}
+							if(rlen1<minlen1 || rlen1>maxReadLength){r1.setDiscarded(true);}
 						}
 						if(r2!=null){
 							if(qtrimLeft || qtrimRight){
@@ -1694,7 +2049,7 @@ public class BBDukF {
 								readsQTrimmedT+=(x>0 ? 1 : 0);
 							}
 							rlen2=r2.length();
-							if(rlen2<minlen2){r2.setDiscarded(true);}
+							if(rlen2<minlen2 || rlen2>maxReadLength){r2.setDiscarded(true);}
 						}
 						
 						//Discard reads if too short
@@ -1703,6 +2058,18 @@ public class BBDukF {
 							basesQTrimmedT+=(r1.length()+(r2==null ? 0 : r2.length()));
 							remove=true;
 							if(addTrimmedToBad && bad!=null){bad.add(r1);}
+						}
+					}
+					
+					if(ross!=null){
+						if(!r1.discarded() && (r2==null || r2.discarded())){
+							Read clone=r1.clone();
+							clone.mate=null;
+							single.add(clone);
+						}else if(r2!=null && r1.discarded() && !r2.discarded()){
+							Read clone=r2.clone();
+							clone.mate=null;
+							single.add(clone);
 						}
 					}
 					
@@ -1738,6 +2105,11 @@ public class BBDukF {
 					ros.add((removed>0 ? Tools.condenseNew(reads) : reads), ln.id); //Creates a new list if old one became empty, to prevent shutting down the cris.
 				}
 				
+				if(ross!=null){
+					ross.add(single, ln.id);
+					single.clear();
+				}
+				
 				//Fetch a new read list
 				cris.returnList(ln, ln.list.isEmpty());
 				ln=cris.nextList();
@@ -1747,15 +2119,646 @@ public class BBDukF {
 		}
 		
 		/*--------------------------------------------------------------*/
+		/*----------------        Helper Methods        ----------------*/
+		/*--------------------------------------------------------------*/
+		
+		/**
+		 * Counts the number of kmer hits for a read.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return Number of hits
+		 */
+		private final int countSetKmers(final Read r, final AbstractKmerTable sets[]){
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			final byte[] bases=r.bases;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+			
+			if(bases==null || bases.length<k){return -1;}
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long key=toValue(kmer, rkmer, kmask);
+					if(noAccel || ((key/WAYS)&15)>=speed && (qSkip<1 || i%qSkip==0)){
+						if(verbose){System.err.println("Testing key "+key);}
+						AbstractKmerTable set=sets[(int)(key%WAYS)];
+						final int id=set.getValue(key);
+						if(id>0){
+							if(verbose){System.err.println("Found = "+(found+1)+"/"+maxBadKmers);}
+							if(found==maxBadKmers){
+								if(scaffoldReadCountsT!=null){
+									scaffoldReadCountsT[id]++;
+									scaffoldBaseCountsT[id]+=bases.length;
+								}else{
+									scaffoldReadCounts.addAndGet(id, 1);
+									scaffoldBaseCounts.addAndGet(id, bases.length);
+								}
+								if(hitCounts==null){
+									return (found=found+1);
+								}//Early exit, but prevents generation of histogram that goes over maxBadKmers+1.
+							}
+							found++;
+						}
+					}
+				}
+			}
+			
+			if(hitCountsT!=null){hitCountsT[Tools.min(found, HITCOUNT_LEN)]++;}
+			return found;
+		}
+		
+		/**
+		 * Returns the id of the sequence with the most kmer matches to this read, or -1 if none are over maxBadKmers.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return id of best match
+		 */
+		private final int findBestMatch(final Read r, final AbstractKmerTable sets[]){
+			countVector.size=0;
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			final byte[] bases=r.bases;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int len=0;
+			
+			if(bases==null || bases.length<k){return -1;}
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long key=toValue(kmer, rkmer, kmask);
+					if(noAccel || ((key/WAYS)&15)>=speed && (qSkip<1 || i%qSkip==0)){
+						if(verbose){System.err.println("Testing key "+key);}
+						AbstractKmerTable set=sets[(int)(key%WAYS)];
+						final int id=set.getValue(key);
+						if(id>0){
+							countVector.add(id);
+							if(verbose){System.err.println("Found = "+(countVector.size)+"/"+maxBadKmers);}
+						}
+					}
+				}
+			}
+			
+			final int id, max, found=countVector.size;
+			if(found>0){
+				max=condenseLoose(countVector, idList, countList);
+				int id0=-1;
+				for(int i=0; i<countList.size; i++){
+					if(countList.get(i)==max){
+						id0=idList.get(i); break;
+					}
+				}
+				id=id0;
+				if(rename){rename(r, idList, countList);}
+			}else{
+				max=0;
+				id=-1;
+			}
+			
+			if(max>maxBadKmers){
+				if(scaffoldReadCountsT!=null){
+					scaffoldReadCountsT[id]++;
+					scaffoldBaseCountsT[id]+=bases.length;
+				}else{
+					scaffoldReadCounts.addAndGet(id, 1);
+					scaffoldBaseCounts.addAndGet(id, bases.length);
+				}
+			}
+			
+			if(hitCountsT!=null){hitCountsT[Tools.min(found, HITCOUNT_LEN)]++;}
+			return id;
+		}
+		
+		/** Estimates kmer hit counts for kmers longer than k using consecutive matches
+		 * @param r
+		 * @param sets
+		 * @return Number of sets of consecutive hits of exactly length kbig
+		 */
+		private final int countSetKmersBig(final Read r, final AbstractKmerTable sets[]){
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			assert(kbig>k);
+			final int sub=kbig-k-1;
+			assert(sub>=0) : kbig+", "+sub;
+			final byte[] bases=r.bases;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+
+			int start=-1;
+			int stop=-1;
+			int id=-1;
+			
+			if(bases==null || bases.length<k){return -1;}
+
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=0; i<bases.length; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning7 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long key=toValue(kmer, rkmer, kmask);
+					AbstractKmerTable set=sets[(int)(key%WAYS)];
+					id=set.getValue(key);
+					if(id>0){
+						if(start==-1){start=i;}
+						stop=i;
+					}else{
+						if(start>-1){
+							int dif=stop-start-sub;
+							stop=start=-1;
+							if(dif>0){
+								int old=found;
+								found+=dif;
+								if(found>maxBadKmers && old<=maxBadKmers){
+									if(scaffoldReadCountsT!=null){
+										scaffoldReadCountsT[id]++;
+										scaffoldBaseCountsT[id]+=bases.length;
+									}else{
+										scaffoldReadCounts.addAndGet(id, 1);
+										scaffoldBaseCounts.addAndGet(id, bases.length);
+									}
+									if(hitCounts==null){
+										return found;
+									}//Early exit, but prevents generation of histogram that goes over maxBadKmers+1.
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			// This catches the case where valid kmers extend to the end of the read
+			if(start>-1){
+				int dif=stop-start-sub;
+				stop=start=-1;
+				if(dif>0){
+					int old=found;
+					found+=dif;
+					if(found>maxBadKmers && old<=maxBadKmers){
+						if(scaffoldReadCountsT!=null){
+							scaffoldReadCountsT[id]++;
+							scaffoldBaseCountsT[id]+=bases.length;
+						}else{
+							scaffoldReadCounts.addAndGet(id, 1);
+							scaffoldBaseCounts.addAndGet(id, bases.length);
+						}
+					}
+				}
+			}
+			
+			if(hitCountsT!=null){hitCountsT[Tools.min(found, HITCOUNT_LEN)]++;}
+			return found;
+		}
+		
+		/**
+		 * Trim a read to remove matching kmers and everything to their left or right.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return Number of bases trimmed
+		 */
+		private final int ktrim(final Read r, final AbstractKmerTable[] sets){
+			assert(ktrimLeft || ktrimRight);
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			if(verbose){System.err.println("KTrimming read "+r.id);}
+			final byte[] bases=r.bases, quals=r.quality;
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+			int id0=-1; //ID of first kmer found.
+			
+			int minLoc=999999999, minLocExclusive=999999999;
+			int maxLoc=-1, maxLocExclusive=-1;
+			final int initialLength=r.bases.length;
+			
+			if(bases==null || bases.length<k){return 0;}
+			
+			final int start=(restrictRight<1 ? 0 : Tools.max(0, bases.length-restrictRight));
+			final int stop=(restrictLeft<1 ? bases.length : Tools.min(bases.length, restrictLeft));
+			
+			//Scan for normal kmers
+			for(int i=start; i<stop; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long value=toValue(kmer, rkmer, kmask);
+					AbstractKmerTable set=sets[(int)(value%WAYS)];
+					if(verbose){System.err.println("set.contains("+value+")="+set.contains(value));}
+					int id=set.getValue(value);
+					if(id>0){
+						if(id0<0){id0=id;}
+						minLoc=Tools.min(minLoc, i-k+1);
+						assert(minLoc>=0);
+						maxLoc=i;
+						found++;
+					}
+				}
+			}
+			
+			if(minLoc!=minLocExclusive){minLocExclusive=minLoc+k;}
+			if(maxLoc!=maxLocExclusive){maxLocExclusive=maxLoc-k;}
+			
+			//If nothing was found, scan for short kmers.  Only used for trimming.
+			if(useShortKmers && found==0){
+				assert(!maskMiddle && middleMask==-1) : maskMiddle+", "+middleMask+", k="+", mink="+mink;
+				
+				//Look for short kmers on left side
+				if(ktrimLeft){
+					kmer=0;
+					rkmer=0;
+					len=0;
+					final int lim=Tools.min(k, stop);
+					for(int i=start; i<lim; i++){
+						byte b=bases[i];
+						long x=Dedupe.baseToNumber[b];
+						long x2=Dedupe.baseToComplementNumber[b];
+						kmer=((kmer<<2)|x)&mask;
+						rkmer=rkmer|(x2<<(2*len));
+						len++;
+						if(verbose){System.err.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+						if(len>=mink){
+							
+							if(verbose){
+								System.err.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
+								System.err.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
+							}
+							final long value=toValue(kmer, rkmer, kMasks[len]);
+							AbstractKmerTable set=sets[(int)(value%WAYS)];
+							int id=set.getValue(value);
+							if(id>0){
+								if(id0<0){id0=id;}
+								if(verbose){System.err.println("Found "+value);}
+								minLoc=0;
+								minLocExclusive=Tools.min(minLocExclusive, i+1);
+								maxLoc=Tools.max(maxLoc, i);
+								maxLocExclusive=Tools.max(maxLocExclusive, 0);
+								found++;
+							}
+						}
+					}
+				}
+
+				//Look for short kmers on right side
+				if(ktrimRight){
+					kmer=0;
+					rkmer=0;
+					len=0;
+					final int lim=Tools.max(-1, stop-k);
+					for(int i=stop-1; i>lim; i--){
+						byte b=bases[i];
+						long x=Dedupe.baseToNumber[b];
+						long x2=Dedupe.baseToComplementNumber[b];
+						kmer=kmer|(x<<(2*len));
+						rkmer=((rkmer<<2)|x2)&mask;
+						len++;
+						if(verbose){System.err.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+						if(len>=mink){
+							
+							final long value=toValue(kmer, rkmer, kMasks[len]);
+							if(verbose){System.err.println("Looking for right kmer "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+"; value="+value+"; kmask="+kMasks[len]);}
+							AbstractKmerTable set=sets[(int)(value%WAYS)];
+							int id=set.getValue(value);
+							if(id>0){
+								if(id0<0){id0=id;}
+								if(verbose){System.err.println("Found "+value);}
+								minLoc=i;
+								minLocExclusive=Tools.min(minLocExclusive, bases.length);
+								maxLoc=bases.length-1;
+								maxLocExclusive=Tools.max(maxLocExclusive, i-1);
+								found++;
+							}
+						}
+					}
+				}
+			}
+			
+			
+			if(verbose){System.err.println("found="+found+", minLoc="+minLoc+", maxLoc="+maxLoc+", minLocExclusive="+minLocExclusive+", maxLocExclusive="+maxLocExclusive);}
+			
+			if(found==0){return 0;}
+			assert(found>0) : "Overflow in 'found' variable.";
+			
+			{//Increment counter for the scaffold whose kmer was first detected
+				if(scaffoldReadCountsT!=null){
+					scaffoldReadCountsT[id0]++;
+					scaffoldBaseCountsT[id0]+=bases.length;
+				}else{
+					scaffoldReadCounts.addAndGet(id0, 1);
+					scaffoldBaseCounts.addAndGet(id0, bases.length);
+				}
+			}
+			
+			if(trimPad!=0){
+				maxLoc=Tools.mid(0, maxLoc+trimPad, bases.length);
+				minLoc=Tools.mid(0, minLoc-trimPad, bases.length);
+				maxLocExclusive=Tools.mid(0, maxLocExclusive+trimPad, bases.length);
+				minLocExclusive=Tools.mid(0, minLocExclusive-trimPad, bases.length);
+			}
+			
+			if(ktrimLeft){ //Trim from the read start to the rightmost kmer base
+				if(verbose){System.err.println("Left trimming to "+(ktrimExclusive ? maxLocExclusive+1 : maxLoc+1)+", "+0);}
+				int x=TrimRead.trimToPosition(r, ktrimExclusive ? maxLocExclusive+1 : maxLoc+1, bases.length-1, 1);
+				if(verbose){System.err.println("Trimmed "+x+" bases: "+new String(r.bases));}
+				return x;
+			}else{ //Trim from the leftmost kmer base to the read stop 
+				assert(ktrimRight);
+				if(verbose){System.err.println("Right trimming to "+0+", "+(ktrimExclusive ? minLocExclusive-1 : minLoc-1));}
+				int x=TrimRead.trimToPosition(r, 0, ktrimExclusive ? minLocExclusive-1 : minLoc-1, 1);
+				if(verbose){System.err.println("Trimmed "+x+" bases: "+new String(r.bases));}
+				return x;
+			}
+		}
+		
+		
+		/**
+		 * Mask a read to cover matching kmers.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return Number of bases trimmed
+		 */
+		private final int kmask(final Read r, final AbstractKmerTable[] sets){
+			assert(ktrimN);
+			if(r==null || r.bases==null || storedKmers<1){return 0;}
+			if(verbose){System.err.println("KMasking read "+r.id);}
+			final byte[] bases=r.bases, quals=r.quality;
+			if(bases==null || bases.length<k){return 0;}
+			final int minlen=k-1;
+			final int minlen2=(maskMiddle ? k/2 : k);
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			final long kmask=kMasks[k];
+			long kmer=0;
+			long rkmer=0;
+			int found=0;
+			int len=0;
+			int id0=-1; //ID of first kmer found.
+			
+			BitSet bs=new BitSet(bases.length+trimPad+1); 
+			
+			final int minus=k-1-trimPad;
+			final int plus=trimPad+1;
+			
+			final int start=(restrictRight<1 ? 0 : Tools.max(0, bases.length-restrictRight));
+			final int stop=(restrictLeft<1 ? bases.length : Tools.min(bases.length, restrictLeft));
+			
+			//Scan for normal kmers
+			for(int i=start; i<stop; i++){
+				byte b=bases[i];
+				long x=Dedupe.baseToNumber[b];
+				long x2=Dedupe.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(b=='N' && forbidNs){len=0;}else{len++;}
+				if(verbose){System.err.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=minlen2 && i>=minlen){
+					final long value=toValue(kmer, rkmer, kmask);
+					AbstractKmerTable set=sets[(int)(value%WAYS)];
+					if(verbose){System.err.println("set.contains("+value+")="+set.contains(value));}
+					int id=set.getValue(value);
+					if(id>0){
+						if(id0<0){id0=id;}
+						if(verbose){
+							System.err.println("a: Found "+value);
+							System.err.println("Setting "+Tools.max(0, i-minus)+", "+(i+plus));
+							System.err.println("i="+i+", minus="+minus+", plus="+plus+", trimpad="+trimPad+", k="+k);
+						}
+						bs.set(Tools.max(0, i-minus), i+plus);
+						found++;
+					}
+				}
+			}
+			
+			//If nothing was found, scan for short kmers.
+			if(useShortKmers){
+				assert(!maskMiddle && middleMask==-1) : maskMiddle+", "+middleMask+", k="+", mink="+mink;
+				
+				//Look for short kmers on left side
+				{
+					kmer=0;
+					rkmer=0;
+					len=0;
+					final int lim=Tools.min(k, stop);
+					for(int i=start; i<lim; i++){
+						byte b=bases[i];
+						long x=Dedupe.baseToNumber[b];
+						long x2=Dedupe.baseToComplementNumber[b];
+						kmer=((kmer<<2)|x)&mask;
+						rkmer=rkmer|(x2<<(2*len));
+						len++;
+						if(verbose){System.err.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+						if(len>=mink){
+							
+							if(verbose){
+								System.err.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
+								System.err.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
+							}
+							final long value=toValue(kmer, rkmer, kMasks[len]);
+							AbstractKmerTable set=sets[(int)(value%WAYS)];
+							int id=set.getValue(value);
+							if(id>0){
+								if(id0<0){id0=id;}
+								if(verbose){
+									System.err.println("b: Found "+value);
+									System.err.println("Setting "+0+", "+(i+plus));
+								}
+								bs.set(0, i+plus);
+								found++;
+							}
+						}
+					}
+				}
+
+				//Look for short kmers on right side
+				{
+					kmer=0;
+					rkmer=0;
+					len=0;
+					final int lim=Tools.max(-1, stop-k);
+					for(int i=stop-1; i>lim; i--){
+						byte b=bases[i];
+						long x=Dedupe.baseToNumber[b];
+						long x2=Dedupe.baseToComplementNumber[b];
+						kmer=kmer|(x<<(2*len));
+						rkmer=((rkmer<<2)|x2)&mask;
+						len++;
+						if(verbose){System.err.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+						if(len>=mink){
+							
+							final long value=toValue(kmer, rkmer, kMasks[len]);
+							if(verbose){System.err.println("Looking for right kmer "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+"; value="+value+"; kmask="+kMasks[len]);}
+							AbstractKmerTable set=sets[(int)(value%WAYS)];
+							int id=set.getValue(value);
+							if(id>0){
+								if(id0<0){id0=id;}
+								if(verbose){
+									System.err.println("c: Found "+value);
+									System.err.println("Setting "+Tools.max(0, i-trimPad)+", "+bases.length);
+								}
+								bs.set(Tools.max(0, i-trimPad), bases.length);
+								found++;
+							}
+						}
+					}
+				}
+			}
+			
+			
+			if(verbose){System.err.println("found="+found+", bitset="+bs);}
+			
+			if(found==0){return 0;}
+			assert(found>0) : "Overflow in 'found' variable.";
+			
+			{//Increment counter for the scaffold whose kmer was first detected
+				if(scaffoldReadCountsT!=null){
+					scaffoldReadCountsT[id0]++;
+					scaffoldBaseCountsT[id0]+=bases.length;
+				}else{
+					scaffoldReadCounts.addAndGet(id0, 1);
+					scaffoldBaseCounts.addAndGet(id0, bases.length);
+				}
+			}
+			
+			int cardinality=bs.cardinality();
+			assert(cardinality>0);
+			
+			//Replace kmer hit zone with the trim symbol
+			for(int i=0; i<bases.length; i++){
+				if(bs.get(i)){
+					bases[i]=trimSymbol;
+					if(quals!=null && trimSymbol=='N'){quals[i]=0;}
+				}
+			}
+			return cardinality;
+		}
+		
+		/**
+		 * @param r
+		 * @param idList
+		 * @param countList
+		 */
+		private void rename(Read r, IntList idList, IntList countList) {
+			if(r==null || idList.size<1){return;}
+			StringBuilder sb=new StringBuilder();
+			if(r.id==null){sb.append(r.numericID);}
+			else{sb.append(r.id);}
+			for(int i=0; i<idList.size; i++){
+				int id=idList.get(i);
+				int count=countList.get(i);
+				sb.append('\t');
+				sb.append(scaffoldNames.get(id));
+				sb.append('=');
+				sb.append(count);
+			}
+			r.id=sb.toString();
+		}
+		
+		/**
+		 * Pack a list of nonunique values into a list of unique values and a list of their counts.
+		 * @param loose Nonunique values
+		 * @param packed Unique values
+		 * @param counts Counts of values
+		 * @return
+		 */
+		private int condenseLoose(IntList loose, IntList packed, IntList counts){
+			packed.size=0;
+			counts.size=0;
+			if(loose.size<1){return 0;}
+			loose.sort();
+			int prev=-1;
+			int max=0;
+			int count=0;
+			for(int i=0; i<loose.size; i++){
+				int id=loose.get(i);
+				if(id==prev){
+					count++;
+				}else{
+					if(count>0){
+						packed.add(prev);
+						counts.add(count);
+						max=Tools.max(count, max);
+					}
+					prev=id;
+					count=1;
+				}
+			}
+			if(count>0){
+				packed.add(prev);
+				counts.add(count);
+				max=Tools.max(count, max);
+			}
+			return max;
+		}
+		
+		/*--------------------------------------------------------------*/
 		
 		/** Input read stream */
 		private final ConcurrentReadStreamInterface cris;
 		/** Output read streams */
-		private final RTextOutputStream3 ros, rosb;
+		private final RTextOutputStream3 ros, rosb, ross;
 		
 		private final ReadStats readstats;
-		private final int[] countVector;
 		private final int[] overlapVector;
+		
+		private final IntList countVector;
+		
+		private final IntList idList;
+		private final IntList countList;
+		
+		long[] hitCountsT;
+		long[] scaffoldReadCountsT;
+		long[] scaffoldBaseCountsT;
 		
 		private long readsInT=0;
 		private long basesInT=0;
@@ -1778,387 +2781,35 @@ public class BBDukF {
 	}
 	
 	/*--------------------------------------------------------------*/
-	/*----------------        Helper Methods        ----------------*/
-	/*--------------------------------------------------------------*/
-	
 	
 	/**
-	 * Trim a read to remove matching kmers and everything to their left or right.
-	 * @param r Read to process
-	 * @param sets Kmer tables
-	 * @return Number of bases trimmed
-	 */
-	private final int ktrim(final Read r, final AbstractKmerTable[] sets){
-		assert(ktrimLeft || ktrimRight || ktrimN);
-		if(r==null || r.bases==null || storedKmers<1){return 0;}
-		if(verbose){System.err.println("KTrimming read "+r.id);}
-		final byte[] bases=r.bases, quals=r.quality;
-		final int minlen=k-1;
-		final int minlen2=(maskMiddle ? k/2 : k);
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
-		final long kmask=kMasks[k];
-		long kmer=0;
-		long rkmer=0;
-		int found=0;
-		int len=0;
-		
-		int minLoc=999999999, minLocExclusive=999999999;
-		int maxLoc=-1, maxLocExclusive=-1;
-		final int initialLength=r.bases.length;
-		
-		if(bases==null || bases.length<k){return 0;}
-		
-		//Scan for normal kmers
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning3 i="+i+", kmer="+kmer+", rkmer="+rkmer+", len="+len+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-			if(len>=minlen2 && i>=minlen){
-				final long value=toValue(kmer, rkmer, kmask);
-				AbstractKmerTable set=sets[(int)(value%WAYS)];
-				if(verbose){System.err.println("set.contains("+value+")="+set.contains(value));}
-				if(set.contains(value)){
-					minLoc=Tools.min(minLoc, i-k+1);
-					assert(minLoc>=0);
-					maxLoc=i;
-					found++;
-				}
-			}
-		}
-
-		if(minLoc!=minLocExclusive){minLocExclusive=minLoc+k;}
-		if(maxLoc!=maxLocExclusive){maxLocExclusive=maxLoc-k;}
-		
-		//If nothing was found, scan for short kmers.  Only used for trimming.
-		if(useShortKmers && found==0){
-			assert(!maskMiddle && middleMask==-1) : maskMiddle+", "+middleMask+", k="+", mink="+mink;
-			
-			//Look for short kmers on left side
-			if(ktrimLeft || ktrimN){
-				kmer=0;
-				rkmer=0;
-				len=0;
-				for(int i=0; i<k && i<bases.length; i++){
-					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
-					kmer=((kmer<<2)|x)&mask;
-					rkmer=rkmer|(x2<<(2*len));
-					len++;
-					if(verbose){System.err.println("Scanning4 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-					if(len>=mink){
-						
-						if(verbose){
-							System.err.println("Looking for left kmer  "+AminoAcid.kmerToString(kmer, len));
-							System.err.println("Looking for left rkmer "+AminoAcid.kmerToString(rkmer, len));
-						}
-						final long value=toValue(kmer, rkmer, kMasks[len]);
-						AbstractKmerTable set=sets[(int)(value%WAYS)];
-						if(set.contains(value)){
-							if(verbose){System.err.println("Found "+value);}
-							minLoc=0;
-							minLocExclusive=Tools.min(minLocExclusive, i+1);
-							maxLoc=Tools.max(maxLoc, i);
-							maxLocExclusive=Tools.max(maxLocExclusive, 0);
-							found++;
-						}
-					}
-				}
-			}
-
-			//Look for short kmers on right side
-			if(ktrimRight || ktrimN){
-				kmer=0;
-				rkmer=0;
-				len=0;
-				for(int i=bases.length-1; i>=0 && i>bases.length-k; i--){
-					byte b=bases[i];
-					long x=Dedupe.baseToNumber[b];
-					long x2=Dedupe.baseToComplementNumber[b];
-					kmer=kmer|(x<<(2*len));
-					rkmer=((rkmer<<2)|x2)&mask;
-					len++;
-					if(verbose){System.err.println("Scanning5 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-					if(len>=mink){
-						
-						final long value=toValue(kmer, rkmer, kMasks[len]);
-						if(verbose){System.err.println("Looking for right kmer "+AminoAcid.kmerToString(kmer&~kMasks[len], len)+"; value="+value+"; kmask="+kMasks[len]);}
-						AbstractKmerTable set=sets[(int)(value%WAYS)];
-						if(set.contains(value)){
-							if(verbose){System.err.println("Found "+value);}
-							minLoc=i;
-							minLocExclusive=Tools.min(minLocExclusive, bases.length);
-							maxLoc=bases.length-1;
-							maxLocExclusive=Tools.max(maxLocExclusive, i-1);
-							found++;
-						}
-					}
-				}
-			}
-		}
-		
-		
-		if(verbose){System.err.println("found="+found+", minLoc="+minLoc+", maxLoc="+maxLoc+", minLocExclusive="+minLocExclusive+", maxLocExclusive="+maxLocExclusive);}
-		
-		
-		if(found==0){return 0;}
-		
-		if(trimPad!=0){
-			maxLoc=Tools.mid(0, maxLoc+trimPad, bases.length);
-			minLoc=Tools.mid(0, minLoc-trimPad, bases.length);
-			maxLocExclusive=Tools.mid(0, maxLocExclusive+trimPad, bases.length);
-			minLocExclusive=Tools.mid(0, minLocExclusive-trimPad, bases.length);
-		}
-		
-		if(ktrimN){ //Replace kmer hit zone with the trim symbol
-			Arrays.fill(bases, minLoc, maxLoc+1, trimSymbol);
-			if(quals!=null){Arrays.fill(quals, minLoc, maxLoc+1, (byte)0);}
-			return maxLoc-minLoc+1;
-		}
-		
-		if(ktrimLeft){ //Trim from the read start to the rightmost kmer base
-			if(verbose){System.err.println("Left trimming to "+(ktrimExclusive ? maxLocExclusive+1 : maxLoc+1)+", "+0);}
-			int x=TrimRead.trimToPosition(r, ktrimExclusive ? maxLocExclusive+1 : maxLoc+1, bases.length-1, 1);
-			if(verbose){System.err.println("Trimmed "+x+" bases: "+new String(r.bases));}
-			return x;
-		}else{ //Trim from the leftmost kmer base to the read stop 
-			assert(ktrimRight);
-			if(verbose){System.err.println("Right trimming to "+0+", "+(ktrimExclusive ? minLocExclusive-1 : minLoc-1));}
-			int x=TrimRead.trimToPosition(r, 0, ktrimExclusive ? minLocExclusive-1 : minLoc-1, 1);
-			if(verbose){System.err.println("Trimmed "+x+" bases: "+new String(r.bases));}
-			return x;
-		}
-	}
-	
-	/**
-	 * Counts the number of kmer hits for a read.
-	 * @param r Read to process
-	 * @param sets Kmer tables
-	 * @return Number of hits
-	 */
-	private final int countSetKmers(final Read r, final AbstractKmerTable sets[]){
-		if(r==null || r.bases==null || storedKmers<1){return 0;}
-		final byte[] bases=r.bases;
-		final int minlen=k-1;
-		final int minlen2=(maskMiddle ? k/2 : k);
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
-		final long kmask=kMasks[k];
-		long kmer=0;
-		long rkmer=0;
-		int found=0;
-		int len=0;
-
-		if(bases==null || bases.length<k){return -1;}
-		
-		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-			if(len>=minlen2 && i>=minlen){
-				final long key=toValue(kmer, rkmer, kmask);
-				if(verbose){System.err.println("Testing key "+key);}
-				AbstractKmerTable set=sets[(int)(key%WAYS)];
-				final int id=set.getCount(key);
-				if(id>0){
-					if(verbose){System.err.println("Found = "+(found+1)+"/"+maxBadKmers);}
-					if(found==maxBadKmers){
-						int count=scaffoldCounts.addAndGet(id, 1);
-						if(count<0){scaffoldCounts.set(id, Integer.MAX_VALUE);}
-						if(hitCounts==null){
-							return (found=found+1);
-						}//Early exit, but prevents generation of histogram that goes over maxBadKmers+1.
-					}
-					found++;
-				}
-			}
-		}
-		
-		if(hitCounts!=null){hitCounts.incrementAndGet(Tools.min(found, hitCounts.length()-1));}
-		return found;
-	}
-	
-	/**
-	 * Returns the id of the sequence with the most kmer matches to this read, or -1 if none are over maxBadKmers.
-	 * @param r Read to process
-	 * @param sets Kmer tables
-	 * @return id of best match
-	 */
-	private final int findBestMatch(final Read r, final AbstractKmerTable sets[], int[] counts){
-		if(r==null || r.bases==null || storedKmers<1){return 0;}
-		final byte[] bases=r.bases;
-		final int minlen=k-1;
-		final int minlen2=(maskMiddle ? k/2 : k);
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
-		final long kmask=kMasks[k];
-		long kmer=0;
-		long rkmer=0;
-		int found=0;
-		int len=0;
-		
-		if(bases==null || bases.length<k){return -1;}
-		
-		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning6 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-			if(len>=minlen2 && i>=minlen){
-				final long key=toValue(kmer, rkmer, kmask);
-				if(verbose){System.err.println("Testing key "+key);}
-				AbstractKmerTable set=sets[(int)(key%WAYS)];
-				final int id=set.getCount(key);
-				if(id>0){
-					counts[id]++;
-					if(verbose){System.err.println("Found = "+(found+1)+"/"+maxBadKmers);}
-					found++;
-				}
-			}
-		}
-
-		int id=-1;
-		int found2=0;
-		if(found>0){
-			id=Tools.maxIndex(counts);
-			found2=counts[id];
-			Arrays.fill(counts, 0);
-		}
-		
-		if(found2>maxBadKmers){
-			int count=scaffoldCounts.addAndGet(id, 1);
-			if(count<0){scaffoldCounts.set(id, Integer.MAX_VALUE);}
-		}
-		
-		if(hitCounts!=null){hitCounts.incrementAndGet(Tools.min(found2, hitCounts.length()-1));}
-		return id;
-	}
-	
-	/** Estimates kmer hit counts for kmers longer than k using consecutive matches
-	 * @param r
-	 * @param sets
-	 * @return Number of sets of consecutive hits of exactly length kbig
-	 */
-	private final int countSetKmersBig(final Read r, final AbstractKmerTable sets[]){
-		if(r==null || r.bases==null || storedKmers<1){return 0;}
-		assert(kbig>k);
-		final int sub=kbig-k-1;
-		assert(sub>=0) : kbig+", "+sub;
-		final byte[] bases=r.bases;
-		final int minlen=k-1;
-		final int minlen2=(maskMiddle ? k/2 : k);
-		final int shift=2*k;
-		final int shift2=shift-2;
-		final long mask=~((-1L)<<shift);
-		final long kmask=kMasks[k];
-		long kmer=0;
-		long rkmer=0;
-		int found=0;
-		int len=0;
-
-		int start=-1;
-		int stop=-1;
-		int id=-1;
-		
-		if(bases==null || bases.length<k){return -1;}
-
-		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
-		for(int i=0; i<bases.length; i++){
-			byte b=bases[i];
-			long x=Dedupe.baseToNumber[b];
-			long x2=Dedupe.baseToComplementNumber[b];
-			kmer=((kmer<<2)|x)&mask;
-			rkmer=(rkmer>>>2)|(x2<<shift2);
-			if(b=='N' && forbidNs){len=0;}else{len++;}
-			if(verbose){System.err.println("Scanning7 i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-			if(len>=minlen2 && i>=minlen){
-				final long key=toValue(kmer, rkmer, kmask);
-				AbstractKmerTable set=sets[(int)(key%WAYS)];
-				id=set.getCount(key);
-				if(id>0){
-					if(start==-1){start=i;}
-					stop=i;
-				}else{
-					if(start>-1){
-						int dif=stop-start-sub;
-						stop=start=-1;
-						if(dif>0){
-							int old=found;
-							found+=dif;
-							if(found>maxBadKmers && old<=maxBadKmers){
-								int count=scaffoldCounts.addAndGet(id, 1);
-								if(count<0){scaffoldCounts.set(id, Integer.MAX_VALUE);}
-								if(hitCounts==null){
-									return found;
-								}//Early exit, but prevents generation of histogram that goes over maxBadKmers+1.
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		// This catches the case where valid kmers extend to the end of the read
-		if(start>-1){
-			int dif=stop-start-sub;
-			stop=start=-1;
-			if(dif>0){
-				int old=found;
-				found+=dif;
-				if(found>maxBadKmers && old<=maxBadKmers){
-					int count=scaffoldCounts.addAndGet(id, 1);
-					if(count<0){scaffoldCounts.set(id, Integer.MAX_VALUE);}
-				}
-			}
-		}
-		
-		if(hitCounts!=null){hitCounts.incrementAndGet(Tools.min(found, hitCounts.length()-1));}
-		return found;
-	}
-	
-	/*--------------------------------------------------------------*/
-	
-	/**
-	 * Object holding a String and a number, for tracking the number of kmer hits per scaffold.
+	 * Object holding a String and numbers, for tracking the number of read and base hits per scaffold.
 	 */
 	private static class StringNum implements Comparable<StringNum>{
 		
-		public StringNum(String s_, int n_){
-			s=s_;
-			n=n_;
+		public StringNum(String name_, int len_, long reads_, long bases_){
+			name=name_;
+			length=len_;
+			reads=reads_;
+			bases=bases_;
 		}
 		public final int compareTo(StringNum o){
-			if(n!=o.n){return o.n-n;}
-			return s.compareTo(o.s);
+			if(bases!=o.bases){return o.bases>bases ? 1 : -1;}
+			if(reads!=o.reads){return o.reads>reads ? 1 : -1;}
+			return name.compareTo(o.name);
 		}
 		public final boolean equals(StringNum o){
 			return compareTo(o)==0;
 		}
 		public final String toString(){
-			return s+"\t"+n;
+			return name+"\t"+length+"\t"+reads+"\t"+bases;
 		}
 		
 		/*--------------------------------------------------------------*/
 		
-		public final String s;
-		public final int n;
+		public final String name;
+		public final int length;
+		public final long reads, bases;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -2177,6 +2828,12 @@ public class BBDukF {
 		long fmemory=rt.freeMemory()/1000000;
 		long umemory=tmemory-fmemory;
 		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
+	}
+	
+	/** Current available memory */
+	private static final long freeMemory(){
+		Runtime rt=Runtime.getRuntime();
+		return rt.freeMemory();
 	}
 	
 	/**
@@ -2199,17 +2856,32 @@ public class BBDukF {
 	/** Has this class encountered errors while processing? */
 	public boolean errorState=false;
 	
+	/** Fraction of available memory preallocated to arrays */
+	private double preallocFraction=1.0;
 	/** Initial size of data structures */
-	private final int initialSize=128000;
+	private int initialSize=-1;
+	/** Default initial size of data structures */
+	private static final int initialSizeDefault=128000;
+	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in keySets[Y] */
-	private final AbstractKmerTable[] keySets=new AbstractKmerTable[WAYS];
+	private final AbstractKmerTable[] keySets;
 	/** A scaffold's name is stored at scaffoldNames.get(id).  
 	 * scaffoldNames[0] is reserved, so the first id is 1. */
 	private final ArrayList<String> scaffoldNames=new ArrayList<String>();
+	/** Names of reference files (refNames[0] is valid). */
+	private final ArrayList<String> refNames=new ArrayList<String>();
+	/** Number of scaffolds per reference. */
+	private final int[] refScafCounts;
 	/** scaffoldCounts[id] stores the number of reads with kmer matches to that scaffold */ 
-	private AtomicIntegerArray scaffoldCounts;
+	private AtomicLongArray scaffoldReadCounts;
+	/** scaffoldBaseCounts[id] stores the number of bases with kmer matches to that scaffold */ 
+	private AtomicLongArray scaffoldBaseCounts;
+	/** Set to false to force threads to share atomic counter arrays. */ 
+	private boolean ALLOW_LOCAL_ARRAYS=true;
+	/** scaffoldLengths[id] stores the length of that scaffold */ 
+	private IntList scaffoldLengths=new IntList();
 	/** hitCounts[x] stores the number of reads with exactly x kmer matches */
-	private final AtomicLongArray hitCounts;
+	private long[] hitCounts;
 	/** Array of reference files from which to load kmers */
 	private String[] ref=null;
 	/** Array of literal strings from which to load kmers */
@@ -2221,8 +2893,13 @@ public class BBDukF {
 	private String out1=null, out2=null;
 	/** Output reads (matched or shorter than minlen) */
 	private String outb1=null, outb2=null;
+	/** Output reads whose mate was discarded */
+	private String outsingle=null;
 	/** Statistics output files */
-	private String outstats=null, outduk=null, outrqc=null;
+	private String outstats=null, outduk=null, outrqc=null, outrpkm=null, outrefstats=null;
+	
+	/** Dump kmers here. */
+	private String dump=null;
 	
 	/** Maximum input reads (or pairs) to process.  Does not apply to references.  -1 means unlimited. */
 	private long maxReads=-1;
@@ -2240,7 +2917,7 @@ public class BBDukF {
 	/** Never skip more than this many consecutive kmers when hashing reference. */
 	private int maxSkip=99;
 	/** Always skip at least this many consecutive kmers when hashing reference.
-	 * Note that a skip of 1 means every kmer is used, 2 means every other, etc. */
+	 * 1 means every kmer is used, 2 means every other, etc. */
 	private int minSkip=1;
 	
 	/** Trim this much extra around matched kmers */
@@ -2271,6 +2948,8 @@ public class BBDukF {
 	long refReads=0;
 	long refBases=0;
 	long refKmers=0;
+	
+	public long modsum=0; //123
 	
 	long storedKmers=0;
 	
@@ -2313,8 +2992,10 @@ public class BBDukF {
 	private final byte minAvgQuality;
 	/** Throw away reads containing more than this many Ns.  Default: -1 (disabled) */
 	private final int maxNs;
-	/** Throw away reads shorter than this after trimming.  Default: 20 */
+	/** Throw away reads shorter than this after trimming.  Default: 10 */
 	private final int minReadLength;
+	/** Throw away reads longer than this after trimming.  Default: Integer.MAX_VALUE */
+	private final int maxReadLength;
 	/** Toss reads shorter than this fraction of initial length, after trimming */
 	private final float minLenFraction;
 	/** Filter reads by whether or not they have matching kmers */
@@ -2340,14 +3021,19 @@ public class BBDukF {
 	/** Trim right bases of the read after this position (exclusive, 0-based) */
 	private final int forceTrimRight;
 	
+	/** If positive, only look for kmer matches in the leftmost X bases */
+	private int restrictLeft;
+	/** If positive, only look for kmer matches the rightmost X bases */
+	private int restrictRight;
+	
 	/** Trim implied adapters based on overlap, for reads with insert size shorter than read length */
 	private final boolean trimByOverlap;
-	private static final int minOverlap0=11;
-	private static final int minOverlap=24;
-	private static final int overlapMargin=2;
-	private static final int overlapMaxMismatches0=4;
-	private static final int overlapMaxMismatches=4;
-	private static final int overlapMinq=13;
+	private int minOverlap0=11;
+	private int minOverlap=24;
+	private final int overlapMargin=2;
+	private final int overlapMaxMismatches0=4;
+	private final int overlapMaxMismatches=4;
+	private final int overlapMinq=13;
 	
 	/** True iff java was launched with the -ea' flag */
 	private final boolean EA;
@@ -2358,6 +3044,28 @@ public class BBDukF {
 	 * Default: true. */
 	private final boolean removePairsIfEitherBad;
 	
+	/** Print only statistics for scaffolds that matched at least one read 
+	 * Default: true. */ 
+	private final boolean printNonZeroOnly;
+	
+	/** Rename reads to indicate what they matched.
+	 * Default: false. */ 
+	private final boolean rename;
+	/** Use names of reference files instead of scaffolds.
+	 * Default: false. */ 
+	private final boolean useRefNames;
+	
+	/** Fraction of kmers to skip, 0 to 15 out of 16 */
+	private final int speed;
+	
+	/** Skip this many kmers when examining the read.  Default 1.
+	 * 1 means every kmer is used, 2 means every other, etc. */
+	private final int qSkip;
+	
+	/** True if speed and qSkip are disabled. */
+	private final boolean noAccel;
+	
+	private final boolean MAKE_QUALITY_ACCURACY;
 	private final boolean MAKE_QUALITY_HISTOGRAM;
 	private final boolean MAKE_MATCH_HISTOGRAM;
 	private final boolean MAKE_BASE_HISTOGRAM;
@@ -2372,7 +3080,7 @@ public class BBDukF {
 	/*----------------         Static Fields        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public static int VERSION=15;
+	public static int VERSION=28;
 	
 	/** Number of tables (and threads, during loading) */ 
 	private static final int WAYS=5; //123
@@ -2395,6 +3103,12 @@ public class BBDukF {
 	private static final ArrayList<Read> POISON=new ArrayList<Read>(0);
 	/** Do garbage collection prior to printing memory usage */
 	private static final boolean GC_BEFORE_PRINT_MEMORY=false;
+	/** Number of columns for statistics output, 3 or 5 */
+	public static int STATS_COLUMNS=3;
+	/** Release memory used by kmer storage after processing reads */
+	public static boolean RELEASE_TABLES=true;
+	/** Max value of hitCount array */
+	public static final int HITCOUNT_LEN=1000;
 	
 	/** x&clearMasks[i] will clear base i */
 	private static final long[] clearMasks;

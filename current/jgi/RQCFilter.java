@@ -74,6 +74,8 @@ public class RQCFilter {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(a.equals("null") || a.equals(in2)){
@@ -126,7 +128,7 @@ public class RQCFilter {
 				clipLinker=b;
 			}else if(a.equals("clrslinker")){
 				clrsLinker=b;
-			}else if(a.equals("trimfragadapter")){
+			}else if(a.equals("trimfragadapter") || a.equals("trimfragadapters")){
 				fragAdapterFlag=Tools.parseBoolean(b);
 			}else if(a.equals("removehuman")){
 				humanFlag=Tools.parseBoolean(b);
@@ -154,6 +156,8 @@ public class RQCFilter {
 				kmerStatsName=b;
 			}else if(a.equals("log")){
 				logName=b;
+			}else if(a.equals("ihist")){
+				ihistName=b;
 			}else if(a.equals("filelist")){
 				fileListName=b;
 			}else if(a.equals("compress")){
@@ -162,12 +166,27 @@ public class RQCFilter {
 				rnaFlag=Tools.parseBoolean(b);
 			}else if(a.equals("phix")){
 				phixFlag=Tools.parseBoolean(b);
+//			}else if(a.equals("tbo")){
+//				tboFlag=Tools.parseBoolean(b);
+//			}else if(a.equals("tpe")){
+//				tpeFlag=Tools.parseBoolean(b);
 			}else if(a.equals("jointseq")){
 				jointSeq=b;
 			}else if(a.equals("ktrim")){
 				ktrim=b;
 			}else if(a.equals("mink")){
 				mink=Integer.parseInt(b);
+			}else if(a.equals("k")){
+				assert(false) : "To specify kmer length, use filterk, trimk, mapk, or normalizek instead of just 'k'";
+				filter_k=Integer.parseInt(b);
+			}else if(a.equals("filterk")){
+				filter_k=Integer.parseInt(b);
+			}else if(a.equals("trimk")){
+				trim_k=Integer.parseInt(b);
+			}else if(a.equals("mapk")){
+				map_k=Integer.parseInt(b);
+			}else if(a.equals("normalizek") || a.equals("normk") || a.equals("ecck")){
+				normalize_k=Integer.parseInt(b);
 			}else if(a.equals("maq")){
 				maq=Byte.parseByte(b);
 			}else if(a.equals("trimq")){
@@ -234,9 +253,10 @@ public class RQCFilter {
 		}else{outDir="";}
 		
 		{//Prepend output directory to output files
-			if(logName!=null){logName=outDir+logName+".tmp";} //Add '.tmp' to log file
+			if(logName!=null){logName=outDir+logName/*+".tmp"*/;} //Add '.tmp' to log file
 			if(reproduceName!=null){reproduceName=outDir+reproduceName;}
 			if(fileListName!=null){fileListName=outDir+fileListName;}
+			if(ihistName!=null){ihistName=outDir+ihistName;}
 		}
 
 		{//Create unique output file names for second pass
@@ -309,6 +329,7 @@ public class RQCFilter {
 			if(qfout1!=null){sb.append("filtered_qual="+qfout1).append('\n');}
 			if(out2!=null){sb.append("filtered_fastq_2="+out2).append('\n');}
 			if(qfout2!=null){sb.append("filtered_qual_2="+qfout2).append('\n');}
+			if(ihistName!=null){sb.append("ihist="+ihistName).append('\n');}
 			
 			if(sb.length()>0){
 				ReadWrite.writeString(sb, fileListName, false);
@@ -318,6 +339,7 @@ public class RQCFilter {
 		final boolean doFilter;
 		final boolean doTrim;
 		final boolean doHuman=humanFlag;
+		final boolean doMerge=(ihistName!=null);
 		
 		//Determine execution path
 		if(libType==FRAG || ((libType==LFPE && lfpeLinker==null) || (libType==CLIP && clipLinker==null) || (libType==CLRS && clrsLinker==null))){
@@ -344,10 +366,11 @@ public class RQCFilter {
 				step++;
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? trimPrefix : null);
+//				System.err.println("Trim. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
 				if(step==1){
-					ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix);
+					ktrim(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}else{
-					ktrim(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix);
+					ktrim(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}
 				if(inPrefix!=null){
 					delete(inPrefix, out1, out2, qfout1, qfout2);
@@ -358,10 +381,11 @@ public class RQCFilter {
 				step++;
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? filterPrefix : null);
+//				System.err.println("Filter. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
 				if(step==1){
-					filter(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix);
+					filter(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}else{
-					filter(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix);
+					filter(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}
 				if(step>1){
 					delete(inPrefix, out1, out2, qfout1, qfout2);
@@ -372,14 +396,25 @@ public class RQCFilter {
 				step++;
 				inPrefix=outPrefix;
 				outPrefix=(step<numSteps ? humanPrefix : null);
+//				System.err.println("Human. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
 				if(step==1){
-					dehumanize(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix);
+					dehumanize(in1, in2, out1, out2, qfin1, qfin2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}else{
-					dehumanize(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix);
+					dehumanize(out1, out2, out1, out2, qfout1, qfout2, qfout1, qfout2, inPrefix, outPrefix, step);
 				}
 				Data.unloadAll();
 				if(step>1){
 					delete(inPrefix, out1, out2, qfout1, qfout2);
+				}
+			}
+			
+			if(doMerge){
+				step++;
+//				System.err.println("Merge. step="+step+", in="+in1+", out="+out1+", inPrefix="+inPrefix+", outPrefix="+outPrefix);
+				if(step==1){
+					merge(in1, in2, qfin1, qfin2, null, null, step);
+				}else{
+					merge(out1, out2, qfout1, qfout2, null, null, step);
 				}
 			}
 		}
@@ -416,193 +451,6 @@ public class RQCFilter {
 		
 	}
 	
-	/**
-	 * Runs BBMap to perform:
-	 * Human contaminant removal.
-	 * 
-	 * @param in1 Primary input reads file (required)
-	 * @param in2 Secondary input reads file
-	 * @param out1 Primary output reads file (required)
-	 * @param out2 Secondary output reads file
-	 * @param qfin1 Primary input qual file
-	 * @param qfin2 Secondary input qual file
-	 * @param qfout1 Primary output qual file
-	 * @param qfout2 Secondary output qual file
-	 * @param inPrefix Append this prefix to input filenames
-	 */
-	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix){
-		
-		log("dehumanize start", true);
-		
-		ArrayList<String> argList=new ArrayList<String>();
-
-		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
-		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
-		
-		{
-//			argList.add("kfilter="+47);
-			argList.add("minratio=.9");
-			argList.add("maxindel=4");
-			argList.add("bw=12");
-			argList.add("bwr=0.16");
-			argList.add("minhits=2");
-			argList.add("path="+humanPath);
-//			argList.add("quickmatch");
-//			argList.add("k="+map_k);
-			argList.add("fast=t");
-			argList.add("idtag=t");
-			argList.add("sam=1.4");
-			if(humanRefIndexedFlag){
-				argList.add("path="+humanPath);
-			}else{
-				argList.add("ref="+humanRef);
-				argList.add("nodisk");
-			}
-			argList.add("quickmatch");
-			argList.add("overwrite="+overwrite);
-			
-			//Pass along uncaptured arguments
-			for(String s : primaryArgList){argList.add(s);}
-
-			//Set read I/O files
-			if(in1!=null){argList.add("in1="+inPre+in1);}
-			if(in2!=null){argList.add("in2="+inPre+in2);}
-			if(out1!=null){argList.add("outu1="+outPre+out1);}
-			if(out2!=null){argList.add("outu2="+outPre+out2);}
-			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
-			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
-			if(qfout1!=null){argList.add("qfoutu1="+outPre+qfout1);}
-			if(qfout2!=null){argList.add("qfoutu2="+outPre+qfout2);}
-			
-		}
-		
-		String[] args=argList.toArray(new String[0]);
-		
-		{//Run BBMap
-			try {
-				BBMap.main(args);
-			} catch (Exception e) {
-				e.printStackTrace();
-				log("failed", true);
-				System.exit(1);
-			}
-		}
-		
-		if(reproduceName!=null){
-			writeReproduceFile(reproduceName, "bbmap.sh", args, true, overwrite);
-		}
-		
-		//Optionally append files to file list here
-		
-		log("dehumanize finish", true);
-	}
-	
-	/**
-	 * Runs BBDuk to perform:
-	 * Quality filtering, quality trimming, n removal, short read removal, artifact removal (via kmer filtering), phiX removal.
-	 * 
-	 * @param in1 Primary input reads file (required)
-	 * @param in2 Secondary input reads file
-	 * @param out1 Primary output reads file (required)
-	 * @param out2 Secondary output reads file
-	 * @param qfin1 Primary input qual file
-	 * @param qfin2 Secondary input qual file
-	 * @param qfout1 Primary output qual file
-	 * @param qfout2 Secondary output qual file
-	 * @param inPrefix Append this prefix to input filenames
-	 */
-	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix){
-		
-		log("filter start", true);
-		
-		ArrayList<String> argList=new ArrayList<String>();
-
-		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
-		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
-		
-		{//Fill list with BBDuk arguments
-			if(maq>-1){argList.add("maq="+maq);}
-			if(qtrim!=null){
-				argList.add("trimq="+trimq);
-				argList.add("qtrim="+qtrim);
-			}
-			argList.add("overwrite="+overwrite);
-			if(maxNs>=0){argList.add("maxns="+maxNs);}
-			if(minLen>0){argList.add("minlen="+minLen);}
-			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
-			
-			//Pass along uncaptured arguments
-			for(String s : primaryArgList){argList.add(s);}
-
-			//Set read I/O files
-			if(in1!=null){argList.add("in1="+inPre+in1);}
-			if(in2!=null){argList.add("in2="+inPre+in2);}
-			if(out1!=null){argList.add("out1="+outPre+out1);}
-			if(out2!=null){argList.add("out2="+outPre+out2);}
-			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
-			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
-			if(qfout1!=null){argList.add("qfout1="+outPre+qfout1);}
-			if(qfout2!=null){argList.add("qfout2="+outPre+qfout2);}
-
-//			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName);} //Old style for 2 log files
-			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
-			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName);}
-			if(scaffoldStatsName!=null){argList.add("stats="+scaffoldStatsName);}
-		}
-		
-		{//Add BBDuk references
-			refs.add(mainArtifactFile);
-			refs.add(rnaFlag ? artifactFileRna : artifactFileDna);
-			
-			if(phixFlag){refs.add(phixRef);}
-
-			if(libType==FRAG){
-
-			}else if(libType==LFPE){
-
-			}else if(libType==CLIP){
-
-			}else if(libType==CLRS){
-
-			}else{
-				throw new RuntimeException("Unknown library type.");
-			}
-
-			StringBuilder refstring=new StringBuilder();
-			for(String ref : refs){
-				if(ref!=null){
-					refstring.append(refstring.length()==0 ? "ref=" : ",");
-					refstring.append(ref);
-				}
-			}
-
-			if(refstring!=null && refstring.length()>0){
-				argList.add(refstring.toString());
-			}
-		}
-		
-		String[] dukargs=argList.toArray(new String[0]);
-		
-		if(reproduceName!=null){
-			writeReproduceFile(reproduceName, "bbduk.sh", dukargs, true, overwrite);
-		}
-		
-		{//Run BBDuk
-			BBDukF duk=new BBDukF(dukargs);
-			try {
-				duk.process();
-			} catch (Exception e) {
-				e.printStackTrace();
-				log("failed", true);
-				System.exit(1);
-			}
-		}
-		
-		//Optionally append files to file list here
-		
-		log("filter finish", true);
-	}
-	
 	
 	/**
 	 * Runs BBDuk to perform:
@@ -616,9 +464,11 @@ public class RQCFilter {
 	 * @param qfin2 Secondary input qual file
 	 * @param qfout1 Primary output qual file
 	 * @param qfout2 Secondary output qual file
+	 * @param inPrefix Append this prefix to input filenames
 	 * @param outPrefix Append this prefix to output filenames
 	 */
-	private void ktrim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix){
+	private void ktrim(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix,
+			int stepNum){
 		
 		log("ktrim start", true);
 		ktrimFlag=true;
@@ -629,15 +479,21 @@ public class RQCFilter {
 		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
 		
 		{//Fill list with BBDuk arguments
-			argList.add("mink="+mink);
 			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
-			if("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim)){
-				argList.add("tbo");
-				argList.add("tpe");
-			}
-			argList.add("overwrite="+overwrite);
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+			if((libType!=CLIP)){
+				argList.add("mink="+mink);
+				if(libType==FRAG && ("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim))){
+					argList.add("tbo");
+					argList.add("tpe");
+				}
+				argList.add("overwrite="+overwrite);
+				if(minLen>0){argList.add("minlen="+minLen);}
+				if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+				argList.add("k="+trim_k);
+				argList.add("hdist="+hdist_trim);
+			}
 			
 			//Pass along uncaptured arguments
 			for(String s : primaryArgList){argList.add(s);}
@@ -705,7 +561,7 @@ public class RQCFilter {
 		String[] dukargs=argList.toArray(new String[0]);
 		
 		if(reproduceName!=null){
-			writeReproduceFile(reproduceName, "bbduk.sh", dukargs, false, overwrite);
+			writeReproduceFile(reproduceName, "bbduk.sh", dukargs, (stepNum>1), overwrite, (stepNum==1));
 		}
 		
 		{//run BBDuk
@@ -722,6 +578,261 @@ public class RQCFilter {
 		//Optionally append files to file list here
 		
 		log("ktrim finish", true);
+	}
+	
+	/**
+	 * Runs BBDuk to perform:
+	 * Quality filtering, quality trimming, n removal, short read removal, artifact removal (via kmer filtering), phiX removal.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param out1 Primary output reads file (required)
+	 * @param out2 Secondary output reads file
+	 * @param qfin1 Primary input qual file
+	 * @param qfin2 Secondary input qual file
+	 * @param qfout1 Primary output qual file
+	 * @param qfout2 Secondary output qual file
+	 * @param inPrefix Append this prefix to input filenames
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void filter(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix,
+			int stepNum){
+		
+		log("filter start", true);
+		
+		ArrayList<String> argList=new ArrayList<String>();
+
+		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
+		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		
+//		System.err.println("inPre="+inPre+", outPre="+outPre+", outDir="+outDir+", tmpDir="+tmpDir); //123
+		
+		{//Fill list with BBDuk arguments
+			if(maq>-1){argList.add("maq="+maq);}
+			if(qtrim!=null){
+				argList.add("trimq="+trimq);
+				argList.add("qtrim="+qtrim);
+			}
+			argList.add("overwrite="+overwrite);
+			if(maxNs>=0){argList.add("maxns="+maxNs);}
+			if(minLen>0){argList.add("minlen="+minLen);}
+			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
+			argList.add("k="+filter_k);
+			argList.add("hdist="+hdist_filter);
+			
+			//Pass along uncaptured arguments
+			for(String s : primaryArgList){argList.add(s);}
+
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+inPre+in1);}
+			if(in2!=null){argList.add("in2="+inPre+in2);}
+			if(out1!=null){argList.add("out1="+outPre+out1);}
+			if(out2!=null){argList.add("out2="+outPre+out2);}
+			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
+			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
+			if(qfout1!=null){argList.add("qfout1="+outPre+qfout1);}
+			if(qfout2!=null){argList.add("qfout2="+outPre+qfout2);}
+
+//			if(rqcStatsName!=null){al.add("rqc="+rqcStatsName);} //Old style for 2 log files
+			if(rqcStatsName!=null){argList.add("rqc=hashmap");}
+			if(kmerStatsName!=null){argList.add("outduk="+kmerStatsName);}
+			if(scaffoldStatsName!=null){argList.add("stats="+scaffoldStatsName);}
+		}
+		
+		{//Add BBDuk references
+			refs.add(mainArtifactFile);
+			refs.add(rnaFlag ? artifactFileRna : artifactFileDna);
+			
+			if(phixFlag){refs.add(phixRef);}
+
+			if(libType==FRAG){
+
+			}else if(libType==LFPE){
+
+			}else if(libType==CLIP){
+
+			}else if(libType==CLRS){
+
+			}else{
+				throw new RuntimeException("Unknown library type.");
+			}
+
+			StringBuilder refstring=new StringBuilder();
+			for(String ref : refs){
+				if(ref!=null){
+					refstring.append(refstring.length()==0 ? "ref=" : ",");
+					refstring.append(ref);
+				}
+			}
+
+			if(refstring!=null && refstring.length()>0){
+				argList.add(refstring.toString());
+			}
+		}
+		
+		String[] dukargs=argList.toArray(new String[0]);
+		
+		if(reproduceName!=null){
+			writeReproduceFile(reproduceName, "bbduk.sh", dukargs, (stepNum>1), overwrite, (stepNum==1));
+		}
+		
+		{//Run BBDuk
+			BBDukF duk=new BBDukF(dukargs);
+			try {
+				duk.process();
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		//Optionally append files to file list here
+		
+		log("filter finish", true);
+	}
+	
+	/**
+	 * Runs BBMap to perform:
+	 * Human contaminant removal.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param out1 Primary output reads file (required)
+	 * @param out2 Secondary output reads file
+	 * @param qfin1 Primary input qual file
+	 * @param qfin2 Secondary input qual file
+	 * @param qfout1 Primary output qual file
+	 * @param qfout2 Secondary output qual file
+	 * @param inPrefix Append this prefix to input filenames
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void dehumanize(String in1, String in2, String out1, String out2, String qfin1, String qfin2, String qfout1, String qfout2, String inPrefix, String outPrefix,
+			int stepNum){
+		
+		log("dehumanize start", true);
+		
+		ArrayList<String> argList=new ArrayList<String>();
+
+		final String inPre=(inPrefix==null ? "" : (tmpDir==null ? outDir : tmpDir)+inPrefix);
+		final String outPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		
+		{
+			argList.add("minratio=.84");
+			argList.add("maxindel=6");
+			argList.add("fast="+true);
+			argList.add("minhits="+1);
+			argList.add("tipsearch="+4);
+			argList.add("bw=18");
+			argList.add("bwr=0.18");
+			argList.add("quickmatch=f");
+			argList.add("k="+map_k);
+//			argList.add("cigar=f");
+			argList.add("idtag=t");
+			argList.add("sam=1.4");
+			argList.add("usemodulo");
+			argList.add("printunmappedcount");
+			argList.add("usejni");
+			argList.add("ow="+overwrite);
+			
+			if(humanRefIndexedFlag){
+				argList.add("path="+humanPath);
+			}else{
+				argList.add("ref="+humanRef);
+				argList.add("nodisk");
+			}
+			
+			//Pass along uncaptured arguments
+			for(String s : primaryArgList){argList.add(s);}
+
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+inPre+in1);}
+			if(in2!=null){argList.add("in2="+inPre+in2);}
+			if(out1!=null){argList.add("outu1="+outPre+out1);}
+			if(out2!=null){argList.add("outu2="+outPre+out2);}
+			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
+			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
+			if(qfout1!=null){argList.add("qfoutu1="+outPre+qfout1);}
+			if(qfout2!=null){argList.add("qfoutu2="+outPre+qfout2);}
+			
+		}
+		
+		String[] args=argList.toArray(new String[0]);
+		
+		{//Run BBMap
+			try {
+				BBMap.main(args);
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		if(reproduceName!=null){
+			writeReproduceFile(reproduceName, "bbmap.sh", args, (stepNum>1), overwrite, (stepNum==1));
+		}
+		
+		//Optionally append files to file list here
+		
+		log("dehumanize finish", true);
+	}
+	
+	
+	/**
+	 * Runs BBMerge to generate an insert size histogram.
+	 * 
+	 * @param in1 Primary input reads file (required)
+	 * @param in2 Secondary input reads file
+	 * @param qfin1 Primary input qual file
+	 * @param qfin2 Secondary input qual file
+	 * @param ihist Histogram file name
+	 * @param inPrefix Append this prefix to input filenames
+	 * @param outPrefix Append this prefix to output filenames
+	 */
+	private void merge(String in1, String in2, String qfin1, String qfin2, String inPrefix, String outPrefix,
+			int stepNum){
+		
+		log("merge start", true);
+		mergeFlag=true;
+		
+		ArrayList<String> argList=new ArrayList<String>();
+
+		final String inPre=(outPrefix==null ? outDir : (tmpDir==null ? outDir : tmpDir)+outPrefix);
+		
+		{//Fill list with BBMerge arguments
+			if(mergeStrictness!=null){argList.add(mergeStrictness);}
+			argList.add("overwrite="+overwrite);
+			
+			//Set read I/O files
+			if(in1!=null){argList.add("in1="+inPre+in1);}
+			if(in2!=null){argList.add("in2="+inPre+in2);}
+			if(qfin1!=null){argList.add("qfin1="+inPre+qfin1);}
+			if(qfin2!=null){argList.add("qfin2="+inPre+qfin2);}
+			
+			if(ihistName!=null){argList.add("ihist="+ihistName);}
+		}
+		
+		String[] mergeargs=argList.toArray(new String[0]);
+		
+		if(reproduceName!=null){
+			writeReproduceFile(reproduceName, "bbmerge.sh", mergeargs, (stepNum>1), overwrite, (stepNum==1));
+		}
+		
+		{//run BBDuk
+			BBMerge merger=new BBMerge(mergeargs);
+			try {
+				merger.process();
+			} catch (Exception e) {
+				e.printStackTrace();
+				log("failed", true);
+				System.exit(1);
+			}
+		}
+		
+		//Optionally append files to file list here
+		
+		log("merge finish", true);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -757,7 +868,7 @@ public class RQCFilter {
 					File f=new File(s);
 					if(f.exists()){
 						f.delete();
-						writeReproduceFile(reproduceName, "rm", new String[] {s}, true, overwrite);
+						writeReproduceFile(reproduceName, "rm", new String[] {s}, true, overwrite, false);
 					}
 				}
 			}
@@ -828,12 +939,12 @@ public class RQCFilter {
 	 * @param append Append to existing file rather than overwriting
 	 * @param overwrite Permission to overwrite
 	 */
-	private static void writeReproduceFile(String fname, String command, String[] args, boolean append, boolean overwrite){
+	private static void writeReproduceFile(String fname, String command, String[] args, boolean append, boolean overwrite, boolean header){
 		StringBuilder sb=new StringBuilder();
 		if(!append){
 			boolean b=Tools.canWrite(fname, overwrite);
 			assert(b) : "Can't write to "+fname;
-			sb.append("#!/bin/bash\n");
+			if(header){sb.append("#!/bin/bash\n");}
 		}
 		sb.append(command);
 		if(args!=null){
@@ -872,24 +983,45 @@ public class RQCFilter {
 	private boolean rnaFlag=false;
 	/** True if phix should be filtered out */
 	private boolean phixFlag=false;
+	
+	/** Unused */
+	private boolean tboFlag=false;
+	/** Unused */
+	private boolean tpeFlag=false;
+	
 	/** Unused */
 	private String jointSeq=null;
 	/** Toss reads shorter than this */
 	private int minLen=25;
-	/** Toss reads shorter than this fraction of initital length, after trimming */
+	/** Toss reads shorter than this fraction of initial length, after trimming */
 	private float minLenFraction=0.333f;
 	/** Trim bases at this quality or below */
-	private byte trimq=6;
+	private byte trimq=10;
 	/** Throw away reads below this average quality before trimming.  Default: 6 */
 	private byte maq=5;
 	/** Quality-trimming mode */
 	private String qtrim="f";//"rl";
 	/** Kmer-trimming mode */
 	private String ktrim="r";
+	/** Kmer length to use for filtering */
+	private int filter_k=27;
+	/** Kmer length to use for trimming */
+	private int trim_k=23;
+	/** Kmer length to use for normalization and error-correction */
+	private int normalize_k=31;
+	/** Kmer length to use for mapping */
+	private int map_k=13;
 	/** Shortest kmer to use for trimming */
-	private int mink=8;
+	private int mink=11;
 	/** Throw away reads containing more than this many Ns.  Default: 0 (toss reads with any Ns) */
 	private int maxNs=0;
+	/** Use this Hamming distance when kmer filtering */
+	private int hdist_filter=1;
+	/** Use this Hamming distance when kmer trimming */
+	private int hdist_trim=1;
+	
+	/** Merge strictness: strict, normal, loose, vloose */
+	private String mergeStrictness="loose";
 	
 	/** Trim fragment adapters from right side of reads */
 	private boolean fragAdapterFlag=false;
@@ -902,6 +1034,8 @@ public class RQCFilter {
 	private boolean humanFlag=false;
 	/** Use indexed version of human reference, rather than regenerating from fasta */
 	private boolean humanRefIndexedFlag=true;
+	/** Merged reads to create an insert size histogram */
+	private boolean mergeFlag=true;
 	
 	private boolean verbose=false;
 	private boolean overwrite=true;
@@ -960,6 +1094,8 @@ public class RQCFilter {
 	private String kmerStatsName="kmerStats.txt";
 	private String scaffoldStatsName="scaffoldStats.txt";
 	
+	private String ihistName="ihist_merge.txt";
+	
 	/** ktrim phase rqc stats file */
 	private String rqcStatsName_kt;
 	/** ktrim phase stats file */
@@ -982,7 +1118,7 @@ public class RQCFilter {
 	private String allArtifactsLatest = "/global/projectb/sandbox/rqc/qcdb/illumina.artifacts/Illumina.artifacts.fa";
 	private String fragAdapter = "/global/projectb/sandbox/gaag/bbtools/data/adapters.fa";
 	private String humanPath = "/global/projectb/sandbox/gaag/bbtools/hg19/";
-	private String humanRef = "/global/projectb/sandbox/gaag/bbtools/hg19/hg19.fa.gz";
+	private String humanRef = "/global/projectb/sandbox/gaag/bbtools/hg19/hg19_masked.fa.gz";
 	
 	/*--------------------------------------------------------------*/
 	/*----------------         Static Fields        ----------------*/

@@ -1,5 +1,6 @@
 package stream;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import align2.Tools;
@@ -9,8 +10,13 @@ import align2.Tools;
  * @date Oct 8, 2013
  *
  */
-public final class ByteBuilder {
+public final class ByteBuilder implements Serializable {
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -4786450129730831665L;
+
 	public static void main(String[] args){
 		StringBuilder sb=new StringBuilder();
 	}
@@ -205,6 +211,16 @@ public final class ByteBuilder {
 		return this;
 	}
 	
+	public ByteBuilder append(StringBuilder x){
+		if(x==null){return append(nullBytes);}
+		expand(x.length());
+		for(int i=0; i<x.length(); i++){
+			array[length]=(byte)x.charAt(i);
+			length++;
+		}
+		return this;
+	}
+	
 	public ByteBuilder append(CharSequence x){
 		if(x==null){return append(nullBytes);}
 		expand(x.length());
@@ -248,6 +264,16 @@ public final class ByteBuilder {
 			length++;
 		}
 		return this;
+	}
+	
+	public byte get(int i){
+		assert(i<length);
+		return array[i];
+	}
+	
+	public char charAt(int i){
+		assert(i<length);
+		return (char)array[i];
 	}
 	
 	@Override

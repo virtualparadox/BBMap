@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified November 13, 2014"
 	echo ""
 	echo "Description:  Runs stats.sh on multiple assemblies to produce one ouput line per file."
 	echo ""
@@ -19,6 +19,7 @@ usage(){
 	echo "k=<13>         	Estimate memory usage of BBMap with this kmer length."
 	echo "minscaf=<0>    	Ignore scaffolds shorter than this."
 	echo "n_=<t>         	This flag will prefix the terms 'contigs' and 'scaffolds' with 'n_' in formats 3-6."
+	echo "addname=<t>    	Adds a column for input file name, for formats 3-6."
 	echo ""
 	echo "format=<1 through 6>	Format of the stats information."
 	echo "	format=1 uses variable units like MB and KB, and is designed for compatibility with existing tools."

@@ -43,7 +43,7 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 			}else if(a.equals("null") || (split.length==1 && i==1)){
 				// do nothing
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("fastareadlen")){
 				FastaReadInputStream.TARGET_READ_LEN=Integer.parseInt(b);
 				FastaReadInputStream.SPLIT_READS=(FastaReadInputStream.TARGET_READ_LEN>0);
@@ -180,6 +180,14 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 		}
 	}
 	
+	public void returnList(boolean poison){
+		if(poison){
+			depot.full.add(new ArrayList<Read>(0));
+		}else{
+			depot.empty.add(new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		}
+	}
+	
 	@Override
 	public void run() {
 //		producer.start();
@@ -190,7 +198,7 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 
 		ReadThread rt1=null;
 		ReadThread rt2=null;
-		if(producer1.preferLists() || producer1.preferBlocks()){
+		if(producer1.preferLists() || producer1.preferArrays()){
 			rt1=new ReadThread(producer1, p1q);
 			rt2=(producer2==null ? null : new ReadThread(producer2, p2q));
 			rt1.start();
@@ -201,11 +209,12 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 			rt2==null ? new Thread[] {Thread.currentThread(), rt1} : 
 				new Thread[] {Thread.currentThread(), rt1, rt2});
 
-		if(producer1.preferLists() || producer1.preferBlocks()){
+		if(producer1.preferLists() || producer1.preferArrays()){
 			readLists();
 			//System.err.println("Done reading lists.");
-		}else if(producer1.preferBlocks()){
+		}else if(producer1.preferArrays()){
 			assert(false);
+			throw new RuntimeException();
 //			readBlocks();
 		}else{
 			readSingles();
@@ -278,6 +287,12 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 				Read a=producer1.next();
 				Read b=(producer2==null ? null : producer2.next());
 				if(a==null){break;}
+				readsIn++;
+				basesIn+=a.length();
+				if(b!=null){
+					readsIn++;
+					basesIn+=b.length();
+				}
 				if(randy==null || randy.nextFloat()<samplerate){
 					list.add(a);
 					if(b!=null){
@@ -390,41 +405,53 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 					}
 					assert(buffer2==null || buffer2.size()==buffer1.size());
 				}
-//				System.out.println("i");
-				if(buffer1.size()<=(BUF_LEN-list.size()) && (buffer1.size()+generated)<maxReads && randy==null){
-					//System.out.println("j");
-					//Then do a quicker bulk operation
-					
-					list.addAll(buffer1);
-					incrementGenerated(buffer1.size());
-					for(Read a : buffer1){
-						bases+=(a.bases==null ? 0 : a.bases.length);
-//						bases+=(a.mate==null || a.mate.bases==null ? 0 : a.mate.bases.length);
-						if(a.mate!=null){
-							bases+=a.mate.bases.length;
-							assert(a.pairnum()==0 && a.mate.pairnum()==1);
-						}
-					}
-					
-					next=0;
-					buffer1=null;
-					buffer2=null;
-				}else{
+				
+				//Code disabled because it does not actually seem to make anything faster.
+//				if(buffer1.size()<=(BUF_LEN-list.size()) && (buffer1.size()+generated)<maxReads && randy==null){
+//					//System.out.println("j");
+//					//Then do a quicker bulk operation
+//					
+//					for(Read a : buffer1){
+//						list.add(a);
+//						Read b=a.mate;
+//						readsIn++;
+//						basesIn+=a.length();
+//						bases+=(a.bases==null ? 0 : a.bases.length);
+////						bases+=(b==null || b.bases==null ? 0 : b.bases.length);
+//						if(b!=null){
+//							readsIn++;
+//							basesIn+=b.length();
+//							bases+=b.bases.length;
+//							assert(a.pairnum()==0 && b.pairnum()==1);
+//						}
+////						System.out.println(generated+", "+readsIn+", "+(b==null));
+//					}
+////					list.addAll(buffer1); //This is actually slower due to an array clone operation.
+//					incrementGenerated(buffer1.size());
+//					
+//					next=0;
+//					buffer1=null;
+//					buffer2=null;
+//				}else
+				{
 
 					while(next<buffer1.size() && list.size()<depot.bufferSize && generated<maxReads && bases<MAX_DATA){
 						Read a=buffer1.get(next);
-						
-						if(p2q!=null){
-							Read b=buffer2.get(next);
+						Read b=a.mate;
+						readsIn++;
+						basesIn+=a.length();
+						if(b!=null){
+							readsIn++;
+							basesIn+=b.length();
 //							assert(a.numericID==b.numericID) : "\n"+a.numericID+", "+b.numericID+"\n"+a.toText(false)+"\n"+b.toText(false)+"\n";
 //							a.mate=b;
 //							b.mate=a;
 //							
 //							assert(a.pairnum()==0);
 //							b.setPairnum(1);
-							assert(a.pairnum()==0 && b.pairnum()==1 && a.mate==b && b.mate==a && a.numericID==b.numericID);
+							assert(a.pairnum()==0 && b.pairnum()==1 && a.mate==b && b.mate==a && a.numericID==b.numericID) : 
+								a.pairnum()+", "+(b.pairnum())+", "+(a.mate==b)+", "+(b.mate==a)+", "+(a.numericID)+", "+(b.numericID);
 						}
-						
 						if(randy==null || randy.nextFloat()<samplerate){
 							list.add(a);
 							bases+=a.bases.length;
@@ -552,7 +579,10 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 		if(producer2!=null){producer2.restart();}
 		depot=new ConcurrentDepot<Read>(BUF_LEN, NUM_BUFFS);
 		generated=0;
-		nextProgress=PROGRESS_INCR;
+		basesIn=0;
+		readsIn=0;
+		listnum=0; //Added Oct 9, 2014
+		nextProgress=PROGRESS_INCR;	
 	}
 	
 	@Override
@@ -609,10 +639,6 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 	public boolean paired() {
 		return producer1.paired() || producer2!=null;
 	}
-	
-//	public static ConcurrentReadStreamInterface getReadInputStream(long maxReads, boolean colorspace, String...args){
-//		return getReadInputStream(maxReads, colorspace, false, args);
-//	}
 
 	private static ConcurrentReadStreamInterface getReadInputStream(long maxReads, boolean colorspace, boolean keepSamHeader, boolean allowSubprocess, String...args){
 		assert(args.length>0) : Arrays.toString(args);
@@ -663,8 +689,8 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 		}else if(ff1.fasta()){
 			
 			ReadInputStream ris1=(qf1==null ? new FastaReadInputStream(ff1, colorspace, (FASTQ.FORCE_INTERLEAVED && ff2==null), ff2==null ? Shared.READ_BUFFER_MAX_DATA : -1)
-				: new FastaQualReadInputStream(ff1, qf1, colorspace));
-			ReadInputStream ris2=(ff2==null ? null : qf2==null ? new FastaReadInputStream(ff2, colorspace, false, -1) : new FastaQualReadInputStream(ff2, qf2, colorspace));
+				: new FastaQualReadInputStream3(ff1, qf1, colorspace));
+			ReadInputStream ris2=(ff2==null ? null : qf2==null ? new FastaReadInputStream(ff2, colorspace, false, -1) : new FastaQualReadInputStream3(ff2, qf2, colorspace));
 			cris=new ConcurrentGenericReadInputStream(ris1, ris2, maxReads);
 			
 		}else if(ff1.scarf()){
@@ -695,6 +721,11 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 			}else{
 				cris=new ConcurrentSolidInputStream(ff1, qf1, maxReads, null);
 			}
+		}else if(ff1.random()){
+			
+			RandomReadInputStream3 ris=new RandomReadInputStream3(maxReads, FASTQ.FORCE_INTERLEAVED, colorspace);
+			cris=new ConcurrentGenericReadInputStream(ris, null, maxReads);
+			
 		}else{
 			cris=null;
 			throw new RuntimeException(""+ff1);
@@ -819,6 +850,7 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 			Data.sysout.print('.');
 			nextProgress+=PROGRESS_INCR;
 		}
+//		System.err.println("generated="+generated+"\treadsIn="+readsIn);
 	}
 	
 	@Override
@@ -833,8 +865,12 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 		}
 	}
 	
+	public long basesIn(){return basesIn;}
+	public long readsIn(){return readsIn;}
+	
 	@Override
-	public boolean errorState(){return errorState || 
+	public boolean errorState(){
+		return errorState || 
 			(producer1==null ? false : producer1.errorState()) || (producer2==null ? false : producer2.errorState());}
 	/** TODO */
 	private boolean errorState=false;
@@ -855,6 +891,9 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 	public final ReadInputStream producer1;
 	public final ReadInputStream producer2;
 	private ConcurrentDepot<Read> depot;
+	
+	private long basesIn=0;
+	private long readsIn=0;
 	
 	private long maxReads;
 	private long generated=0;

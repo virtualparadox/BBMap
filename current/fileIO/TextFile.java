@@ -287,7 +287,7 @@ public class TextFile {
 	public boolean isOpen(){return open;}
 
 	private boolean open=false;
-	private boolean errorState=false;
+	public boolean errorState=false;
 	
 	public final String name;
 	public File file;

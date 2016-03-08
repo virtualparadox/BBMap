@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
@@ -433,13 +434,13 @@ public class ReadWrite {
 //			assert(!append);
 			return getGZipOutputStream(fname, append, allowSubprocess);
 		}else if(zipped){
-			assert(!append);
+			assert(!append) : "Append is not allowed for zip archives.";
 			return getZipOutputStream(fname, buffered, allowSubprocess);
 		}else if(bzipped){
-			assert(!append);
-			return getBZipOutputStream(fname, buffered, allowSubprocess);
+			assert(!append) : "Append is not allowed for bz2 archives.";
+			return getBZipOutputStream(fname, buffered, append, allowSubprocess);
 		}else if(xz){
-			assert(!append);
+			assert(!append) : "Append is not allowed for gz archives.";
 			return getXZOutputStream(fname, buffered, allowSubprocess);
 		}
 		return getRawOutputStream(fname, append, buffered);
@@ -492,11 +493,20 @@ public class ReadWrite {
 //		return null;
 	}
 	
-	public static OutputStream getBZipOutputStream(String fname, boolean buffered, boolean allowSubprocess){
-		if(verbose){System.err.println("getBZipOutputStream("+fname+", "+buffered+", "+allowSubprocess+")");}
+	public static OutputStream getBZipOutputStream(String fname, boolean buffered, boolean append, boolean allowSubprocess){
+		if(verbose){System.err.println("getBZipOutputStream("+fname+", "+buffered+", "+append+", "+allowSubprocess+")");}
 		final OutputStream raw=getRawOutputStream(fname, false, RAWMODE);
 		if(RAWMODE){return raw;}
-		throw new RuntimeException("bz2 compression not supported in this version.");
+		
+		if(true /*allowSubprocess && Shared.THREADS>2*/){
+			if(USE_PBZIP2 && Data.PBZIP2() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getPbzip2Stream(fname, append);}
+			if(USE_BZIP2 && Data.BZIP2() && Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/){return getBzip2Stream(fname, append);}
+		}
+		
+		throw new RuntimeException("bz2 compression not supported in this version, unless bzip2 or pbzip2 is installed.");
+		
+		
+//		getBzip2Stream
 		
 //		{//comment to disable BZip2
 //			try {
@@ -533,9 +543,11 @@ public class ReadWrite {
 	
 	public static OutputStream getGZipOutputStream(String fname, boolean append, boolean allowSubprocess){
 		if(verbose){System.err.println("getGZipOutputStream("+fname+", "+append+", "+allowSubprocess+")");}
+		
+//		assert(false) : ReadWrite.ZIPLEVEL+", "+Shared.THREADS+", "+MAX_ZIP_THREADS+", "+allowSubprocess+", "+USE_PIGZ+", "+Data.PIGZ();
 		if(allowSubprocess && Shared.THREADS>2){
-			if(USE_PIGZ && Data.PIGZ() && Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/){return getPigzStream(fname, append);}
-			if(USE_GZIP && Data.GZIP() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getGzipStream(fname, append);}
+			if(USE_PIGZ && Data.PIGZ()/* && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout."))*/){return getPigzStream(fname, append);}
+			if(USE_GZIP && Data.GZIP()/* && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout."))*/){return getGzipStream(fname, append);}
 		}
 		
 		final OutputStream raw=getRawOutputStream(fname, append, false);
@@ -558,34 +570,51 @@ public class ReadWrite {
 	
 	public static OutputStream getPigzStream(String fname, boolean append){
 		if(verbose){System.err.println("getPigzStream("+fname+")");}
-		int threads=Tools.min(MAX_ZIP_THREADS, Tools.max((Shared.THREADS-1)/Tools.max(ZIP_THREAD_DIVISOR, 1), 1));
-		threads=Tools.max(1, threads);
+		int threads=Tools.min(MAX_ZIP_THREADS, Tools.max((Shared.THREADS+1)/Tools.max(ZIP_THREAD_DIVISOR, 1), 1));
+		threads=Tools.max(1, Tools.min(Shared.THREADS-1, threads));
 		int zl=ZIPLEVEL;
-		if(threads>=4 && zl>0 && zl<4){zl=4;}
+		if(ALLOW_ZIPLEVEL_CHANGE && threads>=4 && zl>0 && zl<4){zl=4;}
 		OutputStream out;
-		if(Data.SH()){
-			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append);
-		}else{
-			assert(!append);
-			assert(false) : "pigz output does not currently work without bash.";
-			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl+" > "+fname, false, append);
-		}
+		out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append, true);
+		
+//		assert(false) : ReadWrite.ZIPLEVEL+", "+zl+", "+threads+", "+Shared.THREADS+", "+MAX_ZIP_THREADS+", "+USE_PIGZ+", "+Data.PIGZ();
+		
+//		if(Data.SH()){
+//			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append, true);
+//		}else{
+////			assert(!append);
+////			assert(false) : "pigz output does not currently work without bash.";
+//			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl+(append ? " >> " : " > ")+fname, false, append, true);
+//		}
+		
 		return out;
 	}
 	
 	public static OutputStream getGzipStream(String fname, boolean append){
 		if(verbose){System.err.println("getGzipStream("+fname+")");}
-		OutputStream out=getOutputStreamFromProcess(fname, "gzip -c -"+ZIPLEVEL, true, append);
+		OutputStream out=getOutputStreamFromProcess(fname, "gzip -c -"+ZIPLEVEL, true, append, true);
 		return out;
 	}
 	
-	public static OutputStream getOutputStreamFromProcess(String fname, String command, boolean sh, boolean append){
-		if(verbose){System.err.println("getOutputStreamFromProcess("+fname+", "+command+", "+sh+")");}
+	public static OutputStream getBzip2Stream(String fname, boolean append){
+		if(verbose){System.err.println("getBzip2Stream("+fname+")");}
+		OutputStream out=getOutputStreamFromProcess(fname, "bzip2 -c -"+ZIPLEVEL, true, append, true);
+		return out;
+	}
+	
+	public static OutputStream getPbzip2Stream(String fname, boolean append){
+		if(verbose){System.err.println("getPbzip2Stream("+fname+")");}
+		int threads=Tools.min(MAX_ZIP_THREADS, Tools.max((Shared.THREADS+1)/Tools.max(ZIP_THREAD_DIVISOR, 1), 1));
+		threads=Tools.max(1, Tools.min(Shared.THREADS-1, threads));
+		OutputStream out=getOutputStreamFromProcess(fname, "pbzip2 -c -p"+threads+" -"+ZIPLEVEL, true, append, true);
+		return out;
+	}
+	
+	public static OutputStream getOutputStreamFromProcess(String fname, String command, boolean sh, boolean append, boolean useProcessBuilder){
+		if(verbose){System.err.println("getOutputStreamFromProcess("+fname+", "+command+", "+sh+", "+useProcessBuilder+")");}
 		
 		OutputStream out=null;
 		Process p=null;
-		
-		boolean useProcessBuilder=false;
 		
 		if(useProcessBuilder){
 			ProcessBuilder pb=new ProcessBuilder();
@@ -605,12 +634,6 @@ public class ReadWrite {
 				}
 				
 				pb.command(command.split(" "));
-				
-//				if(sh){
-//					pb.command(("sh -c "+command+" 1>"+fname).split(" "));
-//				}else{
-//					pb.command(command.split(" "));
-//				}
 			}
 			try {
 				p=pb.start();
@@ -621,6 +644,14 @@ public class ReadWrite {
 			
 			addProcess(fname, p);
 			out=p.getOutputStream();
+			{
+				out=p.getOutputStream();
+				InputStream es=p.getErrorStream();
+				assert(es!=null);
+				PipeThread et=new PipeThread(es, System.err);
+				addPipeThread(fname, et);
+				et.start();
+			}
 			return out;
 		}
 		
@@ -795,7 +826,7 @@ public class ReadWrite {
 		if(!RAWMODE){
 			if(zipped){return getZipInputStream(fname);}
 			if(gzipped){return getGZipInputStream(fname, allowSubprocess);}
-			if(bzipped){return getBZipInputStream(fname);}
+			if(bzipped){return getBZipInputStream(fname, allowSubprocess);}
 			if(bam){return getInputStreamFromProcess(fname, "samtools view -h", false);}
 		}
 
@@ -922,8 +953,8 @@ public class ReadWrite {
 		
 		if(allowSubprocess && Shared.THREADS>2){
 			if(!fname.startsWith("jar:")){
-				if(verbose){System.err.println("Fetching gzip input stream: "+fname+", "+allowSubprocess+", "+USE_UNPIGZ+", "+Data.UNPIGZ());}
-				if(USE_UNPIGZ && Data.UNPIGZ()){return getUnpigzStream(fname);}
+				if(verbose){System.err.println("Fetching gzip input stream: "+fname+", "+allowSubprocess+", "+USE_UNPIGZ+", "+Data.PIGZ());}
+				if(USE_UNPIGZ && Data.PIGZ()){return getUnpigzStream(fname);}
 				if(USE_GUNZIP && Data.GUNZIP()){return getGunzipStream(fname);}
 			}
 		}
@@ -987,6 +1018,16 @@ public class ReadWrite {
 		return getInputStreamFromProcess(fname, "pigz -c -d", false);
 	}
 	
+	public static InputStream getUnpbzip2Stream(String fname){
+		if(verbose){System.err.println("getUnpbzip2Stream("+fname+")");}
+		return getInputStreamFromProcess(fname, "pbzip2 -c -d", false);
+	}
+	
+	public static InputStream getUnbzip2Stream(String fname){
+		if(verbose){System.err.println("getUnbzip2Stream("+fname+")");}
+		return getInputStreamFromProcess(fname, "bzip2 -c -d", false);
+	}
+	
 	public static InputStream getInputStreamFromProcess(String fname, String command, boolean cat){
 		if(verbose){System.err.println("getInputStreamFromProcess("+fname+", "+command+", "+cat+")");}
 
@@ -994,7 +1035,15 @@ public class ReadWrite {
 		InputStream in=null;
 
 		Process p=null;
-		if(fname.equals("stdin") || fname.startsWith("stdin.")){
+		if(fname==null){
+			try {
+				p=Runtime.getRuntime().exec(command);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			fname=command;
+		}else if(fname.equals("stdin") || fname.startsWith("stdin.")){
 			try {
 				if(cat){
 					throw new RuntimeException();
@@ -1034,27 +1083,22 @@ public class ReadWrite {
 		PipeThread et=new PipeThread(es, System.err);
 		addPipeThread(fname, et);
 		et.start();
-
+		
 		return in;
 	}
 	
 	
-	public static InputStream getBZipInputStream(String fname){
+	public static InputStream getBZipInputStream(String fname, boolean allowSubprocess){
 		if(verbose){System.err.println("getBZipInputStream("+fname+")");}
 		InputStream in=null;
 		
-		try {in=getBZipInputStream(fname, true);} 
-		catch (IOException e) {}
-		
-		if(in==null){
-			try {in=getBZipInputStream(fname, false);} 
-			catch (IOException e) {
-				System.err.println("Error when attempting to read "+fname);
-				throw new RuntimeException(e);
-			}catch (NullPointerException e) {
-				System.err.println("Error when attempting to read "+fname);
-				throw new RuntimeException(e);
-			}
+		try {in=getBZipInputStream2(fname, allowSubprocess);} 
+		catch (IOException e) {
+			System.err.println("Error when attempting to read "+fname);
+			throw new RuntimeException(e);
+		}catch (NullPointerException e) {
+			System.err.println("Error when attempting to read "+fname);
+			throw new RuntimeException(e);
 		}
 		
 		assert(in!=null);
@@ -1062,7 +1106,22 @@ public class ReadWrite {
 	}
 	
 	
-	private static InputStream getBZipInputStream(String fname, boolean stripBZ) throws IOException{
+	private static InputStream getBZipInputStream2(String fname, boolean allowSubprocess) throws IOException{
+		if(verbose){
+			if(verbose){System.err.println("getBZipInputStream("+fname+")");}
+		}
+		
+		if(!fname.startsWith("jar:")){
+			if(verbose){System.err.println("Fetching bz2 input stream: "+fname+", "+USE_PBZIP2+", "+USE_BZIP2+", "+Data.PBZIP2()+Data.BZIP2());}
+			if(USE_PBZIP2 && Data.PBZIP2()){return getUnpbzip2Stream(fname);}
+			if(USE_BZIP2 && Data.BZIP2()){return getUnbzip2Stream(fname);}
+		}
+		
+		throw new IOException("\nbzip2 or pbzip2 must be in the path to read bz2 files:\n"+fname+"\n");
+	}
+	
+	@Deprecated
+	private static InputStream getBZipInputStream_old(String fname, boolean stripBZ) throws IOException{
 		if(verbose){System.err.println("getBZipInputStream("+fname+", "+stripBZ+")");}
 		throw new RuntimeException("bz2 compression not supported in this version.");
 
@@ -1153,7 +1212,7 @@ public class ReadWrite {
 	}
 	
 	
-	private static String basename(String fname){
+	public static String basename(String fname){
 		fname=fname.replace('\\', '/');
 		boolean xz=fname.endsWith(".xz");
 		boolean gzipped=fname.endsWith(".gz");
@@ -1174,8 +1233,29 @@ public class ReadWrite {
 		return fname;
 	}
 	
+	public static String stripExtension(String fname){
+		if(fname==null){return null;}
+		for(String s0 : FileFormat.EXTENSION_LIST){
+			String s="."+s0;
+			if(fname.endsWith(s)){return stripExtension(fname.substring(0, fname.length()-s.length()));}
+		}
+		return fname;
+	}
+	
+	public static String stripToCore(String fname){
+		fname=stripPath(fname);
+		return stripExtension(fname);
+	}
+	
+	public static String stripPath(String fname){
+		if(fname==null){return null;}
+		fname=fname.replace('\\', '/');
+		if(fname.contains("/")){fname=fname.substring(fname.lastIndexOf('/')+1);}
+		return fname;
+	}
+	
 	public static String compressionType(String fname){
-		fname=fname.toLowerCase();
+		fname=fname.toLowerCase(Locale.ENGLISH);
 		for(String s : extensions){
 			if(fname.endsWith(s)){return s.substring(1);}
 		}
@@ -1187,6 +1267,7 @@ public class ReadWrite {
 	}
 	
 	public static boolean isSam(String fname){
+		fname=fname.toLowerCase(Locale.ENGLISH);
 		if(fname.endsWith(".sam")){return true;}
 		String s=compressionType(fname);
 		if(s==null){return false;}
@@ -1197,7 +1278,7 @@ public class ReadWrite {
 		fname=rawName(fname);
 		int x=fname.lastIndexOf('.');
 		if(x<0){return "";}
-		return fname.substring(x+1);
+		return fname.substring(x+1).toLowerCase(Locale.ENGLISH);
 	}
 	
 	public static String parseRoot(String path){
@@ -1491,9 +1572,10 @@ public class ReadWrite {
 	public static boolean killProcess(String fname){
 		if(verbose){
 			System.err.println("killProcess("+fname+")");
-			new Exception().printStackTrace(System.err);
+//			new Exception().printStackTrace(System.err);
+			System.err.println("processMap: "+processMap.keySet());
 		}
-		if(fname==null || (!isCompressed(fname) && !fname.endsWith(".bam"))){return false;}
+		if(fname==null || (!isCompressed(fname) && !fname.endsWith(".bam") && !FORCE_KILL)){return false;}
 		
 		boolean error=false;
 		synchronized(processMap){
@@ -1538,7 +1620,10 @@ public class ReadWrite {
 	}
 	
 	private static void addProcess(String fname, Process p){
-		if(verbose){System.err.println("addProcess("+fname+", "+p+")");}
+		if(verbose){
+			System.err.println("addProcess("+fname+", "+p+")");
+			new Exception().printStackTrace();
+		}
 		synchronized(processMap){
 //			System.err.println("Adding Process for "+fname);
 			Process old=processMap.put(fname, p);
@@ -1572,10 +1657,15 @@ public class ReadWrite {
 	
 	public static boolean RAWMODE=false; //Does not automatically compress and decompress when true
 
+	//For killing subprocesses that are neither compression nor samtools
+	public static boolean FORCE_KILL=false;
+	
 	public static boolean USE_GZIP=false;
 	public static boolean USE_PIGZ=false;
 	public static boolean USE_GUNZIP=false;
 	public static boolean USE_UNPIGZ=false;
+	public static boolean USE_BZIP2=true;
+	public static boolean USE_PBZIP2=true;
 
 	public static boolean PROCESS_BZ2=true;
 	public static final boolean PROCESS_XZ=false;
@@ -1586,6 +1676,7 @@ public class ReadWrite {
 	public static int ZIPLEVEL=4;
 	public static int MAX_ZIP_THREADS=8;
 	public static int ZIP_THREAD_DIVISOR=4;
+	public static boolean ALLOW_ZIPLEVEL_CHANGE=true;
 	
 	public static final String FILESEP=System.getProperty("file.separator");
 

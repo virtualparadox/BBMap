@@ -1,9 +1,9 @@
 package stream;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import align2.AbstractIndex;
 import align2.GapTools;
 import align2.QualityTools;
 import align2.Shared;
@@ -14,8 +14,13 @@ import dna.ChromosomeArray;
 import dna.Data;
 import dna.Gene;
 
-public final class Read implements Comparable<Read>, Cloneable{
+public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -1026645233407290096L;
+
 	public static void main(String[] args){
 		byte[] a=args[0].getBytes();
 		System.out.println(new String(a));
@@ -49,7 +54,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public Read(byte[] s_, int chrom_, int start_, int stop_, String id_, byte[] quality_, long numericID_, int flags_){
-		assert(quality_==null || quality_[0]<=80 || !FASTQ.DETECT_QUALITY) : "\n"+Arrays.toString(quality_)+
+		assert(quality_==null || quality_.length<1 || quality_[0]<=80 || !FASTQ.DETECT_QUALITY) : 
+			"Quality value ("+quality_[0]+") appears too high.\n"+Arrays.toString(quality_)+
 			"\n"+Arrays.toString(s_)+"\n"+numericID_+"\n"+id_+"\n"+FASTQ.ASCII_OFFSET;
 		
 		flags=flags_;
@@ -131,6 +137,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 						if(q<MIN_CALLED_QUALITY){
 //							assert(false) : b+", "+q;
 							quality[i]=MIN_CALLED_QUALITY;
+						}else if(FIX_QUALITY && q>MAX_CALLED_QUALITY){
+							q=MAX_CALLED_QUALITY;
 						}
 					}else{
 //						assert(false) : b+", "+q;
@@ -147,19 +155,33 @@ public final class Read implements Comparable<Read>, Cloneable{
 			if(bases!=null){
 				if(quality!=null){
 					if(!aa){
-						for(int i=0; i<quality.length; i++){
-							byte b=bases[i];
-							byte q=quality[i];
-							if(AminoAcid.isFullyDefined(b)){
-								if(q<MIN_CALLED_QUALITY){
-									quality[i]=MIN_CALLED_QUALITY;
+						
+						if(CHANGE_QUALITY){
+							for(int i=0; i<quality.length; i++){
+								byte b=bases[i];
+								byte q=quality[i];
+								if(AminoAcid.isFullyDefined(b)){
+									if(q<MIN_CALLED_QUALITY){
+										quality[i]=MIN_CALLED_QUALITY;
+									}
+								}else{
+									quality[i]=0;
+									if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]=nocall;}
 								}
-							}else{
-								quality[i]=0;
-								if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]=nocall;}
+								if(TO_UPPER_CASE && b>90){bases[i]-=32;}
+								else if(LOWER_CASE_TO_N && b>90){bases[i]=nocall;}
 							}
-							if(TO_UPPER_CASE && b>90){bases[i]-=32;}
-							else if(LOWER_CASE_TO_N && b>90){bases[i]=nocall;}
+						}else{
+							for(int i=0; i<bases.length; i++){
+								byte b=bases[i];
+								if(AminoAcid.isFullyDefined(b)){
+									//do nothing
+								}else{
+									if(b=='-' || b=='.' || b=='X' || b=='n'){bases[i]=nocall;}
+								}
+								if(TO_UPPER_CASE && b>90){bases[i]-=32;}
+								else if(LOWER_CASE_TO_N && b>90){bases[i]=nocall;}
+							}
 						}
 					}
 				}else if(TO_UPPER_CASE){
@@ -539,6 +561,12 @@ public final class Read implements Comparable<Read>, Cloneable{
 		return new ByteBuilder(obj.toString());
 	}
 	
+	public ByteBuilder toInfoB(ByteBuilder bb){
+		if(obj==null){return bb;}
+		if(obj.getClass()==ByteBuilder.class){return bb.append((ByteBuilder)obj);}
+		return bb.append(obj);
+	}
+	
 	public StringBuilder toFastq(){
 		return FASTQ.toFASTQ(this, (StringBuilder)null);
 	}
@@ -605,6 +633,11 @@ public final class Read implements Comparable<Read>, Cloneable{
 	
 	public StringBuilder toSam(){
 		return new SamLine(this, pairnum()).toText();
+	}
+	
+	public ByteBuilder toSam(ByteBuilder bb){
+		SamLine sl=new SamLine(this, pairnum());
+		return sl.toBytes(bb).append('\n');
 	}
 	
 	public static CharSequence header(){
@@ -1198,6 +1231,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 		sites=null;
 		setMapped(false);
 		setPaired(false);
+		if(mate!=null){mate.setPaired(false);}
 	}
 	
 	public void clearSite(){
@@ -1319,7 +1353,64 @@ public final class Read implements Comparable<Read>, Cloneable{
 		}
 		return msdicn;
 	}
+
 	
+	/**
+	 * @param match string
+	 * @return Ref length of match string
+	 */
+	public static final int calcMatchLength(byte[] match) {
+		if(match==null || match.length<1){return 0;}
+		
+		byte mode='0', c='0';
+		int current=0;
+		int len=0;
+		for(int i=0; i<match.length; i++){
+			c=match[i];
+			if(Character.isDigit(c)){
+				current=(current*10)+(c-'0');
+			}else{
+				if(mode==c){
+					current=Tools.max(current+1, 2);
+				}else{
+					current=Tools.max(current, 1);
+
+					if(mode=='m'){
+						len+=current;
+					}else if(mode=='S'){
+						len+=current;
+					}else if(mode=='D'){
+						len+=current;
+					}else if(mode=='I'){ //Do nothing
+						//len+=current;
+					}else if(mode=='C' || mode=='X' || mode=='Y'){
+						len+=current;
+					}else if(mode=='N' || mode=='R'){
+						len+=current;
+					}
+					mode=c;
+					current=0;
+				}
+			}
+		}
+		if(current>0 || !Character.isDigit(c)){
+			current=Tools.max(current, 1);
+			if(mode=='m'){
+				len+=current;
+			}else if(mode=='S'){
+				len+=current;
+			}else if(mode=='D'){
+				len+=current;
+			}else if(mode=='I'){ //Do nothing
+				//len+=current;
+			}else if(mode=='C' || mode=='X' || mode=='Y'){
+				len+=current;
+			}else if(mode=='N' || mode=='R'){
+				len+=current;
+			}
+		}
+		return len;
+	}
 
 	public final float identity() {return identity(match);}
 	
@@ -1690,6 +1781,11 @@ public final class Read implements Comparable<Read>, Cloneable{
 	
 	public boolean containsXY(){
 		assert(match!=null && valid());
+		return containsXY(match);
+	}
+	
+	public static boolean containsXY(byte[] match){
+		if(match==null){return false;}
 		for(int i=0; i<match.length; i++){
 			byte b=match[i];
 			if(b=='X' || b=='Y'){return true;}
@@ -1974,7 +2070,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	
 	public ArrayList<SiteScore> sites;
 	public SiteScore originalSite; //Origin site for synthetic reads
-	public Object obj=null; //For testing only
+	public Serializable obj=null; //For testing only
 	public Read mate;
 	
 	public int flags;
@@ -2528,7 +2624,6 @@ public final class Read implements Comparable<Read>, Cloneable{
 		return kmers;
 	}
 	
-	
 	public static final boolean CHECKSITES(Read r, byte[] basesM){
 		return CHECKSITES(r.sites, r.bases, basesM, r.numericID);
 	}
@@ -2541,7 +2636,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 			byte[] bases=(ss.strand==Gene.PLUS ? basesP : basesM);
 //			System.err.println("Checking site "+i);
 			boolean b=CHECKSITE(ss, bases, id);
-			assert(b);
+			assert(b) : id+"\n"+new String(basesP)+"\n"+ss+"\n";
 //			System.err.println("Checked site "+i+" = "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect);
 			if(!b){
 //				System.err.println("Error at SiteScore "+i+": ss.p="+ss.perfect+", ss.sp="+ss.semiperfect);
@@ -2561,16 +2656,21 @@ public final class Read implements Comparable<Read>, Cloneable{
 		if(ss==null){return true;}
 //		System.err.println("Checking site "+ss+"\nss.p="+ss.perfect+", ss.sp="+ss.semiperfect+", bases="+new String(bases));
 		if(ss.perfect){assert(ss.semiperfect) : ss+"\n"+new String(bases);}
+		if(ss.gaps!=null){
+			if(ss.gaps[0]!=ss.start || ss.gaps[ss.gaps.length-1]!=ss.stop){return false;}
+//			assert(ss.gaps[0]==ss.start && ss.gaps[ss.gaps.length-1]==ss.stop);
+		}
 		if(bases!=null){
-
+			
 			final boolean p=ss.perfect;
 			final boolean sp=ss.semiperfect;
 			final boolean p1=ss.isPerfect(bases);
 			final boolean sp1=(p1 ? true : ss.isSemiPerfect(bases));
+			final boolean xy=ss.matchContainsXY();
 
-			assert(p==p1) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
+			assert(p==p1 || (xy && p1)) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
 				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
-			assert(sp==sp1) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
+			assert(sp==sp1 || (xy && sp1)) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
 				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
 			
 //			ss.setPerfect(bases, false);
@@ -2678,7 +2778,6 @@ public final class Read implements Comparable<Read>, Cloneable{
 		return QUALCACHE[len];
 	}
 	
-	
 	public byte[] getScaffoldName(boolean requireSingleScaffold){
 		byte[] name=null;
 		if(mapped()){
@@ -2732,8 +2831,11 @@ public final class Read implements Comparable<Read>, Cloneable{
 //	public static byte ASCII_OFFSET=33;
 	private static final byte ASCII_OFFSET=33;
 	public static byte MIN_CALLED_QUALITY=2;
+	public static byte MAX_CALLED_QUALITY=41;
+	public static boolean FIX_QUALITY=false; //Cap all quality values at 41
 	public static boolean TO_UPPER_CASE=false;
 	public static boolean LOWER_CASE_TO_N=false;
+	public static boolean CHANGE_QUALITY=true;
 	public static final boolean OTHER_SYMBOLS_TO_N=true;
 	public static boolean AVERAGE_QUALITY_BY_PROBABILITY=true;
 	

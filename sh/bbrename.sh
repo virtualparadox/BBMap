@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified August 22, 2014"
 	echo ""
 	echo "Description:  Renames reads to <prefix>_<number> where you specify the prefix and the numbers are ordered."
 	echo ""
@@ -26,6 +26,12 @@ function usage(){
 	echo "qfout=<.qual file>	Write qualities from this qual file, for the reads going to 'out=<fasta file>'"
 	echo "qfout2=<.qual file>	Write qualities from this qual file, for the reads coming from 'out2=<fasta file>'"
 	echo "ignorebadquality=f	(ibq) Fix out-of-range quality values instead of crashing with a warning."
+	echo ""
+	echo "Renaming modes (if not default):"
+	echo "renamebyinsert=f	Rename the read to indicate its correct insert size."
+	echo "renamebymapping=f	Rename the read to indicate its correct mapping coordinates."
+	echo "renamebytrim=f		Rename the read to indicate its correct post-trimming length."
+	echo "addprefix=f		Rename the read by prepending the prefix to the existing name."
 	echo ""
 	echo "Sampling parameters:"
 	echo "reads=-1 		Set to a positive number to only process this many INPUT reads (or pairs), then quit."

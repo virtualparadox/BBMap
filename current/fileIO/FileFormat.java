@@ -1,9 +1,14 @@
 package fileIO;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
+
+import align2.Tools;
 
 import dna.Parser;
 
@@ -16,6 +21,7 @@ public final class FileFormat {
 	
 	public static void main(String[] args){
 		stream.FASTQ.warnQualityChange=false;
+		PRINT_WARNING=false;
 		for(int i=0; i<args.length; i++){
 
 			final String arg=args[i];
@@ -27,17 +33,24 @@ public final class FileFormat {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(a.equals("verbose")){
+				verbose=Tools.parseBoolean(b);
 			}else if(a!=null && b!=null){
 				assert(a.startsWith("in")) : "Unknown parameter "+arg;
-				test(b);
+				test(b, true);
 			}else{
-				test(arg);
+				test(arg, true);
 			}
 		}
+		
 	}
 	
-	private static void test(String fname){
-		FileFormat ff=testInput(fname, FASTQ, null, false, true);
+//	/** Returns an int array: {format, compression, type, interleaved} */
+	private static void test(String fname, boolean forceFileRead){
+		FileFormat ffName=testInput(fname, FASTQ, null, false, false, false);
+		FileFormat ffContent=testInput(fname, UNKNOWN, null, false, true, true);
+		FileFormat ff=ffContent;
+//		assert(false) : ffName+"\n"+ffContent;
 		if(ff==null){
 			System.out.println("null");
 		}else{
@@ -46,15 +59,18 @@ public final class FileFormat {
 			if(ff.fastq()){
 				byte qold=stream.FASTQ.ASCII_OFFSET;
 				stream.FASTQ.ASCII_OFFSET=33;
-				byte[] qi=stream.FASTQ.testInterleavedAndQuality(fname);
+				ArrayList<String> oct=getFirstOctet(fname);
+				byte[] qi=testInterleavedAndQuality(oct, fname);
 				q=qi[0];
 				i=(qi[1]==1);
 				stream.FASTQ.ASCII_OFFSET=qold;
 			}else if(ff.fasta()){
-				i=stream.FASTQ.testInterleavedFasta(fname);
+				i=stream.FASTQ.testInterleavedFasta(fname, false);
 			}
 			String qs=(q==33 ? "sanger" : q==64 ? "illumina" : ""+q);
-			System.out.println(qs+"\t"+FORMAT_ARRAY[ff.format()]+"\t"+COMPRESSION_ARRAY[ff.compression()]+"\t"+(i ? "interleaved" : "single-ended"));
+			System.out.print(qs+"\t"+FORMAT_ARRAY[ff.format()]+"\t"+COMPRESSION_ARRAY[ff.compression()]+"\t"+(i ? "interleaved" : "single-ended"));
+			if(ffName.format()!=ff.format()){System.out.print("\t"+FORMAT_ARRAY[ffName.format()]+"\t(File extension differs from contents)");}
+			System.out.println();
 		}
 	}
 	
@@ -63,26 +79,35 @@ public final class FileFormat {
 	/*--------------------------------------------------------------*/
 
 	public static FileFormat testInput(String fname, String overrideExtension, boolean allowSubprocess){
+		if(verbose){System.err.println("testInputA("+fname+", "+overrideExtension+", "+allowSubprocess+")");}
 		return testInput(fname, FASTQ, overrideExtension, allowSubprocess, true);
 	}
 	
 	public static FileFormat testInput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean allowFileRead){
+		if(verbose){System.err.println("testInputB("+fname+", "+defaultFormat+", "+overrideExtension+", "+allowSubprocess+", "+allowFileRead+")");}
+		return testInput(fname, defaultFormat, overrideExtension, allowSubprocess, allowFileRead, false);
+	}
+	
+	public static FileFormat testInput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean allowFileRead, boolean forceFileRead){
+		if(verbose){System.err.println("testInputC("+fname+", "+defaultFormat+", "+overrideExtension+", "+allowSubprocess+", "+allowFileRead+", "+forceFileRead+")");}
 		if(fname==null){return null;}
 		int overrideFormat=0;
 		int overrideCompression=0;
 		if(overrideExtension!=null && overrideExtension.length()>0){
-			int[] a=testFormat(overrideExtension, false);
+			int[] a=testFormat(overrideExtension, false, false);
 			if(a!=null){
 				overrideFormat=a[0];
 				if(a[1]!=RAW){overrideCompression=a[1];}
 			}
 		}
-		return testInput(fname, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead);
+		return testInput(fname, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead, forceFileRead);
 	}
 
-	public static FileFormat testInput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean allowFileRead){
+	public static FileFormat testInput(String fname, int defaultFormat, int overrideFormat, 
+			int overrideCompression, boolean allowSubprocess, boolean allowFileRead, boolean forceFileRead){
+		if(verbose){System.err.println("testInputD("+fname+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess+", "+allowFileRead+", "+forceFileRead+")");}
 		if(fname==null){return null;}
-		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead, false, false, false);
+		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead, forceFileRead, false, false, false);
 	}
 	
 	public static FileFormat testOutput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
@@ -90,7 +115,7 @@ public final class FileFormat {
 		int overrideFormat=0;
 		int overrideCompression=0;
 		if(overrideExtension!=null && overrideExtension.length()>0){
-			int[] a=testFormat(overrideExtension, false);
+			int[] a=testFormat(overrideExtension, false, false);
 			if(a!=null){
 				overrideFormat=a[0];
 				if(a[1]!=RAW){overrideCompression=a[1];}
@@ -101,7 +126,7 @@ public final class FileFormat {
 	
 	public static FileFormat testOutput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
 		if(fname==null){return null;}
-		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, false, overwrite, append, ordered);
+		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, false, false, overwrite, append, ordered);
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -109,14 +134,16 @@ public final class FileFormat {
 	/*--------------------------------------------------------------*/
 	
 	private FileFormat(String fname, int mode_, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess_, 
-			boolean allowFileRead, boolean overwrite_, boolean append_, boolean ordered_){
+			boolean allowFileRead, boolean forceFileRead, boolean overwrite_, boolean append_, boolean ordered_){
 //			, boolean interleaved_, boolean colorspace_, long maxReads_){
 		
 		if(verbose){
-			new Exception().printStackTrace(System.err);
+//			new Exception().printStackTrace(System.err);
 			System.err.println("FileFormat(fname="+fname+", mode="+mode_+", dFormat="+defaultFormat+", oFormat="+overrideFormat+", oCompression="+overrideCompression+
-					", allowSub="+allowSubprocess_+", allowRead="+allowFileRead+", ow="+overwrite_+", append="+append_+", ordered="+ordered_+")");
+					", allowSub="+allowSubprocess_+", allowRead="+allowFileRead+", forceFileRead="+forceFileRead+
+					", ow="+overwrite_+", append="+append_+", ordered="+ordered_+")");
 		}
+		assert(!forceFileRead || allowFileRead);
 		
 //		assert(!overwrite_ || !append_) : "Both overwrite and append may not be set to true.";
 		if(overwrite_ && append_){overwrite_=false;}
@@ -125,15 +152,15 @@ public final class FileFormat {
 		fname=fname.trim().replace('\\', '/');
 		assert(fname.trim().length()>0) : fname;
 		
-		if(defaultFormat<1){defaultFormat=FQ;}
+		if(defaultFormat<1 && !forceFileRead){defaultFormat=FQ;}
 		allowFileRead&=(mode_==READ);
-		int[] a=testFormat(fname, allowFileRead);
+		int[] a=testFormat(fname, allowFileRead, forceFileRead);
 		
 		if(verbose){System.err.println(Arrays.toString(a));}
 		
 		if(a[0]==UNKNOWN && overrideFormat<1){
 			a[0]=defaultFormat;
-			if(defaultFormat!=TEXT){
+			if(defaultFormat!=TEXT && PRINT_WARNING){
 				System.err.println("Unspecified format for "+(mode_==READ ? "input" : "output")+" "+(fname==null ? "stream" : fname)+"; defaulting to "+FORMAT_ARRAY[a[0]]+".");
 			}
 		}
@@ -159,7 +186,7 @@ public final class FileFormat {
 //		colorspace=colorspace_;
 //		maxReads=write() ? -1 : maxReads_;
 
-		assert(!unknownFormat()) : "Unknown file format for "+fname+"\n"+
+		assert(forceFileRead || !unknownFormat()) : "Unknown file format for "+fname+"\n"+
 			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
 		assert(!unknownCompression()) : "Unknown compression for "+fname+"\n"+
 			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
@@ -189,13 +216,25 @@ public final class FileFormat {
 		return sb.toString();
 	}
 	
+	public static String toString(int[] vector){
+		int format=vector[0], compression=vector[1], type=vector[2], interleaving=vector[3];
+		StringBuilder sb=new StringBuilder();
+		sb.append(format+"("+FORMAT_ARRAY[format]+")").append(',');
+		sb.append(compression+"("+COMPRESSION_ARRAY[compression]+")").append(',');
+		sb.append(type+"("+TYPE_ARRAY[type]+")").append(',');
+		sb.append(interleaving+"("+INTERLEAVING_ARRAY[interleaving]+")");
+		return sb.toString();
+	}
+	
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private static int[] testFormat(String fname, boolean allowFileRead){
-		int[] r=new int[] {UNKNOWN, RAW, FILE};
+	/** Returns an int array: {format, compression, type, interleaved} */
+	private static int[] testFormat(String fname, boolean allowFileRead, boolean forceFileRead){
+		if(verbose){System.err.println("testFormat("+fname+", "+allowFileRead+", "+forceFileRead+")");}
+		int[] r=new int[] {UNKNOWN, RAW, FILE, UNKNOWN};
 		if(fname==null || fname.length()<1){
 			r[2]=STDIO;
 			return r;
@@ -209,7 +248,7 @@ public final class FileFormat {
 		if(ext==null){}
 		else if(ext.equals("fq") || ext.equals("fastq")){r[0]=FASTQ;}
 		else if(ext.equals("fa") || ext.equals("fasta") || ext.equals("fas") || ext.equals("fna") || ext.equals("ffn") 
-				|| ext.equals("frn") || ext.equals("seq")|| ext.equals("fsa")){r[0]=FASTA;}
+				|| ext.equals("frn") || ext.equals("seq") || ext.equals("fsa") || ext.equals("faa")){r[0]=FASTA;}
 		else if(/*ext.equals("txt") || */ext.equals("bread")){r[0]=BREAD;}
 		else if(ext.equals("sam")){r[0]=SAM;}
 		else if(ext.equals("csfasta")){r[0]=CSFASTA;}
@@ -218,15 +257,13 @@ public final class FileFormat {
 		else if(ext.equals("sites") || ext.equals("sitesonly")){r[0]=SITES;}
 		else if(ext.equals("info") || ext.equals("attachment")){r[0]=ATTACHMENT;}
 		else if(ext.equals("scarf")){r[0]=SCARF;}
+		else if(ext.equals("phylip")){r[0]=PHYLIP;}
 		
 		if(comp==null){}
 		else if(comp.equals("gz")){r[1]=GZ;}
 		else if(comp.equals("zip")){r[1]=ZIP;}
 		else if(comp.equals("bz2")){r[1]=BZ2;}
 		else if(comp.equals("xz")){r[1]=XZ;}
-		
-//		assert(false) : Arrays.toString(r);
-		
 
 		if(slc.length()>2 && slc.charAt(0)=='s' && slc.charAt(1)=='t'){
 			if(slc.equals("stdin") || slc.startsWith("stdin.") || slc.equals("standardin")){r[2]=STDIO;}
@@ -235,21 +272,37 @@ public final class FileFormat {
 			r[2]=DEVNULL;
 		}
 		
-		if(r[0]==UNKNOWN){
+		if(verbose){System.err.println("Before reading: \t"+r[0]+", "+toString(r)+", "+forceFileRead+", "+(r[0]!=BAM));}
+		
+		if(r[0]==UNKNOWN || (forceFileRead && r[0]!=BAM)){
 			File f=(allowFileRead && r[2]==FILE ? new File(fname) : null);
 			if(f!=null && f.exists() && !f.isDirectory()){
-				InputStream is=ReadWrite.getInputStream(fname, false, false);
-				int b=-1;
+				int b1=-1, b2=-1, b3=-1;
 				try {
-					b=is.read();
+					InputStream is=ReadWrite.getInputStream(fname, false, r[1]==BZ2);
+					int x=is.read();
+					b1=x;
+					while(x>=0 && x!='\n' && x!='\r'){x=is.read();}
+					while(x=='\n' || x=='\r'){x=is.read();}
+					b2=x;
+					while(x>=0 && x!='\n' && x!='\r'){x=is.read();}
+					while(x=='\n' || x=='\r'){x=is.read();}
+					b3=x;
 					is.close();
-				} catch (IOException e) {
+					ReadWrite.finishReading(is, fname, true);
+				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				if(b=='>'){r[0]=FA;}
-				else if(b=='@'){r[0]=FQ;} //TODO: Note - could be sam
-				else{r[0]=BREAD;}
+				if(b1=='>'){r[0]=FA;}
+				else if(b1=='@'){
+					if(b3=='+'){r[0]=FQ;}
+					else if(b2<0 || b2=='@'){r[0]=SAM;}
+					else{if(!forceFileRead){r[0]=FQ;}} //probably a truncated fastq file?
+				}
+				else{if(!forceFileRead){r[0]=BREAD;}} //or possibly scarf
+//				System.err.println((char)b1+", "+(char)b2+", "+(char)b3+", ");
+				if(verbose){System.err.println("After reading:   \t"+r[0]+", "+toString(r)+", "+forceFileRead+", "+(r[0]!=BAM));}
 			}else{
 				if(fname.equals("sequential")){r[0]=SEQUENTIAL;}
 				else if(fname.equals("random")){r[0]=RANDOM;}
@@ -262,21 +315,53 @@ public final class FileFormat {
 			File f=new File(fname);
 			if(f.exists() && !f.isDirectory()){r[2]=FILE;}
 		}
-//		else{
-//			r[2]=FILE; //What is this for?
-//		}
-		
+		if(verbose){System.err.println("testFormat return:\t"+r[0]+", "+toString(r)+", "+forceFileRead+", "+(r[0]!=BAM));}
 		return r;
 	}
 	
 	public static boolean hasFastaExtension(String fname){
-		int[] r=testFormat(fname, false);
+		int[] r=testFormat(fname, false, false);
 		return r[0]==FA;
 	}
 	
 	public static boolean hasFastqExtension(String fname){
-		int[] r=testFormat(fname, false);
+		int[] r=testFormat(fname, false, false);
 		return r[0]==FQ;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            ???????           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	public static ArrayList<String> getFirstOctet(String fname){
+		if(fname==null){return null;}
+		if(fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return null;}
+		
+		ArrayList<String> oct=new ArrayList<String>(8);
+		
+		{
+			InputStream is=ReadWrite.getInputStream(fname, false, false);
+			BufferedReader br=new BufferedReader(new InputStreamReader(is));
+			try {
+				int cntr=0;
+				for(String s=br.readLine(); s!=null && cntr<8; s=br.readLine()){
+					oct.add(s);
+					cntr++;
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			ReadWrite.finishReading(is, fname, true, br);
+		}
+		return oct;
+	}
+	
+	public static byte[] testInterleavedAndQuality(final ArrayList<String> oct, String fname){
+		stream.FASTQ.DETECT_QUALITY=true;
+		byte q=stream.FASTQ.testQuality(oct);
+		byte i=(byte)(stream.FASTQ.testInterleaved(oct, fname, false) ? 1 : 0);
+		return new byte[] {q, i};
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -384,6 +469,7 @@ public final class FileFormat {
 	/*--------------------------------------------------------------*/
 	
 	public static boolean verbose=false;
+	public static boolean PRINT_WARNING=true;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------          Constants           ----------------*/
@@ -406,11 +492,20 @@ public final class FileFormat {
 	public static final int BAM=11;
 	public static final int SCARF=12;
 	public static final int TEXT=13;
+	public static final int PHYLIP=14;
 	
 	private static final String[] FORMAT_ARRAY=new String[] {
 		"unknown", "fasta", "fastq", "bread", "sam", "csfasta",
 		"qual", "sequential", "random", "sites", "attachment",
-		"bam", "scarf", "text"
+		"bam", "scarf", "text", "phylip"
+	};
+	
+	public static final String[] EXTENSION_LIST=new String[] {
+		"fq", "fastq", "fa", "fasta", "fas", "fna",
+		"ffn", "frn", "seq", "fsa", "faa",
+		"bread", "sam", "csfasta", "qual", "bam",
+		"scarf", "phylip", "txt",
+		"gz", "gzip", "bz2", "zip", "xz"
 	};
 	
 	/* Compression */
@@ -445,6 +540,14 @@ public final class FileFormat {
 	
 	private static final String[] MODE_ARRAY=new String[] {
 		"unknown", "read", "write"
+	};
+	
+	/* Interleaving */
+	
+	public static final int SINGLE=1, INTERLEAVED=2;
+	
+	private static final String[] INTERLEAVING_ARRAY=new String[] {
+		"unknown", "single-ended", "interleaved"
 	};
 	
 }

@@ -33,8 +33,6 @@ public final class IntList{
 		return(loc>=size ? 0 : array[loc]);
 	}
 	
-	
-	
 	public final void add(int x){
 		if(size>=array.length){
 			resize(max(size*2, 1));
@@ -79,7 +77,25 @@ public final class IntList{
 		
 		array=alt;
 		size=alt.length;
-	}	
+	}
+	
+	public String toString(){
+		StringBuilder sb=new StringBuilder();
+		sb.append('[');
+		String comma="";
+		for(int i=0; i<size; i++){
+			if(array[i]!=0){
+				sb.append(comma+"("+i+", "+array[i]+")");
+				comma=", ";
+			}
+		}
+		sb.append(']');
+		return sb.toString();
+	}
+	
+	public void sort() {
+		if(size>1){Arrays.sort(array, 0, size);}
+	}
 	
 	private static final int min(int x, int y){return x<y ? x : y;}
 	private static final int max(int x, int y){return x>y ? x : y;}

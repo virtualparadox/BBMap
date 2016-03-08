@@ -6,12 +6,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import kmer.AbstractKmerTable;
-import kmer.HashArray;
 import kmer.HashBuffer;
-import kmer.HashForest;
 import kmer.KCountArray;
 import kmer.KmerCount7MTA;
-import kmer.KmerTable;
 import kmer.Primes;
 
 import stream.ConcurrentGenericReadInputStream;
@@ -26,19 +23,21 @@ import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
 import dna.AminoAcid;
+import dna.CoverageArray;
+import dna.CoverageArray3;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
+import fileIO.ByteStreamWriter;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
-import fileIO.TextStreamWriter;
 
 /**
  * @author Brian Bushnell
  * @date Nov 22, 2013
  *
  */
-public class CountKmersExact {
+public class KmerCountExact {
 	
 	/**
 	 * Code entrance from the command line.
@@ -51,11 +50,17 @@ public class CountKmersExact {
 			System.exit(0);
 		}
 		
+		Timer t=new Timer(), t2=new Timer();
+		t.start();
+		t2.start();
+		
 		//Create a new CountKmersExact instance
-		CountKmersExact cke=new CountKmersExact(args);
+		KmerCountExact cke=new KmerCountExact(args);
+		t2.stop();
+		outstream.println("Initialization Time:      \t"+t2);
 		
 		///And run it
-		cke.process();
+		cke.process(t);
 	}
 	
 	/**
@@ -95,7 +100,7 @@ public class CountKmersExact {
 	 * Constructor.
 	 * @param args Command line arguments
 	 */
-	public CountKmersExact(String[] args){
+	public KmerCountExact(String[] args){
 		for(String s : args){if(s.contains("standardout") || s.contains("stdout")){outstream=System.err;}}
 		System.err.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
@@ -108,7 +113,7 @@ public class CountKmersExact {
 		/* Initialize local variables with defaults */
 		boolean setOut=false, qtrimRight_=false, qtrimLeft_=false;
 		boolean rcomp_=true;
-		boolean useForest_=false, useTable_=false, useArray_=true;
+		boolean useForest_=false, useTable_=false, useArray_=true, prealloc_=true;
 		long skipreads_=0;
 		int k_=31;
 		int ways_=-1;
@@ -142,9 +147,11 @@ public class CountKmersExact {
 				in1=b;
 			}else if(a.equals("in2")){
 				in2=b;
-			}else if(a.equals("out") || a.equals("out1")){
-				out1=b;
+			}else if(a.equals("out") || a.equals("out1") || a.equals("outkmers") || a.equals("outk") || a.equals("dump")){
+				outKmers=b;
 				setOut=true;
+			}else if(a.equals("mincounttodump") || a.equals("mindump") || a.equals("mincount")){
+				minToDump=Integer.parseInt(b);
 			}else if(a.equals("hist") || a.equals("khist")){
 				outHist=b;
 			}else if(a.equals("append") || a.equals("app")){
@@ -184,7 +191,7 @@ public class CountKmersExact {
 				assert(b!=null) : "\nThe k key needs an integer value from 1 to 31, such as k=28\n";
 				k_=Integer.parseInt(b);
 			}else if(a.equals("skipreads")){
-				skipreads_=Long.parseLong(b);
+				skipreads_=Tools.parseKMG(b);
 			}else if(a.equals("threads") || a.equals("t")){
 				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
 			}else if(a.equals("minavgquality") || a.equals("maq")){
@@ -200,7 +207,7 @@ public class CountKmersExact {
 			}else if(a.equals("rcomp")){
 				rcomp_=Tools.parseBoolean(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("fastaminlen") || a.equals("fastaminlength")){
@@ -228,16 +235,17 @@ public class CountKmersExact {
 				qtrimLeft_=Tools.parseBoolean(b);
 			}else if(a.equals("trimq") || a.equals("trimquality")){
 				trimq_=Byte.parseByte(b);
-			}else if(a.equals("q102matrix") || a.equals("q102m")){
-				CalcTrueQuality.q102matrix=b;
-			}else if(a.equals("qbpmatrix") || a.equals("bqpm")){
-				CalcTrueQuality.qbpmatrix=b;
-			}else if(a.equals("adjustquality") || a.equals("adjq")){
-				TrimRead.ADJUST_QUALITY=Tools.parseBoolean(b);
 			}else if(a.equals("fastawrap")){
 				FastaReadInputStream.DEFAULT_WRAP=Integer.parseInt(b);
 			}else if(a.equals("ignorebadquality") || a.equals("ibq")){
 				FASTQ.IGNORE_BAD_QUALITY=Tools.parseBoolean(b);
+			}else if(a.equals("prealloc") || a.equals("preallocate")){
+				if(b==null || b.length()<1 || Character.isAlphabetic(b.charAt(0))){
+					prealloc_=Tools.parseBoolean(b);
+				}else{
+					preallocFraction=Tools.max(0, Double.parseDouble(b));
+					prealloc_=(preallocFraction>0);
+				}
 			}else if(a.equals("ascii") || a.equals("quality") || a.equals("qual")){
 				byte x;
 				if(b.equalsIgnoreCase("sanger")){x=33;}
@@ -261,22 +269,65 @@ public class CountKmersExact {
 					filterMax_=Integer.parseInt(b);
 					prefilter=filterMax_>0;
 				}
+			}else if(a.equals("prefiltersize")){
+				prefilterFraction=Tools.max(0, Double.parseDouble(b));
+				assert(prefilterFraction<=1) : "prefiltersize must be 0-1, a fraction of total memory.";
+				prefilter=prefilterFraction>0;
+			}else if(a.equals("prehashes") || a.equals("hashes")){
+				prehashes=Integer.parseInt(b);
+			}else if(a.equals("onepass")){
+				onePass=Tools.parseBoolean(b);
+			}else if(a.equals("passes")){
+				int passes=Integer.parseInt(b);
+				onePass=(passes<2);
+			}else if(a.equals("histcolumns")){
+				histColumns=Integer.parseInt(b);
+			}else if(a.equals("histmax")){
+				histMax=Integer.parseInt(b);
+			}else if(a.equals("histheader")){
+				histHeader=Tools.parseBoolean(b);
+			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
+				histZeros=!Tools.parseBoolean(b);
+			}else if(a.equals("minheight")){
+				minHeight=Long.parseLong(b);
+			}else if(a.equals("minvolume")){
+				minVolume=Long.parseLong(b);
+			}else if(a.equals("minwidth")){
+				minWidth=Integer.parseInt(b);
+			}else if(a.equals("minpeak")){
+				minPeak=Integer.parseInt(b);
+			}else if(a.equals("maxpeak")){
+				maxPeak=Integer.parseInt(b);
+			}else if(a.equals("maxpeakcount") || a.equals("maxpc") || a.equals("maxpeaks")){
+				maxPeakCount=Integer.parseInt(b);
+			}else if(a.equals("peaks") || a.equals("peaksout")){
+				outPeaks=b;
 			}else if(i==0 && in1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
 				in1=args[i];
-			}else if(i==1 && out1==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
-				out1=args[i];
+			}else if(i==1 && outKmers==null && arg.indexOf('=')<0 && arg.lastIndexOf('.')>0){
+				outKmers=args[i];
 				setOut=true;
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
 		
+		
 		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
 		
+		{
+			long memory=Runtime.getRuntime().maxMemory();
+			double xmsRatio=Shared.xmsRatio();
+//			long tmemory=Runtime.getRuntime().totalMemory();
+			usableMemory=(long)Tools.max(((memory-96000000)*(xmsRatio>0.97 ? 0.82 : 0.75)), memory*0.45);
+			filterMemory=(long)(prefilter ? usableMemory*prefilterFraction : 0);
+			tableMemory=(long)(usableMemory*.95-filterMemory);
+		}
+		
 		if(ways_<1){
-			long maxKmers=Runtime.getRuntime().maxMemory()/12;
+			long maxKmers=(2*tableMemory)/12;
 			long minWays=Tools.min(10000, maxKmers/Integer.MAX_VALUE);
-			ways_=(int)Tools.max(31, THREADS*4, minWays);
+			ways_=(int)Tools.max(31, THREADS*2, minWays);
 			ways_=(int)Primes.primeAtLeast(ways_);
 			assert(ways_>0);
 			System.err.println("ways="+ways_);
@@ -284,6 +335,8 @@ public class CountKmersExact {
 		
 		/* Set final variables; post-process and validate argument combinations */
 		
+		onePass=onePass&prefilter;
+		prealloc=prealloc_;
 		useForest=useForest_;
 		useTable=useTable_;
 		useArray=useArray_;
@@ -300,8 +353,14 @@ public class CountKmersExact {
 		qtrimRight=qtrimRight_;
 		qtrimLeft=qtrimLeft_;
 		
-		keySets=new AbstractKmerTable[WAYS];
-		
+		if(initialSize<1){
+			final long memOverWays=tableMemory/(12*WAYS);
+			final double mem2=(prealloc ? preallocFraction : 1)*tableMemory;
+			initialSize=(prealloc || memOverWays<initialSizeDefault ? (int)Tools.min(2142000000, (long)(mem2/(12*WAYS))) : initialSizeDefault);
+			if(initialSize!=initialSizeDefault){
+				System.err.println("Initial size set to "+initialSize);
+			}
+		}
 		
 		/* Adjust I/O settings and filenames */
 		
@@ -330,27 +389,23 @@ public class CountKmersExact {
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
 		}
 		
-		if(out1!=null && !Tools.canWrite(out1, overwrite)){throw new RuntimeException("Output file "+out1+" already exists, and overwrite="+overwrite);}
+		if(outKmers!=null && !Tools.canWrite(outKmers, overwrite)){throw new RuntimeException("Output file "+outKmers+" already exists, and overwrite="+overwrite);}
 
-		assert(!in1.equalsIgnoreCase(out1));
+		assert(!in1.equalsIgnoreCase(outKmers));
 		assert(!in1.equalsIgnoreCase(in2));
 		assert(THREADS>0);
 
 		assert(in1==null || in1.toLowerCase().startsWith("stdin") || in1.toLowerCase().startsWith("standardin") || new File(in1).exists()) : "Can't find "+in1;
 		assert(in2==null || in2.toLowerCase().startsWith("stdin") || in2.toLowerCase().startsWith("standardin") || new File(in2).exists()) : "Can't find "+in2;
 		
-		//Initialize tables
-		for(int i=0; i<keySets.length; i++){
-			if(useForest){
-				keySets[i]=new HashForest(initialSize, true);
-			}else if(useTable){
-				keySets[i]=new KmerTable(initialSize, true);
-			}else if(useArray){
-				keySets[i]=new HashArray(initialSize, true);
-			}else{
-				throw new RuntimeException("Must use forest, table, or array data structure.");
-			}
+		if(DISPLAY_PROGRESS){
+			outstream.println("Initial:");
+			printMemory();
+			outstream.println();
 		}
+		
+		final int tableType=(useForest ? AbstractKmerTable.FOREST1D : useTable ? AbstractKmerTable.TABLE : useArray ? AbstractKmerTable.ARRAY1D : 0);
+		keySets=AbstractKmerTable.preallocate(WAYS, tableType, initialSize, (!prealloc || preallocFraction<1));
 		
 	}
 
@@ -360,24 +415,46 @@ public class CountKmersExact {
 	/*--------------------------------------------------------------*/
 	
 	
-	public void process(){
+	public void process(Timer t){
 		
 		/* Check for output file collisions */
-		Tools.testOutputFiles(overwrite, append, false, out1, outHist);
-		
-		/* Start overall timer */
-		Timer t=new Timer();
-		t.start();
+		Tools.testOutputFiles(overwrite, append, false, outKmers, outHist, outPeaks);
 		
 		/* Count kmers */
-		process2(t.time1);
+		process2();
 		
-		if(outHist!=null){
-			throw new RuntimeException();
-		}
-		
-		if(outKmers!=null){
-			dumpKmersAsText(outKmers, k);
+		if(THREADS>1 && (outHist!=null || outPeaks!=null) && outKmers!=null){
+			Timer tout=new Timer();
+			tout.start();
+			Thread a=new DumpKmersThread();
+			Thread b=new MakeKhistThread();
+			a.start();
+			b.start();
+			while(a.getState()!=Thread.State.TERMINATED){
+				try {
+					a.join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			while(b.getState()!=Thread.State.TERMINATED){
+				try {
+					b.join();
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			tout.stop();
+			outstream.println("Write Time:                 \t"+tout);
+		}else{
+			if(outHist!=null){
+				makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, true);
+			}
+			if(outKmers!=null){
+				dumpKmersAsText(outKmers, k, minToDump, true);
+			}
 		}
 		
 		/* Stop timer and calculate speed statistics */
@@ -394,9 +471,9 @@ public class CountKmersExact {
 
 			while(rpstring.length()<8){rpstring=" "+rpstring;}
 			while(bpstring.length()<8){bpstring=" "+bpstring;}
-
-			outstream.println("Time:   \t\t\t"+t);
-			outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
+			
+			outstream.println("Total Time:               \t"+t);
+			outstream.println("\nReads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 			outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 		}
 		
@@ -407,14 +484,14 @@ public class CountKmersExact {
 	}
 	
 	
-	public void process2(long startTime){
+	public void process2(){
 		
 		/* Start phase timer */
 		Timer t=new Timer();
 		t.start();
 
 		if(DISPLAY_PROGRESS){
-			outstream.println("Initial:");
+			outstream.println("Before Load:");
 			printMemory();
 			outstream.println();
 		}
@@ -422,27 +499,28 @@ public class CountKmersExact {
 		prefilterArray=null;
 //		outstream.println();
 		if(prefilter){
+			KmerCount7MTA.CANONICAL=true;
 			
 			long precells=-1;
-			int prehashes=-1;
-			int cbits=2;
-			while(filterMax+1>=(1<<cbits)){cbits*=2;}
+			int cbits=1;
+			if(onePass){
+				while(filterMax>=(1<<cbits)){cbits*=2;}
+			}else{
+				while(filterMax+1>=(1<<cbits)){cbits*=2;}
+			}
 			byte minq=0;
 			if(precells<1){
-				Runtime rt=Runtime.getRuntime();
-				final long memory=rt.maxMemory();
-				long prebits=(long)(((memory-10)*8)*0.2f);
+				long prebits=(filterMemory-10)*8;
 				precells=prebits/cbits;
 			}
-			if(prehashes<1){
-				prehashes=2;
-			}
+			if(prehashes<1){prehashes=2;}
 			
-			if(precells>100000){
+			if(onePass){
+				prefilterArray=KmerCount7MTA.makeKca(null, null, null, k, cbits, 0, precells, prehashes, minq, true, maxReads, 1, 1, 1, 1, null);
+			}else if(precells>100000){
 				Timer ht=new Timer();
 				ht.start();
-
-				KmerCount7MTA.CANONICAL=true;
+				
 				ArrayList<String> extra=null;
 				prefilterArray=KmerCount7MTA.makeKca(in1, in2, extra, k, cbits, 0, precells, prehashes, minq, true, maxReads, 1, 1, 1, 1, null);
 				assert(filterMax<prefilterArray.maxValue);
@@ -450,9 +528,8 @@ public class CountKmersExact {
 				double uf=prefilterArray.usedFraction();
 				if(uf>0.6){
 					outstream.println("Warning:  This table is "+(uf>0.995 ? "totally" : uf>0.99 ? "crazy" : uf>0.95 ? "incredibly" : uf>0.9 ? "extremely" : uf>0.8 ? "very" : 
-						uf>0.7 ? "fairly" : "somewhat")+" full, which may reduce accuracy for kmers of depth under 3.  Ideal load is under 60% used." +
-						"\nFor better accuracy, run on a node with more memory; quality-trim or error-correct reads; " +
-							"or increase the values of the minprob flag to reduce spurious kmers.");
+						uf>0.7 ? "fairly" : "somewhat")+" full.  Ideal load is under 60% used." +
+						"\nFor better accuracy, run on a node with more memory; quality-trim or error-correct reads; or increase prefiltersize.");
 				}
 				ht.stop();
 
@@ -466,13 +543,15 @@ public class CountKmersExact {
 		}
 		
 		/* Fill tables with kmers */
-		long added=loadKmers(t);
+		long added=loadKmers();
 		
 		if(DISPLAY_PROGRESS){
 			outstream.println("Final:");
 			printMemory();
 			outstream.println();
 		}
+		
+		t.stop();
 		
 		/* Write statistics to files */
 //		writeStats(System.nanoTime()-startTime);
@@ -487,9 +566,11 @@ public class CountKmersExact {
 			outstream.println("Low quality discards:   \t"+lowqReads+" reads ("+String.format("%.2f",lowqReads*100.0/readsIn)+"%) \t"+
 					lowqBases+" bases ("+String.format("%.2f",lowqBases*100.0/basesIn)+"%)");
 		}
-		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
-				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
+//		outstream.println("Result:                 \t"+readsOut+" reads ("+String.format("%.2f",readsOut*100.0/readsIn)+"%) \t"+
+//				basesOut+" bases ("+String.format("%.2f",basesOut*100.0/basesIn)+"%)");
 		outstream.println("Unique Kmers:               \t"+added);
+		
+		outstream.println("\nTable Load Time:          \t"+t);
 	}
 	
 	
@@ -498,9 +579,8 @@ public class CountKmersExact {
 	/*--------------------------------------------------------------*/
 	/**
 	 * load reads into tables, using multiple ProcessThread.
-	 * @param t
 	 */
-	private long loadKmers(Timer t){
+	private long loadKmers(){
 		
 		/* Create read input stream */
 		final ConcurrentReadStreamInterface cris;
@@ -677,6 +757,7 @@ public class CountKmersExact {
 		 * @return Number of hits
 		 */
 		private final int addKmersToTable(final Read r){
+			if(onePass){return addKmersToTable_onePass(r);}
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
 			final int shift=2*k;
@@ -713,6 +794,54 @@ public class CountKmersExact {
 			return created;
 		}
 		
+		
+
+		
+		/**
+		 * Counts the number of kmer hits for a read.
+		 * @param r Read to process
+		 * @param sets Kmer tables
+		 * @return Number of hits
+		 */
+		private final int addKmersToTable_onePass(final Read r){
+			assert(prefilter);
+			if(r==null || r.bases==null){return 0;}
+			final byte[] bases=r.bases;
+			final int shift=2*k;
+			final int shift2=shift-2;
+			final long mask=~((-1L)<<shift);
+			long kmer=0;
+			long rkmer=0;
+			int created=0;
+			int len=0;
+
+			if(bases==null || bases.length<k){return -1;}
+			
+			/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts */
+			for(int i=0; i<bases.length; i++){
+				final byte b=bases[i];
+				final long x=AminoAcid.baseToNumber[b];
+				final long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(x<0){
+					len=0;
+					kmer=rkmer=0;
+				}else{len++;}
+				if(verbose){System.err.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+				if(len>=k){
+					final long key=toValue(kmer, rkmer);
+					int count=prefilterArray.incrementAndReturnUnincremented(key, 1);
+					if(count>=filterMax){
+						int temp=table.incrementAndReturnNumCreated(key);
+						created+=temp;
+						if(verbose){System.err.println("Added "+temp);}
+					}
+				}
+			}
+			return created;
+		}
+		
 		/*--------------------------------------------------------------*/
 		
 		/** Input read stream */
@@ -738,17 +867,111 @@ public class CountKmersExact {
 	/*--------------------------------------------------------------*/
 	
 	
-	public boolean dumpKmersAsText(String fname, int k){
-		if(fname==null){return true;}
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
-		tsw.start();
+	public boolean dumpKmersAsText(String fname, int k, int minToDump, boolean printTime){
+		if(fname==null){return false;}
+		Timer t=new Timer();
+		t.start();
+		
+//		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
+//		tsw.start();
+//		for(AbstractKmerTable set : keySets){
+//			set.dumpKmersAsText(tsw, k, minToDump);
+//		}
+//		tsw.poisonAndWait();
+		
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, true);
+		bsw.start();
 		for(AbstractKmerTable set : keySets){
-			set.dumpKmersAsText(tsw, k);
+			set.dumpKmersAsBytes(bsw, k, minToDump);
 		}
-		tsw.poisonAndWait();
-		return tsw.errorState;
+		bsw.poisonAndWait();
+		
+		t.stop();
+		if(printTime){outstream.println("Kmer Dump Time:             \t"+t);}
+		return bsw.errorState;
 	}
 	
+	public boolean makeKhist(String fname, String peaks, int cols, int max, boolean printHeader, boolean printZeros, boolean printTime){
+		if(fname==null){return false;}
+		Timer t=new Timer();
+		t.start();
+		
+//		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, true);
+//		tsw.start();
+//		if(printHeader){
+//			tsw.print("#Depth\t"+(cols==3 ? "RawCount\t" : "")+"Count\n");
+//		}
+		
+		ByteStreamWriter bsw=new ByteStreamWriter(fname, overwrite, false, true);
+		bsw.start();
+		if(printHeader){
+			bsw.print("#Depth\t"+(cols==3 ? "RawCount\t" : "")+"Count\n");
+		}
+		
+		CoverageArray ca=new CoverageArray3();
+		for(AbstractKmerTable set : keySets){
+			set.fillHistogram(ca, histMax);
+		}
+		
+		if(peaks!=null){
+			CallPeaks.printClass=false;
+			long[] array=Tools.toArray(ca);
+			CallPeaks.printPeaks(array, peaks, overwrite, minHeight, minVolume, minWidth, minPeak, maxPeak, maxPeakCount);
+		}
+		
+//		StringBuilder sb=new StringBuilder();
+		for(int i=1; i<=ca.maxIndex; i++){
+			int count=ca.get(i);
+			if(printZeros || count>0){
+//				sb.append(i);
+//				sb.append('\t');
+//				if(cols==3){
+//					sb.append(i*(long)count);
+//					sb.append('\t');
+//				}
+//				sb.append(count);
+//				sb.append('\n');
+//				bsw.print(sb.toString());
+//				sb.setLength(0);
+
+				bsw.print(i);
+				bsw.print('\t');
+				if(cols==3){
+					bsw.print(i*(long)count);
+					bsw.print('\t');
+				}
+				bsw.print(count);
+				bsw.print('\n');
+			}
+		}
+		bsw.poisonAndWait();
+		t.stop();
+		if(printTime){outstream.println("Histogram Write Time:       \t"+t);}
+		return bsw.errorState;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Helper Classes        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	private class DumpKmersThread extends Thread {
+		
+		DumpKmersThread(){}
+		
+		public void run(){
+			dumpKmersAsText(outKmers, k, minToDump, false);
+		}
+		
+	}
+	
+	private class MakeKhistThread extends Thread {
+		
+		MakeKhistThread(){}
+		
+		public void run(){
+			makeKhist(outHist, outPeaks, histColumns, histMax, histHeader, histZeros, false);
+		}
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Methods        ----------------*/
@@ -765,7 +988,7 @@ public class CountKmersExact {
 		long tmemory=rt.totalMemory()/1000000;
 		long fmemory=rt.freeMemory()/1000000;
 		long umemory=tmemory-fmemory;
-		outstream.println("Memory: "+/*"max="+mmemory+"m, total="+tmemory+"m, "+*/"free="+fmemory+"m, used="+umemory+"m");
+		outstream.println("Memory: "+"max="+mmemory+"m, total="+tmemory+"m, "+"free="+fmemory+"m, used="+umemory+"m");
 	}
 	
 	/**
@@ -789,9 +1012,18 @@ public class CountKmersExact {
 
 	/** Use a count-min prefilter for low-depth kmers */
 	public boolean prefilter=false;
+	/** Fill the prefilter at the same time as the main table */
+	public boolean onePass=false;
+	/** Number of hashes used by prefilter */
+	public int prehashes=2;
+	/** Fraction of memory used by prefilter */
+	private double prefilterFraction=0.2;
 	
 	/** Initial size of data structures */
-	private int initialSize=128000;
+	private int initialSize=-1;
+	private static final int initialSizeDefault=128000;
+	/** Fraction of available memory preallocated to arrays */
+	private double preallocFraction=1.0;
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in keySets[Y] */
 	private final AbstractKmerTable[] keySets;
 	/** A scaffold's name is stored at scaffoldNames.get(id).  
@@ -802,12 +1034,21 @@ public class CountKmersExact {
 	
 	/** Input reads */
 	private String in1=null, in2=null;
-	/** Output reads */
-	private String out1=null;
-	/** Histogram output file */
-	private String outHist=null;
 	/** Kmer count output file */
 	private String outKmers=null;
+	/** Histogram output file */
+	private String outHist=null;
+	/** Histogram peak output file */
+	private String outPeaks=null;
+
+	/** Histogram columns */
+	private int histColumns=2;
+	/** Histogram rows */
+	private int histMax=100000;
+	/** Histogram columns */
+	private boolean histHeader=false;
+	/** Histogram show rows with 0 count */
+	private boolean histZeros=false;
 	
 	/** Maximum input reads (or pairs) to process.  Does not apply to references.  -1 means unlimited. */
 	private long maxReads=-1;
@@ -822,10 +1063,24 @@ public class CountKmersExact {
 	long basesTrimmed=0;
 	long lowqReads=0;
 	long lowqBases=0;
+
+	private long minHeight=2;
+	private long minVolume=2;
+	private int minWidth=2;
+	private int minPeak=2;
+	private int maxPeak=Integer.MAX_VALUE;
+	private int maxPeakCount=8;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
 	/*--------------------------------------------------------------*/
+
+	private final long usableMemory;
+	private final long filterMemory;
+	private final long tableMemory;
+	
+	/** Number of tables (and threads, during loading) */ 
+	private final boolean prealloc;
 	
 	/** Number of tables (and threads, during loading) */ 
 	private final int WAYS;
@@ -846,6 +1101,9 @@ public class CountKmersExact {
 	private final int k;
 	/** k-1; used in some expressions */
 	private final int k2;
+	
+	/** min kmer count to dump to text */
+	private int minToDump=1;
 	
 	/** Quality-trim the left side */
 	private final boolean qtrimLeft;

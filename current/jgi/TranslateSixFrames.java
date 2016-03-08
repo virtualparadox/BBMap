@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Random;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -61,6 +60,7 @@ public class TranslateSixFrames {
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
 		ReadWrite.ZIP_THREAD_DIVISOR=1;
+		int frames=6;
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -89,6 +89,9 @@ public class TranslateSixFrames {
 				skipquality=Tools.parseBoolean(b);
 			}else if(a.equals("translatequality")){
 				skipquality=!Tools.parseBoolean(b);
+			}else if(a.equals("frames")){
+				frames=Integer.parseInt(b);
+				assert(frames>=0 && frames<=6) : "Frames must be in the range of 0 to 6";
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -103,6 +106,7 @@ public class TranslateSixFrames {
 				//				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		FRAMES=frames;
 		
 		{//Download parser fields
 			
@@ -203,11 +207,11 @@ public class TranslateSixFrames {
 			}
 		}
 		
-		ffout1=FileFormat.testOutput(out1, FileFormat.FASTQ, extout, true, overwrite, append, false);  
-		ffout2=FileFormat.testOutput(out2, FileFormat.FASTQ, extout, true, overwrite, append, false);
+		ffout1=FileFormat.testOutput(out1, FileFormat.FASTA, extout, true, overwrite, append, false);  
+		ffout2=FileFormat.testOutput(out2, FileFormat.FASTA, extout, true, overwrite, append, false);
 		
-		ffin1=FileFormat.testInput(in1, FileFormat.FASTQ, extin, true, true);
-		ffin2=FileFormat.testInput(in2, FileFormat.FASTQ, extin, true, true);
+		ffin1=FileFormat.testInput(in1, FileFormat.FASTA, extin, true, true);
+		ffin2=FileFormat.testInput(in2, FileFormat.FASTA, extin, true, true);
 
 		if(ffin1!=null && ffout1!=null && ffin1.samOrBam()){
 			if(ffout1.samOrBam()){
@@ -274,7 +278,7 @@ public class TranslateSixFrames {
 
 			while(reads!=null && reads.size()>0){
 				
-				final ArrayList<Read> listOut=new ArrayList<Read>(reads.size()*6);
+				final ArrayList<Read> listOut=new ArrayList<Read>(reads.size()*FRAMES);
 				
 				for(int idx=0; idx<reads.size(); idx++){
 					final Read r1=reads.get(idx);
@@ -289,7 +293,7 @@ public class TranslateSixFrames {
 					final byte[][] bm2=(r2==null ? null : AminoAcid.toAAsSixFrames(r2.bases));
 					final byte[][] qm2=(r2==null ? null : (skipquality ? QNULL : AminoAcid.toQualitySixFrames(r2.quality, 0)));
 					
-					for(int i=0; i<6; i++){
+					for(int i=0; i<FRAMES; i++){
 						Read aa1=new Read(bm1[i], r1.chrom, r1.start, r1.stop, (addTag ? r1.id+frametag[i] : r1.id), qm1[i], r1.numericID, r1.flags|Read.AAMASK);
 						Read aa2=null;
 						if(r2!=null){
@@ -402,14 +406,6 @@ public class TranslateSixFrames {
 	}
 	
 	
-	public void setSampleSeed(long seed){
-		randy=new Random();
-		if(seed>-1){
-			randy.setSeed(seed);
-		}
-	}
-	
-	
 	/*--------------------------------------------------------------*/
 	
 	private String in1=null;
@@ -438,6 +434,8 @@ public class TranslateSixFrames {
 	private float samplerate=1f;
 	private long sampleseed=-1;
 	
+	private final int FRAMES;
+	
 	/*--------------------------------------------------------------*/
 	
 	private final FileFormat ffin1;
@@ -458,8 +456,5 @@ public class TranslateSixFrames {
 	private boolean overwrite=false;
 	private boolean append=false;
 	private boolean useSharedHeader;
-
-//	private java.util.concurrent.ThreadLocalRandom randy;
-	private Random randy;
 	
 }

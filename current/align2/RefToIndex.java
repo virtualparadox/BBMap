@@ -6,9 +6,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 
+import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import fileIO.ReadWrite;
 import fileIO.SummaryFile;
 
@@ -107,19 +108,19 @@ public class RefToIndex {
 			ReadWrite.ZIPLEVEL=Tools.max(4, ReadWrite.ZIPLEVEL);
 
 			//assert(false) : "minScaf="+minScaf+", midPad="+midPad+", maxChromLen="+maxChromLen+
-			//		", startPad="+startPad+", stopPad="+stopPad+", FastaToChromArrays.END_PADDING="+FastaToChromArrays.END_PADDING;
+			//		", startPad="+startPad+", stopPad="+stopPad+", FastaToChromArrays2.END_PADDING="+FastaToChromArrays2.END_PADDING;
 			
-			maxChromLen=maxChromLen>0 ? maxChromLen : AUTO_CHROMBITS ? FastaToChromArrays.MAX_LENGTH : ((1L<<(31-(chrombits<0 ? 2 : chrombits)))-200000);
-			minScaf=minScaf>-1 ? minScaf : FastaToChromArrays.MIN_SCAFFOLD;
-			midPad=midPad>-1 ? midPad : FastaToChromArrays.MID_PADDING;
-			startPad=startPad>-1 ? startPad : FastaToChromArrays.START_PADDING;
-			stopPad=stopPad>-1 ? stopPad : FastaToChromArrays.END_PADDING;
+			maxChromLen=maxChromLen>0 ? maxChromLen : AUTO_CHROMBITS ? FastaToChromArrays2.MAX_LENGTH : ((1L<<(31-(chrombits<0 ? 2 : chrombits)))-200000);
+			minScaf=minScaf>-1 ? minScaf : FastaToChromArrays2.MIN_SCAFFOLD;
+			midPad=midPad>-1 ? midPad : FastaToChromArrays2.MID_PADDING;
+			startPad=startPad>-1 ? startPad : FastaToChromArrays2.START_PADDING;
+			stopPad=stopPad>-1 ? stopPad : FastaToChromArrays2.END_PADDING;
 			
 			String[] ftcaArgs=new String[] {reference, ""+build, "writeinthread=false", "genscaffoldinfo="+genScaffoldInfo, "retain", "waitforwriting=false",
 					"gzip="+(Data.CHROMGZ), "chromc="+Data.CHROMC, "maxlen="+maxChromLen,
 					"writechroms="+(!NODISK), "minscaf="+minScaf, "midpad="+midPad, "startpad="+startPad, "stoppad="+stopPad, "nodisk="+NODISK};
 
-			chromlist=FastaToChromArrays.main2(ftcaArgs);
+			chromlist=FastaToChromArrays2.main2(ftcaArgs);
 
 			ReadWrite.ZIPLEVEL=oldzl;
 		}
@@ -137,10 +138,10 @@ public class RefToIndex {
 	
 	public static int minScaf=-1, midPad=-1, stopPad=-1, startPad=-1;
 	public static int chrombits=-1;
-//	public static int minScaf=FastaToChromArrays.MIN_SCAFFOLD;
-//	public static int midPad=FastaToChromArrays.MID_PADDING;
-//	public static int startPad=FastaToChromArrays.START_PADDING;
-//	public static int stopPad=FastaToChromArrays.END_PADDING;
+//	public static int minScaf=FastaToChromArrays2.MIN_SCAFFOLD;
+//	public static int midPad=FastaToChromArrays2.MID_PADDING;
+//	public static int startPad=FastaToChromArrays2.START_PADDING;
+//	public static int stopPad=FastaToChromArrays2.END_PADDING;
 	
 	public static ArrayList<ChromosomeArray> chromlist=null;
 	

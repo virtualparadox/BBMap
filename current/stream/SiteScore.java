@@ -1,10 +1,12 @@
 package stream;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import align2.GapTools;
 import align2.MSA;
 import align2.Shared;
 import align2.Tools;
@@ -15,8 +17,13 @@ import dna.Gene;
 
 
 
-public final class SiteScore implements Comparable<SiteScore>, Cloneable{
+public final class SiteScore implements Comparable<SiteScore>, Cloneable, Serializable{
 	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -8096245242590075081L;
+
 	public SiteScore(int chrom_, byte strand_, int start_, int stop_, int hits_, int quickScore_){
 		start=start_;
 		stop=stop_;
@@ -234,7 +241,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 					new String(Data.getChromosome(chrom).array, Tools.max(0, start), (Tools.min(Data.chromLengths[chrom], stop)-start));
 			perfect=false;
 			semiperfect=false;
-			assert(Read.CHECKSITE(this, bases, 0)); //123
+			assert(Read.CHECKSITE(this, bases, 0)) : new String(bases); //123
 			return perfect;
 		}
 		byte[] ref=Data.getChromosome(chrom).array;
@@ -420,7 +427,7 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 		return (start>=0 && stop<=cha.maxIndex);
 	}
 	
-	protected boolean matchContainsXY(){
+	public boolean matchContainsXY(){
 		if(match==null || match.length<1){return false;}
 		final byte a=match[0], b=match[match.length-1];
 		return (a=='X' ||a=='Y' || b=='X' || b=='Y');
@@ -436,8 +443,6 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 	 * Attempt to extend match/N symbols where there are X and Y symbols
 	 * */
 	public boolean fixXY(byte[] bases, boolean nullifyOnFailure, MSA msa){
-		if(verbose){System.err.println("ss.fixXY()");}
-		
 		if(!matchContainsXY()){return true;}
 		
 		boolean disable=false;
@@ -453,17 +458,19 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 			return false;
 		}
 		
-		if(match==null || match.length<1){return false;}
+//		if(match==null || match.length<1){return false;} //Already covered
 		final ChromosomeArray ca=Data.getChromosome(chrom);
 		final int tip=3;
 		boolean success=true;
 		
 		{//Process left side
+			if(verbose){System.err.println("Processing left side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
 			int mloc=0;
 			while(mloc<match.length && (match[mloc]=='X' || match[mloc]=='Y')){mloc++;}
 			if(mloc>=match.length || mloc>=bases.length){success=false;}
 			else if(mloc>0){
-				mloc--;
+				mloc--;//Location of last X or Y on left side
+				final int numX=mloc+1;
 				int rloc=start+mloc, cloc=mloc;
 				while(mloc>=0){
 					byte m=match[mloc];
@@ -481,16 +488,20 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 					rloc--;
 					cloc--;
 				}
+				if(success && mappedLength()!=matchLength()){incrementStart(-numX);}
 			}
+			if(verbose){System.err.println("Finished left side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
 		}
 		
 		if(success){//Process right side
+			if(verbose){System.err.println("Processing right side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
 			int mloc=match.length-1;
 			while(mloc>=0 && (match[mloc]=='X' || match[mloc]=='Y')){mloc--;}
 			int dif=match.length-1-mloc;
 			if(mloc<0){success=false;}
 			else if(dif>0){
-				mloc++;
+				mloc++;//Location of first X or Y on right side
+				final int numX=match.length-mloc;
 				int rloc=stop-dif+1, cloc=bases.length-dif;
 				if(cloc<0){success=false;}
 				else{
@@ -512,16 +523,28 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 						cloc++;
 					}
 				}
+				if(success && mappedLength()!=matchLength()){incrementStop(numX);}
 			}
+			if(verbose){System.err.println("Finished right side.  Success="+success+", start="+start+", stop="+stop+", match=\n"+new String(match));}
 		}
 		
-		success=success && !matchContainsXY();
+		success=success && !matchContainsXY()/* && mappedLength()==matchLength()*/;
 		if(!success && nullifyOnFailure){match=null;}
 		
 //		assert(false) : "TODO: Alter score to reflect changes"; //TODO
 		if(match!=null){slowScore=msa.score(match);}
 		
+		setPerfect(bases); //Fixes a rare bug
 		return success;
+	}
+	
+	public int mappedLength(){
+		return stop-start+1;
+	}
+	
+	public int matchLength(){
+		assert(match!=null);
+		return Read.calcMatchLength(match);
 	}
 
 //	public boolean plus(){return strand()==Gene.PLUS;}
@@ -569,6 +592,52 @@ public final class SiteScore implements Comparable<SiteScore>, Cloneable{
 	public boolean rescued=false;
 	public boolean perfect=false;
 	public boolean semiperfect=false;
+
+	public void setPerfect(){
+		perfect=semiperfect=true;
+		gaps=null;
+	}
+	public void incrementStart(int x){setStart(start+x);}
+	public void incrementStop(int x){setStop(start+x);}
+	public void setLimits(int a, int b){
+		start=a;
+		stop=b;
+		if(gaps!=null){
+			gaps[0]=a;
+			gaps[gaps.length-1]=b;
+			if(!CHECKGAPS()){gaps=GapTools.fixGaps(this);}
+			assert(CHECKGAPS()) : Arrays.toString(gaps);
+		}
+	}
+	public void setStart(int a){
+		start=a;
+		if(gaps!=null){
+			gaps[0]=a;
+			if(gaps[0]>gaps[1]){
+				gaps=GapTools.fixGaps(this);
+			}
+			assert(CHECKGAPS()) : Arrays.toString(gaps);
+		}
+	}
+	public void setStop(int b){
+		stop=b;
+		if(gaps!=null){
+			gaps[gaps.length-1]=b;
+			if(gaps.length-1>gaps.length-2){gaps=GapTools.fixGaps(this);}
+			assert(CHECKGAPS()) : Arrays.toString(gaps);
+		}
+	}
+	public boolean CHECKGAPS(){
+		if(gaps==null){return true;}
+		if(gaps.length==0 || ((gaps.length&1)==1)){return false;}
+		for(int i=1; i<gaps.length; i++){
+			if(gaps[i-1]>gaps[i]){return false;}
+		}
+		return gaps[0]==start && gaps[gaps.length-1]==stop;
+	}
+	
+	public int start(){return start;}
+	public int stop(){return stop;}
 	
 	public int start;
 	public int stop;

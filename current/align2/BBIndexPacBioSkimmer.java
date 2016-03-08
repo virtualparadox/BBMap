@@ -30,7 +30,7 @@ public final class BBIndexPacBioSkimmer extends AbstractIndex {
 		
 		for(int i=0; i<args.length; i++){
 			String s=args[i].toLowerCase();
-			if(s.equals("basespace") || s.equals("bs")){COLORSPACE=false;}
+			if(s.equals("basespace")){COLORSPACE=false;}
 			else if(s.equals("colorspace") || s.equals("cs")){COLORSPACE=true;}
 			else if(s.contains("=")){
 				String[] split=s.split("=");
@@ -1198,11 +1198,11 @@ public final class BBIndexPacBioSkimmer extends AbstractIndex {
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.stop=site3;
+								prevSS.setStop(site3);
 								if(!prevSS.perfect){perfectsFound++;}//***$
 								prevSS.perfect=prevSS.semiperfect=true;
 							}else{
-								prevSS.stop=maxStop;
+								prevSS.setStop(maxStop);
 								prevSS.setPerfect(bases);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
@@ -1210,18 +1210,17 @@ public final class BBIndexPacBioSkimmer extends AbstractIndex {
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.start=site2;
+								prevSS.setStart(site2);
 								if(!prevSS.perfect){perfectsFound++;}//***$
 								prevSS.perfect=prevSS.semiperfect=true;
 							}else{
-								prevSS.start=minStart;
+								prevSS.setStart(minStart);
 								prevSS.setPerfect(bases);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
 						}else if(SUBSUME_OVERLAPPING_SITES && shortEnough && (maxStop-minStart<=bases.length+MAX_SUBSUMPTION_LENGTH)
 								&& !perfect1 && !perfect2 && !prevSS.semiperfect){
-							prevSS.start=minStart;
-							prevSS.stop=maxStop;
+							prevSS.setLimits(minStart, maxStop);
 							prevSS.score=prevSS.quickScore=betterScore;
 							prevSS.setPerfect(bases);
 						}else{

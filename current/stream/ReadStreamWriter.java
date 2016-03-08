@@ -1,6 +1,5 @@
 package stream;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -13,6 +12,12 @@ import fileIO.ReadWrite;
 import fileIO.FileFormat;
 
 public abstract class ReadStreamWriter extends Thread {
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	
 	protected ReadStreamWriter(FileFormat ff, String qfname_, boolean read1_, int bufferSize, CharSequence header, boolean makeWriter, boolean buffered, boolean useSharedHeader){
 //		assert(false) : useSharedHeader+", "+header;
@@ -58,14 +63,14 @@ public abstract class ReadStreamWriter extends Thread {
 				myOutstream=ReadWrite.getOutputStream(ff, buffered);
 			}else{
 				if(!allowSubprocess){System.err.println("Warning! Spawning a samtools process when allowSubprocess="+allowSubprocess);}
-				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, ff.append());
+				myOutstream=ReadWrite.getOutputStreamFromProcess(fname, "samtools view -S -b -h - ", true, ff.append(), true);
 			}
 			
 			
 			
 			myWriter=(makeWriter ? new PrintWriter(myOutstream) : null);
 			
-			boolean supressHeader=(ff.append() && ff.exists());
+			boolean supressHeader=(SUPPRESS_HEADER || (ff.append() && ff.exists()));
 //			assert(false) : ff.append()+", "+ff.exists();
 			
 			if(header!=null && !supressHeader){
@@ -100,24 +105,24 @@ public abstract class ReadStreamWriter extends Thread {
 					}
 				}else{
 					if(myWriter!=null){
-						myWriter.println(SamLine.header0());
+						myWriter.println(SamHeader.header0());
 						int a=(MINCHROM==-1 ? 1 : MINCHROM);
 						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
 						for(int chrom=a; chrom<=b; chrom++){
-							//					myWriter.print(SamLine.header1(chrom, chrom));
-							SamLine.printHeader1(chrom, chrom, myWriter);
+							//					myWriter.print(SamHeader.header1(chrom, chrom));
+							SamHeader.printHeader1(chrom, chrom, myWriter);
 						}
-						myWriter.println(SamLine.header2());
+						myWriter.println(SamHeader.header2());
 					}else{
 						ByteBuilder bb=new ByteBuilder(4096);
-						SamLine.header0B(bb);
+						SamHeader.header0B(bb);
 						bb.append('\n');
 						int a=(MINCHROM==-1 ? 1 : MINCHROM);
 						int b=(MAXCHROM==-1 ? Data.numChroms : MAXCHROM);
 						for(int chrom=a; chrom<=b; chrom++){
-							SamLine.printHeader1B(chrom, chrom, bb, myOutstream);
+							SamHeader.printHeader1B(chrom, chrom, bb, myOutstream);
 						}
-						SamLine.header2B(bb);
+						SamHeader.header2B(bb);
 						bb.append('\n');
 
 
@@ -146,6 +151,12 @@ public abstract class ReadStreamWriter extends Thread {
 		assert(bufferSize>=1);
 		queue=new ArrayBlockingQueue<Job>(bufferSize);
 	}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Outer Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 
 	@Override
 	public abstract void run();
@@ -184,6 +195,12 @@ public abstract class ReadStreamWriter extends Thread {
 			}
 		}
 	}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Inner Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	
 	protected static final StringBuilder toQualitySB(byte[] quals, int len){
 		if(quals==null){return fakeQualitySB(30, len);}
@@ -253,20 +270,32 @@ public abstract class ReadStreamWriter extends Thread {
 		}
 		return bb;
 	}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Getters           ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	
+	public String fname(){return fname;}
+	public long readsWritten(){return readsWritten;}
+	public long basesWritten(){return basesWritten;}
+	public long validReadsWritten(){return validReadsWritten;}
+	public long validBasesWritten(){return validBasesWritten;}
 
 	/** Return true if this stream has detected an error */
 	public final boolean errorState(){return errorState;}
 	/** Return true if this stream has finished */
 	public final boolean finishedSuccessfully(){return finishedSuccessfully;}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	/** TODO */
 	protected boolean errorState=false;
 	protected boolean finishedSuccessfully=false;
-	
-	public static int MINCHROM=-1; //For generating sam header
-	public static int MAXCHROM=-1; //For generating sam header
-	public static CharSequence HEADER;
-	public static boolean NUMERIC_QUAL=true;
-	public static boolean OUTPUT_SAM_SECONDARY_ALIGNMENTS=false;
 
 	public final boolean OUTPUT_SAM;
 	public final boolean OUTPUT_BAM;
@@ -292,13 +321,30 @@ public abstract class ReadStreamWriter extends Thread {
 	protected long basesWritten=0;
 	protected long validReadsWritten=0;
 	protected long validBasesWritten=0;
-	public String fname(){return fname;}
-	public long readsWritten(){return readsWritten;}
-	public long basesWritten(){return basesWritten;}
-	public long validReadsWritten(){return validReadsWritten;}
-	public long validBasesWritten(){return validBasesWritten;}
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Static Fields        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	public static int MINCHROM=-1; //For generating sam header
+	public static int MAXCHROM=-1; //For generating sam header
+	public static CharSequence HEADER;
+	public static boolean NUMERIC_QUAL=true;
+	public static boolean OUTPUT_SAM_SECONDARY_ALIGNMENTS=false;
+	
+	public static boolean ignorePairAssertions=false;
+	public static boolean ASSERT_CIGAR=false;
+	public static boolean SUPPRESS_HEADER=false;
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------         Inner Classes        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	
 	protected static class Job{
+		
 		public Job(ArrayList<Read> list_, PrintWriter writer_, OutputStream outstream_, boolean closeWhenDone_,
 				boolean shutdownThread_){
 			list=list_;
@@ -310,12 +356,16 @@ public abstract class ReadStreamWriter extends Thread {
 		public Job(ArrayList<Read> list_, PrintWriter writer_){
 			this(list_, writer_, null, false, false);
 		}
+		
+		/*--------------------------------------------------------------*/
+		
 		public boolean isEmpty(){return list==null || list.isEmpty();}
 		public final ArrayList<Read> list;
 		public final PrintWriter writer;
 		public final OutputStream outstream;
 		public final boolean close;
 		public final boolean poison;
+		
 	}
 	
 }

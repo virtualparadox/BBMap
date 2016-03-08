@@ -193,7 +193,7 @@ public class SortReadsByID {
 				ReadWrite.closeStream(cris);
 			}
 			
-			Collections.sort(reads2, idComparator);
+			Collections.sort(reads2, ReadComparatorID.comparator);
 			for(Read r : reads2){sorted.add(r);}
 			new File(b.out1).delete();
 			if(b.out2!=null){new File(b.out2).delete();}
@@ -214,7 +214,7 @@ public class SortReadsByID {
 	/**
 	 * @param in1
 	 * @param in2
-	 * @param out
+	 * @param covstats
 	 */
 	public SortReadsByID(String in1_, String in2_, String out_) {
 		in1=in1_;
@@ -291,20 +291,6 @@ public class SortReadsByID {
 		long count=0;
 		
 	}
-	
-	public static final class ReadComparatorID implements Comparator<Read>{
-		
-		@Override
-		public int compare(Read r1, Read r2) {
-			if(r1.numericID<r2.numericID){return -1;}
-			else if(r1.numericID>r2.numericID){return 1;}
-			
-			if(!r1.id.equals(r2.id)){return r1.id.compareTo(r2.id);}
-			return 0;
-		}
-		
-	}
-	public static final ReadComparatorID idComparator=new ReadComparatorID();
 	
 	
 }

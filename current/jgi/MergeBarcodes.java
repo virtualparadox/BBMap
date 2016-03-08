@@ -160,7 +160,8 @@ public class MergeBarcodes {
 				throw new RuntimeException("Error - cannot define out2 without defining out1.");
 			}
 			if(!parser.setOut){
-				out1="stdout";
+				System.err.println("No output stream specified.  To write to stdout, please specify 'out=stdout.fq' or similar.");
+//				out1="stdout";
 			}
 		}
 		

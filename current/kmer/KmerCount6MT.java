@@ -54,7 +54,7 @@ public static void main(String[] args){
 			}else if(a.startsWith("gap")){
 				gap=Integer.parseInt(b);
 			}else if(a.startsWith("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("matrixbits")){
 				matrixbits=Integer.parseInt(b);
 			}else if(a.startsWith("hashes")){

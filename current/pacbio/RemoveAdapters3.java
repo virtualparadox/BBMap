@@ -98,7 +98,7 @@ public class RemoveAdapters3 {
 				else{THREADS=Integer.parseInt(b);}
 				System.out.println("Set threads to "+THREADS);
 			}else if(a.equals("reads") || a.equals("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("outname") || a.startsWith("outfile") || a.equals("out")){
 				if(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none") || split.length==1){
 					System.out.println("No output file.");

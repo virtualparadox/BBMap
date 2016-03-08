@@ -164,6 +164,8 @@ public class ConcurrentSolidInputStream implements ConcurrentReadStreamInterface
 			byte[][] fasta=flist.get(i);
 			byte[][] quals=qlist.get(i);
 			Read r=new Read(fasta, quals, true, generated);
+			readsIn++;
+			basesIn+=r.length();
 			if(randy==null || randy.nextFloat()<samplerate){
 				rlist.add(r);
 			}
@@ -202,6 +204,14 @@ public class ConcurrentSolidInputStream implements ConcurrentReadStreamInterface
 			rdepot.full.add(ln.list);
 		}else{
 			rdepot.empty.add(ln.list);
+		}
+	}
+	
+	public void returnList(boolean poison){
+		if(poison){
+			rdepot.full.add(new ArrayList<Read>(0));
+		}else{
+			rdepot.empty.add(new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
 		}
 	}
 	
@@ -385,7 +395,9 @@ public class ConcurrentSolidInputStream implements ConcurrentReadStreamInterface
 	@Override
 	public synchronized void restart() {
 		shutdown=false;
-		generated=0;
+		generated=0;	
+		basesIn=0;
+		readsIn=0;
 		producerFasta=new FastaStream(fastaName);
 		producerQual=new QualStream(qualName);
 		fdepot=new ConcurrentDepot<byte[][]>(BUF_LEN, NUMLISTS_RAW);
@@ -410,6 +422,10 @@ public class ConcurrentSolidInputStream implements ConcurrentReadStreamInterface
 			randy=new java.util.Random();
 		}
 	}
+	
+	public long basesIn(){return basesIn;}
+	public long readsIn(){return readsIn;}
+	
 	private float samplerate=1f;
 	private java.util.Random randy=null;
 	
@@ -423,6 +439,9 @@ public class ConcurrentSolidInputStream implements ConcurrentReadStreamInterface
 	private boolean shutdown=false;
 
 	private Thread[] threads;
+	
+	private long basesIn=0;
+	private long readsIn=0;
 	
 	public final long maxReads;
 	private long generated=0;

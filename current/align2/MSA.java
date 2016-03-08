@@ -5,7 +5,6 @@ import java.util.Arrays;
 import stream.Read;
 import stream.SiteScore;
 
-import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
 import dna.Gene;
@@ -26,6 +25,8 @@ public abstract class MSA {
 			return MultiStateAligner11ts.minIdToMinRatio(minid);
 		}else if("MultiStateAligner9PacBio".equalsIgnoreCase(classname)){
 			return MultiStateAligner9PacBio.minIdToMinRatio(minid);
+		}else if("MultiStateAligner9Flat".equalsIgnoreCase(classname)){
+			return MultiStateAligner9Flat.minIdToMinRatio(minid);
 		}else{
 			assert(false) : "Unhandled MSA type: "+classname;
 			return MultiStateAligner11ts.minIdToMinRatio(minid);
@@ -38,9 +39,17 @@ public abstract class MSA {
 		}else if("MultiStateAligner10ts".equalsIgnoreCase(classname)){
 			return new MultiStateAligner10ts(maxRows_, maxColumns_, colorspace_);
 		}else if("MultiStateAligner11ts".equalsIgnoreCase(classname)){
-			return new MultiStateAligner11ts(maxRows_, maxColumns_, colorspace_);
+			if(Shared.USE_JNI){
+				return new MultiStateAligner11tsJNI(maxRows_, maxColumns_, colorspace_);
+			}else{
+				return new MultiStateAligner11ts(maxRows_, maxColumns_, colorspace_);
+			}
+		}else if("MultiStateAligner11tsJNI".equalsIgnoreCase(classname)){
+			return new MultiStateAligner11tsJNI(maxRows_, maxColumns_, colorspace_);
 		}else if("MultiStateAligner9PacBio".equalsIgnoreCase(classname)){
 			return new MultiStateAligner9PacBio(maxRows_, maxColumns_, colorspace_);
+		}else if("MultiStateAligner9Flat".equalsIgnoreCase(classname)){
+			return new MultiStateAligner9Flat(maxRows_, maxColumns_, colorspace_);
 		}else{
 			assert(false) : "Unhandled MSA type: "+classname;
 			return new MultiStateAligner11ts(maxRows_, maxColumns_, colorspace_);
@@ -278,8 +287,6 @@ public abstract class MSA {
 	public abstract int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, byte[] baseScores, final int refStart, byte[][] matchReturn);
 	
 	public abstract int scoreNoIndelsAndMakeMatchString(byte[] read, byte[] ref, final int refStart, byte[][] matchReturn);
-
-//	public final boolean toLocalAlignment(Read r, SiteScore ss, int minToClip){return toLocalAlignment(r, ss, minToClip, 1);}
 	
 	/** Assumes match string is in long format */
 	public final boolean toLocalAlignment(Read r, SiteScore ss, byte[] basesM, int minToClip, float matchPointsMult){
@@ -288,14 +295,24 @@ public abstract class MSA {
 		
 		assert(match==ss.match);
 		assert(match==r.match);
+		assert(r.start==ss.start);
+		assert(r.stop==ss.stop);
 		
 		if(r.containsXY2()){
 			if(verbose){System.err.println("\nInitial0:");}
 			if(verbose){System.err.println("0: match="+new String(match));}
 			if(verbose){System.err.println("0: r.start="+r.start+", r.stop="+r.stop+"; len="+bases.length+"; reflen="+(r.stop-r.start+1));}
 			ss.fixXY(bases, false, this);
+			r.start=ss.start;
+			r.stop=ss.stop;
+			if(verbose){System.err.println("\nAfter fixXY:");}
+			if(verbose){System.err.println("0: match="+new String(match));}
+			if(verbose){System.err.println("0: r.start="+r.start+", r.stop="+r.stop+"; len="+bases.length+"; reflen="+(r.stop-r.start+1));}
 			assert(match==ss.match);
 			assert(match==r.match);
+			assert(r.start==ss.start);
+			assert(r.stop==ss.stop);
+			assert(ss.mappedLength()==ss.matchLength()) : ss+"\n"+r+"\n";
 		}
 		
 		int maxScore=-1;
@@ -319,10 +336,10 @@ public abstract class MSA {
 		int score=0;
 
 		if(verbose){System.err.println("\nInitial:");}
-		if(verbose){System.err.println("A: match="+new String(match));}
 		if(verbose){System.err.println("A: r.start="+r.start+", r.stop="+r.stop+"; rpos="+rpos+"; len="+bases.length+"; reflen="+(r.stop-r.start+1));}
+		if(verbose){System.err.println("A: match=\n"+new String(match));}
 		if(verbose){System.err.println(new String(bases));}
-		if(verbose){System.err.println(Data.getChromosome(r.chrom).getString(r.start, r.stop));}
+		if(verbose){System.err.println(Data.getChromosome(r.chrom).getString(r.start, Tools.max(r.stop, r.start+bases.length-1)));}
 		
 		if(verbose){
 			int calcscore=score(match);
@@ -455,7 +472,7 @@ public abstract class MSA {
 
 		if(verbose){System.err.println("A: r.start="+r.start+", r.stop="+r.stop+"; rpos="+rpos+"; len="+bases.length+"; reflen="+(r.stop-r.start+1));}
 		
-		assert(rpos==r.stop+1) : rpos+"!="+r.start+"\n"+r;
+		assert(rpos==r.stop+1) : rpos+"!="+(r.stop+1)+"\n"+r;
 		
 		if(verbose){System.err.println("B: rpos="+rpos+", startLocR="+startLocR+", stopLocR="+stopLocR);}
 		
@@ -516,9 +533,8 @@ public abstract class MSA {
 		
 		if(ss!=null){
 			assert(maxScore>=ss.slowScore) : maxScore+", "+ss.slowScore+"\n"+r.toFastq();
-			ss.start=r.start;
-			ss.stop=r.stop;
 			ss.match=r.match;
+			ss.setLimits(r.start, r.stop);
 			int pairedScore=ss.pairedScore>0 ? Tools.max(ss.pairedScore+(maxScore-ss.slowScore), 0) : 0;
 		}
 		
@@ -533,7 +549,6 @@ public abstract class MSA {
 			r.match=ss.match=genMatchNoIndels(bases, cha.array, ss.start);
 			return toLocalAlignment(r, ss, basesM, minToClip, matchPointsMult);
 		}
-		
 		return true;
 	}
 	
@@ -958,5 +973,7 @@ public abstract class MSA {
 
 	public static int bandwidth=0;
 	public static float bandwidthRatio=0;
+	
+	public static final int MIN_SCORE_ADJUST=120;
 
 }

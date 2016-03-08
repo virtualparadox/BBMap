@@ -3,6 +3,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import jgi.AssemblyStats2;
+
+import stream.ByteBuilder;
+
 import align2.Tools;
 
 import fileIO.ReadWrite;
@@ -189,6 +193,88 @@ public class ChromosomeArray implements Serializable {
 		minIndex=min(loc, minIndex);
 		maxIndex=max(loc, maxIndex);
 	}
+	
+	
+	public void set(int loc, byte[] s){
+		int loc2=loc+s.length;
+		if(loc2>array.length){//Increase size
+			int newlen=(int)(1+(3L*max(array.length, loc2))/2);
+			assert(newlen>loc2) : newlen+", "+loc2+", "+array.length;
+			resize(newlen);
+			assert(array.length==newlen);
+//			System.err.println("Resized array to "+newlen);
+		}
+		
+		for(int i=0; i<s.length; i++, loc++){
+			char c=Character.toUpperCase((char)s[i]);
+			if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
+			assert(Character.isLetter(c));
+			assert(c<=Byte.MAX_VALUE);
+			array[loc]=(byte)c;
+		}
+		loc--;
+		assert(loc==loc2-1) : "loc="+loc+", loc2="+loc2+", s.len="+s.length;
+		minIndex=min(loc, minIndex);
+		maxIndex=max(loc, maxIndex);
+	}
+	
+	
+	public void set(int loc, ByteBuilder bb){
+		byte[] s=bb.array;
+		final int slen=bb.length();
+		int loc2=loc+slen;
+		if(loc2>array.length){//Increase size
+			int newlen=(int)(1+(3L*max(array.length, loc2))/2);
+			assert(newlen>loc2) : newlen+", "+loc2+", "+array.length;
+			resize(newlen);
+			assert(array.length==newlen);
+//			System.err.println("Resized array to "+newlen);
+		}
+		
+		for(int i=0; i<slen; i++, loc++){
+			char c=Character.toUpperCase((char)s[i]);
+			if(AminoAcid.baseToNumberExtended[c]<0){c='N';}
+			assert(Character.isLetter(c));
+			assert(c<=Byte.MAX_VALUE);
+			array[loc]=(byte)c;
+		}
+		loc--;
+		assert(loc==loc2-1) : "loc="+loc+", loc2="+loc2+", s.len="+slen;
+		minIndex=min(loc, minIndex);
+		maxIndex=max(loc, maxIndex);
+	}
+
+	/**
+	 * @param loc
+	 * @param length
+	 * @return
+	 */
+	public float calcGC(int loc, int length, int[] counts) {
+		counts=countACGTINOC(loc, length, counts);
+		long at=counts[0]+counts[3];
+		long gc=counts[1]+counts[2];
+		return gc/(float)Tools.max(at+gc, 1);
+	}
+
+	/**
+	 * @param loc
+	 * @param length
+	 * @return counts: {A, C, G, T, Iupac, N, Other, Control}
+	 */
+	public int[] countACGTINOC(final int loc, final int length, int[] counts) {
+		final int lim=loc+length;
+		assert(loc>=0 && lim<=maxIndex+1 && loc<=lim);
+		if(counts==null){counts=new int[8];}
+		else{Arrays.fill(counts, 0);}
+		assert(counts.length==8);
+		for(int i=loc; i<lim; i++){
+			byte b=get(i);
+			int num=charToNum[b];
+			counts[num]++;
+		}
+		return counts;
+	}
+	
 	
 	/** Returns the letter (IUPAC) representation of the base, as a byte */
 	public byte get(int loc){
@@ -408,6 +494,9 @@ public class ChromosomeArray implements Serializable {
 	public final boolean colorspace;
 	
 	public static boolean UNDEFINED_TO_N=false;
+
+	/** Translation array for tracking base counts */
+	private static final byte[] charToNum=AssemblyStats2.makeCharToNum();
 	
 	
 }

@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 30, 2014"
+	echo "Last modified October 23, 2014"
 	echo ""
 	echo "Description:  Re-pairs reads that became disordered or had some mates eliminated."
 	echo ""
@@ -25,6 +25,7 @@ usage(){
 	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
 	echo "fixinterleaving=f	(fint) Fixes corrupted interleaved files by examining pair names.  Only use on files with broken interleaving."
 	echo "repair=t		(rp) Fixes arbitrarily corrupted paired reads by examining read names.  High memory."
+	echo "allowidenticalnames=f	(ain) When detecting pair names, allows identical names, instead of requiring /1 and /2 or 1: and 2:"
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx             	This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -37,8 +38,8 @@ usage(){
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
 
-z="-Xmx1g"
-z2="-Xms1g"
+z="-Xmx2g"
+z2="-Xms2g"
 EA="-ea"
 set=0
 

@@ -8,7 +8,7 @@ import var.VarLine;
 import var.Variation;
 
 import dna.ChromosomeArray;
-import dna.CoverageArray1;
+import dna.CoverageArray2;
 import dna.Data;
 import dna.Gene;
 
@@ -89,7 +89,7 @@ public class GenerateNoCallsFromCoverage {
 	
 	
 	
-	public static ArrayList<VarLine> generate(byte chrom, CoverageArray1 ca, int build, char gender){
+	public static ArrayList<VarLine> generate(byte chrom, CoverageArray2 ca, int build, char gender){
 		
 		assert(minCovered>=1);
 		assert(minHalfCovered>=1);

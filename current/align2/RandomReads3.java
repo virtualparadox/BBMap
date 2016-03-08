@@ -14,7 +14,7 @@ import stream.Read;
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import dna.Gene;
 import dna.Parser;
 import dna.Timer;
@@ -23,6 +23,10 @@ import fileIO.SummaryFile;
 import fileIO.TextStreamWriter;
 
 public final class RandomReads3 {
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	
 	public static void main(String[] args){
@@ -89,6 +93,7 @@ public final class RandomReads3 {
 		
 		boolean paired=false;
 		boolean colorspace=false;
+		String prefix_=null;
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
@@ -112,7 +117,7 @@ public final class RandomReads3 {
 				//do nothing
 			}else if(a.equals("reads")){
 				number=x;
-			}else if(a.equals("len") || a.equals("length") || a.equals("readlen")){
+			}else if(a.equals("len") || a.equals("length") || a.equals("readlen") || a.equals("readlength")){
 				minlen=maxlen=x;
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
@@ -272,6 +277,8 @@ public final class RandomReads3 {
 				pbMinErrorRate=Float.parseFloat(b);
 			}else if(a.equals("pbmax") || a.equals("pbmaxrate")){
 				pbMaxErrorRate=Float.parseFloat(b);
+			}else if(a.startsWith("midpad")){
+				midPad=Integer.parseInt(b);
 			}else if(a.startsWith("randomscaffold")){
 				RANDOM_SCAFFOLD=Tools.parseBoolean(b);
 			}else if(a.startsWith("replacenoref")){
@@ -298,8 +305,19 @@ public final class RandomReads3 {
 				mateSameStrand=Tools.parseBoolean(b);
 			}else if(a.equals("minoverlap") || a.equals("overlap")){
 				MIN_SCAFFOLD_OVERLAP=Integer.parseInt(b);
+			}else if(a.equals("prefix")){
+				prefix_=b;
 			}else if(a.equals("in")){
 				in1=(b==null || b.equalsIgnoreCase("null") ? null : b);
+			}else if(a.equals("asciiout") || a.equals("qualityout") || a.equals("qualout") || a.equals("qout")){
+				if(b.equalsIgnoreCase("auto")){
+					FASTQ.DETECT_QUALITY_OUT=true;
+				}else{
+					byte ascii_offset=Byte.parseByte(b);
+					FASTQ.ASCII_OFFSET_OUT=ascii_offset;
+					System.err.println("Set fastq output ASCII offset to "+FASTQ.ASCII_OFFSET_OUT);
+					FASTQ.DETECT_QUALITY_OUT=false;
+				}
 			}else{throw new RuntimeException("Unknown parameter "+args[i]);}
 
 		}
@@ -343,6 +361,7 @@ public final class RandomReads3 {
 		
 		RandomReads3 rr=(seed2==Long.MIN_VALUE ? new RandomReads3(paired) : 
 			new RandomReads3((seed2==-1 ? System.nanoTime() : seed2), paired));
+		rr.prefix=prefix_;
 		if(pbadapter!=null){
 			rr.pbadapter1=pbadapter.getBytes();
 			rr.pbadapter2=AminoAcid.reverseComplementBases(rr.pbadapter1);
@@ -523,18 +542,17 @@ public final class RandomReads3 {
 			ReadWrite.ZIPLEVEL=Tools.max(4, ReadWrite.ZIPLEVEL);
 			
 			int minScaf=-1;
-			int midPad=500;
 			int maxChromLen=-1;
 			boolean genScaffoldInfo=true;
 			
-			maxChromLen=maxChromLen>0 ? maxChromLen : FastaToChromArrays.MAX_LENGTH;
-			minScaf=minScaf>-1 ? minScaf : FastaToChromArrays.MIN_SCAFFOLD;
-			midPad=midPad>-1 ? midPad : FastaToChromArrays.MID_PADDING;
+			maxChromLen=maxChromLen>0 ? maxChromLen : FastaToChromArrays2.MAX_LENGTH;
+			minScaf=minScaf>-1 ? minScaf : FastaToChromArrays2.MIN_SCAFFOLD;
+			midPad=midPad>-1 ? midPad : FastaToChromArrays2.MID_PADDING;
 			String[] ftcaArgs=new String[] {reference, ""+build, "writeinthread=false", "genscaffoldinfo="+genScaffoldInfo, "retain", "waitforwriting=false",
 					"gzip="+(Data.CHROMGZ), "chromc="+Data.CHROMC, "maxlen="+maxChromLen,
 							"writechroms="+(!NODISK), "minscaf="+minScaf, "midpad="+midPad, "nodisk="+NODISK};
 			
-			chromlist=FastaToChromArrays.main2(ftcaArgs);
+			chromlist=FastaToChromArrays2.main2(ftcaArgs);
 			
 			ReadWrite.ZIPLEVEL=oldzl;
 		}
@@ -989,7 +1007,7 @@ public final class RandomReads3 {
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
 			int minChrom, int maxChrom, boolean colorspace,
 			int minQual, int midQual, int maxQual, String fname1, String fname2){
-		FASTQ.TAG_CUSTOM=!ILLUMINA_NAMES;
+		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
 		
 		TextStreamWriter tsw1=new TextStreamWriter(fname1, overwrite, false, true);
 		tsw1.start();
@@ -1010,6 +1028,179 @@ public final class RandomReads3 {
 		
 		final BitSet bits=new BitSet(maxlen+1);
 		final int[] locs=new int[(int)Tools.min(300000000, maxlen+(maxDelLen*(long)maxDels))];
+		
+		Read lastRead=null;
+		int ampLevel=0;
+		int ampLength=2000;
+		
+		for(int i=0; i<numReads; i++){
+			
+			final boolean perfect=randyPerfectRead.nextFloat()<PERFECT_READ_RATIO;
+			
+			final byte baseQuality;
+			final byte slant;
+			{
+				byte baseSlant=(perfect ? (byte)5 : (byte)(maxQual-minQual+1));
+				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
+				if(randyQual.nextBoolean()){
+					int range=(perfect ? maxQualP-midQualP+1 : maxQual-midQual+1);
+					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
+					baseQuality=(byte)((perfect ? midQualP : midQual)+delta);
+				}else{
+					int range=perfect ? midQualP-minQualP+1 : midQual-minQual+1;
+					int delta=randyQual.nextInt(range);
+					baseQuality=(byte)((perfect ? midQualP : midQual)-delta);
+				}
+			}
+			
+			int forceChrom=-1, forceLoc=-1;
+			
+			
+			if(AMP>1 && lastRead!=null){
+				if(ampLevel>0){
+					forceChrom=lastRead.chrom;
+					//						forceLoc=lastRead.start+4-randyAmp.nextInt(9);
+					//						forceLoc=lastRead.start+10-randyAmp.nextInt(21);
+
+					int a=ampLength;
+					int b=a*2+1;
+					int mode=randyAmp.nextInt(100);
+					if(mode>96){
+						forceLoc=lastRead.start+a-randyAmp.nextInt(b);
+					}else if(mode>85){
+						forceLoc=lastRead.start+a-(randyAmp.nextInt(b)+randyAmp.nextInt(b))/2;
+					}else if(mode>30){
+						forceLoc=lastRead.start+a-(randyAmp.nextInt(b)+randyAmp.nextInt(b)+randyAmp.nextInt(b))/3;
+					}else{
+						forceLoc=lastRead.start+a-(randyAmp.nextInt(b)+randyAmp.nextInt(b)+randyAmp.nextInt(b)+randyAmp.nextInt(b))/4;
+					}
+				}else{
+					
+					ampLevel=0;
+					int a1=AMP;
+					if(randyAmp.nextInt(30)==0){a1*=7;}
+
+					if(randyAmp.nextInt(3)>0){
+						ampLevel=Tools.min(randyAmp.nextInt(a1), randyAmp.nextInt(a1));
+					}else{
+						double log=Math.log10(a1*7);
+						ampLevel=(int)Math.round(Math.pow(10, randyAmp.nextDouble()*log));
+					}
+					
+					ampLength=500+randyAmp.nextInt(3001)+(int)Tools.min(1000+randyAmp.nextInt(20000), 400*Tools.exponential(randyAmp, 0.8d));
+					
+				}
+			}
+			
+			
+			Read r1=makeRead(null, minlen, maxlen, minChrom, maxChrom,
+					maxSnps, maxInss, maxDels, maxSubs, maxNs,
+					snpRate, insRate, delRate, subRate, nRate,
+					minInsLen, minDelLen, minSubLen, minNLen,
+					maxInsLen, maxDelLen, maxSubLen, maxNLen, 
+					mateMiddleMin, mateMiddleMax, mateSameStrand, 
+					minQual, midQual, maxQual, baseQuality, slant, 
+					perfect, colorspace, nextReadID, locs, bits, forceChrom, forceLoc);
+
+//			assert(false) : r1;
+			if(paired && r1!=null){
+
+				Read r2=null;
+				for(int tries=0; r2==null && tries<100; tries++){
+					r2=makeRead(r1, minlen, maxlen, minChrom, maxChrom,
+							maxSnps, maxInss, maxDels, maxSubs, maxNs,
+							snpRate, insRate, delRate, subRate, nRate,
+							minInsLen, minDelLen, minSubLen, minNLen,
+							maxInsLen, maxDelLen, maxSubLen, maxNLen, 
+							mateMiddleMin, mateMiddleMax, mateSameStrand, 
+							minQual, midQual, maxQual, baseQuality, slant, 
+							perfect, colorspace, nextReadID, locs, bits, -1, -1);
+				}
+				
+				if(r2!=null){
+					if(FORCE_SINGLE_SCAFFOLD){
+						int scaf1=Data.scaffoldIndex(r1.chrom, (r1.start+r1.stop)/2);
+						int scaf2=Data.scaffoldIndex(r2.chrom, (r2.start+r2.stop)/2);
+						if(scaf1!=scaf2){
+							r1=r2=null;
+						}
+					}
+				}
+				
+				if(r2!=null){
+					r1.mate=r2;
+					r2.mate=r1;
+					if(fragadapter1!=null){
+						r1.setMapped(true);
+						r2.setMapped(true);
+						int x=Read.insertSizeMapped(r1, r2, false);
+						if(x>0 && x<r1.length()){
+							addFragAdapter(r1, x, fragadapter1, randyAdapter);
+						}
+						if(x<r2.length()){
+							addFragAdapter(r2, x, fragadapter2, randyAdapterMate);
+						}
+					}
+				}else{
+					r1=null;
+				}
+				
+//				Data.sysout.println(r.strand()+"\t"+r.insertSize());
+			}
+			if(r1!=null){
+				final Read r2=r1.mate;
+//				assert(false) : r1;
+				if(prefix!=null){r1.id=prefix+"_"+r1.numericID+" /1";}
+				else if(ILLUMINA_NAMES){r1.id=r1.numericID+" /1";}
+				tsw1.println(r1);
+				if(r2!=null){
+					r2.setPairnum(1);
+					if(prefix!=null){r2.id=prefix+"_"+r1.numericID+" /2";}
+					else if(ILLUMINA_NAMES){r2.id=r1.numericID+" /2";}
+					if(tsw2!=null){tsw2.println(r2);}
+					else{tsw1.println(r2);}
+						
+				}
+				nextReadID++;
+			}else{
+				i--;
+			}
+			ampLevel=Tools.max(0, ampLevel-1);
+			if(ampLevel==0){lastRead=null;}
+
+			if(lastRead==null){lastRead=r1;}
+//			System.err.println("Made "+r.start+" ~ "+r.stop+" = "+(r.stop-r.start));
+		}
+		tsw1.poison();
+		if(tsw2!=null){tsw2.poison();}
+	}
+	
+
+	
+	public ArrayList<Read> makeRandomReadsX(int numReads, int minlen, int maxlen,
+			int maxSnps, int maxInss, int maxDels, int maxSubs, int maxNs,
+			float snpRate, float insRate, float delRate, float subRate, float nRate,
+			int minInsLen, int minDelLen, int minSubLen, int minNLen,
+			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
+			int minChrom, int maxChrom, boolean colorspace,
+			int minQual, int midQual, int maxQual){
+		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
+		
+		assert(minQual<=midQual);
+		assert(midQual<=maxQual);
+		assert(minQual>=0 && maxQual<60);
+		
+		final int maxQualP=maxQual;//Tools.max(35, maxQual);
+		final int midQualP=midQual;//30;
+		final int minQualP=minQual;//Tools.min(25, maxQual);
+
+		if(bits_cached==null){bits_cached=new BitSet(maxlen+1);}
+		if(locs_cached==null || locs_cached.length<Tools.min(300000000, maxlen+(maxDelLen*(long)maxDels))){
+			locs_cached=new int[(int)Tools.min(300000000, maxlen+(maxDelLen*(long)maxDels))];
+		}
+		final BitSet bits=bits_cached;
+		final int[] locs=locs_cached;
+		final ArrayList<Read> list=new ArrayList<Read>(numReads);
 		
 		Read lastRead=null;
 		int ampLevel=0;
@@ -1064,7 +1255,6 @@ public final class RandomReads3 {
 						double log=Math.log10(a1*7);
 						ampLevel=(int)Math.round(Math.pow(10, randyAmp.nextDouble()*log));
 					}
-					
 					ampLength=500+randyAmp.nextInt(3001);
 //					ampLevel=randyAmp.nextInt(AMP);
 				}
@@ -1127,14 +1317,11 @@ public final class RandomReads3 {
 			if(r1!=null){
 //				assert(false) : r1;
 				if(ILLUMINA_NAMES){r1.id=r1.numericID+" /1";}
-				tsw1.println(r1);
 				if(r1.mate!=null){
 					r1.mate.setPairnum(1);
 					if(ILLUMINA_NAMES){r1.mate.id=r1.numericID+" /2";}
-					if(tsw2!=null){tsw2.println(r1.mate);}
-					else{tsw1.println(r1.mate);}
-						
 				}
+				list.add(r1);
 				nextReadID++;
 			}else{
 				i--;
@@ -1143,10 +1330,9 @@ public final class RandomReads3 {
 			if(ampLevel==0){lastRead=null;}
 
 			if(lastRead==null){lastRead=r1;}
-//			System.err.println("Made "+r.start+" ~ "+r.stop+" = "+(r.stop-r.start));
+//			System.err.println("Made "+r1.start+" ~ "+r1.stop+" = "+(r1.stop-r1.start));
 		}
-		tsw1.poison();
-		if(tsw2!=null){tsw2.poison();}
+		return list;
 	}
 	
 	public Read makeRead(Read r0, int minlen, int maxlen, int minChrom, int maxChrom,
@@ -1445,8 +1631,6 @@ public final class RandomReads3 {
 			}
 		}
 	}
-	
-	private static int[] randomChrom;
 
 	private static int[] fillRandomChrom(){
 
@@ -1483,7 +1667,11 @@ public final class RandomReads3 {
 		seed++;
 		return r;
 	}
-	private static long seed=0;
+	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
 
 	private final Random randy;
 	private final Random randy2;
@@ -1515,6 +1703,19 @@ public final class RandomReads3 {
 	private byte[][] fragadapter1=null;
 	private byte[][] fragadapter2=null;
 	
+	private BitSet bits_cached;
+	private int[] locs_cached;
+	
+	private String prefix;
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Static Fields         ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	private static int[] randomChrom;
+	
+	private static long seed=0;
+	
 	private static final byte[][] fixedQuality=new byte[301][];
 	
 	public static final boolean USE_FIXED_QUALITY=false;
@@ -1541,6 +1742,7 @@ public final class RandomReads3 {
 	public static double EXP_LAMDA=0.8d;
 	public static boolean BIASED_SNPS=false;
 	public static boolean ILLUMINA_NAMES=false;
+	public static int midPad=500;
 	
 	public static boolean NODISK=false;
 

@@ -8,12 +8,13 @@ import stream.SiteScore;
 
 
 import align2.Tools;
+import dna.ChromArrayMaker;
 import dna.ChromosomeArray;
 import dna.ChromosomeArrayCompressed;
 import dna.CoverageArray;
 import dna.CoverageArray2;
 import dna.Data;
-import dna.FastaToChromArrays;
+import dna.FastaToChromArrays2;
 import dna.Parser;
 import dna.Range;
 import dna.Timer;
@@ -160,7 +161,7 @@ public class SplitOffPerfectContigs {
 			ReadWrite.writeString(""+contig, contigfile, false);
 		}
 		
-		FastaToChromArrays.writeInfo(buildout, Data.numChroms, name, source, false, false);
+		FastaToChromArrays2.writeInfo(buildout, Data.numChroms, name, source, false, false);
 		
 		t.stop();
 		

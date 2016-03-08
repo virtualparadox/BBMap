@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified June 5, 2014"
+	echo "Last modified September 19, 2014"
 	echo ""
 	echo "Description:  Generates a kmer uniqueness histogram, binned by file position."
 	echo "There are 3 columns for single reads, 6 columns for paired:"
@@ -32,11 +32,12 @@ usage(){
 	echo "out=<file>        	File for output stats"
 	echo ""
 	echo "Processing parameters:"
-	echo "k=20			Kmer length (values under 32 are most efficient, but arbitrarily high values are supported)"
+	echo "k=20			Kmer length (range 1-31)."
 	echo "interval=25000		Print one line to the histogram per this many reads."
 	echo "cumulative=f		Show cumulative numbers rather than per-interval numbers."
 	echo "percent=t		Show percentages of unique reads."
 	echo "count=f			Show raw counts of unique reads."
+	echo "printlastbin=f		(plb) Print a line for the final undersized bin."
 	echo ""
 	echo ""
 	echo "Java Parameters:"

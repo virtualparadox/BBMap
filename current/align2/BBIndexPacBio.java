@@ -31,7 +31,7 @@ public final class BBIndexPacBio extends AbstractIndex {
 		
 		for(int i=0; i<args.length; i++){
 			String s=args[i].toLowerCase();
-			if(s.equals("basespace") || s.equals("bs")){COLORSPACE=false;}
+			if(s.equals("basespace")){COLORSPACE=false;}
 			else if(s.equals("colorspace") || s.equals("cs")){COLORSPACE=true;}
 			else if(s.contains("=")){
 				String[] split=s.split("=");
@@ -1126,26 +1126,25 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.stop=site3;
-								prevSS.perfect=true;
+								prevSS.setStop(site3);
+								prevSS.setPerfect();
 							}else{
-								prevSS.stop=maxStop;
+								prevSS.setStop(maxStop);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
 						}else if(SUBSUME_SAME_STOP_SITES && shortEnough && prevSS.stop==site3){
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.start=site2;
-								prevSS.perfect=true;
+								prevSS.setStart(site2);
+								prevSS.setPerfect();
 							}else{
-								prevSS.start=minStart;
+								prevSS.setStart(minStart);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
 						}else if(SUBSUME_OVERLAPPING_SITES && shortEnough && (maxStop-minStart<=bases.length+MAX_SUBSUMPTION_LENGTH)
 								&& !perfect1 && !perfect2){
-							prevSS.start=minStart;
-							prevSS.stop=maxStop;
+							prevSS.setLimits(minStart, maxStop);
 							prevSS.score=prevSS.quickScore=betterScore;
 						}else{
 							ss=new SiteScore(chrom, strand, site2, site3, approxHits, score, false, perfect1);
@@ -1535,11 +1534,11 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.stop=site3;
+								prevSS.setStop(site3);
 								if(!prevSS.perfect){perfectsFound++;}//***$
 								prevSS.perfect=prevSS.semiperfect=true;
 							}else{
-								prevSS.stop=maxStop;
+								prevSS.setStop(maxStop);
 								prevSS.setPerfect(bases);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
@@ -1547,18 +1546,17 @@ public final ArrayList<SiteScore> find(byte[] basesP, byte[] basesM, byte[] qual
 							if(perfect2){
 								//do nothing
 							}else if(perfect1){
-								prevSS.start=site2;
+								prevSS.setStart(site2);
 								if(!prevSS.perfect){perfectsFound++;}//***$
 								prevSS.perfect=prevSS.semiperfect=true;
 							}else{
-								prevSS.start=minStart;
+								prevSS.setStart(minStart);
 								prevSS.setPerfect(bases);
 							}
 							prevSS.score=prevSS.quickScore=betterScore;
 						}else if(SUBSUME_OVERLAPPING_SITES && shortEnough && (maxStop-minStart<=bases.length+MAX_SUBSUMPTION_LENGTH)
 								&& !perfect1 && !perfect2 && !prevSS.semiperfect){
-							prevSS.start=minStart;
-							prevSS.stop=maxStop;
+							prevSS.setLimits(minStart, maxStop);
 							prevSS.score=prevSS.quickScore=betterScore;
 							prevSS.setPerfect(bases);
 						}else{

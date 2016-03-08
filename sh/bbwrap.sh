@@ -2,16 +2,16 @@
 #bbwrap in=<infile> out=<outfile>
 
 usage(){
-	echo "BBWrap v32.x"
-	echo "Last modified May 23, 2014"
+	echo "BBWrap v33.x"
+	echo "Last modified September 18, 2014"
 	echo ""
 	echo "Description:  Wrapper for BBMap to allow multiple input and output files for the same reference."
 	echo ""
 	echo "To index:  	bbwrap.sh ref=<reference fasta>"
 	echo "To map:    	bbwrap.sh in=<file,file,...> out=<file,file,...>"
-	echo "To map without an index:  	bbwrap.sh ref=<reference fasta> in=in=<file,file,...> out=<file,file,...> nodisk"
+	echo "To map without an index:  	bbwrap.sh ref=<reference fasta> in=<file,file,...> out=<file,file,...> nodisk"
 	echo ""
-	echo "This will probably not work with stdin and stdout."
+	echo "This will probably not work with stdin and stdout, or histogram output."
 	echo ""
 	echo "Other Parameters:"
 	echo ""
@@ -19,6 +19,8 @@ usage(){
 	echo "mapper=bbmap     	Select mapper.  May be BBMap, BBMapPacBio, or BBMapPacBioSkimmer."
 	echo "append=f         	Append to files rather than overwriting them.  If append is enabled,"
 	echo "                 	multiple input files can write to a single output file, if there is exactly one output file."
+	echo ""
+	echo "***** All BBMap parameters can be used; run bbmap.sh for more details. *****"
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx             		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -30,6 +32,7 @@ usage(){
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+NATIVELIBDIR="$DIR""jni/"
 
 z="-Xmx1g"
 z2="-Xms1g"
@@ -59,7 +62,7 @@ bbwrap() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java $EA $z -cp $CP align2.BBWrap build=1 overwrite=true fastareadlen=500 $@"
+	local CMD="java -Djava.library.path=$NATIVELIBDIR $EA $z -cp $CP align2.BBWrap build=1 overwrite=true fastareadlen=500 $@"
 	echo $CMD >&2
 	$CMD
 }

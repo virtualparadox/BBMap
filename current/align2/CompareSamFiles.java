@@ -55,9 +55,9 @@ public class CompareSamFiles {
 			}else if(in2==null && i==1 && args[i].indexOf('=')<0 && (a.startsWith("stdin") || new File(args[i]).exists())){
 				in2=args[i];
 			}else if(a.equals("reads")){
-				reads=Long.parseLong(b);
+				reads=Tools.parseKMG(b);
 			}else if(i==2 && args[i].indexOf('=')<0 && Character.isDigit(a.charAt(0))){
-				reads=Long.parseLong(a);
+				reads=Tools.parseKMG(a);
 			}
 		}
 

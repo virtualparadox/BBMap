@@ -1,6 +1,5 @@
 package stream;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -80,7 +79,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	}
 	
 	public FastaReadInputStream(String fname, boolean colorspace_, boolean interleaved_, boolean allowSubprocess_, long maxdata){
-		this(FileFormat.testInput(fname, FileFormat.FASTA, FileFormat.FASTA, 0, allowSubprocess_, false), colorspace_, interleaved_, maxdata);
+		this(FileFormat.testInput(fname, FileFormat.FASTA, FileFormat.FASTA, 0, allowSubprocess_, false, false), colorspace_, interleaved_, maxdata);
 	}
 	
 	public FastaReadInputStream(FileFormat ff, boolean colorspace_, boolean interleaved_, long maxdata){
@@ -206,25 +205,26 @@ public class FastaReadInputStream extends ReadInputStream {
 		if(header==null){header=nextHeader();}
 		long len=0;
 		for(int i=0; i<BUF_LEN && len<MAX_DATA; i++){
-			Read r=generateRead();
+			Read r=generateRead(0);
 			if(r==null){break;}
 			currentList.add(r);
 			len+=r.length();
 			if(interleaved){
-				Read r2=generateRead();
+				Read r2=generateRead(1);
 				if(r2==null){break;}
 				len+=r2.length();
 				r.mate=r2;
 				r2.mate=r;
-				r2.setPairnum(1);
 			}
+			nextReadID++;
 			if(verbose){System.err.println("Generated a read; i="+i+", BUF_LEN="+BUF_LEN);}
+//			if(i==1){assert(false) : r.numericID+", "+r.mate.numericID;}
 		}
 		
 		return currentList.size()>0;
 	}
 	
-	private final Read generateRead(){
+	private final Read generateRead(int pairnum){
 		if(verbose){System.err.println("Called generateRead(); bstart="+bstart+", bstop="+bstop+", currentSection="+currentSection+", header="+header);}
 		assert(header!=null) : "Null header for fasta read - input file may be corrupt: "+name;
 		if(bstart<bstop && buffer[bstart]==carrot){
@@ -254,7 +254,8 @@ public class FastaReadInputStream extends ReadInputStream {
 			Arrays.fill(quals, (byte)(FAKE_QUALITY_LEVEL));
 		}
 //		String hd=((currentSection==1 && !hitmax) ? header : header+"_"+currentSection);
-		String hd=((currentSection==1 && bases.length<maxLen) ? header : header+"_"+currentSection);
+		String hd=((!FORCE_SECTION_NAME && currentSection==1 && bases.length<=maxLen) ? header : header+"_"+currentSection);
+//		assert(false) : FORCE_SECTION_NAME+", "+(currentSection==1)+", "+(bases.length<=maxLen)+", "+bases.length+", "+maxLen;
 		assert(currentSection==1 || bases.length>0) : "id="+hd+", section="+currentSection+", len="+bases.length+"\n"+new String(bases);
 		Read r=null;
 		if(FASTQ.PARSE_CUSTOM){
@@ -285,7 +286,7 @@ public class FastaReadInputStream extends ReadInputStream {
 			}
 		}
 		if(r==null){r=new Read(bases, (byte)0, (byte)0, 0, 0, hd, quals, colorspace, nextReadID);}
-		nextReadID++;
+		r.setPairnum(pairnum);
 		if(verbose){System.err.println("Made read:\t"+(r.bases.length>1000 ? r.id : r.toString()));}
 		return r;
 	}
@@ -313,7 +314,9 @@ public class FastaReadInputStream extends ReadInputStream {
 				return null;
 			}
 			x=0;
-			assert(bstart==0 && bstart<bstop && buffer[x]=='>'); //Note: This assertion will fire if a fasta file starts with a newline.
+			assert(bstart==0 && bstart<bstop && buffer[x]=='>') : "Improperly formatted fasta file; expecting '>' symbol.\n"+
+				(buffer[x]=='@' ? "If this is a fastq file, please rename it with a '.fastq' extension.\n" : "")+
+					bstart+", "+bstop+", "+(int)buffer[x]+", "+(char)buffer[x]; //Note: This assertion will fire if a fasta file starts with a newline.
 			while(x<bstop && buffer[x]>slashr){x++;}
 			if(x<bstop && (buffer[x]==0x1 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
 				while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1 || buffer[x]==tab)){
@@ -444,7 +447,7 @@ public class FastaReadInputStream extends ReadInputStream {
 			try {
 				r=ins.read(buffer, bstop, buffer.length-bstop);
 			} catch (IOException e) {e.printStackTrace();}
-			if(verbose){System.err.println("r="+r);}
+			//if(verbose){System.err.println("r="+r);}
 			if(r>0){
 				sum+=r;
 				bstop=bstop+r;
@@ -538,11 +541,12 @@ public class FastaReadInputStream extends ReadInputStream {
 	public static boolean verbose=false;
 	private final static byte slashr='\r', slashn='\n', carrot='>', space=' ', tab='\t';
 	
-	public static boolean SPLIT_READS=true;
+	public static boolean SPLIT_READS=false;
 	public static int TARGET_READ_LEN=500;
 	public static int MIN_READ_LEN=1;//40;
 	public static int DEFAULT_WRAP=80;
 	public static boolean FAKE_QUALITY=false;
 	public static byte FAKE_QUALITY_LEVEL=30;
+	public static boolean FORCE_SECTION_NAME=false;
 	
 }

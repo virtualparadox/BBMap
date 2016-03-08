@@ -8,7 +8,7 @@ import stream.SiteScore;
 public class GapTools {
 	
 	public static int[] fixGaps(SiteScore ss){
-		int[] r=fixGaps(ss.start, ss.stop, ss.gaps, Shared.MINGAP);
+		int[] r=fixGaps(ss.start(), ss.stop(), ss.gaps, Shared.MINGAP);
 		ss.gaps=r;
 		return r;
 	}
@@ -34,10 +34,25 @@ public class GapTools {
 		
 		int g0=gaps[0];
 		int gN=gaps[gaps.length-1];
-		if(a==g0 && b==gN){return gaps;}
-		
 		if(!Tools.overlap(a, b, g0, gN)){return null;}
-		if(verbose){System.err.println("fixGaps c: "+Arrays.toString(gaps));}
+
+		int changed=0;
+		if(gaps[0]!=a){gaps[0]=a; changed++;}
+		if(gaps[gaps.length-1]!=b){gaps[gaps.length-1]=b; changed++;}
+		for(int i=0; i<gaps.length; i++){
+			if(gaps[i]<a){gaps[i]=a; changed++;}
+			else if(gaps[i]>b){gaps[i]=b; changed++;}
+		}
+		
+		if(verbose){System.err.println("fixGaps c0: "+Arrays.toString(gaps));}
+		
+		for(int i=1; i<gaps.length; i++){
+			if(gaps[i-1]>gaps[i]){gaps[i]=gaps[i-1]; changed++;}
+		}
+		
+		if(changed==0){return gaps;}
+		
+		if(verbose){System.err.println("fixGaps c1: "+Arrays.toString(gaps));}
 		
 		gaps[0]=a;
 		gaps[gaps.length-1]=b;
@@ -58,7 +73,7 @@ public class GapTools {
 	
 	/** This may have some off-by-one errors... */
 	public static final int calcGrefLen(SiteScore ss){
-		return calcGrefLen(ss.start, ss.stop, ss.gaps);
+		return calcGrefLen(ss.start(), ss.stop(), ss.gaps);
 	}
 	
 	/** This may have some off-by-one errors... */
@@ -71,7 +86,7 @@ public class GapTools {
 			int syms=calcNumGapSymbols(b1, b2);
 			total=total-syms*(Shared.GAPLEN-1);
 		}
-		assert(total>0) : a+", "+b+", "+Arrays.toString(gaps);
+		assert(total>0) : "total="+total+", a="+a+", b="+b+", gaps="+Arrays.toString(gaps);
 		return total;
 	}
 	

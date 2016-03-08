@@ -88,48 +88,6 @@ public class FASTQ {
 //		return testPairNames(oct[0], oct[4]);
 //	}
 	
-	public static byte[] testInterleavedAndQuality(final String fname){
-		FASTQ.DETECT_QUALITY=true;
-		final String[] oct=getFirstOctet(fname);
-		byte q=testQuality(oct);
-		byte i=(byte)(testInterleaved(oct, fname) ? 1 : 0);
-		return new byte[] {q, i};
-	}
-	
-	public static boolean isInterleaved(final String fname){
-		
-		if(!DETECT_QUALITY && !TEST_INTERLEAVED){return FORCE_INTERLEAVED;}
-		final String[] oct=getFirstOctet(fname);
-		if(oct==null){return FORCE_INTERLEAVED;}
-		
-		if(DETECT_QUALITY){testQuality(oct);}
-		if(TEST_INTERLEAVED){return testInterleaved(oct, fname);}
-		return FORCE_INTERLEAVED;
-	}
-	
-	private static String[] getFirstOctet(String fname){
-		if(fname==null){return null;}
-		if(fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return null;}
-		
-		String[] oct=new String[8];
-		int cntr=0;
-		
-		{
-			InputStream is=ReadWrite.getInputStream(fname, false, false);
-			BufferedReader br=new BufferedReader(new InputStreamReader(is));
-			try {
-				for(String s=br.readLine(); s!=null && cntr<8; s=br.readLine()){
-					oct[cntr]=s;
-					cntr++;
-				}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		return oct;
-	}
-	
 	private static String[] getFirstTwoFastaHeaders(String fname){
 		if(fname==null){return null;}
 		if(fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return null;}
@@ -159,33 +117,44 @@ public class FASTQ {
 		if(fname==null){return ASCII_OFFSET;}
 		if(!DETECT_QUALITY || fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return ASCII_OFFSET;}
 		
-		String[] oct=getFirstOctet(fname);
+		ArrayList<String> oct=fileIO.FileFormat.getFirstOctet(fname);
 		return testQuality(oct);
 	}
 	
-	private static boolean testInterleaved(String[] oct, String fname){
-		if(oct==null || oct.length<8){return false;}
-		for(int i=0; i<oct.length; i++){
-			if(oct[i]==null){return false;}
+	public static boolean isInterleaved(final String fname, final boolean allowIdentical){
+		
+		if(!DETECT_QUALITY && !TEST_INTERLEAVED){return FORCE_INTERLEAVED;}
+		final ArrayList<String> oct=fileIO.FileFormat.getFirstOctet(fname);
+		if(oct==null){return FORCE_INTERLEAVED;}
+		
+		if(DETECT_QUALITY){testQuality(oct);}
+		if(TEST_INTERLEAVED){return testInterleaved(oct, fname, allowIdentical);}
+		return FORCE_INTERLEAVED;
+	}
+	
+	public static boolean testInterleaved(ArrayList<String> oct, String fname, boolean allowIdentical){
+		if(oct==null || oct.size()<8){return false;}
+		for(String s : oct){
+			if(s==null){return false;}
 		}
 		
-		assert(oct[0]==null || oct[0].startsWith("@")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct[0]);
-		assert(oct[2]==null || oct[2].startsWith("+")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct[2]);
-		assert(oct[4]==null || oct[4].startsWith("@")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct[4]);
-		assert(oct[6]==null || oct[6].startsWith("+")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct[6]);
+		assert(oct.get(0).startsWith("@")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct.get(0));
+		assert(oct.get(2).startsWith("+")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct.get(2));
+		assert(oct.get(4).startsWith("@")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct.get(4));
+		assert(oct.get(6).startsWith("+")) : "File "+fname+"\ndoes not appear to be a valid FASTQ file:\n"+new String(oct.get(6));
 		
 		if(FORCE_INTERLEAVED){return true;}
 		if(PARSE_CUSTOM && fname.contains("_interleaved.")){return true;}
 		
-		return testPairNames(oct[0], oct[4]);
+		return testPairNames(oct.get(0), oct.get(4), allowIdentical);
 	}
 	
-	public static boolean testInterleavedFasta(String fname){
+	public static boolean testInterleavedFasta(String fname, boolean allowIdentical){
 		String[] headers=getFirstTwoFastaHeaders(fname);
-		return testInterleavedFasta(headers, fname);
+		return testInterleavedFasta(headers, fname, allowIdentical);
 	}
 	
-	private static boolean testInterleavedFasta(String[] headers, String fname){
+	private static boolean testInterleavedFasta(String[] headers, String fname, boolean allowIdentical){
 		if(headers==null || headers.length<2){return false;}
 		for(int i=0; i<headers.length; i++){
 			if(headers[i]==null){return false;}
@@ -197,26 +166,37 @@ public class FASTQ {
 		if(FORCE_INTERLEAVED){return true;}
 		if(PARSE_CUSTOM && fname.contains("_interleaved.")){return true;}
 		
-		return testPairNames(headers[0], headers[1]);
+		return testPairNames(headers[0], headers[1], allowIdentical);
 	}
 	
-	private static byte testQuality(String[] oct){
-		if(oct==null || oct[0]==null){return ASCII_OFFSET;}
+	public static byte testQuality(ArrayList<String> oct){
+		if(oct==null || oct.size()<4 || oct.get(0)==null){return ASCII_OFFSET;}
 		if(verbose){System.err.println("testQuality()");}
 		int qflips=0;
 		for(int k=0; k<2; k++){
 			int a=1+4*k, b=3+4*k;
-			if(oct.length<b || oct[a]==null || oct[b]==null){break;}
-			byte[] bases=oct[a].getBytes();
-			byte[] quals=oct[b].getBytes();
+			if(oct.size()<b || oct.get(a)==null || oct.get(b)==null){break;}
+			byte[] bases=oct.get(a).getBytes();
+			byte[] quals=oct.get(b).getBytes();
 			//		assert(false) : Arrays.toString(quals);
 			if(verbose){System.err.println(Arrays.toString(quals));}
+			
+			if(DETECT_QUALITY && bases.length>=MIN_LENGTH_TO_FORCE_ASCII_33){
+				if(ASCII_OFFSET==33){
+					//do nothing
+				}else{
+					if(warnQualityChange){System.err.println("Changed from ASCII-64 to ASCII-33 due to read of length "+bases.length+" while prescanning.");}
+					ASCII_OFFSET=33;
+				}
+				DETECT_QUALITY=false;
+			}
+			
 			for(int i=0; i<quals.length; i++){
 				quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
 				if(verbose){System.err.println(quals[i]);}
 				if(DETECT_QUALITY){
 					if(ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
-						if(warnQualityChange){System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
+						if(warnQualityChange && qflips<4){System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
 						qflips++;
 						ASCII_OFFSET=64;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=64;}
@@ -224,7 +204,7 @@ public class FASTQ {
 							quals[j]=(byte)(quals[j]-31);
 						}
 					}else if(ASCII_OFFSET==64 && (quals[i]<-5)){
-						if(warnQualityChange){System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
+						if(warnQualityChange && qflips<4){System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
 						ASCII_OFFSET=33;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=33;}
 						qflips++;
@@ -233,21 +213,21 @@ public class FASTQ {
 						}
 					}
 				}
-				assert(quals[i]>=-5) : "ASCII encoding for quality (currently ASCII-"+ASCII_OFFSET+") appears to be wrong.\n"
-					+oct[k]+"\n"+oct[k+3]+"\n"+Arrays.toString(oct[k+3].getBytes());
-				assert(qflips<2) : "Failed to auto-detect quality coding; quitting.";
+				assert(quals[i]>=-5 || IGNORE_BAD_QUALITY) : "ASCII encoding for quality (currently ASCII-"+ASCII_OFFSET+") appears to be wrong.\n"
+					+oct.get(k)+"\n"+oct.get(k+3)+"\n"+Arrays.toString(oct.get(k+3).getBytes());
+				assert(qflips<2 || IGNORE_BAD_QUALITY) : "Failed to auto-detect quality coding; quitting.  Please manually set qin=33 or qin=64.";
 			}
 		}
 		
 		return ASCII_OFFSET;
 	}
 	
-	public static boolean testPairNames(Read r1, Read r2){
+	public static boolean testPairNames(Read r1, Read r2, boolean allowIdentical){
 		if(r1==null || r2==null){return false;}
-		return testPairNames(r1.id, r2.id);
+		return testPairNames(r1.id, r2.id, allowIdentical);
 	}
 	
-	public static boolean testPairNames(String id1, String id2){
+	public static boolean testPairNames(String id1, String id2, boolean allowIdentical){
 		
 		if(id1==null || id2==null){return false;}
 		
@@ -255,6 +235,11 @@ public class FASTQ {
 		final int idxSlash2=id2.lastIndexOf('/');
 		final int idxSpace1=id1.indexOf(' ');
 		final int idxSpace2=id2.indexOf(' ');
+		
+		if(allowIdentical && idxSlash1<0 && idxSpace1<0){
+			return id1.equals(id2);
+		}
+		
 		//			System.out.println("idxSlash1="+idxSlash1+", idxSlash2="+idxSlash2+", idxSpace1="+idxSpace1+", idxSpace2="+idxSpace2);
 		if(idxSlash1==idxSlash2 && idxSlash1>1){
 			//				System.out.println("A");
@@ -305,6 +290,9 @@ public class FASTQ {
 	
 	public static String customID(Read r){
 		if(TAG_CUSTOM && (r.chrom>-1 && r.stop>-1)){
+			if(DELETE_OLD_NAME){
+				r.id=null;
+			}
 			if(Data.GENOME_BUILD>=0){
 				final int chrom1=r.chrom;
 				final int start1=r.start;
@@ -526,6 +514,27 @@ public class FASTQ {
 				
 				byte[] bases=quad[1].getBytes();
 				byte[] quals=quad[3].getBytes();
+				
+				if(DETECT_QUALITY && bases.length>=MIN_LENGTH_TO_FORCE_ASCII_33){
+					if(ASCII_OFFSET==33){
+						//do nothing
+					}else{
+						
+						if(warnQualityChange){
+							if(numericID<1){
+								System.err.println("Changed from ASCII-33 to ASCII-64 due to read of length "+bases.length+".");
+							}else{
+								warnQualityChange=false;
+								System.err.println("Warning! Changed from ASCII-33 to ASCII-64 due to read of length "+bases.length+".");
+								System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
+								System.err.println("If this is a problem you may wish to re-run with the flag 'qin=33' or 'qin=64'.");
+							}
+						}
+						ASCII_OFFSET=33;
+					}
+					DETECT_QUALITY=false;
+				}
+				
 //				assert(false) : Arrays.toString(quals);
 				for(int i=0; i<quals.length; i++){
 					quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
@@ -534,9 +543,10 @@ public class FASTQ {
 							if(numericID<1){
 								System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
 							}else{
+								warnQualityChange=false;
 								System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
 								System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
-								System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
+								System.err.println("If this is a problem you may wish to re-run with the flag 'qin=33' or 'qin=64'.");
 							}
 						}
 						ASCII_OFFSET=64;
@@ -703,9 +713,10 @@ public class FASTQ {
 					if(numericID<1){
 						System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
 					}else{
+						warnQualityChange=false;
 						System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
 						System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
-						System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
+						System.err.println("If this is a problem you may wish to re-run with the flag 'qin=33' or 'qin=64'.");
 						errorState=true;
 					}
 				}
@@ -828,6 +839,7 @@ public class FASTQ {
 
 	public static boolean PARSE_CUSTOM=false;
 	public static boolean TAG_CUSTOM=false;
+	public static boolean DELETE_OLD_NAME=false;
 	public static byte ASCII_OFFSET=33;
 	public static byte ASCII_OFFSET_OUT=33;
 	public static byte FAKE_QUAL=30;
@@ -837,6 +849,7 @@ public class FASTQ {
 	public static boolean DETECT_QUALITY_OUT=true;
 	public static boolean ADD_PAIRNUM_TO_CUSTOM_ID=true;
 
+	public static final int MIN_LENGTH_TO_FORCE_ASCII_33=200;
 	public static final int QUAL_THRESH=54;
 	public static boolean IGNORE_BAD_QUALITY=false;
 	public static boolean verbose=false;

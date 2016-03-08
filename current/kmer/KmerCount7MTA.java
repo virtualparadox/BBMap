@@ -60,7 +60,7 @@ public static void main(String[] args){
 			}else if(a.startsWith("gap")){
 				gap=Integer.parseInt(b);
 			}else if(a.startsWith("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("matrixbits")){
 				matrixbits=Integer.parseInt(b);
 			}else if(a.startsWith("hashes")){
@@ -172,6 +172,10 @@ public static void main(String[] args){
 		final int kbits=Tools.min(2*k, 62);
 //		verbose=true;
 		if(verbose){System.err.println("Making kca from ("+fname1+", "+fname2+")\nk="+k+", gap="+gap+", cells="+Tools.toKMG(cells)+", cbits="+cbits);}
+		
+		if(fname1==null && fname2==null && extraFiles==null){
+			return KCountArray.makeNew(1L<<kbits, cells, cbits, gap, hashes, prefilter);
+		}
 		
 		boolean oldsplit=FastaReadInputStream.SPLIT_READS;
 		long oldmax=maxReads;
@@ -519,6 +523,7 @@ public static void main(String[] args){
 			}else{
 				countFastq(cris, k, rcomp, count, trusted, thresh, detectStepsize,  conservative);
 			}
+//			System.out.println("Finished: "+readsProcessedLocal);
 			
 			synchronized(getClass()){
 				keysCounted+=keysCountedLocal;

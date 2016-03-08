@@ -1,9 +1,9 @@
 #!/bin/bash
-#correct in=<infile> out=<outfile>
+#ecc.sh in=<infile> out=<outfile>
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified June 23, 2014"
+	echo "Last modified November 4, 2014"
 	echo ""
 	echo "Description:  Corrects substitution errors in reads using kmer depth information."
 	echo "Can also normalize and/or bin reads by kmer depth."
@@ -37,6 +37,7 @@ usage(){
 	echo "tmpdir=$TMPDIR  	This will specify a directory for temp files (only needed for multipass runs).  If null, they will be written to the output directory."
 	echo "usetempdir=t    	Allows enabling/disabling of temporary directory; if disabled, temp files will be written to the output directory."
 	echo "qout=auto        	ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input)."
+	echo "rename=f         	Rename reads based on their kmer depth."
 	echo ""
 	echo "Hashing parameters:"
 	echo "k=31			Kmer length (values under 32 are most efficient, but arbitrarily high values are supported)"
@@ -46,6 +47,7 @@ usage(){
 	echo "  			Higher is MORE accurate if there is enough memory, and LESS accurate if there is not enough memory."
 	echo "prefilter=f		True is slower, but generally more accurate; filters out low-depth kmers from the main hashtable.  The prefilter is more memory-efficient because it uses 2-bit cells."
 	echo "prehashes=2		Number of hashes for prefilter."
+	echo "prefilterbits=2	(pbits) Bits per cell in prefilter."
 	echo "buildpasses=1		More passes can sometimes increase accuracy by iteratively removing low-depth kmers"
 	echo "minq=6			Ignore kmers containing bases with quality below this"
 	echo "minprob=0.5		Ignore kmers with overall probability of correctness below this"
@@ -60,6 +62,7 @@ usage(){
 	echo "mindepth=6        	(min) Kmers with depth below this number will not be included when calculating the depth of a read."
 	echo "minkmers=15		(mgkpr) Reads must have at least this many kmers over min depth to be retained.  Aka 'mingoodkmersperread'."
 	echo "percentile=54.0	(dp) Read depth is by default inferred from the 54th percentile of kmer depth, but this may be changed to any number 1-100."
+	echo "uselowerdepth=t	(uld) For pairs, use the depth of the lower read as the depth proxy."
 	echo "deterministic=t	(dr) Generate random numbers deterministically to ensure identical output between multiple runs.  May decrease speed with a huge number of threads."
 	echo "passes=2		(p) 1 pass is the basic mode.  2 passes (default) allows greater accuracy, error detection, better contol of output depth."
 	echo ""
@@ -91,10 +94,20 @@ usage(){
 	echo "outmid=<file>		All other pairs go into this file."
 	echo ""
 	echo "Histogram parameters:"
-	echo "hist=<file>		Specify a file to write the input kmer depth histogram"
-	echo "histout=<file>		Specify a file to write the output kmer depth histogram"
+	echo "hist=<file>		Specify a file to write the input kmer depth histogram."
+	echo "histout=<file>		Specify a file to write the output kmer depth histogram."
+	echo "histcol=3		(histogramcolumns) Number of histogram columns, 2 or 3."
 	echo "pzc=f			(printzerocoverage) Print lines in the histogram with zero coverage."
 	echo "histlen=1048576   	Max kmer depth displayed in histogram.  Also affects statistics displayed, but does not affect normalization."
+	echo ""
+	echo "Peak calling parameters:"
+	echo "peaks=<file>     	Write the peaks to this file.  Default is stdout."
+	echo "minHeight=2     	(h) Ignore peaks shorter than this."
+	echo "minVolume=2     	(v) Ignore peaks with less area than this."
+	echo "minWidth=2      	(w) Ignore peaks narrower than this."
+	echo "minPeak=2       	(minp) Ignore peaks with an X-value below this."
+	echo "maxPeak=BIG       	(maxp) Ignore peaks with an X-value above this."
+	echo "maxPeakCount=8  	(maxpc) Print up to this many peaks (prioritizing height)."
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -133,7 +146,7 @@ correct() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
-	local CMD="java $EA $z -cp $CP jgi.KmerNormalize bits=16 ecc=t passes=1 keepall dr=f prefilter $@"
+	local CMD="java $EA $z $z2 -cp $CP jgi.KmerNormalize bits=16 ecc=t passes=1 keepall dr=f prefilter $@"
 	echo $CMD >&2
 	$CMD
 }

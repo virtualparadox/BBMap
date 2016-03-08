@@ -8,7 +8,11 @@ import java.util.ArrayList;
  *
  */
 public class KmerLink {
-
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Initialization        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	public KmerLink(long pivot_){
 		pivot=pivot_;
 	}
@@ -18,7 +22,11 @@ public class KmerLink {
 		count=value_;
 	}
 	
-	int increment(long kmer){
+	/*--------------------------------------------------------------*/
+	/*----------------        Public Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	public int increment(long kmer){
 		if(pivot<0){pivot=kmer; return (count=1);} //Allows initializing empty nodes to -1
 		if(kmer==pivot){
 			if(count<Integer.MAX_VALUE){count++;}
@@ -27,6 +35,10 @@ public class KmerLink {
 		if(next==null){next=new KmerLink(kmer, 1); return 1;}
 		return next.increment(kmer);
 	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------      Nonpublic Methods       ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	/** Returns number of nodes added */
 	int set(long kmer, int value){
@@ -76,6 +88,22 @@ public class KmerLink {
 		if(next!=null){next.traverseInfix(list);}
 	}
 	
+	boolean canRebalance() {
+		return false;
+	}
+	
+	boolean canResize() {
+		return false;
+	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Private Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/*--------------------------------------------------------------*/
+	/*----------------       Invalid Methods        ----------------*/
+	/*--------------------------------------------------------------*/
+	
 	KmerLink rebalance(ArrayList<KmerLink> list){
 		throw new RuntimeException("Unsupported.");
 	}
@@ -83,6 +111,10 @@ public class KmerLink {
 	private static KmerLink rebalance(ArrayList<KmerLink> list, int a, int b){
 		throw new RuntimeException("Unsupported.");
 	}
+	
+	/*--------------------------------------------------------------*/
+	/*----------------            Fields            ----------------*/
+	/*--------------------------------------------------------------*/
 	
 	long pivot;
 	int count;

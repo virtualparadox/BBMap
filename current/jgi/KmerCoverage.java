@@ -155,9 +155,9 @@ public class KmerCoverage {
 			}else if(a.equals("threads") || a.equals("t")){
 				threads=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
-				maxReads=Long.parseLong(b);
+				maxReads=Tools.parseKMG(b);
 			}else if(a.startsWith("tablereads") || a.startsWith("buildreads")){
-				tablereads=Long.parseLong(b);
+				tablereads=Tools.parseKMG(b);
 			}else if(a.startsWith("out")){
 				output=b;
 			}else if(a.startsWith("hist")){
@@ -1066,7 +1066,7 @@ public class KmerCoverage {
 			}
 		}
 		
-		private CharSequence toFastaString(Read r){
+		private String toFastaString(Read r){
 			if(r.bases==null || r.bases.length<k){
 				if(MIN_MEDIAN>0 || MIN_AVERAGE>0){r.setDiscarded(true);}
 				if(USE_HEADER){
@@ -1137,11 +1137,11 @@ public class KmerCoverage {
 					
 					if(median<MIN_MEDIAN || sum/cov.length<MIN_AVERAGE){r.setDiscarded(true);}
 				}
-				return sb;
+				return sb.toString();
 			}
 		}
 		
-		private CharSequence toFastqString(Read r){
+		private StringBuilder toFastqString(Read r){
 			StringBuilder sb=r.toFastq();
 			if(r.bases==null || r.bases.length<k){
 				if(MIN_MEDIAN>0 || MIN_AVERAGE>0){r.setDiscarded(true);}

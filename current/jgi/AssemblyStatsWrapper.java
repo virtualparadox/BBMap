@@ -49,7 +49,7 @@ public class AssemblyStatsWrapper {
 			args2[0]=s;
 			if(i>0){
 				args2[1]="header=f";
-				AssemblyStats2.reset();
+//				AssemblyStats2.reset();
 				System.gc();
 				synchronized(AssemblyStatsWrapper.class){
 					try {
@@ -58,7 +58,8 @@ public class AssemblyStatsWrapper {
 				}
 				Thread.yield();
 			}
-			AssemblyStats2.main(args2);
+			AssemblyStats2 as2=new AssemblyStats2(args2);
+			as2.process();
 		}
 		
 	}
