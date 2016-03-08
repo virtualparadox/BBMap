@@ -678,7 +678,8 @@ public final class BBMapThread extends AbstractMapThread{
 		
 		assert(checkTopSite(r));
 		if(r.mapped() && (LOCAL_ALIGN || r.containsXY2())){
-			msa.toLocalAlignment(r, r.topSite(), r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			msa.toLocalAlignment(r, r.topSite(), basesM, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			assert(Read.CHECKSITES(r, basesM));
 		}
 		
 		if(r.numSites()==0 || (!r.ambiguous() && r.mapScore<maxSwScore*MINIMUM_ALIGNMENT_SCORE_RATIO)){
@@ -998,6 +999,8 @@ public final class BBMapThread extends AbstractMapThread{
 		
 		if(verbose){System.err.println("\nAfter trim:\nRead1:\t"+r.sites+"\nRead2:\t"+r2.sites);}
 		
+//		assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
+		
 		if(SLOW_ALIGN){
 			
 			if(r.numSites()>0){
@@ -1038,6 +1041,7 @@ public final class BBMapThread extends AbstractMapThread{
 			
 			
 			if(verbose){System.err.println("\nAfter slow align:\nRead1:\t"+r+"\nRead2:\t"+r2);}
+			assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 			
 			if(DO_RESCUE){
 				int unpaired1=0;
@@ -1081,11 +1085,13 @@ public final class BBMapThread extends AbstractMapThread{
 //				Tools.removeLowQualitySites(r2.list, maxSwScore2, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE, MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE);
 				
 				if(verbose){System.err.println("\nAfter rescue:\nRead1:\t"+r+"\nRead2:\t"+r2);}
+				assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 			}
 		}else{
 			Tools.mergeDuplicateSites(r.sites, true, false);
 			Tools.mergeDuplicateSites(r2.sites, true, false);
 			if(verbose){System.err.println("\nAfter merge:\nRead1:\t"+r+"\nRead2:\t"+r2);}
+			assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 		}
 		
 		if(r.numSites()>1){Collections.sort(r.sites);}
@@ -1110,6 +1116,7 @@ public final class BBMapThread extends AbstractMapThread{
 		
 		pairSiteScoresFinal(r, r2, true, true, MAX_PAIR_DIST, AVERAGE_PAIR_DIST, SAME_STRAND_PAIRS, REQUIRE_CORRECT_STRANDS_PAIRS, MAX_TRIM_SITES_TO_RETAIN);
 		if(verbose){System.err.println("\nAfter final pairing:\nRead1:\t"+r+"\nRead2:\t"+r2);}
+		assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 		
 		if(r.numSites()>0){
 			mapped1++;
@@ -1123,6 +1130,7 @@ public final class BBMapThread extends AbstractMapThread{
 		if(SLOW_ALIGN || USE_AFFINE_SCORE){
 			r.setPerfectFlag(maxSwScore1);
 			r2.setPerfectFlag(maxSwScore2);
+//			assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 		}
 		
 
@@ -1138,6 +1146,7 @@ public final class BBMapThread extends AbstractMapThread{
 				boolean b=processAmbiguous(r.sites, true, AMBIGUOUS_TOSS, clearzone, SAVE_AMBIGUOUS_XY);
 				r.setAmbiguous(b);
 			}
+//			assert(Read.CHECKSITES(r, basesM1));
 		}
 
 		if(r2.numSites()>1){
@@ -1152,6 +1161,7 @@ public final class BBMapThread extends AbstractMapThread{
 				boolean b=processAmbiguous(r2.sites, false, AMBIGUOUS_TOSS, clearzone, SAVE_AMBIGUOUS_XY);
 				r2.setAmbiguous(b);
 			}
+//			assert(Read.CHECKSITES(r2, basesM2));
 		}
 		if(verbose){System.err.println("\nAfter ambiguous removal:\nRead1:\t"+r+"\nRead2:\t"+r2);}
 		
@@ -1172,12 +1182,8 @@ public final class BBMapThread extends AbstractMapThread{
 		if(r.numSites()==0){r.sites=null;r.mapScore=0;}
 		if(r2.numSites()==0){r2.sites=null;r2.mapScore=0;}
 		
-//		assert(Read.CHECKSITES(r, basesM));//***123
-//		assert(Read.CHECKSITES(r2));//***123
-		
 		r.setFromTopSite(AMBIGUOUS_RANDOM, true, MAX_PAIR_DIST);
 		r2.setFromTopSite(AMBIGUOUS_RANDOM, true, MAX_PAIR_DIST);
-		assert(checkTopSite(r)); // TODO remove this
 		if(KILL_BAD_PAIRS){
 			if(r.isBadPair(REQUIRE_CORRECT_STRANDS_PAIRS, SAME_STRAND_PAIRS, MAX_PAIR_DIST)){
 				int x=r.mapScore/len1;
@@ -1193,15 +1199,12 @@ public final class BBMapThread extends AbstractMapThread{
 		
 		assert(r.sites==null || r.mapScore>0) : r.mapScore+"\n"+r.toText(false)+"\n\n"+r2.toText(false)+"\n";
 		assert(r2.sites==null || r2.mapScore>0) : r2.mapScore+"\n"+r.toText(false)+"\n\n"+r2.toText(false)+"\n";
-		assert(checkTopSite(r)); // TODO remove this
 		if(MAKE_MATCH_STRING){
 			if(r.numSites()>0){
 				if(USE_SS_MATCH_FOR_PRIMARY && r.topSite().match!=null){
 					r.match=r.topSite().match;
 				}else{
-					assert(checkTopSite(r)); // TODO remove this
 					genMatchString(r, basesP1, basesM1, maxImperfectSwScore1, maxSwScore1, false, false);
-					assert(checkTopSite(r)); // TODO remove this
 					
 					if(STRICT_MAX_INDEL && r.mapped()){
 						if(hasLongIndel(r.match, index.MAX_INDEL)){
@@ -1210,6 +1213,7 @@ public final class BBMapThread extends AbstractMapThread{
 						}
 					}
 				}
+//				assert(Read.CHECKSITES(r, basesM1));
 			}
 			if(r2.numSites()>0){
 				if(USE_SS_MATCH_FOR_PRIMARY && r2.topSite().match!=null){
@@ -1224,6 +1228,7 @@ public final class BBMapThread extends AbstractMapThread{
 						}
 					}
 				}
+//				assert(Read.CHECKSITES(r2, basesM2));
 			}
 		}
 		
@@ -1296,19 +1301,24 @@ public final class BBMapThread extends AbstractMapThread{
 			r2.setMapped(false);
 			//TODO: Unclear if I should set paired to false here
 		}
+//		assert(Read.CHECKSITES(r, basesM1) && Read.CHECKSITES(r2, basesM2));
 
 		assert(checkTopSite(r));
 		if(r.mapped() && (LOCAL_ALIGN || r.containsXY2())){
 			final SiteScore ss=r.topSite();
 			ss.match=r.match;
-			msa.toLocalAlignment(r, ss, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+//			System.err.println("\n\n*********\n\n"+r+"\n\n*********\n\n");
+			msa.toLocalAlignment(r, ss, basesM1, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+//			System.err.println("\n\n*********\n\n"+r+"\n\n*********\n\n");
+//			assert(Read.CHECKSITES(r, basesM1)); //TODO: This can fail; see bug#0001
 		}
 		
 		assert(checkTopSite(r2));
 		if(r2.mapped() && (LOCAL_ALIGN || r2.containsXY2())){
 			final SiteScore ss=r2.topSite();
 			ss.match=r2.match;
-			msa.toLocalAlignment(r2, ss, r2.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			msa.toLocalAlignment(r2, ss, basesM2, r2.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+//			assert(Read.CHECKSITES(r2, basesM2)); //TODO: This can fail; see bug#0001
 		}
 		
 		if(CALC_STATISTICS){

@@ -13,7 +13,7 @@ import dna.Data;
 import dna.Parser;
 import dna.Timer;
 
-import fileIO.ReadWrite;
+
 import fileIO.FileFormat;
 
 public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInterface {

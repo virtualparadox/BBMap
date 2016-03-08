@@ -1,4 +1,4 @@
-package driver;
+package jgi;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -10,7 +10,6 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
-import stream.RTextOutputStream3;
 import stream.Read;
 
 import align2.ListNum;

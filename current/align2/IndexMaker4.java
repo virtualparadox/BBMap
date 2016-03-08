@@ -218,7 +218,6 @@ public class IndexMaker4 {
 				//Data.sysout.println("Thread "+id+" range is "+minIndex+", "+maxIndex);
 				
 				if(ALLOW_POLYMERS){
-					banned=-1;
 					banmask=-1; //poly-A still slips through
 				}else{
 					int b=0;
@@ -226,7 +225,6 @@ public class IndexMaker4 {
 						b<<=2;
 						b=(b|id);
 					}
-					banned=b;
 					banmask=~((-1)<<((2*KEYLEN)-banshift));
 				}
 			}
@@ -239,7 +237,6 @@ public class IndexMaker4 {
 			private final Block[] indexHolder;
 			private final int minIndex;
 			private final int maxIndex;
-			private final int banned;
 			private final int banmask;
 			private static final int banshift=4;
 
@@ -338,15 +335,16 @@ public class IndexMaker4 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(array[a]==idb){
 						int key=ca.getNumber(a, b);
-//						if(key>=0 && key!=banned){
-						if(key>=0 && (key>>banshift)!=(key&banmask)){
+//						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==0)){
+//							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+
+//							", "+ca.getString(a, b)+"\n"+minIndex+", "+maxIndex+"\n";
+//							sizes[key]++;
+//						}
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
 							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+
-								", "+ca.getString(a, b)+"\n"+minIndex+", "+maxIndex+"\n";
+							", "+ca.getString(a, b)+"\n"+minIndex+", "+maxIndex+"\n";
 							sizes[key]++;
 						}
-//						else{
-//							assert(key==banned) : "\n"+Integer.toBinaryString(key)+" != "+Integer.toBinaryString(banned)+"\n";
-//						}
 					}
 					//				Data.sysout.println("a="+a+", b="+b+", max="+max);
 				}
@@ -414,8 +412,7 @@ public class IndexMaker4 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.array[a]==idb){
 						int key=ca.getNumber(a, b);
-//						if(key>=0 && key!=banned){
-						if(key>=0 && (key>>banshift)!=(key&banmask)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
 							assert(key>=minIndex && key<=maxIndex);
 							int number=toNumber(a, chrom);
 							assert(numberToChrom(number, baseChrom)==chrom);
@@ -459,8 +456,7 @@ public class IndexMaker4 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.getNumber(a)==id){
 						int key=ca.getNumber(a, b, COLORSPACE);
-//						if(key>=0 && key!=banned){
-						if(key>=0 && (key>>banshift)!=(key&banmask)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
 							assert(key>=minIndex && key<=maxIndex) : "\n"+id+", "+ca.getNumber(a)+", "+(char)ca.get(a)+", "+key+", "+Integer.toHexString(key)+", "+ca.getString(a, b)+"\n"
 									+minIndex+", "+maxIndex+"\n";
 							sizes[key]++;
@@ -501,8 +497,7 @@ public class IndexMaker4 {
 				for(int a=start, b=start+skip; a<max; a++, b++){
 					if(ca.array[a]==idb){
 						int key=ca.getNumber(a, b, COLORSPACE);
-//						if(key>=0 && key!=banned){
-						if(key>=0 && (key>>banshift)!=(key&banmask)){
+						if(key>=0 && (key>>banshift)!=(key&banmask) && (!USE_MODULO || key%MODULO==AminoAcid.reverseComplementBinaryFast(key, KEYLEN)%MODULO)){
 							assert(key>=minIndex && key<=maxIndex);
 							int number=toNumber(a, chrom);
 							assert(numberToChrom(number, baseChrom)==chrom);
@@ -620,5 +615,7 @@ public class IndexMaker4 {
 	private static int ACTIVE_BLOCKS=0;
 
 	public static boolean ALLOW_POLYMERS=false;
+	public static boolean USE_MODULO=false;
+	private static final int MODULO=5;
 	
 }

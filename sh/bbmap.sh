@@ -2,9 +2,9 @@
 #bbmap in=<infile> out=<outfile>
 
 usage(){
-	echo "BBMap v32.x"
+	echo "BBMap v33.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified June 17, 2014"
+	echo "Last modified June 26, 2014"
 	echo ""
 	echo "Description:  Fast and accurate short-read aligner for DNA and RNA."
 	echo ""
@@ -29,6 +29,7 @@ usage(){
 	#echo "colorspace=f      		Set to true to build a SOLiD colorspace index.  Probably does not work any more."
 	echo "path=<.>         		Specify the location to write the index, if you don't want it in the current working directory."
 	#echo "minscaf=1        		Throw away scaffolds shorter than this when indexing."
+	echo "usemodulo=f       		Throw away kmers not equal to their reverse module 5 (reduces RAM and sensitivity)."
 	echo ""
 	echo "Input Parameters:"
 	echo "build=1          		Designate index to use.  Corresponds to the number specified when building the index."

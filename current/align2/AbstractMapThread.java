@@ -297,8 +297,10 @@ public abstract class AbstractMapThread extends Thread {
 					processReadPair(r, basesM1, basesM2);
 					capSiteList(r, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
 					capSiteList(r2, MAX_SITESCORES_TO_PRINT, PRINT_SECONDARY_ALIGNMENTS);
-					assert(Read.CHECKSITES(r, basesM1));
-					assert(Read.CHECKSITES(r2, basesM2));
+//					if(!LOCAL_ALIGN){//TODO: This can fail in local mode; see bug#0001
+						assert(Read.CHECKSITES(r, basesM1));
+						assert(Read.CHECKSITES(r2, basesM2));
+//					}
 				}
 
 				if(UNTRIM && (TRIM_LEFT || TRIM_RIGHT)){
@@ -443,7 +445,7 @@ public abstract class AbstractMapThread extends Thread {
 		keyDen3=Tools.max(keyDensity, keyDen3);
 		
 		if(GENERATE_KEY_SCORES_FROM_QUALITY || r.quality==null){
-			QualityTools.makeKeyProbs(r.quality, KEYLEN, keyProbs);
+			QualityTools.makeKeyProbs(r.quality, r.bases, KEYLEN, keyProbs, USE_MODULO);
 			
 			boolean offsetsMode3=true;
 			if(offsetsMode3){
@@ -2706,6 +2708,8 @@ public abstract class AbstractMapThread extends Thread {
 
 	protected static int MAX_READ_LENGTH=0;
 	protected static int MIN_READ_LENGTH=0;
+	
+	protected static boolean USE_MODULO=false;
 	
 //	static{if(OUTER_DIST_MULT2<1){throw new RuntimeException();}}
 	

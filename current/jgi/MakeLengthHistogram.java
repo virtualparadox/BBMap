@@ -53,10 +53,12 @@ public class MakeLengthHistogram {
 				in1=b;
 			}else if(a.equals("in2")){
 				in2=b;
-			}else if(a.equals("out")){
+			}else if(a.equals("out") || a.equals("hist") || a.equals("lhist")){
 				out=b;
 			}else if(a.equals("max") || a.equals("maxlength")){
-				MAX_LENGTH=Integer.parseInt(b);
+				MAX_BINS=Integer.parseInt(b);
+			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
+				NON_ZERO_ONLY=Tools.parseBoolean(b);
 			}else if(a.startsWith("mult") || a.startsWith("div") || a.startsWith("bin")){
 				MULT=Integer.parseInt(b);
 			}else if(a.equals("round")){
@@ -72,7 +74,7 @@ public class MakeLengthHistogram {
 			}
 		}
 		
-		MAX_LENGTH/=MULT;
+		MAX_BINS/=MULT;
 		
 		calc(in1, in2, out);
 		t.stop();
@@ -101,11 +103,12 @@ public class MakeLengthHistogram {
 //		if(verbose){System.err.println("Paired: "+paired);}
 		
 		
-		final int max=MAX_LENGTH;
+		final int max=MAX_BINS;
 		long[] readHist=new long[max+1];
 		long[] baseHist=new long[max+1];
 		
 		int maxFound=0;
+		int minFound=Integer.MAX_VALUE;
 		
 		{
 			ListNum<Read> ln=cris.nextList();
@@ -118,27 +121,29 @@ public class MakeLengthHistogram {
 			
 			while(reads!=null && reads.size()>0){
 				//System.err.println("reads.size()="+reads.size());
-				for(Read r : reads){
+				for(Read r1 : reads){
+					final Read r2=r1.mate;
 					
 //					System.out.println("Processing read "+r.numericID);
 					
-					if(r!=null && r.bases!=null){
+					if(r1!=null && r1.bases!=null){
 						readsProcessed++;
-						int x=r.bases.length;
-						int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
+						final int x=r1.bases.length;
+						final int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
 						readHist[y]++;
 						baseHist[y]+=x;
 						maxFound=Tools.max(maxFound, x);
+						minFound=Tools.min(minFound, x);
 					}
 					
-					if(r.mate!=null){
+					if(r2!=null && r2.bases!=null){
 						readsProcessed++;
-						Read r2=r.mate;
-						int x=r2.bases.length;
-						int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
+						final int x=r2.bases.length;
+						final int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
 						readHist[y]++;
 						baseHist[y]+=x;
 						maxFound=Tools.max(maxFound, x);
+						minFound=Tools.min(minFound, x);
 					}
 					
 				}
@@ -155,6 +160,11 @@ public class MakeLengthHistogram {
 			System.err.println("Closed stream");
 			System.err.println("Processed "+readsProcessed+" reads.");
 		}
+		
+		if(readsProcessed<1){minFound=0;}
+		double stdev=Tools.standardDeviationHistogram(readHist)*MULT;
+		int median=Tools.percentile(readHist, 0.5)*MULT;
+		int mode=Tools.calcMode(readHist)*MULT;
 
 		double[] readHistF=new double[max+1];
 		long[] readHistC=new long[max+1];
@@ -180,22 +190,30 @@ public class MakeLengthHistogram {
 
 		TextStreamWriter tsw=new TextStreamWriter(out==null ? "stdout" : out, true, false, false);
 		tsw.start();
-		tsw.println("#Reads:      \t"+readsProcessed);
-		tsw.println("#Bases:      \t"+baseHistC[0]);
-		tsw.println("#Avg Length: \t"+String.format("%.1f",(baseHistC[0]*1d/readsProcessed)));
+		tsw.println("#Reads:\t"+readsProcessed);
+		tsw.println("#Bases:\t"+baseHistC[0]);
+		tsw.println("#Max:\t"+maxFound);
+		tsw.println("#Min:\t"+minFound);
+		tsw.println("#Avg:\t"+String.format("%.1f",(baseHistC[0]*1d/readsProcessed)));
+		tsw.println("#Median:\t"+median);
+		tsw.println("#Mode:\t"+mode);
+		tsw.println("#Std_Dev:\t"+String.format("%.1f",stdev));
 		tsw.println("#Read Length Histogram:");
 		tsw.println("#Length\treads\tpct_reads\tcum_reads\tcum_pct_reads\tbases\tpct_bases\tcum_bases\tcum_pct_bases");
 		for(int i=0; i<=max; i++){
-			tsw.println((i*MULT)+"\t"+readHist[i]+String.format("\t%.3f%%", readHistF[i])+"\t"+readHistC[i]+String.format("\t%.3f%%", readHistCF[i])+
-					"\t"+baseHist[i]+String.format("\t%.3f%%", baseHistF[i])+"\t"+baseHistC[i]+String.format("\t%.3f%%", baseHistCF[i]));
+			if(readHist[i]>0 || !NON_ZERO_ONLY){
+				tsw.println((i*MULT)+"\t"+readHist[i]+String.format("\t%.3f%%", readHistF[i])+"\t"+readHistC[i]+String.format("\t%.3f%%", readHistCF[i])+
+						"\t"+baseHist[i]+String.format("\t%.3f%%", baseHistF[i])+"\t"+baseHistC[i]+String.format("\t%.3f%%", baseHistCF[i]));
+			}
 			if(i*MULT>=maxFound){break;}
 		}
 		tsw.poisonAndWait();
 	}
 	
 	public static long readsProcessed=0;
-	public static int MAX_LENGTH=4000;
+	public static int MAX_BINS=40000;
 	public static int MULT=10;
 	public static boolean ROUND_BINS=false;
+	public static boolean NON_ZERO_ONLY=false;
 	
 }

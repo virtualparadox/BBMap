@@ -61,7 +61,9 @@ public class Parser {
 		}else if(a.equals("sampleseed")){
 			sampleseed=Long.parseLong(b);
 		}else if(a.equals("t") || a.equals("threads")){
-			Shared.THREADS=Tools.max(Integer.parseInt(b), 1);
+			if(b.equalsIgnoreCase("auto")){Shared.SET_THREADS(-1);}
+			else{Shared.THREADS=Integer.parseInt(b);}
+			System.err.println("Set threads to "+Shared.THREADS);
 		}else if(a.equals("append") || a.equals("app")){
 			append=ReadStats.append=Tools.parseBoolean(b);
 		}else if(a.equals("overwrite") || a.equals("ow")){
@@ -261,8 +263,12 @@ public class Parser {
 	public static boolean parseHist(String arg, String a, String b){
 		if(a.equals("qualityhistogram") || a.equals("qualityhist") || a.equals("qhist")){
 			ReadStats.QUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
-			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.QUAL_HIST_FILE!=null);
+			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.QUAL_HIST_FILE!=null || ReadStats.AVG_QUAL_HIST_FILE!=null);
 			if(ReadStats.COLLECT_QUALITY_STATS){System.err.println("Set quality histogram output to "+ReadStats.QUAL_HIST_FILE);}
+		}else if(a.equals("averagequalityhistogram") || a.equals("aqhist")){
+			ReadStats.AVG_QUAL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_QUALITY_STATS=(ReadStats.QUAL_HIST_FILE!=null || ReadStats.AVG_QUAL_HIST_FILE!=null);
+			if(ReadStats.COLLECT_QUALITY_STATS){System.err.println("Set average quality histogram output to "+ReadStats.AVG_QUAL_HIST_FILE);}
 		}else if(a.equals("matchhistogram") || a.equals("matchhist") || a.equals("mhist")){
 			ReadStats.MATCH_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
 			ReadStats.COLLECT_MATCH_STATS=(ReadStats.MATCH_HIST_FILE!=null);

@@ -108,6 +108,7 @@ public final class BBMap extends AbstractMapper {
 			for(String s : args){if(s!=null){list.add(s);}}
 			args=list.toArray(new String[list.size()]);
 			
+			AbstractIndex.SLOW=true;
 			keyDensity*=1.2f;
 			maxKeyDensity*=1.2f;
 			minKeyDensity*=1.2f;

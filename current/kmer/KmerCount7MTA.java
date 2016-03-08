@@ -352,6 +352,7 @@ public static void main(String[] args){
 		{
 			FileFormat ff1=FileFormat.testInput(reads1, FileFormat.FASTQ, null, true, true);
 			FileFormat ff2=FileFormat.testInput(reads2, FileFormat.FASTQ, null, true, true);
+//			if(ff2!=null){ //TODO - interleaved flag
 			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, true, ff1, ff2);
 			Thread th=new Thread(cris);
 			th.start();

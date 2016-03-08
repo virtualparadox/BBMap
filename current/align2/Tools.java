@@ -815,6 +815,12 @@ public final class Tools {
 		return min;
 	}
 	
+	public static byte min(byte[] array){
+		byte min=Byte.MAX_VALUE;
+		for(byte y : array){if(y<min){min=y;}}
+		return min;
+	}
+	
 	public static int intSum(int[] array){
 		int x=0;
 		for(int y : array){x+=y;}
@@ -1249,6 +1255,21 @@ public final class Tools {
 		}
 		return array.length-1;
 	}
+	
+	public static int calcMode(long array[]){
+		if(array==null || array.length<1){return 0;}
+		int median=percentile(array, 0.5);
+		int mode=0;
+		long modeCount=array[mode];
+		for(int i=1; i<array.length; i++){
+			long count=array[i];
+			if(count>modeCount || (count==modeCount && absdif(i, median)<absdif(mode, median))){
+				mode=i;
+				modeCount=count;
+			}
+		}
+		return mode;
+	}
 
 	public static int absdif(int a, int b) {
 		return a>b ? a-b : b-a;
@@ -1387,6 +1408,16 @@ public final class Tools {
 			sumdev2+=(dev*dev);
 		}
 		return Math.sqrt(sumdev2/numbers.length);
+	}
+	
+	public static final double averageHistogram(long[] histogram){
+		long sum=max(1, sum(histogram));
+		long sum2=0;
+		for(int i=0; i<histogram.length; i++){
+			sum2+=(histogram[i]*i);
+		}
+		double avg=sum2/(double)sum;
+		return avg;
 	}
 	
 	public static final double standardDeviationHistogram(long[] histogram){

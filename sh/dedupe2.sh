@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 27, 2014"
+	echo "Last modified June 19, 2014"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."
@@ -31,6 +31,7 @@ usage(){
 	echo "storename=t           (sn) Store scaffold names (set false to save memory)."
 	echo "storequality=t        (sq) Store quality values for fastq assemblies (set false to save memory)."
 	echo "uniquenames=t         (un) Ensure all output scaffolds have unique names.  Uses more memory."
+	echo "numbergraphnodes=t    (ngn) Label dot graph nodes with read numbers rather than read names."
 	echo "sort=f                Sort output by scaffold length (otherwise it will be random)."
 	echo "                      'a' for ascending, 'd' for descending, 'f' for false (no sorting)."
 	echo ""
@@ -42,6 +43,7 @@ usage(){
 #	echo "absorboverlap=f       (ao) Absorb (merge) non-contained overlaps of contigs (TODO)."
 	echo "findoverlap=f         (fo) Find overlaps between contigs (containments and non-containments).  Necessary for clustering."
 	echo "uniqueonly=f          (uo) If true, all copies of duplicate reads will be discarded, rather than keeping 1."
+	echo "rmn=f                 (requirematchingnames) If true, both names and sequence must match."
 	echo ""
 	echo "Clustering Parameters"
 	echo ""

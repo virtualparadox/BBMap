@@ -3,6 +3,7 @@ package stream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import align2.AbstractIndex;
 import align2.GapTools;
 import align2.QualityTools;
 import align2.Shared;
@@ -1322,12 +1323,90 @@ public final class Read implements Comparable<Read>, Cloneable{
 
 	public final float identity() {return identity(match);}
 	
+	public static final float identity(byte[] match) {
+		if(FLAT_IDENTITY){
+			return identityFlat(match);
+		}else{
+			return identitySkewed(match);
+		}
+	}
+	
 	/**
 	 * Handles short or long mode.
 	 * @param match string
-	 * @return Total number of match, sub, del, ins, or clip symbols
+	 * @return Identity based on number of match, sub, del, ins, or N symbols
 	 */
-	public static final float identity(byte[] match) {
+	public static final float identityFlat(byte[] match) {
+//		assert(false) : new String(match);
+		if(match==null || match.length<1){return 0;}
+		
+		int good=0, bad=0, n=0;
+		
+		byte mode='0', c='0';
+		int current=0;
+		for(int i=0; i<match.length; i++){
+			c=match[i];
+			if(Character.isDigit(c)){
+				current=(current*10)+(c-'0');
+			}else{
+				if(mode==c){
+					current=Tools.max(current+1, 2);
+				}else{
+					current=Tools.max(current, 1);
+
+					if(mode=='m'){
+						good+=current;
+//						System.out.println("G: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
+					}else if(mode=='R' || mode=='N'){
+						n+=current;
+					}else if(mode=='C'){
+						//Do nothing
+						//I assume this is clipped because it went off the end of a scaffold, and thus is irrelevant to identity
+					}else if(mode!='0'){
+						assert(mode=='S' || mode=='D' || mode=='I' || mode=='X' || mode=='Y') : (char)mode;
+						bad+=current;
+//						System.out.println("B: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
+					}
+					mode=c;
+					current=0;
+				}
+			}
+		}
+		if(current>0 || !Character.isDigit(c)){
+			current=Tools.max(current, 1);
+			if(mode=='m'){
+				good+=current;
+			}else if(mode=='R' || mode=='N'){
+				n+=current;
+			}else if(mode=='C'){
+				//Do nothing
+				//I assume this is clipped because it went off the end of a scaffold, and thus is irrelevant to identity
+			}else if(mode!='0'){
+				assert(mode=='S' || mode=='I' || mode=='X' || mode=='Y') : (char)mode;
+				bad+=current;
+//				System.out.println("B: mode="+(char)mode+", c="+(char)c+", current="+current+", good="+good+", bad="+bad);
+			}
+		}
+		
+		
+		n=(n+3)/4;
+		good+=n;
+		bad+=3*n;
+		float r=good/(float)Tools.max(good+bad, 1);
+//		assert(false) : new String(match)+"\nmode='"+(char)mode+"', current="+current+", good="+good+", bad="+bad;
+
+//		System.out.println("match="+new String(match)+"\ngood="+good+", bad="+bad+", r="+r);
+//		System.out.println(Arrays.toString(matchToMsdicn(match)));
+		
+		return r;
+	}
+	
+	/**
+	 * Handles short or long mode.
+	 * @param match string
+	 * @return Identity based on number of match, sub, del, ins, or N symbols
+	 */
+	public static final float identitySkewed(byte[] match) {
 //		assert(false) : new String(match);
 		if(match==null || match.length<1){return 0;}
 		
@@ -1419,9 +1498,15 @@ public final class Read implements Comparable<Read>, Cloneable{
 	/** Average based on summing error probabilities */
 	public int avgQualityByProbability(){
 		if(bases==null || bases.length==0){return 0;}
+		return avgQualityByProbability(bases, quality);
+	}
+	
+	/** Average based on summing error probabilities */
+	public static int avgQualityByProbability(byte[] bases, byte[] quality){
 		if(quality==null){return 40;}
-		float e=expectedErrors();
-		float p=e/bases.length;
+		if(quality.length==0){return 0;}
+		float e=expectedErrors(bases, quality);
+		float p=e/quality.length;
 		return QualityTools.probCorrectToPhred(1-p);
 	}
 	
@@ -1664,6 +1749,10 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public float expectedErrors(){
+		return expectedErrors(bases, quality);
+	}
+	
+	public static float expectedErrors(byte[] bases, byte[] quality){
 		if(quality==null){return 0;}
 		final float[] array=QualityTools.PROB_ERROR;
 		assert(array[0]>0 && array[0]<1);
@@ -2462,7 +2551,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 		return true;
 	}
 	
-	/** Make sure 'bases' is for correct strand! */
+	/** Makes sure 'bases' is for correct strand. */
 	public static final boolean CHECKSITE(SiteScore ss, byte[] basesP, byte[] basesM, long id){
 		return CHECKSITE(ss, ss.plus() ? basesP : basesM, id);
 	}
@@ -2480,23 +2569,22 @@ public final class Read implements Comparable<Read>, Cloneable{
 			final boolean sp1=(p1 ? true : ss.isSemiPerfect(bases));
 
 			assert(p==p1) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
-				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n";
+				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
 			assert(sp==sp1) : p+"->"+p1+", "+sp+"->"+sp1+", "+ss.isSemiPerfect(bases)+
-				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n";
+				"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n"+ss+"\n\n";
 			
 //			ss.setPerfect(bases, false);
 			
 			assert(p==ss.perfect) : 
-				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+
-				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n";
+				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
+				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
 			assert(sp==ss.semiperfect) : 
-				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n"+new String(bases)+"\n\n"+
-				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n\n";
+				p+"->"+ss.perfect+", "+sp+"->"+ss.semiperfect+", "+ss.isSemiPerfect(bases)+"\nnumericID="+id+"\n\n"+new String(bases)+"\n\n"+
+				Data.getChromosome(ss.chrom).getString(ss.start, ss.stop)+"\n"+ss+"\n\n";
 			if(ss.perfect){assert(ss.semiperfect);}
 		}
 		return true;
 	}
-	
 	
 	public void setPerfect(boolean b){
 		flags=(flags&~PERFECTMASK);
@@ -2654,4 +2742,5 @@ public final class Read implements Comparable<Read>, Cloneable{
 	
 	public static boolean ADD_BEST_SITE_TO_LIST_FROM_TEXT=true;
 	public static boolean NULLIFY_BROKEN_QUALITY=false;
+	public static boolean FLAT_IDENTITY=true;
 }

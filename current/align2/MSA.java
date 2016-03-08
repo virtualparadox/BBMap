@@ -282,8 +282,8 @@ public abstract class MSA {
 //	public final boolean toLocalAlignment(Read r, SiteScore ss, int minToClip){return toLocalAlignment(r, ss, minToClip, 1);}
 	
 	/** Assumes match string is in long format */
-	public final boolean toLocalAlignment(Read r, SiteScore ss, int minToClip, float matchPointsMult){
-		final byte[] match=r.match, bases=(r.strand()==Gene.PLUS ? r.bases : AminoAcid.reverseComplementBases(r.bases));
+	public final boolean toLocalAlignment(Read r, SiteScore ss, byte[] basesM, int minToClip, float matchPointsMult){
+		final byte[] match=r.match, bases=(r.strand()==Gene.PLUS ? r.bases : basesM);
 		if(match==null || match.length<1){return false;}
 		
 		assert(match==ss.match);
@@ -520,6 +520,18 @@ public abstract class MSA {
 			ss.stop=r.stop;
 			ss.match=r.match;
 			int pairedScore=ss.pairedScore>0 ? Tools.max(ss.pairedScore+(maxScore-ss.slowScore), 0) : 0;
+		}
+		
+		if(!ss.perfect && ss.isPerfect(bases)){
+			ss.perfect=ss.semiperfect=true;
+			r.setPerfect(true);
+			Arrays.fill(r.match, (byte)'m');
+			ss.slowScore=maxScore;
+		}else if(!ss.semiperfect && ss.isSemiPerfect(bases)){
+			ss.semiperfect=true;
+			ChromosomeArray cha=Data.getChromosome(ss.chrom);
+			r.match=ss.match=genMatchNoIndels(bases, cha.array, ss.start);
+			return toLocalAlignment(r, ss, basesM, minToClip, matchPointsMult);
 		}
 		
 		return true;

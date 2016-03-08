@@ -520,6 +520,7 @@ public class BBMerge {
 		if(minInsert>0){System.err.println("Too Short:   \t"+tooShortCountTotal+String.format((tooShortCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", tooShortCountTotal*div));}
 		System.err.println("Avg Insert:          \t\t"+String.format("%.1f", (insertSumCorrectTotal+insertSumIncorrectTotal)*1d/(correctCountTotal+incorrectCountTotal)));
 		System.err.println("Standard Deviation:  \t\t"+String.format("%.1f", stdev));
+		System.err.println("Mode:                \t"+Tools.calcMode(histTotal));
 		if(FASTQ.PARSE_CUSTOM){
 			System.err.println("Avg Insert Correct:  \t\t"+String.format("%.1f", (insertSumCorrectTotal)*1d/(correctCountTotal)));
 			System.err.println("Avg Insert Incorrect:\t\t"+String.format("%.1f", (insertSumIncorrectTotal)*1d/(incorrectCountTotal)));
@@ -1142,6 +1143,6 @@ public class BBMerge {
 	private static boolean verbose=false;
 	
 	private static int THREADS=-1;
-	private static float version=4.1f;
+	private static float version=4.2f;
 	
 }

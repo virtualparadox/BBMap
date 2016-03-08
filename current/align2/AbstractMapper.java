@@ -124,6 +124,7 @@ public abstract class AbstractMapper {
 		Read.TO_UPPER_CASE=true;
 
 		boolean setMaxIndel1=false, setMaxIndel2=false;
+		Parser parser=new Parser();
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=(args[i]==null ? "null" : args[i]);
@@ -137,6 +138,8 @@ public abstract class AbstractMapper {
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
 			}else if(Parser.parseHist(arg, a, b)){
+				//do nothing
+			}else if(parser.parseCommon(arg, a, b)){
 				//do nothing
 			}else if(a.equals("printtoerr")){
 				if(Tools.parseBoolean(b)){
@@ -235,8 +238,6 @@ public abstract class AbstractMapper {
 			}else if(a.equals("parsecustom") || a.equals("fastqparsecustom")){
 				FASTQ.PARSE_CUSTOM=Tools.parseBoolean(b);
 				sysout.println("Set FASTQ.PARSE_CUSTOM to "+FASTQ.PARSE_CUSTOM);
-			}else if(a.equals("reads")){
-				maxReads=Long.parseLong(b);
 			}else if(a.equals("skipreads")){
 				AbstractMapThread.SKIP_INITIAL=Long.parseLong(b);
 			}else if(a.equals("readlen") || a.equals("length") || a.equals("len")){
@@ -300,12 +301,6 @@ public abstract class AbstractMapper {
 					FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=Tools.parseBoolean(b);
 					sysout.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				}
-			}else if(a.equals("append") || a.equals("app")){
-				append=ReadStats.append=Tools.parseBoolean(b);
-				sysout.println("Set append to "+append);
-			}else if(a.equals("overwrite") || a.equals("ow")){
-				overwrite=ReadStats.overwrite=Tools.parseBoolean(b);
-				sysout.println("Set overwrite to "+overwrite);
 			}else if(a.equals("sitesonly") || a.equals("outputsitesonly")){
 				outputSitesOnly=Tools.parseBoolean(b);
 				sysout.println("Set outputSitesOnly to "+outputSitesOnly);
@@ -357,10 +352,6 @@ public abstract class AbstractMapper {
 			}else if(a.equals("forbidselfmapping")){
 				FORBID_SELF_MAPPING=Tools.parseBoolean(b);
 				sysout.println("Set FORBID_SELF_MAPPING to "+FORBID_SELF_MAPPING);
-			}else if(a.equals("threads") || a.equals("t")){
-				if(b.equalsIgnoreCase("auto")){Shared.SET_THREADS(-1);}
-				else{Shared.THREADS=Integer.parseInt(b);}
-				sysout.println("Set threads to "+Shared.THREADS);
 			}else if(a.equals("samversion") || a.equals("samv") || a.equals("sam")){
 				SamLine.VERSION=Float.parseFloat(b);
 			}else if(a.equals("match") || a.equals("cigar")){
@@ -567,11 +558,6 @@ public abstract class AbstractMapper {
 				SamLine.MAKE_CUSTOM_TAGS=Tools.parseBoolean(b);
 			}else if(a.equals("idmodulo") || a.equals("idmod")){
 				idmodulo=Integer.parseInt(b);
-			}else if(a.equals("samplerate")){
-				samplerate=Float.parseFloat(b);
-				assert(samplerate<=1f && samplerate>=0f) : "samplerate="+samplerate+"; should be between 0 and 1";
-			}else if(a.equals("sampleseed")){
-				sampleseed=Long.parseLong(b);
 			}else if(a.equals("minhits") || a.equals("minapproxhits")){
 				minApproxHits=Integer.parseInt(b);
 			}else if(a.equals("maxindel")){
@@ -660,9 +646,21 @@ public abstract class AbstractMapper {
 				AbstractIndex.GENERATE_KEY_SCORES_FROM_QUALITY=AbstractIndex.GENERATE_BASE_SCORES_FROM_QUALITY=!Tools.parseBoolean(b);
 			}else if(a.equals("keepbadkeys") || a.equals("kbk")){
 				KeyRing.KEEP_BAD_KEYS=Tools.parseBoolean(b);
+			}else if(a.equals("usemodulo") || a.equals("um")){
+				USE_MODULO=AbstractMapThread.USE_MODULO=IndexMaker4.USE_MODULO=IndexMaker5.USE_MODULO=Tools.parseBoolean(b);
 			}else if(i>1){
 				throw new RuntimeException("Unknown parameter: "+arg);
 			}
+		}
+		
+		{//Download parser fields
+			
+			maxReads=parser.maxReads;
+			overwrite=ReadStats.overwrite=parser.overwrite;
+			append=ReadStats.append=parser.append;
+
+			samplerate=parser.samplerate;
+			sampleseed=parser.sampleseed;
 		}
 
 		gzip=ReadWrite.USE_GZIP;
@@ -1478,6 +1476,7 @@ public abstract class AbstractMapper {
 				double stdev=Tools.standardDeviationHistogram(array);
 				sysout.println("insert median:   \t  "+padPercent(median,2));
 				sysout.println("insert std dev:  \t  "+padPercent(stdev,2));
+				sysout.println("insert mode:     \t  "+Tools.calcMode(array));
 			}
 			if(verbose_stats>=1){
 				sysout.println(String.format("avg inner length:\t  %.2f", innerLengthAvg));
@@ -2650,6 +2649,7 @@ public abstract class AbstractMapper {
 	static boolean SYNTHETIC=false;
 	static boolean ERROR_ON_NO_OUTPUT=false;
 	static boolean MACHINE_OUTPUT=false;
+	static boolean USE_MODULO=false;
 	final static String DELIMITER="=";
 	
 	static PrintStream sysout=System.err;

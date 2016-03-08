@@ -641,10 +641,10 @@ public class KmerNormalize {
 					lastTemp1=tempOut1;
 					lastTemp2=tempOut2;
 					FASTQ.TEST_INTERLEAVED=true;
-					FASTQ.FORCE_INTERLEAVED=paired;
+					FASTQ.FORCE_INTERLEAVED=(paired && outKeep2==null);
 				}
 				FASTQ.TEST_INTERLEAVED=true;
-				FASTQ.FORCE_INTERLEAVED=paired;
+				FASTQ.FORCE_INTERLEAVED=(paired && outKeep2==null);
 //				System.out.println(">>>C");
 				
 				ERROR_DETECT_RATIO-=50;
@@ -716,7 +716,7 @@ public class KmerNormalize {
 					lastTemp1=tempOut1;
 					lastTemp2=tempOut2;
 					FASTQ.TEST_INTERLEAVED=true;
-					FASTQ.FORCE_INTERLEAVED=paired;
+					FASTQ.FORCE_INTERLEAVED=(paired && outKeep2==null);
 				}
 //				System.out.println(">>>G");
 			}
@@ -751,7 +751,7 @@ public class KmerNormalize {
 		if(outKeep1!=null && (khistFileOut!=null || rhistFileOut!=null)){
 			outstream.println("\n   ***********   Output Histogram Generation   **********   \n");
 			FASTQ.TEST_INTERLEAVED=true;
-			FASTQ.FORCE_INTERLEAVED=paired;
+			FASTQ.FORCE_INTERLEAVED=(paired && outKeep2==null);
 			CORRECT_ERRORS_THIS_PASS=false;
 			TRIM_LEFT_THIS_PASS=false;
 			TRIM_RIGHT_THIS_PASS=false;

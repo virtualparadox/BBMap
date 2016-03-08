@@ -1,10 +1,8 @@
-package jgi;
+package kmer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import kmer.KCountArray2;
-import kmer.KmerCount3;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastqReadInputStream;

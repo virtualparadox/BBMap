@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 23, 2014"
+	echo "Last modified June 23, 2014"
 	echo ""
 	echo "Description:  Corrects substitution errors in reads using kmer depth information."
 	echo "Can also normalize and/or bin reads by kmer depth."
@@ -23,6 +23,7 @@ usage(){
 	echo "kmersample=1		Process every nth kmer, and skip the rest"
 	echo "readsample=1		Process every nth read, and skip the rest"
 	echo "interleaved=auto	May be set to true or false to force the input read file to ovverride autodetection of the input file as paired interleaved."
+	echo "qin=auto         	ASCII offset for input quality.  May be 33 (Sanger), 64 (Illumina), or auto."
 	echo ""
 	echo "Output parameters:"
 	echo "out=<file>        	File for corrected reads"
@@ -35,6 +36,7 @@ usage(){
 	echo "             		The reason is that based on the 'minq' and 'minprob' settings, some kmers may be excluded from the bloom filter."
 	echo "tmpdir=$TMPDIR  	This will specify a directory for temp files (only needed for multipass runs).  If null, they will be written to the output directory."
 	echo "usetempdir=t    	Allows enabling/disabling of temporary directory; if disabled, temp files will be written to the output directory."
+	echo "qout=auto        	ASCII offset for output quality.  May be 33 (Sanger), 64 (Illumina), or auto (same as input)."
 	echo ""
 	echo "Hashing parameters:"
 	echo "k=31			Kmer length (values under 32 are most efficient, but arbitrarily high values are supported)"

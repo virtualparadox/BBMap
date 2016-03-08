@@ -2,9 +2,9 @@
 #merge in=<infile> out=<outfile>
 
 function usage(){
-	echo "BBMerge v4.0"
+	echo "BBMerge v4.2"
 	echo "Written by Brian Bushnell"
-	echo "Last modified May 30, 2014"
+	echo "Last modified June 24, 2014"
 	echo ""
 	echo "Description:  Merges paired reads into single reads by overlap detection."
 	echo "With sufficient coverage, can also merge nonoverlapping reads using gapped kmers."

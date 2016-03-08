@@ -722,7 +722,7 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		
 		assert(checkTopSite(r));
 		if(r.mapped() && (LOCAL_ALIGN || r.containsXY2())){
-			msa.toLocalAlignment(r, r.topSite(), r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			msa.toLocalAlignment(r, r.topSite(), basesM, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
 		}
 		
 		if(r.numSites()==0 || (!r.ambiguous() && r.mapScore<maxSwScore*MINIMUM_ALIGNMENT_SCORE_RATIO)){
@@ -1325,14 +1325,14 @@ public final class BBMapThreadAcc extends AbstractMapThread{
 		if(r.mapped() && (LOCAL_ALIGN || r.containsXY2())){
 			final SiteScore ss=r.topSite();
 			ss.match=r.match;
-			msa.toLocalAlignment(r, ss, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			msa.toLocalAlignment(r, ss, basesM1, r.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
 		}
 		
 		assert(checkTopSite(r2));
 		if(r2.mapped() && (LOCAL_ALIGN || r2.containsXY2())){
 			final SiteScore ss=r2.topSite();
 			ss.match=r2.match;
-			msa.toLocalAlignment(r2, ss, r2.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
+			msa.toLocalAlignment(r2, ss, basesM2, r2.containsXY2() ? 1 : LOCAL_ALIGN_TIP_LENGTH, LOCAL_ALIGN_MATCH_POINT_RATIO);
 		}
 		
 		if(CALC_STATISTICS){

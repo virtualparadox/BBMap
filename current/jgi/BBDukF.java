@@ -1218,8 +1218,8 @@ public class BBDukF {
 		private long addToMap(Read r, int skip){
 			skip=Tools.max(minSkip, Tools.min(maxSkip, skip));
 			final byte[] bases=r.bases;
-			final long shift=2*k;
-			final long shift2=shift-2;
+			final int shift=2*k;
+			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
 			final long kmask=kMasks[k];
 			long kmer=0;
@@ -1795,8 +1795,8 @@ public class BBDukF {
 		final byte[] bases=r.bases, quals=r.quality;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
-		final long shift=2*k;
-		final long shift2=shift-2;
+		final int shift=2*k;
+		final int shift2=shift-2;
 		final long mask=~((-1L)<<shift);
 		final long kmask=kMasks[k];
 		long kmer=0;
@@ -1947,8 +1947,8 @@ public class BBDukF {
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
-		final long shift=2*k;
-		final long shift2=shift-2;
+		final int shift=2*k;
+		final int shift2=shift-2;
 		final long mask=~((-1L)<<shift);
 		final long kmask=kMasks[k];
 		long kmer=0;
@@ -2001,8 +2001,8 @@ public class BBDukF {
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
-		final long shift=2*k;
-		final long shift2=shift-2;
+		final int shift=2*k;
+		final int shift2=shift-2;
 		final long mask=~((-1L)<<shift);
 		final long kmask=kMasks[k];
 		long kmer=0;
@@ -2064,8 +2064,8 @@ public class BBDukF {
 		final byte[] bases=r.bases;
 		final int minlen=k-1;
 		final int minlen2=(maskMiddle ? k/2 : k);
-		final long shift=2*k;
-		final long shift2=shift-2;
+		final int shift=2*k;
+		final int shift2=shift-2;
 		final long mask=~((-1L)<<shift);
 		final long kmask=kMasks[k];
 		long kmer=0;

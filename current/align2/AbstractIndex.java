@@ -184,6 +184,7 @@ public abstract class AbstractIndex {
 	boolean verbose=false;
 	static boolean verbose2=false;
 	
+	static boolean SLOW=false;
 	
 	static int NUM_CHROM_BITS=3;
 	static int CHROMS_PER_BLOCK=(1<<(NUM_CHROM_BITS));

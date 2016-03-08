@@ -241,6 +241,8 @@ public final class Dedupe2 {
 				UNIQUE_ONLY=Tools.parseBoolean(b);
 			}else if(a.equals("rmn") || a.equals("requirematchingnames")){
 				REQUIRE_MATCHING_NAMES=Tools.parseBoolean(b);
+			}else if(a.equals("ngn") || a.equals("numbergraphnodes")){
+				NUMBER_GRAPH_NODES=Tools.parseBoolean(b);
 			}else if(a.equals("pn") || a.equals("prefixname")){
 //				PREFIX_NAME=Tools.parseBoolean(b);
 			}else if(a.equals("tuc") || a.equals("touppercase")){
@@ -1456,15 +1458,15 @@ public final class Dedupe2 {
 							if(verbose){System.err.println("Writing read "+r.id);}
 							
 							if(tsw!=null){
-								tsw.print("\t"+r.numericID+"."+(r.pairnum()+1)+"\n");
+								tsw.print("\t"+toGraphName(r)+"\n");
 								if(r.mate!=null && r.pairnum()==0){
 									Read r2=r.mate;
-									tsw.print(r.numericID+"."+(r.pairnum()+1)+" -> "+r2.numericID+"."+(r2.pairnum()+1)+" [label=mate]");
+									tsw.print(toGraphName(r)+" -> "+toGraphName(r2)+" [label=mate]");
 								}
 								for(Overlap o : u.overlapList){
 									if(u==o.u1){
 										Read r2=o.u2.r;
-										tsw.print("\t"+r.numericID+"."+(r.pairnum()+1)+" -> "+r2.numericID+"."+(r2.pairnum()+1)+" [label=\""+o.toLabel()+"\"]\n");
+										tsw.print("\t"+toGraphName(r)+" -> "+toGraphName(r2)+" [label=\""+o.toLabel()+"\"]\n");
 									}
 								}
 							}
@@ -1479,6 +1481,14 @@ public final class Dedupe2 {
 			tsw.print("}\n");
 			if(verbose){System.err.println("Shutting down tswAll "+tsw.fname);}
 			tsw.poisonAndWait();
+		}
+	}
+	
+	private static String toGraphName(Read r){
+		if(NUMBER_GRAPH_NODES || r.id==null){
+			return r.numericID+"."+(r.pairnum()+1);
+		}else{
+			return r.id.replace(' ','_').replace('\t','_');
 		}
 	}
 	
@@ -1711,7 +1721,7 @@ public final class Dedupe2 {
 				}
 				
 				int offsetContradictions=0;
-				if(ok){
+				if(ok && fixOffsetContradictionsT){
 					if(EA){
 						for(Unit u : cluster){
 							assert(!u.visited());
@@ -2804,8 +2814,8 @@ public final class Dedupe2 {
 			if(minLengthPercent<=0 && maxSubs<=0 && minIdentity>=100 && !u.valid()){return 0;}
 			final byte[] bases=u.bases();
 			final int minlen=k-1;
-			final long shift=2*k;
-			final long shift2=shift-2;
+			final int shift=2*k;
+			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
 			long kmer=0;
 			long rkmer=0;
@@ -2878,8 +2888,8 @@ public final class Dedupe2 {
 //			if(u.overlapList!=null){u.overlapList.clear();}
 			final byte[] bases=u.bases();
 			final int minlen=k-1;
-			final long shift=2*k;
-			final long shift2=shift-2;
+			final int shift=2*k;
+			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
 			long kmer=0;
 			long rkmer=0;
@@ -3356,8 +3366,8 @@ public final class Dedupe2 {
 	private static long hashTip(byte[] bases, boolean prefix, int k, int skipInitialBases){
 		if(bases==null || bases.length<k){return -1;}
 
-		final long shift=2*k;
-		final long shift2=shift-2;
+		final int shift=2*k;
+		final int shift2=shift-2;
 		final long mask=~((-1L)<<shift);
 		long kmer=0;
 		long rkmer=0;
@@ -5168,6 +5178,7 @@ public final class Dedupe2 {
 	public static boolean DISPLAY_PROGRESS=true;
 	public static boolean UNIQUE_ONLY=false;
 	public static boolean REQUIRE_MATCHING_NAMES=false;
+	public static boolean NUMBER_GRAPH_NODES=true;
 	
 	private static int reverseType(int type){return (type+2)%4;}
 	public static final int FORWARD=0;

@@ -1,9 +1,9 @@
 BBMap readme by Brian Bushnell
-Last updated June 17, 2014.
+Last updated June 26, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 BBMap is free to use for noncommercial purposes, and investigators are free to publish results derived from the program, as long as the source code is not published or modified.
 
-This is the official release of BBMAP, version 32.x
+This is the official release of BBMAP, version 33.x
 
 
 Basic Syntax:
@@ -40,6 +40,7 @@ midpad=<300>		Put this many "N" in between scaffolds when making the index.  300
 startpad=<8000> 	Put this many "N" at the beginning of a "chrom" file when making index.  It's best if this is longer than your longest expected read.
 stoppad=<8000>		Put this many "N" at the end of a "chrom" file when making index.  It's best if this is longer than your longest expected read.
 minscaf=<1>		Do not include scaffolds shorter than this when generating index.  Useful for assemblies with millions of fairly worthless unscaffolded contigs under 100bp.  There's no reason to make this shorter than the kmer length.
+usemodulo=<f>		Throw away kmers that are not equal to their reverse modulo 5.  Reduces memory usage and sensitivity.  Must be specified when indexing and when mapping.
 
 
 Input Parameters:
@@ -196,6 +197,14 @@ File types are autodetected by parsing the filename.  So you can name files, say
 
 Change Log:
 
+v33.
+Added "usemodulo" flag to BBMap.  Allows throwing away 80% of reference kmers to save memory.  Slight reduction in sensitivity.  Requested by Rob Egan.
+Moved GetReads back to jgi package and fixed shellscript.
+Fixed rare crash when using "local" mode on paired-end data on highly-repetitive genomes (Creinhardtii).  Found by Vasanth S.
+Improved "usemodulo" mode - it was biased against minus-strand hits.  Now, it keeps kmers where (kmer%5==rkmer%5).  Result is virtually no reduction in sensitivity (zero in error-free reads, and less than 0.01% in reads with 8% error).
+TODO:  Test forcing msa.scoreNoIndels to always run bidirectionally.
+
+
 v32.
 Revised all shellscripts to better detect memory in Linux.  This should massively increase reliability and ease of use.
 Added append flag.  Allows appending to output files instead of overwriting.
@@ -286,9 +295,24 @@ Added "ftr"/"ftl" flags to BBDuk.
 Added "bbmapskimmer" to the list of options parsed by BBWrap.  (Noted by JJ Chai)
 Corrected documentation of idtag and stoptag - both default to false, not true. (Noted by JJ Chai)
 Added "mappedonly" flag to reformat. (Requested by Kristen T)
-Added "rmn" (requirematchingnames) flag to Dedupe.
+Added "rmn" (requirematchingnames) flag to Dedupe.  Requested by Alex Copeland.
 Added ehist, indelhist, idhist, gchist, lhist flags to BBMap, BBDuk, and Reformat.
 Added removesmartbell.sh wrapper for pacbio.RemoveAdapters2.
+Fixed instance in KmerCoverage where input stream was being started twice.  Noted by Alicia Clum.
+Added "ngn" (NumberGraphNodes) flag to dedupe; default true.  Allows toggling of labelling graph nodes with read number or read name.
+"slow" flag now disables a heuristic that skipped mapping reads containing only kmers that are highly overrepresented in the reference.  Problem noted by Shoudan Liang.
+Added MergeBarcodes and mergebarcodes.sh
+Identity is now calculated neutrally by default.
+Added "qin" and "qout" documentation to bbnorm shellscripts. Noted by muol (seqanswers).
+Changed qhist to ouput additional columns - both linear averages and logrithmic averages.
+Added mode to BBMerge output.
+Added mode, min, max, median, and standard deviation to ReadLength output.  The mode and std dev are affected by bin size, so will only be exactly correct when bin size is 1.
+Added "nzo" (nonzeroonly) flag to ReadLength.
+Created "A_Sample", a template for programs that input reads, perform some function, and output reads.
+BBNorm now works correctly with dual input and output files.  Noted by Olaf (seqanswers).
+Added mode to BBMap insert size statistics.
+Added CorrelateBarcodes and filterbarcodes.sh, for analyzing and filtering reads by barcode quality.
+Added "aqhist" (average quality histogram) to ReadStats - can be used by BBMap, BBDuk, Reformat.
 
 
 v31.

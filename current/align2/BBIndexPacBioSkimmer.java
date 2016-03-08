@@ -337,7 +337,7 @@ public final class BBIndexPacBioSkimmer extends AbstractIndex {
 		}
 		assert(shortest2>=shortest);
 		if(initialHitCount<MIN_APPROX_HITS_TO_KEEP){return initialHitCount;}
-		if(shortest>limit3){
+		if(shortest>limit3 && !SLOW){
 			for(int i=0; i<hits.length; i++){hits[i]=null;}
 			return 0;
 		}
@@ -405,7 +405,7 @@ public final class BBIndexPacBioSkimmer extends AbstractIndex {
 		}
 		assert(shortest2>=shortest);
 		if(initialHitCount<MIN_APPROX_HITS_TO_KEEP){return initialHitCount;}
-		if(shortest>limit3){
+		if(shortest>limit3 && !SLOW){
 			for(int i=0; i<keys.length; i++){keys[i]=-1;}
 			return 0;
 		}

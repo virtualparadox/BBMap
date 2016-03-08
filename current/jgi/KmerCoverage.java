@@ -453,7 +453,6 @@ public class KmerCoverage {
 			ADD_CARROT=false;
 		}
 		
-		new Thread(cris).start();
 		if(verbose){System.err.println("Started cris");}
 		boolean paired=cris.paired();
 		if(verbose){System.err.println("Paired: "+paired);}

@@ -679,8 +679,8 @@ public class CountKmersExact {
 		private final int addKmersToTable(final Read r){
 			if(r==null || r.bases==null){return 0;}
 			final byte[] bases=r.bases;
-			final long shift=2*k;
-			final long shift2=shift-2;
+			final int shift=2*k;
+			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
 			long kmer=0;
 			long rkmer=0;

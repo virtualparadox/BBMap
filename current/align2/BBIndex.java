@@ -243,7 +243,7 @@ public final class BBIndex extends AbstractIndex {
 		}
 		assert(shortest2>=shortest);
 		if(initialHitCount<MIN_APPROX_HITS_TO_KEEP){return initialHitCount;}
-		if(shortest>limit3){
+		if(shortest>limit3 && !SLOW){
 			for(int i=0; i<hits.length; i++){hits[i]=null;}
 			return 0;
 		}
@@ -309,9 +309,10 @@ public final class BBIndex extends AbstractIndex {
 				}
 			}
 		}
+//		assert(false) : limit+", "+limit2+", "+limit3+", "+shortest2+", "+shortest+", "+initialHitCount+", "+MIN_APPROX_HITS_TO_KEEP+"\n"+Arrays.toString(lengths);
 		assert(shortest2>=shortest);
 		if(initialHitCount<MIN_APPROX_HITS_TO_KEEP){return initialHitCount;}
-		if(shortest>limit3){
+		if(shortest>limit3 && !SLOW){
 			for(int i=0; i<keys.length; i++){keys[i]=-1;}
 			return 0;
 		}
@@ -406,6 +407,12 @@ public final class BBIndex extends AbstractIndex {
 		
 		int numHits=0;
 		numHits=countHits(keysP, maxLen, true);
+		
+		if(verbose){
+			System.err.println("initial hits: "+numHits);
+			System.err.println("initial keys: "+keysP.length+"\n"+Arrays.toString(keysP));
+		}
+		
 		if(numHits>0){ //TODO: Change these to higher numbers
 			int trigger=(3*keysP.length)/4;
 			if(numHits<4 && numHits<trigger){
@@ -446,6 +453,11 @@ public final class BBIndex extends AbstractIndex {
 			numHits=trimExcessHitListsByGreedy(offsetsP, keyScoresP, maxLists, keysP);
 		}
 //		System.out.println("After greedy: numHits = "+numHits);
+		
+		if(verbose){
+			System.err.println("final hits: "+numHits);
+			System.err.println("final keys: "+keysP.length+"\n"+Arrays.toString(keysP));
+		}
 		
 		if(TRIM_BY_TOTAL_SITE_COUNT && obeyLimits){
 			throw new RuntimeException("Needs to be redone.");

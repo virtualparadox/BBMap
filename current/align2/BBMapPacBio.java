@@ -62,7 +62,7 @@ public final class BBMapPacBio extends AbstractMapper  {
 		MAX_SITESCORES_TO_PRINT=100;
 		PRINT_SECONDARY_ALIGNMENTS=false;
 		AbstractIndex.MIN_APPROX_HITS_TO_KEEP=1;
-		Shared.READ_BUFFER_LENGTH=Tools.min(Shared.READ_BUFFER_LENGTH, 50);
+		Shared.READ_BUFFER_LENGTH=Tools.min(Shared.READ_BUFFER_LENGTH, 20);
 	}
 	
 	@Override
@@ -85,6 +85,19 @@ public final class BBMapPacBio extends AbstractMapper  {
 			keyDensity*=0.9f;
 			maxKeyDensity*=0.9f;
 			minKeyDensity*=0.9f;
+		}else if(slow){
+			//TODO: Unfinished
+			ArrayList<String> list=new ArrayList<String>();
+			
+			BBIndexPacBio.setFractionToExclude(BBIndexPacBio.FRACTION_GENOME_TO_EXCLUDE*0.4f);
+			
+			for(String s : args){if(s!=null){list.add(s);}}
+			args=list.toArray(new String[list.size()]);
+			
+			AbstractIndex.SLOW=true;
+			keyDensity*=1.2f;
+			maxKeyDensity*=1.2f;
+			minKeyDensity*=1.2f;
 		}
 		return args;
 	}

@@ -8,6 +8,7 @@ import stream.FASTQ;
 import dna.AminoAcid;
 
 import jgi.CalcTrueQuality;
+import jgi.Dedupe;
 
 
 
@@ -77,7 +78,7 @@ public class QualityTools {
 			qual[i]=(byte)(Math.random()*30+5);
 		}	
 		for(int i=0; i<rounds; i++){
-			float[] r=makeKeyProbs(qual, 8);
+			float[] r=makeKeyProbs(qual, null, 8, false);
 			if(r[r.length-1]>1 || r[r.length-1]<0){
 				System.err.println("Ooops! "+Arrays.toString(r));
 			}
@@ -108,8 +109,8 @@ public class QualityTools {
 		System.out.println("Bench2 Time: "+String.format("%.3f",seconds)+" s");
 	}
 	
-	public static int[] makeKeyScores(byte[] qual, int keylen, int range, int baseScore, int[] out){
-		float[] probs=makeKeyProbs(qual, keylen);
+	public static int[] makeKeyScores(byte[] qual, byte[] bases, int keylen, int range, int baseScore, int[] out, boolean useModulo){
+		float[] probs=makeKeyProbs(qual, bases, keylen, useModulo);
 		return makeKeyScores(probs, (qual.length-keylen+1), range, baseScore, out);
 	}
 	
@@ -171,13 +172,13 @@ public class QualityTools {
 	}
 	
 	/** Returns prob of error for each key */
-	public static float[] makeKeyProbs(byte[] quality, int keylen){
-		return makeKeyProbs(quality, keylen, null);
+	public static float[] makeKeyProbs(byte[] quality, byte[] bases, int keylen, boolean useModulo){
+		return makeKeyProbs(quality, bases, keylen, null, useModulo);
 	}
 	
 	/** Returns prob of error for each key */
-	public static float[] makeKeyProbs(byte[] quality, int keylen, float[] out){
-		if(quality==null){return makeKeyProbs(keylen, out);}
+	public static float[] makeKeyProbs(byte[] quality, byte[] bases, int keylen, float[] out, boolean useModulo){
+		if(quality==null){return makeKeyProbs(bases, keylen, out, useModulo);}
 		if(out==null){out=new float[quality.length-keylen+1];}
 		assert(out.length>=quality.length-keylen+1) : quality.length+", "+keylen+", "+out.length;
 //		assert(out.length==quality.length-keylen+1);
@@ -207,13 +208,66 @@ public class QualityTools {
 			out[a+1]=1-key1;
 			if(timeSinceZero<keylen){out[a+1]=1;}
 		}
+		
+		if(bases!=null){
+			if(useModulo){//Rare case for large references
+				final int shift=2*keylen;
+				final int shift2=shift-2;
+				final int mask=~((-1)<<shift);
+				int kmer=0, rkmer=0;
+				
+				int len=0;
+				for(int i=0; i<bases.length; i++){
+					final byte b=bases[i];
+					final int x=Dedupe.baseToNumber[b];
+					final int x2=Dedupe.baseToComplementNumber[b];
+					kmer=((kmer<<2)|x)&mask;
+					rkmer=(rkmer>>>2)|(x2<<shift2);
+					
+					if(b=='N'){len=0;}else{len++;}
+					if(len>=keylen){
+						if(kmer%5!=rkmer%5){
+							out[i-keylen+1]=1f;
+//							assert(false) : kmer;
+						}
+					}
+				}
+			}
+		}
+		
 		return out;
 	}
 	
 	/** Returns prob of error for each key */
-	public static float[] makeKeyProbs(int keylen, float[] out){
+	public static float[] makeKeyProbs(byte[] bases, int keylen, float[] out, boolean useModulo){
 		assert(out!=null) : "Must provide array if no quality vector";
 		Arrays.fill(out, 0);
+		
+		if(bases!=null){
+			if(useModulo){//Rare case for large references
+				final int shift=2*keylen;
+				final int shift2=shift-2;
+				final int mask=~((-1)<<shift);
+				int kmer=0, rkmer=0;
+				
+				int len=0;
+				for(int i=0; i<bases.length; i++){
+					final byte b=bases[i];
+					final int x=Dedupe.baseToNumber[b];
+					final int x2=Dedupe.baseToComplementNumber[b];
+					kmer=((kmer<<2)|x)&mask;
+					rkmer=(rkmer>>>2)|(x2<<shift2);
+					
+					if(b=='N'){len=0;}else{len++;}
+					if(len>=keylen){
+						if(kmer%5!=rkmer%5){
+							out[i-keylen+1]=1f;
+//							assert(false) : kmer;
+						}
+					}
+				}
+			}
+		}
 		return out;
 	}
 	
