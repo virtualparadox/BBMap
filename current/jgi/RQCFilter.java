@@ -42,7 +42,10 @@ public class RQCFilter {
 		//Create a filter instance
 		RQCFilter filter=new RQCFilter(args);
 		
-		///...and execute it.
+		//Set backwards-compatibility mode
+		Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
+		
+		//...and execute it.
 		filter.process();
 	}
 	
@@ -628,6 +631,10 @@ public class RQCFilter {
 		{//Fill list with BBDuk arguments
 			argList.add("mink="+mink);
 			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
+			if("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim)){
+				argList.add("tbo");
+				argList.add("tpe");
+			}
 			argList.add("overwrite="+overwrite);
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
@@ -779,7 +786,7 @@ public class RQCFilter {
 
 		if(phixFlag){sb.append("p");}
 		if(humanFlag){sb.append("h");}
-//		if(ktrimFlag){sb.append("k");}
+		if(ktrimFlag){sb.append("k");}
 		if(qtrimFlag){sb.append("t");}
 		
 		return sb.toString();

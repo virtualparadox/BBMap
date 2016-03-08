@@ -2,31 +2,48 @@
 #calcmem
 
 #function usage(){
-#	echo "CalcMem v1.00"
+#	echo "CalcMem v1.01"
 #	echo "Written by Brian Bushnell, Doug Jacobsen, Alex Copeland"
-#	echo "Displays available memory in megabytes"
-#	echo "Last modified April 9, 2014"
+#	echo "Calculates available memory in megabytes"
+#	echo "Last modified April 25, 2014"
 #}
 
 function parseXmx () {
+	
+	local setxmx=0
+	local setxms=0
+	
 	for arg in "$@"
 	do
 		if [[ "$arg" == -Xmx* ]]; then
 			z="$arg"
-			set=1
+			setxmx=1
 		elif [[ "$arg" == Xmx* ]]; then
 			z="-$arg"
-			set=1
+			setxmx=1
 		elif [[ "$arg" == -Xms* ]]; then
 			z2="$arg"
-			set=1
+			setxms=1
 		elif [[ "$arg" == Xms* ]]; then
 			z2="-$arg"
-			set=1
+			setxms=1
 		elif [[ "$arg" == -da ]] || [[ "$arg" == -ea ]]; then
 			EA="$arg"
 		fi
 	done
+	
+	if [[ $setxmx == 1 ]] && [[ $setxms == 0 ]]; then
+		local substring=`echo $z| cut -d'x' -f 2`
+		z2="-Xms$substring"
+		setxms=1
+	elif [[ $setxmx == 0 ]] && [[ $setxms == 1 ]]; then
+		local substring=`echo $z2| cut -d's' -f 2`
+		z="-Xmx$substring"
+		setxmx=1
+	fi
+	
+	set=$setxmx
+	
 }
 
 
@@ -60,16 +77,17 @@ function freeRam(){
 	#echo "mult =    $mult"
 	#echo "default = $defaultMem"
 	
-	local x=$(ulimit -v)
+	local ulimit=$(ulimit -v)
+	local x=$ulimit
 	
 	if [ -e /proc/meminfo ]; then
-		local vfree=$(cat /proc/meminfo | awk -F: 'BEGIN{total=-1;used=-1} /CommitLimit:/ { total=$2 }; /Committed_AS:/ { used=$2 } END{ print (total-used) }')
-		local pfree=$( cat /proc/meminfo | awk -F: 'BEGIN{free=-1;cached=-1;buffers=-1} /MemFree:/ { free=$2 }; /Cached:/ { cached=$2}; /Buffers:/ { buffers=$2} END{ print (free+cached+buffers) }')
+		local vfree=$(cat /proc/meminfo | awk -F: 'BEGIN{total=-1;used=-1} /^CommitLimit:/ { total=$2 }; /^Committed_AS:/ { used=$2 } END{ print (total-used) }')
+		local pfree=$(cat /proc/meminfo | awk -F: 'BEGIN{free=-1;cached=-1;buffers=-1} /^MemFree:/ { free=$2 }; /^Cached:/ { cached=$2}; /^Buffers:/ { buffers=$2} END{ print (free+cached+buffers) }')
 		
 		#echo "vfree =   $vfree"
 		#echo "pfree =   $pfree"
-		#echo "x =       $x"
-		
+		#echo "ulimit =  $ulimit"
+
 		local x2=0;
 		
 		if [ $vfree -gt 0 ] && [ $pfree -gt 0 ]; then
@@ -90,13 +108,13 @@ function freeRam(){
 	
 	#echo "x=$x"
 	local HOSTNAME=`hostname`
-	if [ $x -lt 1 ]; then
+	if [ $x -lt 1 ] || [[ $HOSTNAME == genepool* ]]; then
 		#echo "hello 2"
 		#echo $x
 		#echo "ram is unlimited"
 		RAM=$((defaultMem/1024))
 		echo "Max memory cannot be determined.  Attempting to use $RAM MB." 1>&2
-		echo "If this fails, please add the argument -Xmx29g (adjusted to ~85 percent of physical RAM)." 1>&2
+		echo "If this fails, please add the argument -Xmx29g (adjusted to roughly 85 percent of physical RAM)." 1>&2
 	else
 		#echo "hello 1"
 		#echo $x

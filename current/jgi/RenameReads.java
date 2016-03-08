@@ -70,8 +70,8 @@ public class RenameReads {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -185,6 +185,10 @@ public class RenameReads {
 				FASTQ.FORCE_INTERLEAVED=Tools.parseBoolean(b);
 				outstream.println("Set FORCE_INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
 				setInterleaved=true;
+			}else if(a.equals("renamebyinsert")){
+				renameByInsert=Tools.parseBoolean(b);
+			}else if(a.equals("renamebytrim")){
+				renameByTrim=Tools.parseBoolean(b);
 			}else if(a.equals("interleaved") || a.equals("int")){
 				if("auto".equalsIgnoreCase(b)){FASTQ.FORCE_INTERLEAVED=!(FASTQ.TEST_INTERLEAVED=true);}
 				else{
@@ -211,6 +215,15 @@ public class RenameReads {
 		}
 		
 		if(prefix==null){prefix="";}
+		else if(!prefix.endsWith("_")){prefix=prefix+"_";}
+
+		if(renameByInsert){
+			prefix="insert=";
+			FASTQ.PARSE_CUSTOM=true;
+		}else if(renameByTrim){
+			prefix="";
+			FASTQ.PARSE_CUSTOM=true;
+		}
 		
 		if(in1!=null && in2==null && in1.indexOf('#')>-1 && !new File(in1).exists()){
 			in2=in1.replace("#", "2");
@@ -286,10 +299,6 @@ public class RenameReads {
 	
 	void process(Timer t){
 		
-		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
-		
 		final ConcurrentReadStreamInterface cris;
 		{
 			cris=ConcurrentGenericReadInputStream.getReadInputStream(maxReads, false, false, ffin1, ffin2, qfin1, qfin2);
@@ -317,18 +326,38 @@ public class RenameReads {
 		
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=(ln!=null ? ln.list : null);
+		
 		long x=0;
 		while(reads!=null && reads.size()>0){
 
-			for(Read r : reads){
-				r.id=prefix+"_"+x;
-				if(r.mate!=null){
-					r.id=r.id+" /1";
-					r.mate.id=prefix+"_"+x+" /2";
+			for(Read r1 : reads){
+				final Read r2=r1.mate;
+//				assert(false) : (r2!=null)+", "+(renameByInsert)+", "+(renameByTrim);
+				if(r2!=null && (renameByInsert || renameByTrim)){
+					
+					r1.setMapped(true);
+					r2.setMapped(true);
+					x=Read.insertSizeMapped(r1, r2, false);
+					if(verbose){System.err.println("True Insert: "+x);}
+					if(renameByTrim){
+						r1.id=r1.numericID+"_"+r1.length()+"_"+Tools.min(x, r1.length())+" /1";
+						r2.id=r2.numericID+"_"+r2.length()+"_"+Tools.min(x, r2.length())+" /2";
+					}else{
+						r1.id=prefix+x;
+						if(r2!=null){
+							r1.id=r1.id+" /1";
+							r2.id=prefix+x+" /2";
+						}
+					}
+					
+				}else{
+					r1.id=prefix+x;
+					if(r1.mate!=null){
+						r1.id=r1.id+" /1";
+						r1.mate.id=prefix+x+" /2";
+					}
+					x++;
 				}
-//				tsw.println(r);
-//				if(r.mate!=null){tsw.println(r.mate);}
-				x++;
 			}
 			if(ros!=null){ros.add(reads, ln.id);}
 			cris.returnList(ln, ln.list.isEmpty());
@@ -372,6 +401,9 @@ public class RenameReads {
 	private boolean verbose=false;
 	private long maxReads=-1;
 	public boolean errorState=false;
+
+	public boolean renameByInsert=false;
+	public boolean renameByTrim=false;
 	
 	private byte qin=-1;
 	private byte qout=-1;

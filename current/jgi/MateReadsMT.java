@@ -1343,8 +1343,8 @@ public class MateReadsMT {
 					}
 
 					if(minReadLength>0 && !remove){
-						int rlen=(r1==null || r1.bases==null ? 0 : r1.bases.length);
-						int rlen2=(r2==null || r2.bases==null ? 0 : r2.bases.length);
+						int rlen=(r1==null ? 0 : r1.length());
+						int rlen2=(r2==null ? 0 : r2.length());
 						if(rlen<minReadLength && rlen2<minReadLength){
 							basesTrimmedT+=(rlen+rlen2);
 							remove=true;

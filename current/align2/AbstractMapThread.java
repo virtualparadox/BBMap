@@ -194,6 +194,12 @@ public abstract class AbstractMapThread extends Thread {
 		final boolean MAKE_BASE_HISTOGRAM=(readstats==null ? false : ReadStats.COLLECT_BASE_STATS);
 		final boolean MAKE_QUALITY_ACCURACY=(readstats==null ? false : ReadStats.COLLECT_QUALITY_ACCURACY);
 		
+		final boolean MAKE_EHIST=(readstats==null ? false : ReadStats.COLLECT_ERROR_STATS);
+		final boolean MAKE_INDELHIST=(readstats==null ? false : ReadStats.COLLECT_INDEL_STATS);
+		final boolean MAKE_LHIST=(readstats==null ? false : ReadStats.COLLECT_LENGTH_STATS);
+		final boolean MAKE_GCHIST=(readstats==null ? false : ReadStats.COLLECT_GC_STATS);
+		final boolean MAKE_IDHIST=(readstats==null ? false : ReadStats.COLLECT_IDENTITY_STATS);
+		
 		if(SKIP_INITIAL>0){
 			while(!readlist.isEmpty()){
 				
@@ -261,6 +267,9 @@ public abstract class AbstractMapThread extends Thread {
 
 				if(MAKE_QUALITY_HISTOGRAM){readstats.addToQualityHistogram(r);}
 				if(MAKE_BASE_HISTOGRAM){readstats.addToBaseHistogram(r);}
+				
+				if(MAKE_LHIST){readstats.addToLengthHistogram(r);}
+				if(MAKE_GCHIST){readstats.addToGCHistogram(r);}
 
 				if(TRIM_LEFT || TRIM_RIGHT){
 					TrimRead.trim(r, TRIM_LEFT, TRIM_RIGHT, TRIM_QUAL, TRIM_MIN_LENGTH);
@@ -300,6 +309,10 @@ public abstract class AbstractMapThread extends Thread {
 				if(MAKE_MATCH_HISTOGRAM){readstats.addToMatchHistogram(r);}
 				if(MAKE_INSERT_HISTOGRAM && r.paired()){readstats.addToInsertHistogram(r, (SAME_STRAND_PAIRS || !REQUIRE_CORRECT_STRANDS_PAIRS));}
 				if(MAKE_QUALITY_ACCURACY){readstats.addToQualityAccuracy(r);}
+
+				if(MAKE_EHIST){readstats.addToErrorHistogram(r);}
+				if(MAKE_INDELHIST){readstats.addToIndelHistogram(r);}
+				if(MAKE_IDHIST){readstats.addToIdentityHistogram(r);}
 
 				if(translateToBaseSpace && r.numSites()>0){
 					SiteScore ss=r.topSite();
@@ -641,7 +654,7 @@ public abstract class AbstractMapThread extends Thread {
 			
 			int oldScore=ss.slowScore;
 			if(ss.match==null || (i==0 && !USE_SS_MATCH_FOR_PRIMARY)){
-				genMatchStringForSite(r.numericID, ss, basesP, basesM, maxImperfectSwScore, maxSwScore, r.mate);
+				genMatchStringForSite(r.numericID, ss, basesP, basesM, maxImperfectSwScore, maxSwScore, r.mate, PRINT_SECONDARY_ALIGNMENTS);
 				if(setSSScore){ss.score=ss.slowScore;}
 			}
 			if(i>0 && ss.match==null && !r.paired()){r.sites.remove(i);}
@@ -665,7 +678,7 @@ public abstract class AbstractMapThread extends Thread {
 					SiteScore ss=r.sites.get(i);
 					if(ss.match==null){
 						if(verbose){System.err.println("GMS 3");}
-						genMatchStringForSite(r.numericID, ss, basesP, basesM, maxImperfectSwScore, maxSwScore, r.mate);
+						genMatchStringForSite(r.numericID, ss, basesP, basesM, maxImperfectSwScore, maxSwScore, r.mate, PRINT_SECONDARY_ALIGNMENTS);
 						if(setSSScore){ss.score=ss.slowScore;}
 						if(i>0 && ss.match==null){r.sites.remove(i);}
 						i--;
@@ -708,20 +721,17 @@ public abstract class AbstractMapThread extends Thread {
 	}
 	
 	
-	protected final int genMatchStringForSite(final long id, final SiteScore ss, final byte[] basesP, final byte[] basesM, final int maxImperfectSwScore, final int maxSwScore, final Read mate){
+	protected final int genMatchStringForSite(final long id, final SiteScore ss, final byte[] basesP, final byte[] basesM, 
+			final int maxImperfectSwScore, final int maxSwScore, final Read mate, final boolean secondary){
 		final byte[] bases=ss.plus() ? basesP : basesM;
 		assert(Read.CHECKSITE(ss, bases, id));
 		assert(msa!=null);
 		
 		
 		final int minMsaLimit;
-		if(PAIRED){
-//			minMsaLimit=-100+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PRE_RESCUE*maxSwScore);
-			minMsaLimit=-1+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED*maxSwScore);
-//			minMsaLimit=0;
-		}else{
-			minMsaLimit=-1+(int)(MINIMUM_ALIGNMENT_SCORE_RATIO*maxSwScore);
-//			minMsaLimit=0;
+		{
+			final float mult=(PAIRED ? MINIMUM_ALIGNMENT_SCORE_RATIO_PAIRED : MINIMUM_ALIGNMENT_SCORE_RATIO)*(secondary ? SECONDARY_SITE_SCORE_RATIO : 1f);
+			minMsaLimit=-1+(int)(mult*maxSwScore);
 		}
 		
 		if(GEN_MATCH_FAST){
@@ -1040,7 +1050,10 @@ public abstract class AbstractMapThread extends Thread {
 		}
 		if(!printSecondary || r.numSites()<2){return;}
 		int max=r.topSite().slowScore;
-		int min=Tools.min(max-500, (int)(max*.95f));
+		int min=Tools.min(max-500, (int)(max*SECONDARY_SITE_SCORE_RATIO));
+		if(r.ambiguous()){//Ensures ambiguous reads will have at least one secondary site
+			min=Tools.max(min, r.sites.get(1).score);
+		}
 		for(int i=r.sites.size()-1; i>0; i--){
 			if(r.sites.get(i).slowScore<min){r.sites.remove(i);}
 		}
@@ -1199,8 +1212,8 @@ public abstract class AbstractMapThread extends Thread {
 	
 	public void calcStatistics1(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
 		final Read r2=r.mate;
-		final int len1=(r.bases==null ? 0 : r.bases.length);
-		final int len2=(r2==null ? 0 : r.bases==null ? 0 : r.bases.length);
+		final int len1=r.length();
+		final int len2=(r2==null ? 0 : r.length());
 		
 		if(OUTPUT_PAIRED_ONLY && r.mate!=null && !r.paired() && (r.mapped() || r.mate.mapped())){r.clearPairMapping();}
 		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
@@ -1236,6 +1249,7 @@ public abstract class AbstractMapThread extends Thread {
 				readCountS1+=(errors[1]>0 ? 1 : 0);
 				readCountD1+=(errors[2]>0 ? 1 : 0);
 				readCountI1+=(errors[3]>0 ? 1 : 0);
+//				assert(errors[3]==0) : "\n"+r+"\n"+r2+"\n";
 				readCountN1+=(errors[4]>0 ? 1 : 0);
 				readCountSplice1+=(errors[5]>0 ? 1 : 0);
 				readCountE1+=((errors[1]>0 || errors[2]>0 || errors[3]>0)? 1 : 0);
@@ -1354,7 +1368,7 @@ public abstract class AbstractMapThread extends Thread {
 	
 	
 	public void calcStatistics2(final Read r, final int maxSwScore, final int maxPossibleQuickScore){
-		final int len=(r.bases==null ? 0 : r.bases.length);
+		final int len=r.length();
 		
 		if(r.ambiguous() && (AMBIGUOUS_TOSS || r.mapped())){
 			ambiguousBestAlignment2++;
@@ -1804,8 +1818,9 @@ public abstract class AbstractMapThread extends Thread {
 		if(trim){
 //			Tools.trimSitesBelowCutoffInplace(r.list, (int)(maxPairedScore1*.95f), false);
 //			Tools.trimSitesBelowCutoffInplace(r2.list, (int)(maxPairedScore2*.95f), false);
-			Tools.trimSitesBelowCutoff(r.sites, (int)(maxPairedScore1*.95f), false, true, 1, maxTrimSitesToRetain);
-			Tools.trimSitesBelowCutoff(r2.sites, (int)(maxPairedScore2*.95f), false, true, 1, maxTrimSitesToRetain);
+			float f=Tools.min(SECONDARY_SITE_SCORE_RATIO, 0.95f);
+			Tools.trimSitesBelowCutoff(r.sites, (int)(maxPairedScore1*f), false, true, 1, maxTrimSitesToRetain);
+			Tools.trimSitesBelowCutoff(r2.sites, (int)(maxPairedScore2*f), false, true, 1, maxTrimSitesToRetain);
 		}
 	}
 	
@@ -2486,7 +2501,7 @@ public abstract class AbstractMapThread extends Thread {
 		byte prev='0';
 		int len=0;
 		for(byte b : match){
-			if(b=='D' || b=='I'){
+			if(b=='D' || b=='I' || b=='X' || b=='Y'){
 				if(b==prev){len++;}
 				else{len=1;}
 				if(len>maxlen){return true;}
@@ -2501,7 +2516,7 @@ public abstract class AbstractMapThread extends Thread {
 	/** TODO */
 	final void processReadSplit(Read r, byte[] basesM, int minlen, int maxlen){
 		assert(minlen>=KEYLEN && maxlen>=minlen) : KEYLEN+", "+maxlen+", "+minlen;
-		int len=r.bases==null ? 0 : r.bases.length;
+		int len=r.length();
 		if(len<=maxlen){
 			processRead(r, basesM);
 			return;
@@ -2661,10 +2676,13 @@ public abstract class AbstractMapThread extends Thread {
 
 	/** Extra padding for when slow alignment fails. */
 	protected int EXTRA_PADDING=10;
-
+	
 	protected final boolean GENERATE_KEY_SCORES_FROM_QUALITY;
 	
 	/*--------------------------------------------------------------*/
+	
+	protected static float SECONDARY_SITE_SCORE_RATIO=.95f;
+	protected static boolean PRINT_SECONDARY_ALIGNMENTS_ONLY_FOR_AMBIGUOUS_READS=false;
 	
 	protected static boolean CALC_STATISTICS=true;
 	protected static int MIN_PAIR_DIST=-160;

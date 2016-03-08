@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 21, 2014"
+	echo "Last modified June 12, 2014"
 	echo ""
 	echo "Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format."
 	echo "Optionally performs additional functions such as quality trimming, subsetting, and subsampling."
@@ -37,8 +37,20 @@ function usage(){
 	echo "addslash=f		Append ' /1' and ' /2' to read names, if not already present.  Also add 'int=t' if the reads are interleaved."
 	echo "rcomp=f	  		(rc) Reverse-compliment reads."
 	echo "rcompmate=f		(rcm) Reverse-compliment read 2 only."
+	echo "mingc=0     		Discard reads with GC content below this."
+	echo "maxgc=1     		Discard reads with GC content above this."
+	echo "mappedonly=f		Toss unmapped reads."
+	echo ""
+	echo "Histogram output parameters:"
 	echo "bhist=<file>		Write a base composition histogram to file."
 	echo "qhist=<file>		Write a quality histogram to file."
+	echo "indelhist=<file>	Write an indel length histogram to file."
+	echo "lhist=<file>		Write a read length histogram to file."
+	echo "ehist=<file>		Write an errors-per-read histogram to file."
+	echo "gchist=<file>		Write a gc content histogram to file."
+	echo "qahist=<file>		Write histogram of match, sub, ins, del by quality score.  Requires sam v1.4 input."
+	echo "mhist=<file>		Write histogram of match, substitution, deletion, and insertion rates by read location.  Requires sam v1.4 input."
+	echo "idhist=<file>		Write a percent identity histogram to file.  Requires sam v1.4 input."
 	echo ""
 	echo "Sampling parameters:"
 	echo "reads=-1 		Set to a positive number to only process this many INPUT reads (or pairs), then quit."
@@ -51,7 +63,7 @@ function usage(){
 	echo "Trimming parameters:"
 	echo "qtrim=f          	Trim read ends to remove bases with quality below minq."
 	echo "                 	Values: t (trim both ends), f (neither end), r (right end only), l (left end only)."
-	echo "trimq=4           	Trim quality threshold."
+	echo "trimq=6           	Trim quality threshold."
 	echo "minlength=0     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
 	echo "maxlength=0     	If nonzero, reads longer than this after trimming will be discarded."
 	echo "breaklength=0     	If nonzero, reads longer than this will be broken into multiple reads of this length.  Does not work for paired reads."
@@ -90,6 +102,11 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
+
 calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
@@ -106,10 +123,5 @@ function reformat() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 reformat "$@"

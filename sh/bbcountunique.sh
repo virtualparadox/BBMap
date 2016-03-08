@@ -1,9 +1,9 @@
 #!/bin/bash
-#bbuniqueness in=<infile> out=<outfile>
+#bbcountunique in=<infile> out=<outfile>
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 24, 2014"
+	echo "Last modified June 5, 2014"
 	echo ""
 	echo "Description:  Generates a kmer uniqueness histogram, binned by file position."
 	echo "There are 3 columns for single reads, 6 columns for paired:"
@@ -15,7 +15,7 @@ usage(){
 	echo "pair       	percent unique concatenated kmer from read 1 and 2"
 	echo ""
 	echo ""
-	echo "Usage:	bbuniqueness.sh in=<input> out=<output>"
+	echo "Usage:	bbcountunique.sh in=<input> out=<output>"
 	echo ""
 	echo "Input may be a fasta, fastq, or sam file, compressed or uncompressed."
 	echo "Output may be stdout or a file."
@@ -24,15 +24,19 @@ usage(){
 	echo ""
 	echo "Input parameters:"
 	echo "in2=null		Second input file for paired reads"
-	echo "interleaved=auto	May be set to true or false to force the input read file to ovverride autodetection of the input file as paired interleaved."
+	echo "interleaved=auto	Set true/false to override autodetection of the input file as paired interleaved."
 	echo "samplerate=1		Set to below 1 to sample a fraction of input reads."
 	echo "reads=-1		Only process this number of reads, then quit (-1 means all)"
 	echo ""
 	echo "Output parameters:"
 	echo "out=<file>        	File for output stats"
 	echo ""
-	echo "Hashing parameters:"
+	echo "Processing parameters:"
 	echo "k=20			Kmer length (values under 32 are most efficient, but arbitrarily high values are supported)"
+	echo "interval=25000		Print one line to the histogram per this many reads."
+	echo "cumulative=f		Show cumulative numbers rather than per-interval numbers."
+	echo "percent=t		Show percentages of unique reads."
+	echo "count=f			Show raw counts of unique reads."
 	echo ""
 	echo ""
 	echo "Java Parameters:"
@@ -51,6 +55,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -64,7 +72,7 @@ calcXmx () {
 }
 calcXmx "$@"
 
-bbuniqueness() {
+bbcountunique() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
@@ -73,9 +81,4 @@ bbuniqueness() {
 	$CMD
 }
 
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
-
-bbuniqueness "$@"
+bbcountunique "$@"

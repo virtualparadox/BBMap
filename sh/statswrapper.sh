@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Runs stats.sh on multiple assemblies to produce one ouput line per file."
 	echo ""
@@ -42,6 +42,10 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -56,10 +60,5 @@ stats() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 stats "$@"

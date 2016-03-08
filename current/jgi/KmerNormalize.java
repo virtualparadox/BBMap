@@ -94,9 +94,15 @@ public class KmerNormalize {
 		int buildpasses=1;
 		long tablereads=-1; //How many reads to process when building the hashtable
 		int buildStepsize=4;
-		String outKeep=null;
-		String outToss=null;
-		String outLow=null, outMid=null, outHigh=null, outUnc=null;
+		
+		String outKeep1=null;
+		String outToss1=null;
+		String outLow1=null, outMid1=null, outHigh1=null, outUnc1=null;
+
+		String outKeep2=null;
+		String outToss2=null;
+		String outLow2=null, outMid2=null, outHigh2=null, outUnc2=null;
+		
 		int prehashes=-1;
 		long precells=-1;
 		String khistFile=null;
@@ -252,20 +258,30 @@ public class KmerNormalize {
 				maxReads=Long.parseLong(b);
 			}else if(a.equals("tablereads") || a.equals("buildreads")){
 				tablereads=Long.parseLong(b);
-			}else if(a.equals("out") || a.equals("outk") || a.equals("outkeep") || a.equals("outgood")){
-				outKeep=b;
-//				outstream.println("k:"+b);
-			}else if(a.equals("outt") || a.equals("outtoss") || a.equals("outoss") || a.equals("outbad")){
-				outToss=b;
-//				outstream.println("t:"+b);
-			}else if(a.equals("outl") || a.equals("outlow")){
-				outLow=b;
-			}else if(a.equals("outm") || a.equals("outmid") || a.equals("outmiddle")){
-				outMid=b;
-			}else if(a.equals("outh") || a.equals("outhigh")){
-				outHigh=b;
-			}else if(a.equals("outu") || a.equals("outuncorrected")){
-				outUnc=b;
+			}else if(a.equals("out") || a.equals("out1") || a.equals("outk") || a.equals("outkeep") || a.equals("outgood")){
+				outKeep1=b;
+			}else if(a.equals("outt") || a.equals("outt1") || a.equals("outtoss") || a.equals("outoss") || a.equals("outbad")){
+				outToss1=b;
+			}else if(a.equals("outl") || a.equals("outl1") || a.equals("outlow") || a.equals("outlow1")){
+				outLow1=b;
+			}else if(a.equals("outm") || a.equals("outm1") || a.equals("outmid") || a.equals("outmid1") || a.equals("outmiddle")){
+				outMid1=b;
+			}else if(a.equals("outh") || a.equals("outh1") || a.equals("outhigh") || a.equals("outhigh1")){
+				outHigh1=b;
+			}else if(a.equals("outu") || a.equals("outu1") || a.equals("outuncorrected")){
+				outUnc1=b;
+			}else if(a.equals("out2") || a.equals("outk2") || a.equals("outkeep2") || a.equals("outgood2")){
+				outKeep2=b;
+			}else if(a.equals("outt2") || a.equals("outtoss2") || a.equals("outoss2") || a.equals("outbad2")){
+				outToss2=b;
+			}else if(a.equals("outl2") || a.equals("outlow2")){
+				outLow2=b;
+			}else if(a.equals("outm2") || a.equals("outmid2") || a.equals("outmiddle2")){
+				outMid2=b;
+			}else if(a.equals("outh2") || a.equals("outhigh2")){
+				outHigh2=b;
+			}else if(a.equals("outu2") || a.equals("outuncorrected2")){
+				outUnc2=b;
 			}else if(a.equals("lbd") || a.equals("lowbindepth") || a.equals("lowerlimit")){
 				LOW_BIN_DEPTH=Integer.parseInt(b);
 			}else if(a.equals("hbd") || a.equals("highbindepth") || a.equals("upperlimit")){
@@ -485,7 +501,7 @@ public class KmerNormalize {
 		
 		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
 		
-		assert(passes<2 || (outLow==null && outMid==null && outHigh==null && outUnc==null)) : 
+		assert(passes<2 || (outLow1==null && outMid1==null && outHigh1==null && outUnc1==null)) : 
 			"\noutLow, outMid, outHigh, and outUnc don't work with multiple passes.  Set passes=1 or eliminate those output streams.";
 		
 		assert(in1!=null && !in1.equalsIgnoreCase("stdin") && !in1.toLowerCase().startsWith("stdin.")) : 
@@ -523,7 +539,7 @@ public class KmerNormalize {
 		
 		if(DETERMINISTIC){ordered=true;}
 		
-		boolean ok=Tools.testOutputFiles(overwrite, append, false, outKeep, outToss, khistFile, khistFileOut, rhistFile, rhistFileOut);
+		boolean ok=Tools.testOutputFiles(overwrite, append, false, outKeep1, outToss1, outKeep2, outToss2, khistFile, khistFileOut, rhistFile, rhistFileOut);
 		
 //		assert(Tools.canWrite(outKeep, overwrite)) : outKeep+" already exists, and overwrite="+overwrite;
 //		assert(Tools.canWrite(outToss, overwrite)) : outToss+" already exists, and overwrite="+overwrite;
@@ -584,7 +600,8 @@ public class KmerNormalize {
 		t.start();
 
 		if(passes>1){
-			String lastTemp=null;
+			String lastTemp1=null;
+			String lastTemp2=null;
 
 			if(passes>2){
 //				System.out.println(">>>A");
@@ -593,11 +610,13 @@ public class KmerNormalize {
 				EC_HTHRESH=EC_HTHRESH*2+20;
 				
 				for(int pass=1; pass<passes-1; pass++){
-//					System.out.println(">>>B");
-					final String tempOutPrefix=getTempPrefix(in1, outKeep, pass);
-					final String tempOut=getTempOut(outKeep, tempOutPrefix);
-					final String tempOutToss=(outToss==null ? null : getTempOut(outToss, tempOutPrefix));
-					//				assert(false) : tempOut+"\n"+tempOutToss;
+					final String tempOutPrefix1=getTempPrefix(in1, outKeep1, pass, 1);
+					final String tempOut1=getTempOut(outKeep1, tempOutPrefix1);
+					final String tempOutToss1=(outToss1==null ? null : getTempOut(outToss1, tempOutPrefix1));
+
+					final String tempOutPrefix2=(outKeep2==null ? null : getTempPrefix(in1, outKeep2, pass, 2));
+					final String tempOut2=(outKeep2==null ? null : getTempOut(outKeep2, tempOutPrefix2));
+					final String tempOutToss2=(outToss2==null ? null : getTempOut(outToss2, tempOutPrefix2));
 
 					outstream.println("\n   ***********   Pass "+pass+"   **********   \n");
 
@@ -612,12 +631,15 @@ public class KmerNormalize {
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
-							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
+							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
+							tempOut1, tempOutToss1, null, null, null, null, 
+							tempOut2, tempOutToss2, null, null, null, null, 
 							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 2), Tools.min(minKmersOverMinDepth, 5), 
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), false, rbb, true,
 							highPercentile, 0, (errorDetectRatio>100 ? 100+(errorDetectRatio-100)/2 : errorDetectRatio), hthresh, lthresh, false, false, false);
-					lastTemp=tempOut;
+					lastTemp1=tempOut1;
+					lastTemp2=tempOut2;
 					FASTQ.TEST_INTERLEAVED=true;
 					FASTQ.FORCE_INTERLEAVED=paired;
 				}
@@ -629,11 +651,13 @@ public class KmerNormalize {
 				EC_HTHRESH=(EC_HTHRESH-20)/2;
 
 				for(int pass=passes-1; pass<passes; pass++){
-//					System.out.println(">>>D");
-					final String tempOutPrefix=getTempPrefix(in1, outKeep, pass);
-					final String tempOut=getTempOut(outKeep, tempOutPrefix);
-					final String tempOutToss=(outToss==null ? null : getTempOut(outToss, tempOutPrefix));
-					//				assert(false) : tempOut+"\n"+tempOutToss;
+					final String tempOutPrefix1=getTempPrefix(in1, outKeep1, pass, 1);
+					final String tempOut1=getTempOut(outKeep1, tempOutPrefix1);
+					final String tempOutToss1=(outToss1==null ? null : getTempOut(outToss1, tempOutPrefix1));
+
+					final String tempOutPrefix2=(outKeep2==null ? null : getTempPrefix(in1, outKeep2, pass, 2));
+					final String tempOut2=(outKeep2==null ? null : getTempOut(outKeep2, tempOutPrefix2));
+					final String tempOutToss2=(outToss2==null ? null : getTempOut(outToss2, tempOutPrefix2));
 
 					outstream.println("\n   ***********   Pass "+pass+"   **********   \n");
 
@@ -648,21 +672,26 @@ public class KmerNormalize {
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
-							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
+							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
+							tempOut1, tempOutToss1, null, null, null, null, 
+							tempOut2, tempOutToss2, null, null, null, null, 
 							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
-					lastTemp=tempOut;
+					lastTemp1=tempOut1;
+					lastTemp2=tempOut2;
 				}
 			}else{
 //				System.out.println(">>>E");
 				for(int pass=1; pass<passes; pass++){
-//					System.out.println(">>>F");
-					final String tempOutPrefix=getTempPrefix(in1, outKeep, pass);
-					final String tempOut=getTempOut(outKeep, tempOutPrefix);
-					final String tempOutToss=(outToss==null ? null : getTempOut(outToss, tempOutPrefix));
-					//					assert(false) : tempOut+"\n"+tempOutToss;
+					final String tempOutPrefix1=getTempPrefix(in1, outKeep1, pass, 1);
+					final String tempOut1=getTempOut(outKeep1, tempOutPrefix1);
+					final String tempOutToss1=(outToss1==null ? null : getTempOut(outToss1, tempOutPrefix1));
+
+					final String tempOutPrefix2=(outKeep2==null ? null : getTempPrefix(in1, outKeep2, pass, 2));
+					final String tempOut2=(outKeep2==null ? null : getTempOut(outKeep2, tempOutPrefix2));
+					final String tempOutToss2=(outToss2==null ? null : getTempOut(outToss2, tempOutPrefix2));
 
 					outstream.println("\n   ***********   Pass "+pass+"   **********   \n");
 
@@ -677,12 +706,15 @@ public class KmerNormalize {
 					TRIM_RIGHT_THIS_PASS=(pass==1 && TRIM_RIGHT);
 					bases+=runPass(auto, memory, (cbits1<1 ? cbits : cbits1), cells, precells, buildpasses, hashes, prehashes, k,
 							maxReads, tablereads, minq, buildStepsize,
-							(pass==1 ? in1 : lastTemp), (pass==1 ? in2 : null), tempOut, tempOutToss, null, null, null, null, 
+							(pass==1 ? in1 : lastTemp1), (pass==1 ? in2 : lastTemp2),
+							tempOut1, tempOutToss1, null, null, null, null, 
+							tempOut2, tempOutToss2, null, null, null, null, 
 							(pass==1 ? khistFile : null), (pass==1 ? rhistFile : null), (pass==1 ? extra : null),
 							tgt, tgtBadLow, tgtBadHigh, max, Tools.min(minDepth, 3), minKmersOverMinDepth,
 							Tools.min(0.8f, Tools.max(0.4f, depthPercentile)*1.2f), tossErrorReads1, rbb, discardBadOnly1,
 							highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, false, false, false);
-					lastTemp=tempOut;
+					lastTemp1=tempOut1;
+					lastTemp2=tempOut2;
 					FASTQ.TEST_INTERLEAVED=true;
 					FASTQ.FORCE_INTERLEAVED=paired;
 				}
@@ -696,7 +728,10 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=false;
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					lastTemp, null, outKeep, outToss, outLow, outMid, outHigh, outUnc, null, null, null,
+					lastTemp1, lastTemp2,
+					outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
+					outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, 
+					null, null, null,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF,
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}else{
@@ -705,12 +740,15 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=(TRIM_RIGHT);
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					in1, in2, outKeep, outToss, outLow, outMid, outHigh, outUnc, khistFile, rhistFile, extra,
+					in1, in2,
+					outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
+					outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, 
+					khistFile, rhistFile, extra,
 					targetDepthF, targetDepthF, targetDepthF, maxDepth, minDepth, minKmersOverMinDepth, depthPercentile, tossErrorReadsF, rbb, discardBadOnlyF, 
 					highPercentile, lowPercentile, errorDetectRatio, hthresh, lthresh, fixSpikes, countup, renameReads);
 		}
 		
-		if(outKeep!=null && (khistFileOut!=null || rhistFileOut!=null)){
+		if(outKeep1!=null && (khistFileOut!=null || rhistFileOut!=null)){
 			outstream.println("\n   ***********   Output Histogram Generation   **********   \n");
 			FASTQ.TEST_INTERLEAVED=true;
 			FASTQ.FORCE_INTERLEAVED=paired;
@@ -719,7 +757,10 @@ public class KmerNormalize {
 			TRIM_RIGHT_THIS_PASS=false;
 			bases+=runPass(auto, memory, cbits, cells, precells, buildpasses, hashes, prehashes, k,
 					maxReads, tablereads, minq, buildStepsize,
-					outKeep, null, null, null, null, null, null, null, khistFileOut, rhistFileOut, extra,
+					outKeep1, outKeep2, 
+					null, null, null, null, null, null,
+					null, null, null, null, null, null, 
+					khistFileOut, rhistFileOut, extra,
 					99999999, 99999999, 99999999, 99999999, 0, 0, .5f, false, rbb, false, 
 					1, 0, 100, 10, 3, fixSpikes, false, false);
 		}
@@ -761,10 +802,10 @@ public class KmerNormalize {
 		if(errorState){throw new RuntimeException("KmerNormalize terminated in an error state; the output may be corrupt.");}
 	}
 	
-	private static String getTempPrefix(String inFname, String outFname, int pass){
+	private static String getTempPrefix(String inFname, String outFname, int pass, int pairnum){
 		String tempOut=null, tempOutPrefix=null;
 		for(int i=0; i<2000 && tempOut==null; i++){
-			tempOutPrefix=(useTmpdir() ? Shared.TMPDIR : "")+"TEMPFILE_BBNORM_P"+pass+"_"+getSalt(inFname, i)+"_";
+			tempOutPrefix=(useTmpdir() ? Shared.TMPDIR : "")+"TEMPFILE_BBNORM_P"+pass+"_R"+pairnum+"_"+getSalt(inFname, i)+"_";
 			tempOut=getTempOut(outFname, tempOutPrefix);
 			if(new File(tempOut).exists()){
 				tempOut=null;
@@ -825,7 +866,9 @@ public class KmerNormalize {
 	
 	private static long runPass(boolean auto, long memory, int cbits, long cells, long precells, int buildpasses, int hashes, int prehashes, int k,
 			long maxReads, long tablereads, int minq, int buildStepsize,
-			String in1, String in2, String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
+			String in1, String in2,
+			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1,
+			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2,
 			String khistFile, String rhistFile, List<String> extra,
 			int targetDepth, int targetDepthBadLow, int targetDepthBadHigh, int maxDepth, int minDepth, 
 			int minKmersOverMinDepth, float depthPercentile, boolean tossErrorReads, boolean rbb, boolean discardBadOnly, 
@@ -1031,20 +1074,20 @@ public class KmerNormalize {
 			MIN_KMERS_OVER_MIN_DEPTH=MIN_KMERS_OVER_MIN_DEPTH/2;
 			
 			int rnd=(int)(100+Math.random()*1000000);
-			final String tempOutPrefix1=getTempPrefix(in1, outKeep, rnd);
-//			final String tempOutPrefix2=getTempPrefix(in1, outKeep, rnd+1);
-//			final String tempOutPrefix3=getTempPrefix(in1, outKeep, rnd+3);
-			final String tempOut1=getTempOut(outKeep, tempOutPrefix1);
-//			final String tempOut2=getTempOut(outKeep, tempOutPrefix2);
-//			final String tempOut3=getTempOut(outKeep, tempOutPrefix3);
+			final String tempOutPrefix1=getTempPrefix(in1, outKeep1, rnd, 1);
+			final String tempOut1=getTempOut(outKeep1, tempOutPrefix1);
+			final String tempOutPrefix2=(outKeep2==null ? null : getTempPrefix(in1, outKeep2, rnd, 2));
+			final String tempOut2=(outKeep2==null ? null : getTempOut(outKeep2, tempOutPrefix2));
 			ArrayList<Read> storage=new ArrayList<Read>();
 			
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
+				bases+=count(list1, list2, kca, k, maxReads, null, null, null, null, null, null, 
+						null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
+				bases+=count(in1, in2, kca, k, maxReads, null, null, null, null, null, null, 
+						null, null, null, null, null, null, false, overwrite, null, null, estUnique, storage);
 			}
 			inMemorySort(storage, tempOut1, false);
 			storage=null;
@@ -1062,9 +1105,11 @@ public class KmerNormalize {
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+				bases+=count(list1, list2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+				bases+=count(in1, in2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}
 			
 		}else{
@@ -1073,9 +1118,11 @@ public class KmerNormalize {
 			if(in1!=null && in1.contains(",") && !new File(in1).exists()){
 				String[] list1=in1.split(",");
 				String[] list2=(in2==null ? null : in2.split(","));
-				bases+=count(list1, list2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+				bases+=count(list1, list2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1,
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}else{
-				bases+=count(in1, in2, kca, k, maxReads, outKeep, outToss, outLow, outMid, outHigh, outUnc, ordered, overwrite, khistFile, rhistFile, estUnique, null);
+				bases+=count(in1, in2, kca, k, maxReads, outKeep1, outToss1, outLow1, outMid1, outHigh1, outUnc1, 
+						outKeep2, outToss2, outLow2, outMid2, outHigh2, outUnc2, ordered, overwrite, khistFile, rhistFile, estUnique, null);
 			}
 		}
 		
@@ -1112,7 +1159,8 @@ public class KmerNormalize {
 
 
 	public static long count(String in1, String in2, KCountArray kca, int k, long maxReads, 
-			String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
+			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1, 
+			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2, 
 			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
 		final ConcurrentReadStreamInterface cris;
 		{
@@ -1127,15 +1175,16 @@ public class KmerNormalize {
 		if(verbose){System.err.println("Paired: "+paired);}
 		
 		RTextOutputStream3 rosKeep=null;
-		if(outKeep!=null){
+		if(outKeep1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outKeep.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outKeep1;
+			String out1=outKeep1.replaceFirst("#", "1");
+			String out2=outKeep2;
 			
-			if(cris.paired()){
-				if(outKeep.contains("#")){
-					out2=outKeep.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1152,15 +1201,16 @@ public class KmerNormalize {
 		}
 		
 		RTextOutputStream3 rosToss=null;
-		if(outToss!=null){
+		if(outToss1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outToss.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outToss1;
+			String out1=outToss1.replaceFirst("#", "1");
+			String out2=outToss2;
 			
-			if(cris.paired()){
-				if(outToss.contains("#")){
-					out2=outToss.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1178,15 +1228,16 @@ public class KmerNormalize {
 		}
 		
 		RTextOutputStream3 rosLow=null;
-		if(outLow!=null){
+		if(outLow1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outLow.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outLow1;
+			String out1=outLow1.replaceFirst("#", "1");
+			String out2=outLow2;
 			
-			if(cris.paired()){
-				if(outLow.contains("#")){
-					out2=outLow.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1204,15 +1255,16 @@ public class KmerNormalize {
 		}
 		
 		RTextOutputStream3 rosMid=null;
-		if(outMid!=null){
+		if(outMid1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outMid.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outMid1;
+			String out1=outMid1.replaceFirst("#", "1");
+			String out2=outMid2;
 			
-			if(cris.paired()){
-				if(outMid.contains("#")){
-					out2=outMid.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1230,15 +1282,16 @@ public class KmerNormalize {
 		}
 		
 		RTextOutputStream3 rosHigh=null;
-		if(outHigh!=null){
+		if(outHigh1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outHigh.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outHigh1;
+			String out1=outHigh1.replaceFirst("#", "1");
+			String out2=outHigh2;
 			
-			if(cris.paired()){
-				if(outHigh.contains("#")){
-					out2=outHigh.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1256,15 +1309,16 @@ public class KmerNormalize {
 		}
 		
 		RTextOutputStream3 rosUnc=null;
-		if(outUnc!=null){
+		if(outUnc1!=null){
 			final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
 			
-			String out1=outUnc.replaceFirst("#", "1");
-			String out2=null;
+			final String out=outUnc1;
+			String out1=outUnc1.replaceFirst("#", "1");
+			String out2=outUnc2;
 			
-			if(cris.paired()){
-				if(outUnc.contains("#")){
-					out2=outUnc.replaceFirst("#", "2");
+			if(cris.paired() && out2==null){
+				if(out.contains("#")){
+					out2=out.replaceFirst("#", "2");
 				}else{
 					outstream.println("Writing interleaved.");
 				}
@@ -1291,100 +1345,149 @@ public class KmerNormalize {
 	
 	
 	public static long count(String[] list1, String[] list2, KCountArray kca, int k, long maxReads, 
-			String outKeep, String outToss, String outLow, String outMid, String outHigh, String outUnc, 
+			String outKeep1, String outToss1, String outLow1, String outMid1, String outHigh1, String outUnc1, 
+			String outKeep2, String outToss2, String outLow2, String outMid2, String outHigh2, String outUnc2, 
 			boolean ordered, boolean overwrite, String khistFile, String rhistFile, long estUnique, ArrayList<Read> storage) {
 		
 		RTextOutputStream3 rosKeep=null, rosToss=null, rosLow=null, rosMid=null, rosHigh=null, rosUnc=null;
-		String[] outKeep1=null, outKeep2=null;
-		String[] outToss1=null, outToss2=null;
-		String[] outLow1=null, outLow2=null;
-		String[] outMid1=null, outMid2=null;
-		String[] outHigh1=null, outHigh2=null;
-		String[] outUnc1=null, outUnc2=null;
+		String[] outKeep1a=null, outKeep2a=null;
+		String[] outToss1a=null, outToss2a=null;
+		String[] outLow1a=null, outLow2a=null;
+		String[] outMid1a=null, outMid2a=null;
+		String[] outHigh1a=null, outHigh2a=null;
+		String[] outUnc1a=null, outUnc2a=null;
 		
 
 		final int buff=(!ordered ? 8 : Tools.max(16, 2*THREADS));
-		if(outKeep!=null){
-			if(!new File(outKeep).exists()){
-				outKeep1=outKeep.split(",");
+		if(outKeep1!=null){
+			if(!new File(outKeep1).exists()){
+				outKeep1a=outKeep1.split(",");
 			}else{
-				outKeep1=new String[] {outKeep};
+				outKeep1a=new String[] {outKeep1};
 			}
-			outKeep2=new String[outKeep1.length];
-			for(int i=0; i<outKeep1.length; i++){
-				if(outKeep1[i].contains("#")){
-					outKeep2[i]=outKeep1[i].replaceFirst("#", "2");
-					outKeep1[i]=outKeep1[i].replaceFirst("#", "1");
+			if(outKeep2!=null){
+				if(!new File(outKeep2).exists()){
+					outKeep2a=outKeep2.split(",");
+				}else{
+					outKeep2a=new String[] {outKeep2};
+				}
+			}else{
+				outKeep2a=new String[outKeep1a.length];
+				for(int i=0; i<outKeep1a.length; i++){
+					if(outKeep1a[i].contains("#")){
+						outKeep2a[i]=outKeep1a[i].replaceFirst("#", "2");
+						outKeep1a[i]=outKeep1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
-		if(outToss!=null){
-			if(!new File(outToss).exists()){
-				outToss1=outToss.split(",");
+		if(outToss1!=null){
+			if(!new File(outToss1).exists()){
+				outToss1a=outToss1.split(",");
 			}else{
-				outToss1=new String[] {outToss};
+				outToss1a=new String[] {outToss1};
 			}
-			outToss2=new String[outToss1.length];
-			for(int i=0; i<outToss1.length; i++){
-				if(outToss1[i].contains("#")){
-					outToss2[i]=outToss1[i].replaceFirst("#", "2");
-					outToss1[i]=outToss1[i].replaceFirst("#", "1");
+			if(outToss2!=null){
+				if(!new File(outToss2).exists()){
+					outToss2a=outToss2.split(",");
+				}else{
+					outToss2a=new String[] {outToss2};
+				}
+			}else{
+				outToss2a=new String[outToss1a.length];
+				for(int i=0; i<outToss1a.length; i++){
+					if(outToss1a[i].contains("#")){
+						outToss2a[i]=outToss1a[i].replaceFirst("#", "2");
+						outToss1a[i]=outToss1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
-		if(outLow!=null){
-			if(!new File(outLow).exists()){
-				outLow1=outLow.split(",");
+		if(outLow1!=null){
+			if(!new File(outLow1).exists()){
+				outLow1a=outLow1.split(",");
 			}else{
-				outLow1=new String[] {outLow};
+				outLow1a=new String[] {outLow1};
 			}
-			outLow2=new String[outLow1.length];
-			for(int i=0; i<outLow1.length; i++){
-				if(outLow1[i].contains("#")){
-					outLow2[i]=outLow1[i].replaceFirst("#", "2");
-					outLow1[i]=outLow1[i].replaceFirst("#", "1");
+			if(outLow2!=null){
+				if(!new File(outLow2).exists()){
+					outLow2a=outLow2.split(",");
+				}else{
+					outLow2a=new String[] {outLow2};
+				}
+			}else{
+				outLow2a=new String[outLow1a.length];
+				for(int i=0; i<outLow1a.length; i++){
+					if(outLow1a[i].contains("#")){
+						outLow2a[i]=outLow1a[i].replaceFirst("#", "2");
+						outLow1a[i]=outLow1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
-		if(outMid!=null){
-			if(!new File(outMid).exists()){
-				outMid1=outMid.split(",");
+		if(outMid1!=null){
+			if(!new File(outMid1).exists()){
+				outMid1a=outMid1.split(",");
 			}else{
-				outMid1=new String[] {outMid};
+				outMid1a=new String[] {outMid1};
 			}
-			outMid2=new String[outMid1.length];
-			for(int i=0; i<outMid1.length; i++){
-				if(outMid1[i].contains("#")){
-					outMid2[i]=outMid1[i].replaceFirst("#", "2");
-					outMid1[i]=outMid1[i].replaceFirst("#", "1");
+			if(outMid2!=null){
+				if(!new File(outMid2).exists()){
+					outMid2a=outMid2.split(",");
+				}else{
+					outMid2a=new String[] {outMid2};
+				}
+			}else{
+				outMid2a=new String[outMid1a.length];
+				for(int i=0; i<outMid1a.length; i++){
+					if(outMid1a[i].contains("#")){
+						outMid2a[i]=outMid1a[i].replaceFirst("#", "2");
+						outMid1a[i]=outMid1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
-		if(outHigh!=null){
-			if(!new File(outHigh).exists()){
-				outHigh1=outHigh.split(",");
+		if(outHigh1!=null){
+			if(!new File(outHigh1).exists()){
+				outHigh1a=outHigh1.split(",");
 			}else{
-				outHigh1=new String[] {outHigh};
+				outHigh1a=new String[] {outHigh1};
 			}
-			outHigh2=new String[outHigh1.length];
-			for(int i=0; i<outHigh1.length; i++){
-				if(outHigh1[i].contains("#")){
-					outHigh2[i]=outHigh1[i].replaceFirst("#", "2");
-					outHigh1[i]=outHigh1[i].replaceFirst("#", "1");
+			if(outHigh2!=null){
+				if(!new File(outHigh2).exists()){
+					outHigh2a=outHigh2.split(",");
+				}else{
+					outHigh2a=new String[] {outHigh2};
+				}
+			}else{
+				outHigh2a=new String[outHigh1a.length];
+				for(int i=0; i<outHigh1a.length; i++){
+					if(outHigh1a[i].contains("#")){
+						outHigh2a[i]=outHigh1a[i].replaceFirst("#", "2");
+						outHigh1a[i]=outHigh1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
-		if(outUnc!=null){
-			if(!new File(outUnc).exists()){
-				outUnc1=outUnc.split(",");
+		if(outUnc1!=null){
+			if(!new File(outUnc1).exists()){
+				outUnc1a=outUnc1.split(",");
 			}else{
-				outUnc1=new String[] {outUnc};
+				outUnc1a=new String[] {outUnc1};
 			}
-			outUnc2=new String[outUnc1.length];
-			for(int i=0; i<outUnc1.length; i++){
-				if(outUnc1[i].contains("#")){
-					outUnc2[i]=outUnc1[i].replaceFirst("#", "2");
-					outUnc1[i]=outUnc1[i].replaceFirst("#", "1");
+			if(outUnc2!=null){
+				if(!new File(outUnc2).exists()){
+					outUnc2a=outUnc2.split(",");
+				}else{
+					outUnc2a=new String[] {outUnc2};
+				}
+			}else{
+				outUnc2a=new String[outUnc1a.length];
+				for(int i=0; i<outUnc1a.length; i++){
+					if(outUnc1a[i].contains("#")){
+						outUnc2a[i]=outUnc1a[i].replaceFirst("#", "2");
+						outUnc1a[i]=outUnc1a[i].replaceFirst("#", "1");
+					}
 				}
 			}
 		}
@@ -1393,15 +1496,15 @@ public class KmerNormalize {
 		
 		for(int x=0; x<list1.length; x++){
 			
-			if(outKeep1!=null){
-				if(x==0 || outKeep1.length>1){
+			if(outKeep1a!=null){
+				if(x==0 || outKeep1a.length>1){
 					if(rosKeep!=null){
 						rosKeep.close();
 						rosKeep.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outKeep1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outKeep2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outKeep1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outKeep2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosKeep=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosKeep.start();
@@ -1411,15 +1514,15 @@ public class KmerNormalize {
 				}
 			}
 			
-			if(outToss1!=null){
-				if(x==0 || outToss1.length>1){
+			if(outToss1a!=null){
+				if(x==0 || outToss1a.length>1){
 					if(rosToss!=null){
 						rosToss.close();
 						rosToss.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outToss1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outToss2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outToss1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outToss2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosToss=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosToss.start();
@@ -1429,15 +1532,15 @@ public class KmerNormalize {
 				}
 			}
 			
-			if(outLow1!=null){
-				if(x==0 || outLow1.length>1){
+			if(outLow1a!=null){
+				if(x==0 || outLow1a.length>1){
 					if(rosLow!=null){
 						rosLow.close();
 						rosLow.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outLow1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outLow2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outLow1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outLow2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosLow=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosLow.start();
@@ -1447,15 +1550,15 @@ public class KmerNormalize {
 				}
 			}
 			
-			if(outMid1!=null){
-				if(x==0 || outMid1.length>1){
+			if(outMid1a!=null){
+				if(x==0 || outMid1a.length>1){
 					if(rosMid!=null){
 						rosMid.close();
 						rosMid.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outMid1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outMid2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outMid1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outMid2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosMid=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosMid.start();
@@ -1465,15 +1568,15 @@ public class KmerNormalize {
 				}
 			}
 			
-			if(outHigh1!=null){
-				if(x==0 || outHigh1.length>1){
+			if(outHigh1a!=null){
+				if(x==0 || outHigh1a.length>1){
 					if(rosHigh!=null){
 						rosHigh.close();
 						rosHigh.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outHigh1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outHigh2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outHigh1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outHigh2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosHigh=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosHigh.start();
@@ -1483,15 +1586,15 @@ public class KmerNormalize {
 				}
 			}
 			
-			if(outUnc1!=null){
-				if(x==0 || outUnc1.length>1){
+			if(outUnc1a!=null){
+				if(x==0 || outUnc1a.length>1){
 					if(rosUnc!=null){
 						rosUnc.close();
 						rosUnc.join();
 					}
 					
-					FileFormat ff1=FileFormat.testOutput(outUnc1[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
-					FileFormat ff2=FileFormat.testOutput(outUnc2[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff1=FileFormat.testOutput(outUnc1a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
+					FileFormat ff2=FileFormat.testOutput(outUnc2a[x], FileFormat.FASTQ, null, true, overwrite, append, ordered);
 					rosUnc=new RTextOutputStream3(ff1, ff2, buff, null, true);
 					
 					rosUnc.start();

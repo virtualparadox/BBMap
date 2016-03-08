@@ -19,6 +19,7 @@ import dna.Gene;
 import dna.Parser;
 import dna.Scaffold;
 import dna.Timer;
+import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
 
@@ -52,6 +53,7 @@ public class SamPileup {
 		
 		boolean bs=false, setbs=false;
 		boolean outset=false;
+		ReadWrite.USE_UNPIGZ=true;
 		
 		for(int i=0; i<args.length; i++){
 			final String arg=args[i];
@@ -101,6 +103,9 @@ public class SamPileup {
 				bits32=Tools.parseBoolean(b);
 			}else if(a.equals("bitset") || a.equals("usebitset")){
 				bs=Tools.parseBoolean(b);
+				setbs=true;
+			}else if(a.equals("arrays") || a.equals("usearrays") || a.equals("median") || a.equals("calcmedian")){
+				bs=!Tools.parseBoolean(b);
 				setbs=true;
 			}else if(a.startsWith("nonzero") || a.equals("nzo")){
 				NONZERO_ONLY=Tools.parseBoolean(b);
@@ -250,7 +255,7 @@ public class SamPileup {
 		mappedBases=0;
 		ArrayList<Scaffold> list=new ArrayList<Scaffold>(initialScaffolds);
 		HashMap<String, Scaffold> table=new HashMap<String, Scaffold>(initialScaffolds);
-		TextFile tf=new TextFile(in, false, false);
+		TextFile tf=new TextFile(in, ReadWrite.USE_UNPIGZ, false);
 		String line=null;
 		
 		String program=null;
@@ -404,11 +409,6 @@ public class SamPileup {
 		tf.close();
 		if(tsw!=null){tsw.poison();}
 		
-//		OutputStream os=ReadWrite.getOutputStream(out, false);
-//		PrintWriter pw=new PrintWriter(os);
-		
-//		for()
-		
 		final TextStreamWriter tsw2=(out==null ? null : new TextStreamWriter(out, overwrite, false, true));
 		
 		if(tsw2!=null){
@@ -416,10 +416,10 @@ public class SamPileup {
 			if(TWOCOLUMN){
 				tsw2.println("ID\tAvg_fold");
 			}else if(COUNT_GC){
-				tsw2.println("ID\tAvg_fold\tLength\tRef_GC\tBase_Coverage\tRead_GC");
+				tsw2.println("ID\tAvg_fold\tLength\tRef_GC\tBase_Coverage"+(USE_COVERAGE_ARRAYS ? "\tMedian_fold" : "")+"\tRead_GC");
 //				tsw2.println("ID\tLength\tRef_GC\tAvg_fold\tBase_Coverage\tRead_GC");
 			}else{
-				tsw2.println("ID\tAvg_fold\tLength\tRef_GC\tBase_Coverage");
+				tsw2.println("ID\tAvg_fold\tLength\tRef_GC\tBase_Coverage"+(USE_COVERAGE_ARRAYS ? "\tMedian_fold" : ""));
 //				tsw2.println("ID\tLength\tRef_GC\tAvg_fold\tBase_Coverage");
 			}
 		}
@@ -431,6 +431,7 @@ public class SamPileup {
 			for(Scaffold scaf : list){
 				final long sum=scaf.basehits;
 				int covered=0;
+				int median=-1;
 				if(USE_COVERAGE_ARRAYS){
 					CoverageArray ca=(CoverageArray)scaf.obj;
 					if(ca!=null){
@@ -439,6 +440,17 @@ public class SamPileup {
 							hist[x]++;
 //							sum+=x;
 							if(x>0){covered++;}
+						}
+						if(bits32){
+							int[] array=((CoverageArray3)ca).array;
+							Arrays.sort(array);
+							Tools.reverseInPlace(array);
+							median=ca.get(scaf.length/2);
+						}else{
+							char[] array=((CoverageArray2)ca).array;
+							Arrays.sort(array);
+							Tools.reverseInPlace(array);
+							median=ca.get(scaf.length/2);
 						}
 					}
 				}else if(USE_BITSETS){
@@ -457,9 +469,17 @@ public class SamPileup {
 					}else if(COUNT_GC){
 						long[] bc=scaf.basecount;
 						double gc=(bc[1]+bc[2])*1d/Data.max(1, bc[0]+bc[1]+bc[2]+bc[3]);
-						tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length, gc));
+						if(USE_COVERAGE_ARRAYS){
+							tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length, median, gc));
+						}else{
+							tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length, gc));
+						}
 					}else{
-						tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length));
+						if(USE_COVERAGE_ARRAYS){
+							tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\t%d\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length, median));
+						}else{
+							tsw2.print(String.format("%s\t%.4f\t%d\t%.4f\t%.4f\n", scaf.name, sum/(double)scaf.length, scaf.length, scaf.gc, covered*100d/scaf.length));
+						}
 					}
 				}
 				totalCoveredBases+=covered;

@@ -570,7 +570,7 @@ public final class BBMapThreadPacBio extends AbstractMapThread{
 		
 		
 		if(r.sites!=null && r.mapScore<=0){
-			if(!Shared.anomaly){
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){
 				System.err.println("Note: Read "+r.id+" failed cigar string generation and will be marked as unmapped.");
 				if(MSA.bandwidth>0 || MSA.bandwidthRatio>0){Shared.anomaly=true;}
 			}
@@ -1127,6 +1127,13 @@ public final class BBMapThreadPacBio extends AbstractMapThread{
 					assert(checkTopSite(r)); // TODO remove this
 					genMatchString(r, basesP1, basesM1, maxImperfectSwScore1, maxSwScore1, false, false);
 					assert(checkTopSite(r)); // TODO remove this
+					
+					if(STRICT_MAX_INDEL && r.mapped()){
+						if(hasLongIndel(r.match, index.MAX_INDEL)){
+							r.clearMapping();
+							r2.setPaired(false);
+						}
+					}
 				}
 			}
 			if(r2.numSites()>0){
@@ -1134,6 +1141,13 @@ public final class BBMapThreadPacBio extends AbstractMapThread{
 					r2.match=r2.topSite().match;
 				}else{
 					genMatchString(r2, basesP2, basesM2, maxImperfectSwScore2, maxSwScore2, false, false);
+					
+					if(STRICT_MAX_INDEL && r2.mapped()){
+						if(hasLongIndel(r2.match, index.MAX_INDEL)){
+							r2.clearMapping();
+							r.setPaired(false);
+						}
+					}
 				}
 			}
 		}
@@ -1160,12 +1174,12 @@ public final class BBMapThreadPacBio extends AbstractMapThread{
 		assert(checkTopSite(r)); // TODO remove this
 		//Block to prevent assertion from firing.  Generally caused by alignment being lost during match generation.  TODO: Fix cause. 
 		if(r2.mapScore>0 && r2.sites==null){
-			if(!Shared.anomaly){System.err.println("Anomaly: mapScore>0 and list==null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly: mapScore>0 and list==null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r2.clearMapping();
 			r.setPaired(false);
 		}else if(r2.mapScore<=0 && r2.sites!=null){
-			if(!Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r2.clearMapping();
 			r.setPaired(false);

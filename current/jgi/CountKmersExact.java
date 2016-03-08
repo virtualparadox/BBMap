@@ -188,7 +188,10 @@ public class CountKmersExact {
 			}else if(a.equals("threads") || a.equals("t")){
 				THREADS=(b==null || b.equalsIgnoreCase("auto") ? Shared.THREADS : Integer.parseInt(b));
 			}else if(a.equals("minavgquality") || a.equals("maq")){
-				minAvgQuality_=Byte.parseByte(b);
+				minAvgQuality_=(byte)Integer.parseInt(b);
+			}else if(a.equals("minavgquality2") || a.equals("maq2")){
+				minAvgQuality_=(byte)Integer.parseInt(b);
+				Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
 			}else if(a.equals("showspeed") || a.equals("ss")){
 				showSpeed=Tools.parseBoolean(b);
 			}else if(a.equals("verbose")){
@@ -601,10 +604,10 @@ public class CountKmersExact {
 					if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
 					
 					readsInT++;
-					basesInT+=(r1.bases==null ? 0 : r1.bases.length);
+					basesInT+=r1.length();
 					if(r2!=null){
 						readsInT++;
-						basesInT+=(r2.bases==null ? 0 : r2.bases.length);
+						basesInT+=r2.length();
 					}
 					
 					//Determine whether to discard the reads based on average quality
@@ -620,7 +623,7 @@ public class CountKmersExact {
 							basesTrimmedT+=x;
 							readsTrimmedT+=(x>0 ? 1 : 0);
 						}
-						rlen1=r1.bases==null ? 0 : r1.bases.length;
+						rlen1=r1.length();
 						if(rlen1<k){r1.setDiscarded(true);}
 					}
 					if(r2!=null){
@@ -629,7 +632,7 @@ public class CountKmersExact {
 							basesTrimmedT+=x;
 							readsTrimmedT+=(x>0 ? 1 : 0);
 						}
-						rlen2=r2.bases==null ? 0 : r2.bases.length;
+						rlen2=r2.length();
 						if(rlen2<k){r2.setDiscarded(true);}
 					}
 

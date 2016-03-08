@@ -630,7 +630,7 @@ public class BBMask{
 					final Read r=reads.get(idx);
 					assert(r.mate==null);
 
-					final int initialLength1=(r.bases==null ? 0 : r.bases.length);
+					final int initialLength1=r.length();
 
 					{
 						samReads++;

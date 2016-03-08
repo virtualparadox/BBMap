@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 3, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Translates nucleotide sequences to all 6 amino acid frames."
 	echo ""
@@ -47,6 +47,10 @@ z2="-Xms2g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -70,10 +74,5 @@ translate6frames() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 translate6frames "$@"

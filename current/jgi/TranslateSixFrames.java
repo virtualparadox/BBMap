@@ -59,8 +59,8 @@ public class TranslateSixFrames {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		Parser parser=new Parser();
 		for(int i=0; i<args.length; i++){
@@ -280,8 +280,8 @@ public class TranslateSixFrames {
 					final Read r1=reads.get(idx);
 					final Read r2=r1.mate;
 					
-					final int initialLength1=(r1.bases==null ? 0 : r1.bases.length);
-					final int initialLength2=(r2==null ? 0 : r2.bases==null ? 0 : r2.bases.length);
+					final int initialLength1=r1.length();
+					final int initialLength2=(r2==null ? 0 : r2.length());
 					
 
 					final byte[][] bm1=AminoAcid.toAAsSixFrames(r1.bases);

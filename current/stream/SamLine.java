@@ -1020,7 +1020,7 @@ public class SamLine {
 //			}
 //		}
 		
-		if(r.secondary()){
+		if(r.secondary() && SECONDARY_ALIGNMENT_ASTERISKS){
 //			seq=qual=bytestar;
 			seq=qual=null;
 		}else{
@@ -1127,7 +1127,7 @@ public class SamLine {
 				}
 			}
 			
-			if(MAKE_STOP_TAG && (perfect || r.match!=null)){optional.add(makeStopTag(pos, seq.length, cigar, perfect));}
+			if(MAKE_STOP_TAG && (perfect || (r.match!=null && r.bases!=null))){optional.add(makeStopTag(pos, r.bases.length, cigar, perfect));}
 			
 			if(MAKE_IDENTITY_TAG && (perfect || r.match!=null)){optional.add(makeIdentityTag(r.match, perfect));}
 			
@@ -2167,6 +2167,7 @@ public class SamLine {
 	public static boolean MAKE_CORRECTNESS_TAG=false;
 	public static boolean CONVERT_CIGAR_TO_MATCH=false;
 	public static boolean SOFT_CLIP=true;
+	public static boolean SECONDARY_ALIGNMENT_ASTERISKS=true;
 	/** OK to use the "setFrom" function which uses the old SamLine instead of translating the read, if a genome is not loaded. Should be false when processing occurs. */
 	public static boolean SET_FROM_OK=false;
 	/** For paired reads, keep original names rather than changing read2's name to match read1 */

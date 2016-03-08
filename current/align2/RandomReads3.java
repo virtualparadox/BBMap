@@ -11,8 +11,6 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 
-
-
 import dna.AminoAcid;
 import dna.ChromosomeArray;
 import dna.Data;
@@ -76,8 +74,10 @@ public final class RandomReads3 {
 //		float subRate=0.2f;
 //		float nRate=0.2f;
 //		PERFECT_READ_RATIO=0.5f;
-		
-		String adapter=null;
+
+		String pbadapter=null;
+		String fragadapter1=null;
+		String fragadapter2=null;
 		
 		long seed2=Long.MIN_VALUE;
 		
@@ -90,7 +90,7 @@ public final class RandomReads3 {
 		boolean paired=false;
 		boolean colorspace=false;
 		
-		ReadWrite.USE_PIGZ=true;
+		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
 		
 		for(int i=0; i<args.length; i++){
 //			assert(s.contains("=")) : "All arguments must be of the form word=number, e.g., reads=10000";
@@ -124,8 +124,12 @@ public final class RandomReads3 {
 			}else if(a.startsWith("maxlen")){
 				maxlen=x;
 				minlen=Tools.min(minlen, maxlen);
-			}else if(a.equals("adapter")){
-				adapter=b;
+			}else if(a.equals("pbadapter") || a.equals("pacbioadapter")){
+				pbadapter=b;
+			}else if(a.equals("fragadapter") || a.equals("fragadapter1")){
+				fragadapter1=b;
+			}else if(a.equals("fragadapter2")){
+				fragadapter2=b;
 			}else if(a.equals("amp")){
 				AMP=Integer.parseInt(b);
 			}else if(a.equals("slashes") || a.equals("addslashes") || a.equals("slash") || a.equals("addslash") || a.equals("addpairnum") || a.equals("pairnum")){
@@ -172,6 +176,9 @@ public final class RandomReads3 {
 				seed2=Long.parseLong(b);
 			}else if(a.equals("ref") || a.equals("reference")){
 				ref=b;
+			}else if(a.equals("nodisk")){
+				assert(false) : "'nodisk' has not been implemented; please remove that flag.";
+				RefToIndex.NODISK=NODISK=Tools.parseBoolean(b);
 			}else if(a.equals("s") || a.startsWith("snp")){
 				maxSnps=x;
 				snpRate=1;
@@ -215,6 +222,8 @@ public final class RandomReads3 {
 				minQuality=Tools.min(minQuality,  maxQuality);
 			}else if(a.startsWith("qual") || a.equals("q")){
 				minQuality=midQuality=maxQuality=x;
+			}else if(a.equals("qv") || a.equals("variance") || a.equals("qvariance")){
+				qVariance=x;
 			}else if(a.equals("mininsert")){
 				minInsert=x;
 			}else if(a.equals("maxinsert")){
@@ -227,6 +236,17 @@ public final class RandomReads3 {
 				paired=Tools.parseBoolean(b);
 			}else if(a.startsWith("superflat")){
 				SUPERFLAT_DIST=Tools.parseBoolean(b);
+			}else if(a.startsWith("exponential")){
+				if(b==null){EXP_DIST=true;}
+				else{
+					char c=b.charAt(0);
+					if(Character.isDigit(c) || c=='.'){
+						EXP_DIST=true;
+						EXP_LAMDA=Double.parseDouble(b);
+					}else{
+						EXP_DIST=Tools.parseBoolean(b);
+					}
+				}
 			}else if(a.startsWith("triang")){
 				if(Tools.parseBoolean(b)){
 					SUPERFLAT_DIST=FLAT_DIST=BELL_DIST=false;
@@ -274,8 +294,12 @@ public final class RandomReads3 {
 				PERFECT_READ_RATIO=Float.parseFloat(b);
 			}else if(a.equals("singlescaffold")){
 				FORCE_SINGLE_SCAFFOLD=Tools.parseBoolean(b);
+			}else if(a.equals("samestrand")){
+				mateSameStrand=Tools.parseBoolean(b);
 			}else if(a.equals("minoverlap") || a.equals("overlap")){
 				MIN_SCAFFOLD_OVERLAP=Integer.parseInt(b);
+			}else if(a.equals("in")){
+				in1=(b==null || b.equalsIgnoreCase("null") ? null : b);
 			}else{throw new RuntimeException("Unknown parameter "+args[i]);}
 
 		}
@@ -288,7 +312,7 @@ public final class RandomReads3 {
 		if(insertDev>-1){
 			mateMiddleDev=insertDev;
 		}else{
-			mateMiddleDev=Tools.absdif(mateMiddleMax, mateMiddleMin)/4;
+			mateMiddleDev=Tools.absdif(mateMiddleMax, mateMiddleMin)/6;
 		}
 		
 		assert(pbMaxErrorRate>=pbMinErrorRate) : "pbMaxErrorRate must be >= pbMinErrorRate";
@@ -319,10 +343,14 @@ public final class RandomReads3 {
 		
 		RandomReads3 rr=(seed2==Long.MIN_VALUE ? new RandomReads3(paired) : 
 			new RandomReads3((seed2==-1 ? System.nanoTime() : seed2), paired));
-		if(adapter!=null){
-			rr.adapter1=adapter.getBytes();
-			rr.adapter2=AminoAcid.reverseComplementBases(rr.adapter1);
-			rr.adapter1=rr.adapter2; //For PacBio, since adapters never appear in plus configuration
+		if(pbadapter!=null){
+			rr.pbadapter1=pbadapter.getBytes();
+			rr.pbadapter2=AminoAcid.reverseComplementBases(rr.pbadapter1);
+			rr.pbadapter1=rr.pbadapter2; //For PacBio, since adapters never appear in plus configuration
+		}
+		if(fragadapter1!=null){
+			rr.fragadapter1=toAdapters(fragadapter1);
+			rr.fragadapter2=fragadapter2==null ? rr.fragadapter1 : toAdapters(fragadapter2);
 		}
 		
 		if(REPLACE_NOREF){
@@ -409,6 +437,26 @@ public final class RandomReads3 {
 		
 	}
 	
+	private static byte[][] toAdapters(String name){
+		String[] split;
+		ArrayList<byte[]> list=new ArrayList<byte[]>();
+		if(new File(name).exists()){
+			split=new String[] {name};
+		}else{
+			split=name.split(",");
+		}
+		for(String s : split){
+			if(new File(s).exists()){
+				ArrayList<Read> reads=FastaReadInputStream.toReads(s);
+				for(Read r : reads){
+					if(r!=null && r.length()>0){list.add(r.bases);}
+				}
+			}else{
+				list.add(s.getBytes());
+			}
+		}
+		return list.toArray(new byte[list.size()][]);
+	}
 	
 	private static ArrayList<ChromosomeArray> writeRef(String reference, int build){
 		ArrayList<ChromosomeArray> chromlist=null;
@@ -542,13 +590,18 @@ public final class RandomReads3 {
 	}
 	
 	private final void addErrorsFromQuality(Read r, Random randy){
-		for(int i=0; i<r.quality.length; i++){
+		addErrorsFromQuality(r, randy, 0, r.length());
+	}
+	
+	private final void addErrorsFromQualityColorspace(Read r, Random rand, final int from, final int to){
+		final byte[] quals=r.quality;
+		for(int i=from; i<to; i++){
 			if(r.bases[i]!='N'){
-				float prob=QualityTools.PROB_ERROR[r.quality[i]];
-				if(randy.nextFloat()<prob){
+				float prob=quals==null ? 0.001f : QualityTools.PROB_ERROR[r.quality[i]];
+				if(rand.nextFloat()<prob){
 					byte old=r.bases[i];
 					if(!r.colorspace()){old=AminoAcid.baseToNumber[old];}
-					byte b=(byte)((old+randy.nextInt(3)+1)%4);
+					byte b=(byte)((old+rand.nextInt(3)+1)%4);
 					if(!r.colorspace()){b=AminoAcid.numberToBase[b];}
 					assert(old!=b);
 					r.bases[i]=b;
@@ -556,8 +609,42 @@ public final class RandomReads3 {
 			}
 		}
 	}
+	
+	private final void addErrorsFromQuality(Read r, Random rand, final int from, final int to){
+		final byte[] quals=r.quality, bases=r.bases;
+		for(int i=from; i<to; i++){
+			final byte q=(quals==null ? 30 : quals[i]);
+			if(AminoAcid.isFullyDefined(bases[i]) && rand.nextFloat()<QualityTools.PROB_ERROR[q]){
+				int old=AminoAcid.baseToNumber[bases[i]];
+				bases[i]=AminoAcid.numberToBase[(old+rand.nextInt(3))%4];
+			}
+		}
+	}
+	
+	public void addFragAdapter(Read r, final int loc, final byte[][] adapters, final Random rand){
+		final byte[] bases=r.bases;
+		final byte[] quals=r.quality;
+		final int initial=(bases==null ? 0 : bases.length);
+		final byte[] adapter=adapters[rand.nextInt(adapters.length)];
+		
+		if(initial>0 && loc>=0 && loc<initial){
 
-	public byte[] addAdapter(byte[] bases, int[] locs, int readlen, Random rand, byte[] adapter){
+			final int lim=Tools.min(initial, adapter.length+loc);
+			for(int i=loc, j=0; i<lim; i++, j++){
+				if(AminoAcid.isFullyDefined(bases[i])){bases[i]=adapter[j];}
+			}
+			for(int i=lim; i<initial; i++){
+				if(AminoAcid.isFullyDefined(bases[i])){
+					bases[i]=AminoAcid.numberToBase[rand.nextInt(4)];
+				}
+			}
+		}
+		if(ADD_ERRORS_FROM_QUALITY){
+			addErrorsFromQuality(r, rand, loc, bases.length);
+		}
+	}
+
+	public byte[] addPBAdapter(byte[] bases, int[] locs, int readlen, Random rand, byte[] adapter){
 //		Data.sysout.println("Adding adapter "+new String(adapter));
 		assert(readlen<=bases.length);
 		int mod=Tools.max((readlen+1)/2, readlen-30-adapter.length);
@@ -807,7 +894,8 @@ public final class RandomReads3 {
 		assert(r0!=null);
 		
 		final int midRange=maxMiddle-minMiddle+1;
-		int middle=(maxMiddle+minMiddle)/2;
+		final int middle0=(maxMiddle+minMiddle)/2;
+		int middle;
 		if(SUPERFLAT_DIST){
 			//		Data.sysout.print(other.numericID);
 			middle=((int)(r0.numericID%midRange))+minMiddle;
@@ -815,16 +903,37 @@ public final class RandomReads3 {
 		}else if(FLAT_DIST){
 			middle=randyMate.nextInt(midRange)+minMiddle;
 		}else if(BELL_DIST){
-			middle=(int)((randyMate.nextGaussian()*mateMiddleDev)+middle);
-			middle=Tools.mid(minMiddle, middle, maxMiddle);
+			
+			double g=randyMate.nextGaussian();
+			middle=(int)Math.round((g*mateMiddleDev)+middle0);
+			while(middle<minMiddle || middle>maxMiddle){
+				g=randyMate.nextGaussian();
+				middle=(int)Math.round((g*mateMiddleDev)+middle0);
+			}
+			
+//			double g=2*randyMate.nextDouble()-1;
+//			middle=(int)Math.round((g*mateMiddleDev)+middle0);
+//			while(middle<minMiddle || middle>maxMiddle){
+//				g=2*randyMate.nextDouble()-1;
+//				middle=(int)Math.round((g*mateMiddleDev)+middle0);
+//			}
+			
+//			System.out.println(g);
 			/*
-			nextGaussian() is normal distributed with mean 0 and std-deviance 1
-			so if you want mean 1 hour and std-deviance 15 minutes you'll need to call it as nextGaussian()*15+60
+			nextGaussian() has mean 0 and stdev 1
 			 */
-
-			assert(false) : "TODO";
 		}else{
 			middle=(randyMate.nextInt(midRange)+randyMate.nextInt(midRange))/2+minMiddle;
+		}
+		
+		if(EXP_DIST){
+			double d=999999;
+			int mid=middle;
+			while(d>64){
+				d=Tools.exponential(randy, EXP_LAMDA);
+			}
+//			middle=(int)Math.round((1*middle+(((middle+readlen*2)*(d))-(readlen*2)))/2);
+			middle=(int)Math.round((middle+readlen*2)*(0.4*(d*1.4+0.2)+0.6)-(readlen*2));
 		}
 
 		//	Data.sysout.println(sameStrand+": "+other.strand+" -> "+strand);
@@ -998,6 +1107,17 @@ public final class RandomReads3 {
 				if(r2!=null){
 					r1.mate=r2;
 					r2.mate=r1;
+					if(fragadapter1!=null){
+						r1.setMapped(true);
+						r2.setMapped(true);
+						int x=Read.insertSizeMapped(r1, r2, false);
+						if(x>0 && x<r1.length()){
+							addFragAdapter(r1, x, fragadapter1, randyAdapter);
+						}
+						if(x<r2.length()){
+							addFragAdapter(r2, x, fragadapter2, randyAdapterMate);
+						}
+					}
 				}else{
 					r1=null;
 				}
@@ -1135,11 +1255,11 @@ public final class RandomReads3 {
 			System.err.println(Arrays.toString(Arrays.copyOf(locs, bases.length)));
 		}
 		
-		if(adapter1!=null && (rid&3)==0){
-			bases=addAdapter(bases, locs, readlen, randyAdapter, adapter1);
+		if(pbadapter1!=null && (rid&3)==0){
+			bases=addPBAdapter(bases, locs, readlen, randyAdapter, pbadapter1);
 			adapters++;
-		}else if(adapter2!=null && (rid&3)==1){
-			bases=addAdapter(bases, locs, readlen, randyAdapter, adapter2);
+		}else if(pbadapter2!=null && (rid&3)==1){
+			bases=addPBAdapter(bases, locs, readlen, randyAdapter, pbadapter2);
 			adapters++;
 		}
 		
@@ -1234,9 +1354,9 @@ public final class RandomReads3 {
 			quals=getFixedQualityRead(bases.length);
 		}else{
 			if(perfect){
-				quals=QualityTools.makeQualityArray(bases.length, randyQual, 30, 40, baseQuality, slant);
+				quals=QualityTools.makeQualityArray(bases.length, randyQual, 30, 40, baseQuality, slant, qVariance);
 			}else{
-				quals=QualityTools.makeQualityArray(bases.length, randyQual, minQual, maxQual, baseQuality, slant);
+				quals=QualityTools.makeQualityArray(bases.length, randyQual, minQual, maxQual, baseQuality, slant, qVariance);
 			}
 		}
 		for(int j=0; j<quals.length; j++){
@@ -1251,7 +1371,7 @@ public final class RandomReads3 {
 
 		if(ADD_ERRORS_FROM_QUALITY && !perfect){addErrorsFromQuality(r, randyQual);}
 		if(ADD_PACBIO_ERRORS && !perfect){
-			addPacBioErrors(r, randyQual.nextFloat()*(pbMaxErrorRate-pbMinErrorRate)+pbMinErrorRate);
+			addPacBioErrors(r, randyQual.nextFloat()*(pbMaxErrorRate-pbMinErrorRate)+pbMinErrorRate, (1+randyQual.nextFloat())*(pbMaxErrorRate-pbMinErrorRate)*0.25f);
 		}else{
 			assert(r.bases.length==readlen);
 		}
@@ -1271,20 +1391,26 @@ public final class RandomReads3 {
 		return r;
 	}
 	
-	public void addPacBioErrors(Read r, float errorRate){
+	public void addPacBioErrors(final Read r, final float errorRate, final float deviation){
 		
 		byte[] bases=r.bases;
 		ByteBuilder bb=new ByteBuilder((int)(bases.length*1.1f));
+		ByteBuilder qq=new ByteBuilder((int)(bases.length*1.1f));
 		
 		for(int i=0; i<bases.length; i++){
+			float dev2=2*deviation*randy.nextFloat()-deviation;
+			float rate=errorRate+dev2;
 			float p=randy.nextFloat();
-			if(p>errorRate){
+			byte q=QualityTools.probCorrectToPhred(1-rate);
+			if(p>rate){
 				bb.append(bases[i]);
+				qq.append(q);
 			}else{
 				float p2=randyMutationType.nextFloat();
 				if(p2<0.4){//Ins
 					byte b=AminoAcid.numberToBase[randy2.nextInt(4)];
 					bb.append(b);
+					qq.append(q);
 					i--;
 				}else if(p2<0.75){//Del
 					//do nothing
@@ -1292,16 +1418,18 @@ public final class RandomReads3 {
 					int x=AminoAcid.baseToNumber[bases[i]]+randy2.nextInt(3);
 					byte b=AminoAcid.numberToBase[x%4];
 					bb.append(b);
+					qq.append(q);
 				}
 			}
 		}
 
 		r.bases=bb.toBytes();
 		if(r.quality!=null){
-		byte q=QualityTools.probCorrectToPhred(1-errorRate);
-		byte[] qual=new byte[r.bases.length];
-		Arrays.fill(qual, q);
-			r.quality=qual;
+			r.quality=qq.toBytes();
+//			byte q=QualityTools.probCorrectToPhred(1-errorRate);
+//			byte[] qual=new byte[r.bases.length];
+//			Arrays.fill(qual, q);
+//			r.quality=qual;
 		}
 	}
 	
@@ -1381,10 +1509,13 @@ public final class RandomReads3 {
 	public final boolean paired;
 	
 	private long nextReadID=0;
-	private byte[] adapter1=null;
-	private byte[] adapter2=null;
+	private byte[] pbadapter1=null;
+	private byte[] pbadapter2=null;
 	
-	private static final byte[][] fixedQuality=new byte[1000][];
+	private byte[][] fragadapter1=null;
+	private byte[][] fragadapter2=null;
+	
+	private static final byte[][] fixedQuality=new byte[301][];
 	
 	public static final boolean USE_FIXED_QUALITY=false;
 	public static final byte FIXED_QUALITY_VALUE=24;
@@ -1406,12 +1537,15 @@ public final class RandomReads3 {
 	public static boolean SUPERFLAT_DIST=false;
 	public static boolean FLAT_DIST=false;
 	public static boolean BELL_DIST=false;
+	public static boolean EXP_DIST=false;
+	public static double EXP_LAMDA=0.8d;
 	public static boolean BIASED_SNPS=false;
 	public static boolean ILLUMINA_NAMES=false;
 	
 	public static boolean NODISK=false;
-	
+
 	public static int AMP=1;
+	public static int qVariance=4;
 	
 	public static float PERFECT_READ_RATIO=0f;
 
@@ -1420,5 +1554,9 @@ public final class RandomReads3 {
 	public static int MIN_SCAFFOLD_OVERLAP=1;
 	public static boolean overwrite=true;
 	public static boolean append=false;
+	public static boolean errorState;
+	
+	//Input file, for use as quality source
+	public static String in1;
 	
 }

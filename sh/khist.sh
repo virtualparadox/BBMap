@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Generates a histogram of kmer counts for the input reads or assemblies."
 	echo "Can also normalize, error-correct, and/or bin reads by kmer depth."
@@ -108,7 +108,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
-
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -130,10 +133,5 @@ khist() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 khist "$@"

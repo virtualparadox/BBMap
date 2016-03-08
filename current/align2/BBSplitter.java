@@ -1116,7 +1116,7 @@ public class BBSplitter {
 		Collections.reverse(list);
 //		long ur=0, ub=0, ar=0, ab=0;
 		if(header){
-			tsw.print("#name\t%unambiguous reads\tunambiguous MB\t%ambiguous reads\tambiguous MB\tunambiguous reads\tambiguous reads\n");
+			tsw.print("#name\t%unambiguousReads\tunambiguousMB\t%ambiguousReads\tambiguousMB\tunambiguousReads\tambiguousReads\n");
 		}
 		final StringBuilder sb=new StringBuilder(1024);
 		final double divR=100.0/(totalReads);

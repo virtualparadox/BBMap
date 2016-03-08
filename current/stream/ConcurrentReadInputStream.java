@@ -112,7 +112,7 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 				Read r=producer.next();
 				if(r==null){break;}
 				list.add(r);
-				bases+=(r.bases==null ? 0 : r.bases.length);
+				bases+=r.length();
 				bases+=(r.mate==null || r.mate.bases==null ? 0 : r.mate.bases.length);
 				generated++;
 			}
@@ -166,7 +166,7 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 						Read r=buffer.get(next);
 						if(randy==null || randy.nextFloat()<samplerate){
 							list.add(r);
-							bases+=(r.bases==null ? 0 : r.bases.length);
+							bases+=r.length();
 							bases+=(r.mate==null || r.mate.bases==null ? 0 : r.mate.bases.length);
 						}
 						generated++;
@@ -216,7 +216,7 @@ public class ConcurrentReadInputStream implements ConcurrentReadStreamInterface 
 					Read r=buffer[next];
 					if(randy==null || randy.nextFloat()<samplerate){
 						list.add(r);
-						bases+=(r.bases==null ? 0 : r.bases.length);
+						bases+=r.length();
 						bases+=(r.mate==null || r.mate.bases==null ? 0 : r.mate.bases.length);
 					}
 					generated++;

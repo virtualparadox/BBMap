@@ -1,10 +1,12 @@
 package stream;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import align2.ListNum;
 import align2.Shared;
 
 import dna.Gene;
@@ -47,6 +49,34 @@ public class FastaReadInputStream extends ReadInputStream {
 		while(r!=null && i++<b){r=fris.next();}
 		t.stop();
 		System.out.println("Time: \t"+t);
+	}
+	
+	public static ArrayList<Read> toReads(String fname){
+		if(fname==null){return null;}
+		ArrayList<Read> list=new ArrayList<Read>();
+
+		/* Start an input stream */
+		FileFormat ff=FileFormat.testInput(fname, FileFormat.FASTA, null, false, true);
+		ConcurrentReadStreamInterface cris=ConcurrentGenericReadInputStream.getReadInputStream(-1L, false, false, ff, null);
+		Thread cristhread=new Thread(cris);
+		cristhread.start();
+		ListNum<Read> ln=cris.nextList();
+		ArrayList<Read> reads=(ln!=null ? ln.list : null);
+
+		/* Iterate through read lists from the input stream */
+		while(reads!=null && reads.size()>0){
+			list.addAll(reads);
+			
+			/* Dispose of the old list and fetch a new one */
+			cris.returnList(ln, ln.list.isEmpty());
+			ln=cris.nextList();
+			reads=(ln!=null ? ln.list : null);
+		}
+		/* Cleanup */
+		cris.returnList(ln, ln.list.isEmpty());
+//		errorState|=ReadWrite.closeStream(cris);
+		
+		return list;
 	}
 	
 	public FastaReadInputStream(String fname, boolean colorspace_, boolean interleaved_, boolean allowSubprocess_, long maxdata){
@@ -179,11 +209,11 @@ public class FastaReadInputStream extends ReadInputStream {
 			Read r=generateRead();
 			if(r==null){break;}
 			currentList.add(r);
-			len+=(r.bases==null ? 0 : r.bases.length);
+			len+=r.length();
 			if(interleaved){
 				Read r2=generateRead();
 				if(r2==null){break;}
-				len+=(r2.bases==null ? 0 : r2.bases.length);
+				len+=r2.length();
 				r.mate=r2;
 				r2.mate=r;
 				r2.setPairnum(1);
@@ -261,20 +291,23 @@ public class FastaReadInputStream extends ReadInputStream {
 	}
 	
 	private String nextHeader(){
-		if(verbose){System.err.println("Called nextHeader(); bstart="+bstart);}
+		if(verbose){System.err.println("Called nextHeader(); bstart="+bstart+"; bstop="+bstop);}
 		assert(bstart>=bstop || buffer[bstart]=='>' || buffer[bstart]<=slashr) : bstart+", "+bstop+", '"+(char)buffer[bstart]+"'";
 		while(bstart<bstop && buffer[bstart]!='>'){bstart++;}
 		int x=bstart;
 		assert(bstart>=bstop || buffer[x]=='>') : bstart+", "+bstop+", '"+(char)buffer[x]+"'";
 		while(x<bstop && buffer[x]>slashr){x++;}
-		if(x<bstop && buffer[x]==0x1){ //Handle deprecated 'SOH' symbol
-			while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1)){
+		if(verbose){System.err.println("A: x="+x);}
+		if(x<bstop && (buffer[x]==0x1 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
+			while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1 || buffer[x]==tab)){
 				if(buffer[x]==0x1){buffer[x]=carrot;}
 				x++;
 			}
 		}
+		if(verbose){System.err.println("B: x="+x);}
 		if(x>=bstop){
 			int fb=fillBuffer();
+			if(verbose){System.err.println("B: fb="+fb);}
 			if(fb<1){
 				if(verbose){System.err.println("Returning null from nextHeader()");}
 				return null;
@@ -282,13 +315,14 @@ public class FastaReadInputStream extends ReadInputStream {
 			x=0;
 			assert(bstart==0 && bstart<bstop && buffer[x]=='>'); //Note: This assertion will fire if a fasta file starts with a newline.
 			while(x<bstop && buffer[x]>slashr){x++;}
-			if(x<bstop && buffer[x]==0x1){ //Handle deprecated 'SOH' symbol
-				while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1)){
+			if(x<bstop && (buffer[x]==0x1 || buffer[x]==tab)){ //Handle deprecated 'SOH' symbol and tab
+				while(x<bstop && (buffer[x]>slashr || buffer[x]==0x1 || buffer[x]==tab)){
 					if(buffer[x]==0x1){buffer[x]=carrot;}
 					x++;
 				}
 			}
 		}
+		if(verbose){System.err.println("C: x="+x);}
 		assert(x>=bstop || buffer[x]<=slashr);
 		
 		int start=bstart+1, stop=x;
@@ -429,7 +463,7 @@ public class FastaReadInputStream extends ReadInputStream {
 			assert(nextReadID==0);
 			assert(bstart==0);
 			while(bstop>bstart && buffer[bstart]==';'){
-				while(bstop>bstart && buffer[bstart]>slashr){bstart++;}
+				while(bstop>bstart && (buffer[bstart]>slashr || buffer[bstart]==0x1 || buffer[bstart]==tab)){bstart++;}
 				while(bstop>bstart && buffer[bstart]<=slashr){bstart++;}
 			}
 			if(bstart>=bstop){ //Overflowed buffer with comments; recur
@@ -502,7 +536,7 @@ public class FastaReadInputStream extends ReadInputStream {
 	
 	
 	public static boolean verbose=false;
-	private final static byte slashr='\r', slashn='\n', carrot='>', space=' ';
+	private final static byte slashr='\r', slashn='\n', carrot='>', space=' ', tab='\t';
 	
 	public static boolean SPLIT_READS=true;
 	public static int TARGET_READ_LEN=500;

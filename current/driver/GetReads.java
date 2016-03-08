@@ -337,12 +337,12 @@ public class GetReads {
 				for(Read r1 : reads){
 					{
 						readsProcessed++;
-						basesProcessed+=r1.bases==null ? 0 : r1.bases.length;
+						basesProcessed+=r1.length();
 					}
 					Read r2=r1.mate;
 					if(r2!=null){
 						readsProcessed++;
-						basesProcessed+=r2.bases==null ? 0 : r2.bases.length;
+						basesProcessed+=r2.length();
 					}
 					
 					if(table.remove(r1.numericID)){

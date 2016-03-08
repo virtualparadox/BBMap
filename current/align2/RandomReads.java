@@ -526,10 +526,10 @@ public final class RandomReads {
 			}else{
 				if(perfect){
 					r.quality=QualityTools.makeQualityArray(
-							r.bases.length, randyQual, minQualP, maxQualP, baseQuality, slant);
+							r.bases.length, randyQual, minQualP, maxQualP, baseQuality, slant, 0);
 				}else{
 					r.quality=QualityTools.makeQualityArray(
-							r.bases.length, randyQual, minQual, maxQual, baseQuality, slant);
+							r.bases.length, randyQual, minQual, maxQual, baseQuality, slant, 0);
 				}
 			}
 			for(int j=0; j<r.quality.length; j++){
@@ -721,7 +721,7 @@ public final class RandomReads {
 		if(USE_FIXED_QUALITY){
 			r.quality=getFixedQualityRead(r.bases.length);
 		}else{
-			r.quality=QualityTools.makeQualityArray(r.bases.length, randyQualMate, minQual, maxQual, baseQuality, slant);
+			r.quality=QualityTools.makeQualityArray(r.bases.length, randyQualMate, minQual, maxQual, baseQuality, slant, 0);
 		}
 		for(int j=0; j<r.quality.length; j++){
 			if(!AminoAcid.isFullyDefined(r.bases[j])){r.quality[j]=0;}

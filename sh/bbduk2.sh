@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 21, 2014"
+	echo "Last modified June 11, 2014"
 	echo ""
 	echo "Description:  Compares reads to the kmers in a reference dataset, optionally allowing an edit distance."
 	echo "Splits the reads into two outputs - those that match the reference, and those that don't."
@@ -46,8 +46,17 @@ usage(){
 	echo "ziplevel=2       	(zl) Compression level; 1 (min) through 9 (max)."
 	echo "fastawrap=80     	Length of lines in fasta output."
 	echo "qout=auto        	Output quality offset: 33 (Sanger), 64, or auto."
+	echo ""
+	echo "Histogram output parameters:"
 	echo "bhist=<file>		Write a base composition histogram to file."
-	echo "qhist=<file>		Write a quality histogram to file."
+	echo "qhist=<file>		Write histogram of quality score by read location to file."
+	echo "indelhist=<file>	Write an indel length histogram to file."
+	echo "lhist=<file>		Write a read length histogram to file."
+	echo "ehist=<file>		Write an errors-per-read histogram to file."
+	echo "gchist=<file>		Write a gc content histogram to file."
+	echo "qahist=<file>		Write histogram of match, sub, ins, del by quality score.  Requires sam v1.4 input."
+	echo "mhist=<file>		Write histogram of match, substitution, deletion, and insertion rates by read location.  Requires sam v1.4 input."
+	echo "idhist=<file>		Write a percent identity histogram to file.  Requires sam v1.4 input."
 	echo ""
 	echo "Processing parameters:"
 	echo "threads=auto     	(t) Set number of threads to use; default is number of logical processors."
@@ -62,6 +71,7 @@ usage(){
 	echo "maxskip=99    	  	(mxs) Restrict maximal skip interval when indexing reference kmers."
 	echo "                 	Normally all are used for scaffolds<100kb, but with longer scaffolds, up to K-1 are skipped."
 	echo "removeifeitherbad=t	(rieb) Paired reads get sent to 'outmatch' if either is match (or either is trimmed shorter than minlen).  Set to false to require both."
+	echo "findbestmatch=f  	(fbm) If multiple matches, associate read with sequence sharing most kmers."
 	echo ""
 	echo "Trimming parameters:"
 #	echo "ktrim=f          	Trim reads to remove bases matching reference kmers."
@@ -69,15 +79,17 @@ usage(){
 #	echo "                 	Any non-whitespace character other than t, f, r, l, n: convert to that symbol rather than trimming, and process short kmers on both ends."
 	echo "kmask=f          	Convert bases matching the 'mref' kmers to this symbol.  't' and 'f' are not allowed, as they mean true and false.  Default is 'N'."
 	echo "useshortkmers=f  	(usk) Look for shorter kmers at read tips (only for k-trimming/masking).  Enabling this will disable maskmiddle."
-	echo "mink=4           	Minimum length of short kmers when trimming/masking.  Setting this automatically sets useshortkmers=t."
+	echo "mink=6           	Minimum length of short kmers when trimming/masking.  Setting this automatically sets useshortkmers=t."
 	echo "qtrim=f          	Trim read ends to remove bases with quality below minq.  Performed AFTER looking for kmers."
 	echo "                 	Values: t (trim both ends), f (neither end), r (right end only), l (left end only)."
-	echo "trimq=4           	Trim quality threshold."
+	echo "trimq=6           	Trim quality threshold."
 	echo "minlength=20     	(ml) Reads shorter than this after trimming will be discarded.  Pairs will be discarded only if both are shorter."
 	echo "minavgquality=0  	(maq) Reads with average quality (before trimming) below this will be discarded."
 	echo "minavgquality2=0 	(maq2) Averages probabilities rather than quality values."
 	echo "otm=f            	(outputtrimmedtomatch) Output reads trimmed to shorter than minlength to outm rather than discarding."
 	echo "tp=0             	(trimpad) Trim this much extra around matching kmers."
+	echo "tbo=f            	(trimbyoverlap) Trim adapters based on where paired reads overlap."
+	echo "tpe=f            	(trimpairsevenly) When kmer right-trimming, trim both reads to the minimum length of either."
 	echo ""
 #	echo "Other parameters:"
 #	echo "array=t    	  	Use HashArray data structure."
@@ -101,6 +113,11 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
+
 calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
@@ -122,10 +139,5 @@ bbduk2() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbduk2 "$@"

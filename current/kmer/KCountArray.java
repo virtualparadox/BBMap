@@ -34,11 +34,10 @@ public abstract class KCountArray {
 //	}
 	
 	public static KCountArray makeNew(long keys_, long cells_, int cbits_, int gap_, int hashes_, KCountArray prefilter){
-//		assert(false) : keys_+", "+cells_+", "+cbits_+", "+gap_;
-		assert(keys_>=cells_) : keys_+", "+cells_;
+//		assert(keys_>=cells_) : keys_+", "+cells_;
 //		assert(cells_>1) : cells_;
 		KCountArray kca;
-		if(keys_<=cells_){
+		if(false && keys_<=cells_){
 			kca=new KCountArray3(cells_, cbits_, gap_);
 //			return new KCountArray4(cells_, cbits_, gap_, 2);
 		}else{
@@ -73,7 +72,7 @@ public abstract class KCountArray {
 		gap=gap_;
 		assert(cbits_<=32);
 		assert(Integer.bitCount(cbits_)==1);
-		assert(Long.bitCount(cells_)==1) || this.getClass()==KCountArray7MT.class;
+		assert(Long.bitCount(cells_)==1) || this.getClass()==KCountArray7MT.class : this.getClass();
 		
 		numArrays=64;
 		arrayBits=31-Integer.numberOfLeadingZeros(numArrays);

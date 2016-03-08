@@ -55,7 +55,7 @@ public class MergeReadHeaders {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		for(int i=0; i<args.length; i++){
@@ -315,12 +315,12 @@ public class MergeReadHeaders {
 					
 					{
 						readsProcessed++;
-						basesProcessed+=r1.bases==null ? 0 : r1.bases.length;
+						basesProcessed+=r1.length();
 						r1.id=processHeader(tf.readLine());
 					}
 					if(r2!=null){
 						readsProcessed++;
-						basesProcessed+=r2.bases==null ? 0 : r2.bases.length;
+						basesProcessed+=r2.length();
 						r2.id=processHeader(tf.readLine());
 					}
 					

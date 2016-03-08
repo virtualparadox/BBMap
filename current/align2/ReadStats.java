@@ -79,6 +79,42 @@ public class ReadStats {
 		}else{
 			baseHist=null;
 		}
+		
+
+		if(COLLECT_INDEL_STATS){
+			insHist=new LongList(100);
+			delHist=new LongList(100);
+			delHist2=new LongList(100);
+		}else{
+			insHist=null;
+			delHist=null;
+			delHist2=null;
+		}
+		
+		if(COLLECT_GC_STATS){
+			gcHist=new long[GC_BINS+1];
+		}else{
+			gcHist=null;
+		}
+		
+		if(COLLECT_ERROR_STATS){
+			errorHist=new LongList(100);
+		}else{
+			errorHist=null;
+		}
+		
+		if(COLLECT_LENGTH_STATS){
+			lengthHist=new LongList(501);
+		}else{
+			lengthHist=null;
+		}
+		
+		if(COLLECT_IDENTITY_STATS){
+			idHist=new long[ID_BINS+1];
+		}else{
+			idHist=null;
+		}
+		
 	}
 	
 	public static ReadStats mergeAll(){
@@ -130,6 +166,34 @@ public class ReadStats {
 					x.qualSub[i]+=rs.qualSub[i];
 					x.qualIns[i]+=rs.qualIns[i];
 					x.qualDel[i]+=rs.qualDel[i];
+				}
+			}
+			
+
+			if(COLLECT_INDEL_STATS){
+				x.delHist.add(rs.delHist);
+				x.delHist2.add(rs.delHist2);
+				x.insHist.add(rs.insHist);
+			}
+
+			if(COLLECT_LENGTH_STATS){
+				x.lengthHist.add(rs.lengthHist);
+			}
+			
+
+			if(COLLECT_ERROR_STATS){
+				x.errorHist.add(rs.errorHist);
+			}
+			
+			if(COLLECT_GC_STATS){
+				for(int i=0; i<rs.gcHist.length; i++){
+					x.gcHist[i]+=rs.gcHist[i];
+				}
+			}
+			
+			if(COLLECT_IDENTITY_STATS){
+				for(int i=0; i<rs.idHist.length; i++){
+					x.idHist[i]+=rs.idHist[i];
 				}
 			}
 			
@@ -209,6 +273,96 @@ public class ReadStats {
 			lastm=m;
 		}
 		
+	}
+	
+	public void addToErrorHistogram(final Read r){
+		if(r==null){return;}
+		addToErrorHistogram(r, 0);
+		if(r.mate!=null){addToErrorHistogram(r.mate, 1);}
+	}
+	
+	private void addToErrorHistogram(final Read r, int pairnum){
+		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		int x=r.countSubs();
+		errorHist.increment(x, 1);
+	}
+	
+	public void addToLengthHistogram(final Read r){
+		if(r==null){return;}
+		addToLengthHistogram(r, 0);
+		if(r.mate!=null){addToLengthHistogram(r.mate, 1);}
+	}
+	
+	private void addToLengthHistogram(final Read r, int pairnum){
+		if(r==null || r.bases==null){return;}
+		int x=Tools.min(r.bases.length, 80000); 
+		lengthHist.increment(x, 1);
+	}
+	
+	public void addToGCHistogram(final Read r){
+		if(r==null){return;}
+		addToGCHistogram(r, 0);
+		if(r.mate!=null){addToGCHistogram(r.mate, 1);}
+	}
+	
+	private void addToGCHistogram(final Read r, int pairnum){
+		if(r==null || r.bases==null){return;}
+		gcHist[(int)(r.gc()*GC_BINS)]++;
+	}
+	
+	public void addToIdentityHistogram(final Read r){
+		if(r==null){return;}
+		addToIdentityHistogram(r, 0);
+		if(r.mate!=null){addToIdentityHistogram(r.mate, 1);}
+	}
+		
+	private void addToIdentityHistogram(final Read r, int pairnum){
+		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		idHist[(int)(r.identity()*ID_BINS)]++;
+	}
+	
+	public void addToIndelHistogram(final Read r){
+		if(r==null){return;}
+		addToIndelHistogram(r, 0);
+		if(r.mate!=null){addToIndelHistogram(r.mate, 1);}
+	}
+		
+	private void addToIndelHistogram(final Read r, int pairnum){
+		if(r==null || r.bases==null || r.bases.length<1 || !r.mapped() || r.match==null/* || r.discarded()*/){return;}
+		final byte[] bases=r.bases, match=r.match;
+		final int limit=Tools.min(bases.length, MAXLEN);
+		
+		int rpos=0;
+		int streak=0;
+		byte lastm='A';
+		for(int mpos=0; mpos<match.length && rpos<limit; mpos++){
+			byte m=match[mpos];
+			
+			{	
+				if(lastm!=m){
+					if(lastm=='D'){
+						streak=Tools.min(streak, MAXDELLEN2);
+						if(streak<MAXDELLEN){delHist.increment(streak, 1);}
+						delHist2.increment(streak/100, 1);
+					}else if(lastm=='I'){
+						streak=Tools.min(streak, MAXINSLEN);
+						insHist.increment(streak, 1);
+					}
+					streak=0;
+				}
+			}
+			streak++;
+			rpos++;
+			lastm=m;
+		}
+		if(lastm=='D'){
+			streak=Tools.min(streak, MAXDELLEN2);
+			if(streak<MAXDELLEN){delHist.increment(streak, 1);}
+			delHist2.increment(streak/100, 1);
+		}else if(lastm=='I'){
+			streak=Tools.min(streak, MAXINSLEN);
+			insHist.increment(streak, 1);
+		}
 	}
 	
 	public void addToMatchHistogram(final Read r){
@@ -310,6 +464,13 @@ public class ReadStats {
 			if(INSERT_HIST_FILE!=null){rs.writeInsertToFile(INSERT_HIST_FILE);}
 			if(BASE_HIST_FILE!=null){rs.writeBaseContentToFile(BASE_HIST_FILE, paired);}
 			if(QUAL_ACCURACY_FILE!=null){rs.writeQualityAccuracyToFile(QUAL_ACCURACY_FILE);}
+			
+			if(INDEL_HIST_FILE!=null){rs.writeIndelToFile(INDEL_HIST_FILE);}
+			if(ERROR_HIST_FILE!=null){rs.writeErrorToFile(ERROR_HIST_FILE);}
+			if(LENGTH_HIST_FILE!=null){rs.writeLengthToFile(LENGTH_HIST_FILE);}
+			if(GC_HIST_FILE!=null){rs.writeGCToFile(GC_HIST_FILE, true);}
+			if(IDENTITY_HIST_FILE!=null){rs.writeIdentityToFile(IDENTITY_HIST_FILE, true);}
+			
 			return rs.errorState;
 		}
 		return false;
@@ -453,19 +614,7 @@ public class ReadStats {
 	}
 	
 	public void writeInsertToFile(String fname){
-		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
-		tsw.start();
-		tsw.print("#InsertSize\tCount\n");
-		
-		for(int i=0; i<insertHist.size; i++){
-			long x=insertHist.get(i);
-			if(x>0 || !skipZeroInsertCount){
-				tsw.print(i+"\t"+x+"\t"+"\n");
-			}
-		}
-		tsw.poison();
-		tsw.waitForFinish();
-		errorState|=tsw.errorState;
+		writeHistogramToFile(fname, "#InsertSize\tCount\n", insertHist, !skipZeroInsertCount);
 	}
 	
 	public void writeBaseContentToFile(String fname, boolean paired){
@@ -512,8 +661,105 @@ public class ReadStats {
 		return max;
 	}
 	
+	public void writeIndelToFile(String fname){
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		tsw.start();
+		tsw.print("#Length\tDeletions\tInsertions\n");
+		
+		int max=Tools.max(insHist.size, delHist.size);
+
+		for(int i=0; i<max; i++){
+			long x=delHist.get(i);
+			long y=insHist.get(i);
+			if(x>0 || y>0 || !skipZeroIndel){
+				tsw.print(i+"\t"+x+"\t"+y+"\n");
+			}
+		}
+		
+		tsw.print("#Length_bin\tDeletions\n");
+		max=delHist2.size;
+		for(int i=0; i<max; i++){
+			long x=delHist2.get(i);
+			if(x>0 || !skipZeroIndel){
+				tsw.print((i*DEL_BIN)+"\t"+x+"\n");
+			}
+		}
+		tsw.poison();
+		tsw.waitForFinish();
+		errorState|=tsw.errorState;
+	}
+	
+	public void writeErrorToFile(String fname){
+		writeHistogramToFile(fname, "#Errors\tCount\n", errorHist, false);
+	}
+	
+	public void writeLengthToFile(String fname){
+		writeHistogramToFile(fname, "#Length\tCount\n", lengthHist, false);
+	}
+	
+	public void writeHistogramToFile(String fname, String header, LongList hist, boolean printZeros){
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		tsw.start();
+		tsw.print(header);
+		
+		int max=hist.size;
+
+		for(int i=0; i<max; i++){
+			long x=hist.get(i);
+			if(x>0 || printZeros){
+				tsw.print(i+"\t"+x+"\n");
+			}
+		}
+		tsw.poison();
+		tsw.waitForFinish();
+		errorState|=tsw.errorState;
+	}
+	
+	public void writeGCToFile(String fname, boolean printZeros){
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		tsw.start();
+		tsw.print("#GC\tCount\n");
+		
+		double mult=100.0/ID_BINS;
+		
+		long[] hist=gcHist;
+		int max=hist.length;
+		for(int i=0; i<max; i++){
+			long x=hist[i];
+			if(x>0 || printZeros){
+				//This assumes GC_BINS==100
+//				tsw.print(i+"\t"+x+"\n");
+				tsw.print(String.format("%.1f", i*mult)+"\t"+x+"\n");
+			}
+		}
+		tsw.poison();
+		tsw.waitForFinish();
+		errorState|=tsw.errorState;
+	}
+	
+	public void writeIdentityToFile(String fname, boolean printZeros){
+		TextStreamWriter tsw=new TextStreamWriter(fname, overwrite, false, false);
+		tsw.start();
+		tsw.print("#Identity\tCount\n");
+		
+		double mult=100.0/ID_BINS;
+		
+		long[] hist=idHist;
+		int max=hist.length;
+		for(int i=0; i<max; i++){
+			long x=hist[i];
+			if(x>0 || printZeros){
+				tsw.print(String.format("%.1f", i*mult)+"\t"+x+"\n");
+			}
+		}
+		tsw.poison();
+		tsw.waitForFinish();
+		errorState|=tsw.errorState;
+	}
+	
 	public static boolean collectingStats(){
-		return COLLECT_QUALITY_STATS || COLLECT_QUALITY_ACCURACY || COLLECT_MATCH_STATS || COLLECT_INSERT_STATS || COLLECT_BASE_STATS;
+		return COLLECT_QUALITY_STATS || COLLECT_QUALITY_ACCURACY || COLLECT_MATCH_STATS || COLLECT_INSERT_STATS || COLLECT_BASE_STATS
+				|| COLLECT_INDEL_STATS || COLLECT_GC_STATS || COLLECT_ERROR_STATS || COLLECT_LENGTH_STATS || COLLECT_IDENTITY_STATS;
 	}
 	
 	public final long[][] qualLength;
@@ -531,13 +777,34 @@ public class ReadStats {
 	public final long[] qualSub;
 	public final long[] qualIns;
 	public final long[] qualDel;
+	
+	public final long[] gcHist;
+	public final long[] idHist;
 
 	public final LongList[][] baseHist;
 	
+	/** Insert size */
 	public final LongList insertHist;
-
+	/** Read length */
+	public final LongList lengthHist;
+	/** Number errors per read */
+	public final LongList errorHist;
+	/** Insertion length */
+	public final LongList insHist;
+	/** Deletion length */
+	public final LongList delHist;
+	/** Deletion length, binned  */
+	public final LongList delHist2;
+	
 	public static final int MAXLEN=2000;
 	public static final int MAXINSERTLEN=24000;
+	public static final int MAXLENGTHLEN=80000;
+	public static final int MAXINSLEN=1000;
+	public static final int MAXDELLEN=1000;
+	public static final int MAXDELLEN2=1000000;
+	public static final int DEL_BIN=100;
+	public static final int GC_BINS=100;
+	public static final int ID_BINS=100;
 	
 	public boolean errorState=false;
 	
@@ -549,15 +816,27 @@ public class ReadStats {
 	public static boolean COLLECT_MATCH_STATS=false;
 	public static boolean COLLECT_INSERT_STATS=false;
 	public static boolean COLLECT_BASE_STATS=false;
+	public static boolean COLLECT_INDEL_STATS=false;
+	public static boolean COLLECT_GC_STATS=false;
+	public static boolean COLLECT_ERROR_STATS=false;
+	public static boolean COLLECT_LENGTH_STATS=false;
+	public static boolean COLLECT_IDENTITY_STATS=false;
 	public static String QUAL_HIST_FILE=null;
 	public static String QUAL_ACCURACY_FILE=null;
 	public static String MATCH_HIST_FILE=null;
 	public static String INSERT_HIST_FILE=null;
 	public static String BASE_HIST_FILE=null;
+	public static String INDEL_HIST_FILE=null;
+	public static String ERROR_HIST_FILE=null;
+	public static String LENGTH_HIST_FILE=null;
+	public static String GC_HIST_FILE=null;
+	public static String IDENTITY_HIST_FILE=null;
+	
 	public static boolean overwrite=false;
 	public static boolean append=false;
 	public static final boolean verbose=false;
-	
+
 	public static boolean skipZeroInsertCount=true;
+	public static boolean skipZeroIndel=true;
 	
 }

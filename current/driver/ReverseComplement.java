@@ -53,9 +53,8 @@ public static void main(String[] args){
 		for(String s : args){if(s.contains("standardout") || s.contains("stdout")){outstream=System.err;}}
 		outstream.println("Executing "+getClass().getName()+" "+Arrays.toString(args)+"\n");
 		
-		ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.USE_PIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
+		ReadWrite.USE_UNPIGZ=ReadWrite.USE_PIGZ=true;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		boolean setOut=false;
 
@@ -185,7 +184,7 @@ public static void main(String[] args){
 			for(Read r : reads){
 				assert(r.mate==null);
 				readsProcessed++;
-				basesProcessed+=r.bases==null ? 0 : r.bases.length;
+				basesProcessed+=r.length();
 				r.reverseComplement();
 				if(tsw!=null){tsw.println(r);}
 			}

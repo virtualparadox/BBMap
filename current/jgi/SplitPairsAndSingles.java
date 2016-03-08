@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadStreamInterface;
@@ -58,10 +59,11 @@ public final class SplitPairsAndSingles {
 		outstream.println("interleaved=auto   \t(int) If true, forces fastq input to be paired and interleaved.");
 		outstream.println("qtrim=f            \tTrim read ends to remove bases with quality below minq.");
 		outstream.println("                   \tValues: t (trim both ends), f (neither end), r (right end only), l (left end only).");
-		outstream.println("trimq=4            \tTrim quality threshold.");
+		outstream.println("trimq=6            \tTrim quality threshold.");
 		outstream.println("minlen=2           \t(ml) Reads shorter than this after trimming will be discarded.");
 		outstream.println("ziplevel=2         \t(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster.");
-		outstream.println("fixpairs=f         \t(fp, fint) Fixes corrupted interleaved files by examining paired read names.");
+		outstream.println("fixinterleaving=f  \t(fint) Fixes corrupted interleaved files by examining paired read names.");
+		outstream.println("repair=f           \t(rp) Fixes arbitrarily corrupted paired reads by examining read names.  High memory.");
 		
 	}
 	
@@ -71,11 +73,12 @@ public final class SplitPairsAndSingles {
 		
 		ReadWrite.ZIPLEVEL=2;
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		FastaReadInputStream.SPLIT_READS=false;
 		ByteFile.FORCE_MODE_BF2=Shared.THREADS>2;
-		boolean setOut=false, setOuts=false, trimRight_=false, trimLeft_=false, setInterleaved=false, fixPairs_=false;
+		boolean setOut=false, setOuts=false, trimRight_=false, trimLeft_=false;
+		boolean setInterleaved=false, fixInterleaving_=false, repair_=false;
 		
 		{
 			boolean b=false;
@@ -154,8 +157,10 @@ public final class SplitPairsAndSingles {
 				trimLeft_=Tools.parseBoolean(b);
 			}else if(a.equals("trimq") || a.equals("trimquality") || a.equals("minq")){
 				trimq=Byte.parseByte(b);
-			}else if(a.equals("fixpairs") || a.equals("fp") || a.equals("fint")){
-				fixPairs_=Tools.parseBoolean(b);
+			}else if(a.equals("fixinterleaving") || a.equals("fi") || a.equals("fint") || a.equals("fixint")){
+				fixInterleaving_=Tools.parseBoolean(b);
+			}else if(a.equals("repair") || a.equals("rp")){
+				repair_=Tools.parseBoolean(b);
 			}else if(a.equals("ml") || a.equals("minlen") || a.equals("minlength") || a.equals("minreadlength")){
 				minReadLength=Integer.parseInt(b);
 				assert(minReadLength>=0) : "minReadLength must be at least 0";
@@ -193,8 +198,10 @@ public final class SplitPairsAndSingles {
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
-		
-		fixPairs=fixPairs_;
+
+		fixInterleaving=fixInterleaving_;
+		repair=repair_;
+		assert(!repair || ! fixInterleaving) : "ERROR: Choose 'fixInterleaving' or 'repair', but not both.";
 		trimRight=trimRight_;
 		trimLeft=trimLeft_;
 		
@@ -214,24 +221,29 @@ public final class SplitPairsAndSingles {
 		}
 		if(in2!=null && (in2.contains("=") || in2.equalsIgnoreCase("null"))){in2=null;}
 		
-		if(fixPairs){
+		if(fixInterleaving){
 			if(in2!=null){
-				System.err.println("ERROR: 'FixPairs' mode only works with a single interleaved input file, not paired input files.");
+				System.err.println("ERROR: 'FixInterleaving' mode only works with a single interleaved input file, not paired input files.");
 				System.err.println("Aborting.");
 				System.exit(1);
 			}
 			setInterleaved=true;
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
-			outstream.println("Paired input disabled; running in FixPairs mode");
+			outstream.println("Paired input disabled; running in FixInterleaving mode");
 		}
 		
-		if(!setInterleaved && in2==null){
-			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
-			outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
-		}
-		if(in2!=null){
-			if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
+		if(repair){
 			FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+			outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
+		}else{
+			if(!setInterleaved && in2==null){
+				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=true;
+				outstream.println("Set INTERLEAVED to "+FASTQ.FORCE_INTERLEAVED);
+			}
+			if(in2!=null){
+				if(FASTQ.FORCE_INTERLEAVED){System.err.println("Reset INTERLEAVED to false because paired input files were specified.");}
+				FASTQ.FORCE_INTERLEAVED=FASTQ.TEST_INTERLEAVED=false;
+			}
 		}
 		
 		if(out1!=null && out1.contains("#")){
@@ -258,6 +270,8 @@ public final class SplitPairsAndSingles {
 		assert(!in1.equalsIgnoreCase(in2));
 		assert(out1==null || !out1.equalsIgnoreCase(out2));
 		assert(out1==null || !out1.equalsIgnoreCase(outsingle));
+		
+		pairMap=(repair ? new LinkedHashMap<String, Read>() : null);
 	}
 
 	public void process(){
@@ -334,8 +348,10 @@ public final class SplitPairsAndSingles {
 		}
 		
 //		assert(false) : out1+", "+out2+", "+outsingle;
-		if(fixPairs){
-			process3_fixPairs(cris, ros, rosb);
+		if(fixInterleaving){
+			process3_fixInterleaving(cris, ros, rosb);
+		}else if(repair){
+			process3_repair(cris, ros, rosb);
 		}else{
 			process3(cris, ros, rosb);
 		}
@@ -358,10 +374,10 @@ public final class SplitPairsAndSingles {
 //				Read r2=r1.mate;
 //				
 //				readsIn++;
-//				basesIn+=(r1.bases==null ? 0 : r1.bases.length);
+//				basesIn+=r1.length();
 //				if(r2!=null){
 //					readsIn++;
-//					basesIn+=(r2.bases==null ? 0 : r2.bases.length);
+//					basesIn+=r2.length();
 //				}
 //				
 //				{
@@ -378,8 +394,8 @@ public final class SplitPairsAndSingles {
 //						}
 //					}
 //
-//					final int rlen1=(r1==null ? -1 : r1.bases==null ? 0 : r1.bases.length);
-//					final int rlen2=(r2==null ? -1 : r2.bases==null ? 0 : r2.bases.length);
+//					final int rlen1=(r1==null ? -1 : r1.length());
+//					final int rlen2=(r2==null ? -1 : r2.length());
 //					
 //					if(verbose){System.err.println("rlen1="+rlen1+", rlen2="+rlen2);}
 //					
@@ -475,7 +491,7 @@ public final class SplitPairsAndSingles {
 		basesOut+=singleBasesOut+pairBasesOut;
 	}
 	
-	private void process3_fixPairs(final ConcurrentReadStreamInterface cris, final RTextOutputStream3 ros, final RTextOutputStream3 rosb){
+	private void process3_fixInterleaving(final ConcurrentReadStreamInterface cris, final RTextOutputStream3 ros, final RTextOutputStream3 rosb){
 
 		ListNum<Read> ln=cris.nextList();
 		ArrayList<Read> reads=ln.list;
@@ -546,14 +562,66 @@ public final class SplitPairsAndSingles {
 		basesOut+=singleBasesOut+pairBasesOut;
 	}
 	
+	private void process3_repair(final ConcurrentReadStreamInterface cris, final RTextOutputStream3 ros, final RTextOutputStream3 rosb){
+
+		ListNum<Read> ln=cris.nextList();
+		ArrayList<Read> reads=ln.list;
+		
+		final ArrayList<Read> pairs=(ros==null ? null : new ArrayList<Read>(Shared.READ_BUFFER_LENGTH));
+		
+		while(reads!=null && reads.size()>0){
+			for(Read r1 : reads){
+				Read r2=r1.mate;
+				
+				{
+					Read pair=repair(r1);
+					if(pair!=null && pairs!=null){pairs.add(pair);}
+				}
+				{
+					Read pair=repair(r2);
+					if(pair!=null && pairs!=null){pairs.add(pair);}
+				}
+			}
+			
+//			if(verbose){System.err.println("X\n"+current+"\n"+prev+"\n");}
+			
+			cris.returnList(ln, ln.list.isEmpty());
+			ln=cris.nextList();
+			reads=(ln!=null ? ln.list : null);
+			
+			if(ros!=null){
+				if(verbose){System.err.println("Adding "+pairs.size()+" to pair out.");}
+				ros.add(new ArrayList<Read>(pairs), ln.id);
+				pairs.clear();
+			}
+		}
+		cris.returnList(ln, ln.list.isEmpty());
+		
+		if(rosb!=null && !pairMap.isEmpty()){
+			final ArrayList<Read> singles=(rosb==null ? null : new ArrayList<Read>(pairMap.size()));
+			for(String key : pairMap.keySet()){
+				Read r=pairMap.get(key);
+				singles.add(r);
+				singlesOut++;
+				singleBasesOut+=r.length();
+			}
+			pairMap.clear();
+			if(verbose){System.err.println("Adding "+singles.size()+" to single out.");}
+			rosb.add(singles, 0);
+		}
+		
+		readsOut+=singlesOut+pairsOut;
+		basesOut+=singleBasesOut+pairBasesOut;
+	}
+	
 	
 	private int processPair(Read r1, Read r2, ArrayList<Read> pairs, ArrayList<Read> singles){
 		int removed=0;
 		readsIn++;
-		basesIn+=(r1.bases==null ? 0 : r1.bases.length);
+		basesIn+=r1.length();
 		if(r2!=null){
 			readsIn++;
-			basesIn+=(r2.bases==null ? 0 : r2.bases.length);
+			basesIn+=r2.length();
 		}
 		
 		if(trimLeft || trimRight){
@@ -568,8 +636,8 @@ public final class SplitPairsAndSingles {
 				readsTrimmed+=(x>0 ? 1 : 0);
 			}
 		}
-		final int rlen1=(r1==null ? -1 : r1.bases==null ? 0 : r1.bases.length);
-		final int rlen2=(r2==null ? -1 : r2.bases==null ? 0 : r2.bases.length);
+		final int rlen1=(r1==null ? -1 : r1.length());
+		final int rlen2=(r2==null ? -1 : r2.length());
 		if(verbose){System.err.println("rlen="+rlen1+", rlen2="+rlen2);}
 		
 		if(rlen1>=minReadLength && rlen2>=minReadLength){
@@ -606,12 +674,78 @@ public final class SplitPairsAndSingles {
 	}
 	
 	
+	private Read repair(Read r){
+		if(r==null){return null;}
+		r.mate=null;
+		
+		readsIn++;
+		basesIn+=r.length();
+		
+		assert(r.id!=null) : "Read number "+r.numericID+" has no name and thus cannot be re-paired.  To ignore this, run with the -da flag.";
+		if(r.id==null){return null;}
+		String[] split=r.id.split("\\s+");
+		assert(split.length>0);
+		String prefix=split[0];
+		String suffix=(split.length==1 ? null : split[split.length-1]);
+		if(suffix!=null){
+			if(suffix.startsWith("/1") || suffix.startsWith("1:")){
+				r.setPairnum(0);
+			}else if(suffix.startsWith("/2") || suffix.startsWith("2:")){
+				r.setPairnum(1);
+			}else if(r.id.contains("/1") || r.id.contains("/2")){
+				split=r.id.split("/");
+				prefix=split[0];
+				suffix=(split.length==1 ? null : split[split.length-1]);
+				
+				if(suffix!=null){
+					if(suffix.startsWith("1")){
+						r.setPairnum(0);
+					}else if(suffix.startsWith("2")){
+						r.setPairnum(1);
+					}
+				}else{
+					//pairnum cannot be determined
+				}
+			}else{
+				//pairnum cannot be determined
+			}
+		}else{
+			//pairnum cannot be determined
+		}
+		
+		Read old=pairMap.remove(prefix);
+		
+//		System.out.println("Processing:\n"+r+"\n"+old+"\n"+readsIn+", "+readsOut+", "+pairsOut);
+		
+		if(old==null){
+			pairMap.put(prefix, r);
+			return null;
+		}else{
+			r.mate=old;
+			old.mate=r;
+			
+			int len=r.length()+old.length();
+			pairsOut+=2;
+			pairBasesOut+=len;
+			
+			if(old.pairnum()==1){
+				r.setPairnum(0);
+				return r;
+			}else{
+				old.setPairnum(0);
+				r.setPairnum(1);
+				return old;
+			}
+		}
+	}
+	
+	
 	private String in1=null, in2=null;
 	private String out1=null, out2=null;
 	private String outsingle=null;
 	private long maxReads=-1;
 	public boolean errorState=false;
-
+	
 	long readsIn=0;
 	long basesIn=0;
 	long readsOut=0;
@@ -623,12 +757,15 @@ public final class SplitPairsAndSingles {
 	long readsTrimmed=0;
 	long basesTrimmed=0;
 
-	private byte trimq=4;
+	private final LinkedHashMap<String, Read> pairMap;
+
+	private byte trimq=6;
 	private int minReadLength=20;
 	private final boolean trimLeft, trimRight;
 
 	private final boolean EA;
-	private final boolean fixPairs;
+	private final boolean fixInterleaving;
+	private final boolean repair;
 	
 	private static PrintStream outstream=System.err;
 	/** Permission to overwrite existing files */

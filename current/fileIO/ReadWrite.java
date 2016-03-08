@@ -534,7 +534,7 @@ public class ReadWrite {
 	public static OutputStream getGZipOutputStream(String fname, boolean append, boolean allowSubprocess){
 		if(verbose){System.err.println("getGZipOutputStream("+fname+", "+append+", "+allowSubprocess+")");}
 		if(allowSubprocess && Shared.THREADS>2){
-			if(USE_PIGZ && Data.PIGZ() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getPigzStream(fname, append);}
+			if(USE_PIGZ && Data.PIGZ() && Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/){return getPigzStream(fname, append);}
 			if(USE_GZIP && Data.GZIP() && (Data.SH() /*|| fname.equals("stdout") || fname.startsWith("stdout.")*/)){return getGzipStream(fname, append);}
 		}
 		
@@ -562,7 +562,14 @@ public class ReadWrite {
 		threads=Tools.max(1, threads);
 		int zl=ZIPLEVEL;
 		if(threads>=4 && zl>0 && zl<4){zl=4;}
-		OutputStream out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append);
+		OutputStream out;
+		if(Data.SH()){
+			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl, true, append);
+		}else{
+			assert(!append);
+			assert(false) : "pigz output does not currently work without bash.";
+			out=getOutputStreamFromProcess(fname, "pigz -c -p "+threads+" -"+zl+" > "+fname, false, append);
+		}
 		return out;
 	}
 	
@@ -649,6 +656,7 @@ public class ReadWrite {
 					p=Runtime.getRuntime().exec(cmd);
 				}else{
 					//TODO: append won't work here...
+					assert(false) : command;
 					p=Runtime.getRuntime().exec(command);
 				}
 			} catch (IOException e) {
@@ -907,7 +915,11 @@ public class ReadWrite {
 	}
 	
 	public static InputStream getGZipInputStream(String fname, boolean allowSubprocess){
-		if(verbose){System.err.println("getGZipInputStream("+fname+", "+allowSubprocess+")");}
+		if(verbose){
+			System.err.println("getGZipInputStream("+fname+", "+allowSubprocess+")");
+//			new Exception().printStackTrace(System.err);
+		}
+		
 		if(allowSubprocess && Shared.THREADS>2){
 			if(!fname.startsWith("jar:")){
 				if(verbose){System.err.println("Fetching gzip input stream: "+fname+", "+allowSubprocess+", "+USE_UNPIGZ+", "+Data.UNPIGZ());}
@@ -915,7 +927,6 @@ public class ReadWrite {
 				if(USE_GUNZIP && Data.GUNZIP()){return getGunzipStream(fname);}
 			}
 		}
-		
 		InputStream raw=getRawInputStream(fname, false);
 		InputStream in=null;
 		

@@ -479,7 +479,12 @@ public class ConcurrentGenericReadInputStream implements ConcurrentReadStreamInt
 	}
 	
 	private final void pair(ArrayList<Read> buffer1, ArrayList<Read> buffer2){
-		for(int i=0; i<buffer1.size(); i++){
+		final int len1=buffer1.size(), len2=buffer2.size();
+		assert(len1==len2) : "\nThere appear to be different numbers of reads in the paired input files." +
+				"\nThe pairing may have been corrupted by an upstream process.  It may be fixable by running repair.sh.";
+		final int lim=Tools.min(len1, len2);
+		
+		for(int i=0; i<lim; i++){
 			Read a=buffer1.get(i);
 			Read b=buffer2.get(i);
 

@@ -3,7 +3,7 @@
 
 usage(){
 	echo "BBWrap v32.x"
-	echo "Last modified March 27, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Wrapper for BBMap to allow multiple input and output files for the same reference."
 	echo ""
@@ -36,6 +36,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -49,7 +53,6 @@ calcXmx () {
 }
 calcXmx "$@"
 
-
 bbwrap() {
 	#module unload oracle-jdk
 	#module unload samtools
@@ -60,10 +63,5 @@ bbwrap() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbwrap "$@"

@@ -61,6 +61,7 @@ public class BBQC {
 		
 		//Symbols to insert in output filename to denote operations performed; may be overriden from command line
 		String symbols_=null;//"filtered"
+		int passes_=-1;
 		
 		//Parse argument list
 		for(int i=0; i<args.length; i++){
@@ -187,6 +188,8 @@ public class BBQC {
 				target=Integer.parseInt(b);
 			}else if(a.equals("prehashes")){
 				prehashes=Integer.parseInt(b);
+			}else if(a.equals("passes")){
+				passes_=Integer.parseInt(b);
 			}else if(a.equals("hashes")){
 				hashes=Integer.parseInt(b);
 			}else if(a.equals("bits")){
@@ -223,6 +226,9 @@ public class BBQC {
 				primaryArgList.add(arg);
 			}
 		}
+		
+		if(passes_>0){passes=passes_;}
+		else if(!normalize){passes=1;}
 		
 		//Set final field 'symbols'
 		symbols=(symbols_==null ? abbreviation() : symbols_);
@@ -474,13 +480,15 @@ public class BBQC {
 //			argList.add("kfilter="+47);
 			argList.add("minratio=0.84");
 			argList.add("maxindel=6");
+			argList.add("tipsearch=4");
 			argList.add("bw=18");
 			argList.add("bwr=0.18");
 			argList.add("minhits=2");
 			argList.add("path="+humanPath);
-//			argList.add("quickmatch");
+			argList.add("quickmatch=f");
 			argList.add("k="+map_k);
 			argList.add("fast=t");
+//			argList.add("cigar=f");
 			argList.add("idtag=t");
 			argList.add("sam=1.4");
 			
@@ -553,6 +561,7 @@ public class BBQC {
 			argList.add("hashes="+hashes);
 			argList.add("bits="+bits);
 			argList.add("k="+normalize_k);
+			argList.add("passes="+passes);
 			if(normalize){
 				if(target>0){
 					argList.add("target="+target);
@@ -619,6 +628,10 @@ public class BBQC {
 		{//Fill list with BBDuk arguments
 			argList.add("mink="+mink);
 			argList.add("ktrim="+(ktrim==null ? "f" : ktrim));
+			if("r".equalsIgnoreCase(ktrim) || "right".equalsIgnoreCase(ktrim)){
+				argList.add("tbo");
+				argList.add("tpe");
+			}
 			if(minLen>0){argList.add("minlen="+minLen);}
 			if(minLenFraction>0){argList.add("minlenfraction="+minLenFraction);}
 			argList.add("k="+trim_k);
@@ -790,6 +803,7 @@ public class BBQC {
 	private int mindepth=6;
 	private int target=50;
 	private int prehashes=3;
+	private int passes=2;
 	private int hashes=4;
 	private int bits=16;
 	

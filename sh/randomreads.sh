@@ -2,7 +2,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 23, 2014"
+	echo "Last modified June 11, 2014"
 	echo ""
 	echo "Description:  Generates random synthetic reads from a reference genome.  Read names indicate their genomic origin."
 	echo "Allows precise customization of things like insert size and synthetic mutation type, sizes, and rates."
@@ -33,7 +33,8 @@ usage(){
 	echo "triangle=true   		Make a triangular insert size distribution."
 	echo "flat=false      		Make a roughly flat insert size distribution.."
 	echo "superflat=false 		Make a perfectly flat insert size distribution."
-	echo "gaussian=false  		Make a bell-shaped insert size distribution, with standard deviation of (maxinsert-mininsert)/4."
+	echo "gaussian=false  		Make a bell-shaped insert size distribution, with standard deviation of (maxinsert-mininsert)/6."
+	echo "samestrand=false		Generate paired reads on the same strand."
 	echo ""
 	echo "Mutation parameters:"
 	echo "snprate=0        		Add snps to reads with this probability (0-1)."
@@ -78,7 +79,9 @@ usage(){
 	echo "amp=1            		Simulate highly-amplified MDA single-cell data by setting this to a higher number like 1000."
 	echo "replacenoref=false		Replace intra- and inter-scaffold Ns with random bases."
 #	echo "colorspace=false  		Generate Solid colorspace reads."
-	echo "adapter=         		Add adapter sequence to some reads using this literal string."
+	echo "pbadapter=        		Add adapter sequence to some reads using this literal string."
+	echo "fragadapter=      		Add this sequence to paired reads with insert size shorter than read length."
+	echo "fragadapter2=     		Use this sequence for read 2."
 	echo ""
 	echo ""
 	echo "Java Parameters:"
@@ -94,7 +97,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
-
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -116,10 +122,5 @@ randomreads() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 randomreads "$@"

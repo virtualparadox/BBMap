@@ -147,7 +147,7 @@ public class BBWrap {
 				BBMap.main(args);
 			}else if(mapper.equalsIgnoreCase("bbmappacbio") || mapper.equalsIgnoreCase("pacbio")){
 				BBMapPacBio.main(args);
-			}else if(mapper.equalsIgnoreCase("bbmappacbioskimmer") || mapper.equalsIgnoreCase("pacbioskimmer") || mapper.equalsIgnoreCase("skimmer")){
+			}else if(mapper.equalsIgnoreCase("bbmappacbioskimmer") || mapper.equalsIgnoreCase("pacbioskimmer") || mapper.equalsIgnoreCase("skimmer") || mapper.equalsIgnoreCase("bbmapskimmer")){
 				BBMapPacBioSkimmer.main(args);
 			}else if(mapper.equalsIgnoreCase("bbmap5") || mapper.equalsIgnoreCase("5")){
 				BBMap5.main(args);

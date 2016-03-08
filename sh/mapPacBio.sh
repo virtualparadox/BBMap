@@ -10,10 +10,13 @@ CP="$DIR""current/"
 
 z="-Xmx1g"
 z2="-Xms1g"
-EA="-da"
+EA="-ea"
 set=0
 
-
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -33,14 +36,9 @@ mapPacBio() {
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
 	#module load samtools
-	local CMD="java -ea $z -cp $CP align2.BBMapPacBio build=1 overwrite=true minratio=0.40 fastareadlen=500 ambiguous=best minscaf=100 startpad=4000 stoppad=4000 midpad=1000 $@"
+	local CMD="java $EA $z -cp $CP align2.BBMapPacBio build=1 overwrite=true minratio=0.40 fastareadlen=500 ambiguous=best minscaf=100 startpad=4000 stoppad=4000 midpad=1000 $@"
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 mapPacBio "$@"

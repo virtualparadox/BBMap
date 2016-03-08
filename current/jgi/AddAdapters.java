@@ -68,8 +68,8 @@ public class AddAdapters {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -139,6 +139,8 @@ public class AddAdapters {
 				adderrors=Tools.parseBoolean(b);
 			}else if(a.equals("addreversecomplement") || a.equals("arc")){
 				addRC=Tools.parseBoolean(b);
+			}else if(a.equals("addpaired")){
+				addPaired=Tools.parseBoolean(b);
 			}else if(a.equals("append") || a.equals("app")){
 				append=ReadStats.append=Tools.parseBoolean(b);
 			}else if(a.equals("overwrite") || a.equals("ow")){
@@ -385,14 +387,12 @@ public class AddAdapters {
 					final Read r1=reads.get(idx);
 					final Read r2=r1.mate;
 					
-					final int initialLength1=(r1.bases==null ? 0 : r1.bases.length);
-					final int initialLength2=(r2==null ? 0 : r2.bases==null ? 0 : r2.bases.length);
-					
-					{
-						addAdapter(r1);
-					}
-					if(r2!=null){
-						addAdapter(r2);
+					final int initialLength1=r1.length();
+					final int initialLength2=(r2==null ? 0 : r2.length());
+
+					addAdapter(r1, addPaired);
+					if(r2!=null && !addPaired){
+						addAdapter(r2, addPaired);
 					}
 					
 					if(r2==null){
@@ -458,19 +458,17 @@ public class AddAdapters {
 		}
 	}
 	
-	private void addAdapter(Read r){
+	private void addAdapter(Read r, final int loc){
 		final byte[] bases=r.bases;
 		final byte[] quals=r.quality;
 		final int remaining, initial=(bases==null ? 0 : bases.length);
 		final byte[] adapter;
-		final int loc;
 		int ab=0, rb=0;
 		
 		readsProcessed++;
 		basesProcessed+=initial;
-		if(initial>0 && randy.nextFloat()<adapterProb){
+		if(initial>0 && loc>=0 && loc<initial){
 			adapter=adapters.get(randy.nextInt(adapters.size()));
-			loc=randy.nextInt(initial);
 			adaptersAdded++;
 
 			if(right){
@@ -522,7 +520,6 @@ public class AddAdapters {
 				", loc="+loc+", adapter.length="+(adapter==null ? 0 : adapter.length)+"\n";
 		}else{
 			adapter=null;
-			loc=-1;
 			remaining=initial;
 		}
 		
@@ -536,6 +533,21 @@ public class AddAdapters {
 			validReads++;
 			validBases+=remaining;
 		}
+	}
+	
+	private void addAdapter(Read r, boolean addPaired){
+		final byte[] bases=r.bases;
+		final int initial=(bases==null ? 0 : bases.length);
+		final int loc;
+		
+		if(initial>0 && randy.nextFloat()<adapterProb){
+			loc=randy.nextInt(initial);
+		}else{
+			loc=-1;
+		}
+		
+		addAdapter(r, loc);
+		if(addPaired && r.mate!=null){addAdapter(r.mate, loc);}
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -613,14 +625,14 @@ public class AddAdapters {
 		
 		outstream.println("Adapters Remaining (% of adapters):  \t"+(adapterReadsRemaining)+" reads ("+String.format("%.3f",adapterReadsRemaining*100.0/adapterReadsTotal)+
 				"%)        \t"+adapterBasesRemaining+" bases ("+String.format("%.3f",adapterBasesRemaining*100.0/basesProcessed)+"%)");
-		outstream.println("Non-Adapter Removed (% of valid):    \t"+tooShort+" reads ("+String.format("%.3f",tooShort*100.0/readsProcessed)+
-				"%)        \t"+validBasesRemoved+" bases ("+String.format("%.3f",validBasesRemoved*100.0/validBasesExpected)+"%)");
+		outstream.println("Non-Adapter Removed (% of valid):    \t"+tooShort+" reads ("+String.format("%.4f",tooShort*100.0/readsProcessed)+
+				"%)        \t"+validBasesRemoved+" bases ("+String.format("%.4f",validBasesRemoved*100.0/validBasesExpected)+"%)");
 		
 		if(broken>0 || mispaired>0){
-			outstream.println("Broken:                 \t"+broken+" reads ("+String.format("%.2f",broken*100.0/readsProcessed)+"%");
-			outstream.println("Mispaired:              \t"+mispaired+" reads ("+String.format("%.2f",mispaired*100.0/readsProcessed)+"%");
+			outstream.println("Broken:                              \t"+broken+" reads ("+String.format("%.2f",broken*100.0/readsProcessed)+"%)");
+			outstream.println("Mispaired:                           \t"+mispaired+" reads ("+String.format("%.2f",mispaired*100.0/readsProcessed)+"%)");
 		}
-
+		
 		
 //		outstream.println("\nTime:                         \t"+t);
 //		outstream.println("Reads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
@@ -637,17 +649,20 @@ public class AddAdapters {
 		final int len=a.split("_").length;
 		
 		if(r2!=null){
-			if(len!=5){
-				throw new RuntimeException("Headers are corrupt, or unpaired reads are being processed as paired.  Try running with 'int=f'");
-			}
 			if(r1.id.endsWith(" /2") || r2.id.endsWith(" /1") || !a.equals(b)){
 				mispaired+=2;
 			}
-			if(r1.id.endsWith(" /2")){r1.setPairnum(1);}
-			if(r2.id.endsWith(" /1")){r2.setPairnum(0);}
+			if(len==3){
+				r2.setPairnum(0);
+			}else if(len==5){
+				if(r1.id.endsWith(" /2")){r1.setPairnum(1);}
+				if(r2.id.endsWith(" /1")){r2.setPairnum(0);}
+			}else{
+				throw new RuntimeException("Headers are corrupt. They must be generated by AddAdapters or RenameReads.");
+			}
 		}else{
 			if(len!=3){
-				throw new RuntimeException("Headers are corrupt, or paired reads are being processed as unpaired.  Try running with 'int=t' or with 'in1=' and 'in2='.");
+				throw new RuntimeException("Headers are corrupt, or paired reads are being processed as unpaired.  Try running with 'int=t' or with 'in1=' and 'in2='");
 			}
 		}
 		grade(r1);
@@ -662,7 +677,7 @@ public class AddAdapters {
 		final long id=Long.parseLong(sa[0]);
 		final int initial=Integer.parseInt(sa[1+offset]);
 		final int remaining=Integer.parseInt(sa[2+offset]);
-		final int actual=r.bases==null ? 0 : r.bases.length;
+		final int actual=r.length();
 		
 		readsProcessed++;
 		basesProcessed+=actual;
@@ -746,7 +761,10 @@ public class AddAdapters {
 	/** Add errors from quality value */
 	private boolean adderrors=true;
 
-	private boolean addRC=true;
+	/** Add adapters to the same location for read 1 and read 2 */
+	private boolean addPaired=true;
+	/** Add reverse-complemented adapters also */
+	private boolean addRC=false;
 	/** aka 3' */
 	private boolean right=true;
 	

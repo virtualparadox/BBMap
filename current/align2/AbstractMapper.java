@@ -122,9 +122,11 @@ public abstract class AbstractMapper {
 		t.start();
 		
 		Read.TO_UPPER_CASE=true;
+
+		boolean setMaxIndel1=false, setMaxIndel2=false;
 		
 		for(int i=0; i<args.length; i++){
-			final String arg=args[i];
+			final String arg=(args[i]==null ? "null" : args[i]);
 			final String[] split=arg.split("=");
 			final String a=split[0].toLowerCase();
 			String b=split.length>1 ? split[1] : null;
@@ -212,6 +214,8 @@ public abstract class AbstractMapper {
 				}
 			}else if(a.equals("keepnames")){
 				SamLine.KEEP_NAMES=Tools.parseBoolean(b);
+			}else if(a.equals("saa") || a.equals("secondaryalignmentasterisks")){
+				SamLine.SECONDARY_ALIGNMENT_ASTERISKS=Tools.parseBoolean(b);
 			}else if(a.equals("local")){
 				LOCAL_ALIGN=Tools.parseBoolean(b);
 			}else if(a.equals("idtag")){
@@ -328,6 +332,10 @@ public abstract class AbstractMapper {
 			}else if(a.equals("secondary")){
 				PRINT_SECONDARY_ALIGNMENTS=Tools.parseBoolean(b);
 				ReadStreamWriter.OUTPUT_SAM_SECONDARY_ALIGNMENTS=PRINT_SECONDARY_ALIGNMENTS;
+			}else if(a.equals("sssr") || a.equals("secondarysitescoreratio")){
+				AbstractMapThread.SECONDARY_SITE_SCORE_RATIO=Float.parseFloat(b);
+			}else if(a.equals("ssao") || a.equals("secondarysiteasambiguousonly")){
+				AbstractMapThread.PRINT_SECONDARY_ALIGNMENTS_ONLY_FOR_AMBIGUOUS_READS=Tools.parseBoolean(b);
 			}else if(a.equals("quickmatch")){
 				QUICK_MATCH_STRINGS=Tools.parseBoolean(b);
 			}else if(a.equals("ambiguous2") || a.equals("ambig2")){
@@ -568,17 +576,19 @@ public abstract class AbstractMapper {
 				minApproxHits=Integer.parseInt(b);
 			}else if(a.equals("maxindel")){
 				maxIndel1=Tools.max(0, Integer.parseInt(b));
-				maxIndel2=2*maxIndel1;
+				if(!setMaxIndel2){maxIndel2=2*maxIndel1;}
 			}else if(a.equals("maxindel1") || a.equals("maxindelsingle")){
 				maxIndel1=Tools.max(0, Integer.parseInt(b));
 				maxIndel2=Tools.max(maxIndel1, maxIndel2);
+				setMaxIndel1=true;
 			}else if(a.equals("maxindel2") || a.equals("maxindelsum")){
 				maxIndel2=Tools.max(0, Integer.parseInt(b));
 				maxIndel1=Tools.min(maxIndel1, maxIndel2);
+				setMaxIndel2=true;
 			}else if(a.equals("strictmaxindel")){
 				if(b!=null && Character.isDigit(b.charAt(0))){
 					maxIndel1=Tools.max(0, Integer.parseInt(b));
-					maxIndel2=2*maxIndel1;
+					if(!setMaxIndel2){maxIndel2=2*maxIndel1;}
 					STRICT_MAX_INDEL=true;
 				}else{
 					STRICT_MAX_INDEL=Tools.parseBoolean(b);
@@ -654,6 +664,11 @@ public abstract class AbstractMapper {
 				throw new RuntimeException("Unknown parameter: "+arg);
 			}
 		}
+
+		gzip=ReadWrite.USE_GZIP;
+		gunzip=ReadWrite.USE_GUNZIP;
+		pigz=ReadWrite.USE_PIGZ;
+		unpigz=ReadWrite.USE_UNPIGZ;
 		
 		if(TrimRead.ADJUST_QUALITY){CalcTrueQuality.initializeMatrices();}
 		
@@ -730,8 +745,11 @@ public abstract class AbstractMapper {
 
 	boolean openStreams(Timer t, String[] args){
 
+		ReadWrite.USE_GZIP=gzip;
+		ReadWrite.USE_PIGZ=pigz;
 		ReadWrite.USE_GUNZIP=gunzip;
 		ReadWrite.USE_UNPIGZ=unpigz;
+		
 		cris=getReadInputStream(in1, in2);
 		final boolean paired=cris.paired();
 		cris.setSampleRate(samplerate, sampleseed);
@@ -2227,8 +2245,8 @@ public abstract class AbstractMapper {
 			sysout.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 		}else{			
 			double x=mappedRetainedB-ambiguousFound;
-			sysout.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-			sysout.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+			sysout.println("R1_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+			sysout.println("R1_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
 			sysout.println("R1_Mapped_Reads"+DELIMITER+mappedReads);
 			sysout.println("R1_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 		}
@@ -2357,8 +2375,8 @@ public abstract class AbstractMapper {
 				sysout.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 			}else{			
 				double x=mappedRetainedB-ambiguousFound;
-				sysout.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
-				sysout.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+				sysout.println("R2_Mapped_Percent"+DELIMITER+padPercentMachine(mappedRetainedB,4)+"%");
+				sysout.println("R2_Unambiguous_Percent"+DELIMITER+padPercentMachine(x,4)+"%");
 				sysout.println("R2_Mapped_Reads"+DELIMITER+mappedReads);
 				sysout.println("R2_Unambiguous_Reads"+DELIMITER+unambiguousReads);
 			}
@@ -2485,10 +2503,10 @@ public abstract class AbstractMapper {
 	long sampleseed=1;
 	boolean ambiguousRandom=false, ambiguousAll=false;
 	boolean forceanalyze=false;
-	boolean gunzip=false;
-	boolean gzip=false;
-	boolean pigz=true;
-	boolean unpigz=ReadWrite.USE_UNPIGZ;
+	private boolean gunzip=false;
+	private boolean gzip=false;
+	private boolean pigz=false;
+	private boolean unpigz=false;
 	boolean setxs=false, setintron=false;
 	String bamscript=null;
 	String in1=null, in2=null;

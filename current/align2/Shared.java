@@ -13,7 +13,7 @@ public class Shared {
 	public static int READ_BUFFER_NUM_BUFFERS=Tools.max(4, (THREADS*3)/2);
 	public static final long READ_BUFFER_MAX_DATA=400000;
 	
-	//TODO:  Actually... for some reason...  it seems as though GAPBUFFER must equal exactly 1/2 of GAPLEN.  Not good; 1/4 would be far better.
+	//TODO:  For some reason, it seems as though GAPBUFFER must equal exactly 1/2 of GAPLEN.  Not good; 1/4 would be far better.
 	
 	public static final int GAPBUFFER=64; //TODO:  Seems to break less than 64, for some reason
 	public static final int GAPBUFFER2=2*GAPBUFFER;
@@ -23,7 +23,7 @@ public class Shared {
 	public static final byte GAPC='-';
 	
 	public static int BBMAP_VERSION=32;
-	public static String BBMAP_VERSION_MINOR="14";
+	public static String BBMAP_VERSION_MINOR="32";
 	public static String BBMAP_VERSION_STRING=BBMAP_VERSION+"."+BBMAP_VERSION_MINOR;
 
 	public static boolean TRIM_READ_COMMENTS=false;
@@ -56,10 +56,8 @@ public class Shared {
 		if(x>0){
 			THREADS=x;
 		}else{
-			//THREADS=(Data.HOSTNAME()==null || !Data.HOSTNAME().startsWith("gpint") ? Data.LOGICAL_PROCESSORS : Tools.min(4, Data.LOGICAL_PROCESSORS));
 			THREADS=Data.LOGICAL_PROCESSORS;
 		}
-//		assert(false) : Data.HOSTNAME()+", "+THREADS;
 		return THREADS;
 	}
 	

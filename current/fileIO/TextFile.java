@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import dna.Data;
 
@@ -33,6 +34,7 @@ public class TextFile {
 			lines++;
 			bytes+=s.length();
 			System.out.println(s);
+//			System.out.println(Arrays.toString(s.getBytes()));
 		}
 		
 		System.err.println("\n");

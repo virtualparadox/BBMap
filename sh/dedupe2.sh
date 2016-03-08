@@ -1,8 +1,9 @@
 #!/bin/bash
+#khist in=<infile> out=<outfile>
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 21, 2014"
+	echo "Last modified May 27, 2014"
 	echo ""
 	echo "Description:  Accepts one or more files containing sets of sequences (reads or scaffolds)."
 	echo "Removes duplicate sequences, which may be specified to be exact matches, subsequences, or sequences within some percent identity."
@@ -41,15 +42,22 @@ usage(){
 #	echo "absorboverlap=f       (ao) Absorb (merge) non-contained overlaps of contigs (TODO)."
 	echo "findoverlap=f         (fo) Find overlaps between contigs (containments and non-containments).  Necessary for clustering."
 	echo "uniqueonly=f          (uo) If true, all copies of duplicate reads will be discarded, rather than keeping 1."
-	echo "cluster=f             (c) Group overlapping contigs into clusters."
 	echo ""
+	echo "Clustering Parameters"
+	echo ""
+	echo "cluster=f             (c) Group overlapping contigs into clusters."
+	echo "pto=f                 (preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster."
+	echo "minclustersize=1      (mcs) Do not output clusters smaller than this."
+	echo ""
+	echo "Cluster Postprocessing Parameters"
+	echo ""
+	echo "processclusters=f     (pc) Run the cluster processing phase, which performs the selected operations in this category."
 	echo "fixmultijoins=t       (fmj) Remove redundant overlaps between the same two contigs."
 	echo "removecycles=t        (rc) Remove all cycles so clusters form trees."
 	echo "renameclusters=f      (rnc) Rename contigs to indicate which cluster they are in."
 	echo "cc=t                  (canonicizeclusters) Flip contigs so clusters have a single orientation."
 	echo "fcc=f                 (fixcanoncontradictions) Truncate graph at nodes with canonization disputes."
 	echo "foc=f                 (fixoffsetcontradictions) Truncate graph at nodes with offset disputes."
-	echo "pto=f                 (preventtransitiveoverlaps) To not look for new edges between nodes in the same cluster."
 	echo ""
 	echo "Overlap Detection Parameters"
 	echo ""
@@ -65,7 +73,7 @@ usage(){
 	echo "                      Should be above 1.  Depth is determined by parsing the read names; this information can be added"
 	echo "                      by running KmerNormalize (khist.sh, bbnorm.sh, or ecc.sh) with the flag 'rename'"
 	echo "k=31                  Seed length used for finding containments and overlaps.  Anything shorter than k will not be found."
-	echo "numaffixmaps=1        (nam) More affixes (kmers per read) will increase sensitivity, if mismatches are allowed."
+	echo "numaffixmaps=1        (nam) Determines number of prefixes and suffixes indexed per contig; no upper limit."
 #	echo "ignoreaffix1=f        (ia1) Ignore first affix (for testing)."
 #	echo "storesuffix=f         (ss) Store suffix as well as prefix.  Automatically set to true when doing inexact matches."
 	echo ""
@@ -87,7 +95,12 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
-function calcXmx () {
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
+
+calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
 	if [[ $set == 1 ]]; then
@@ -107,10 +120,5 @@ dedupe() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 dedupe "$@"

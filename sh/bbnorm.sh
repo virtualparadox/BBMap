@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Normalizes read depth based on kmer counts."
 	echo "Can also error-correct, bin reads by kmer depth, and generate a kmer depth histogram."
@@ -109,6 +109,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -130,10 +134,5 @@ normalize() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 normalize "$@"

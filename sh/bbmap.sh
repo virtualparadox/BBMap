@@ -4,7 +4,7 @@
 usage(){
 	echo "BBMap v32.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified April 16, 2014"
+	echo "Last modified June 17, 2014"
 	echo ""
 	echo "Description:  Fast and accurate short-read aligner for DNA and RNA."
 	echo ""
@@ -65,7 +65,7 @@ usage(){
 	echo "                 			best	(use the first best site)"
 	echo "                 			toss	(consider unmapped)"
 	echo "                 			random	(select one top-scoring site randomly)"
-	echo "                 			all	(retain all top-scoring sites.  Does not work yet with SAM output)"
+	echo "                 			all	(retain all top-scoring sites)"
 	#echo "kfilter=-1      		Set to a positive number N to require minimum N contiguous matches for a mapped read."
 	echo "samestrandpairs=f  		(ssp) Specify whether paired reads should map to the same strand or opposite strands."
 	echo "requirecorrectstrand=t     	(rcs) Forbid pairing of reads without correct strand orientation.  Set to false for long-mate-pair libraries."
@@ -91,13 +91,6 @@ usage(){
 	echo "out=<file>      		Write all reads to this file (unless outputunmapped=t)."
 	echo "outu=<file>      		Write only unmapped reads to this file.  Does not include unmapped paired reads with a mapped mate."
 	echo "outm=<file>      		Write only mapped reads to this file.  Includes unmapped paired reads with a mapped mate."
-	echo "scafstats=<file>  		Write statistics on how many reads mapped to which scaffold to this file."
-	echo "refstats=<file>   		Write statistics on how many reads mapped to which reference to this file (for BBSplitter)."
-	echo "qhist=<file>     		Write histogram of quality score by read location to this file."
-	echo "mhist=<file>     		Write histogram of match, substitution, deletion, and insertion rates by read location."
-	echo "qahist=<file>     		Write histogram of match, sub, ins, del by quality score."
-	echo "ihist=<file>     		Write histogram of insert sizes (for paired reads)."
-	echo "bhist=<file>     		Write histogram of base composition by location."
 	echo "bamscript=<file>     		(bs) Write a shell script to <file> that will turn the sam output into a sorted, indexed bam file."
 	echo "ordered=f        		Set to true to output reads in same order as input.  Slower and uses more memory."
 	#echo "                 		Only relevant with multiple mapping threads."
@@ -106,6 +99,8 @@ usage(){
 	#echo "                 		'none' is faster, but prevents generation of match and error rate statistics."
 	echo "overwrite=f      		(ow) Allow process to overwrite existing files."
 	echo "secondary=f      		Print secondary alignments."
+	echo "sssr=0.95        		(secondarysitescoreratio) Print only secondary alignments with score of at least this fraction of primary."
+	echo "ssao=f           		(secondarysiteasambiguousonly) Only print secondary alignments for ambiguously-mapped reads."
 	echo "maxsites=5       		Maximum number of total alignments to print per read.  Only relevant when secondary=t."
 	echo "quickmatch=f      		Generate cigar strings more quickly.  Must be true to generate secondary site cigar strings."
 	echo "keepnames=f  	  		Keep original names of paired reads, rather than ensuring both reads have the same name."
@@ -120,6 +115,21 @@ usage(){
 	echo "ziplevel=2          		(zl) Compression level for zip or gzip output."
 	echo "pigz=f           		Spawn a pigz (parallel gzip) process for faster compression than using Java.  Requires pigz to be installed."
 	echo "machineout=f         		Set to true to output statistics in machine-friendly 'key=value' format."
+	echo "saa=t                 	(secondaryalignmentasterisks) Use asterisks instead of bases for sam secondary alignments."
+	echo ""
+	echo "Histogram and statistics output parameters:"
+	echo "scafstats=<file>  		Write statistics on how many reads mapped to which scaffold to this file."
+	echo "refstats=<file>   		Write statistics on how many reads mapped to which reference to this file (for BBSplitter)."
+	echo "qhist=<file>     		Write histogram of quality score by read location to this file."
+	echo "qahist=<file>     		Write histogram of match, sub, ins, del by quality score."
+	echo "mhist=<file>     		Write histogram of match, substitution, deletion, and insertion rates by read location."
+	echo "ehist=<file>      		Write an errors-per-read histogram."
+	echo "bhist=<file>     		Write a base composition histogram."
+	echo "ihist=<file>      		Write histogram of insert sizes (for paired reads)."
+	echo "indelhist=<file>  		Write an indel length histogram."
+	echo "idhist=<file>    		Write a percent identity histogram."
+	echo "lhist=<file>      		Write a read length histogram."
+	echo "gchist=<file>     		Write a gc content histogram."
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx             		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -136,6 +146,11 @@ z="-Xmx1g"
 z2="-Xms1g"
 EA="-ea"
 set=0
+
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -160,10 +175,5 @@ bbmap() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbmap "$@"

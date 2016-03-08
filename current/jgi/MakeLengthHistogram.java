@@ -34,6 +34,7 @@ public class MakeLengthHistogram {
 		String out=null;
 		
 		Data.GENOME_BUILD=-1;
+		ReadWrite.USE_UNPIGZ=true;
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
 
@@ -46,6 +47,8 @@ public class MakeLengthHistogram {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
 				in1=b;
 			}else if(a.equals("in2")){
@@ -56,6 +59,8 @@ public class MakeLengthHistogram {
 				MAX_LENGTH=Integer.parseInt(b);
 			}else if(a.startsWith("mult") || a.startsWith("div") || a.startsWith("bin")){
 				MULT=Integer.parseInt(b);
+			}else if(a.equals("round")){
+				ROUND_BINS=Tools.parseBoolean(b);
 			}else if(i==0 && !arg.contains("=")){
 				in1=arg;
 			}else if(i==1 && !arg.contains("=")){
@@ -97,8 +102,8 @@ public class MakeLengthHistogram {
 		
 		
 		final int max=MAX_LENGTH;
-		long[] hist=new long[max+1];
-		long[] bhist=new long[max+1];
+		long[] readHist=new long[max+1];
+		long[] baseHist=new long[max+1];
 		
 		int maxFound=0;
 		
@@ -120,9 +125,9 @@ public class MakeLengthHistogram {
 					if(r!=null && r.bases!=null){
 						readsProcessed++;
 						int x=r.bases.length;
-						int y=Tools.min(max, (x+MULT/2)/MULT);
-						hist[y]++;
-						bhist[y]+=x;
+						int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
+						readHist[y]++;
+						baseHist[y]+=x;
 						maxFound=Tools.max(maxFound, x);
 					}
 					
@@ -130,9 +135,9 @@ public class MakeLengthHistogram {
 						readsProcessed++;
 						Read r2=r.mate;
 						int x=r2.bases.length;
-						int y=Tools.min(max, (x+MULT/2)/MULT);
-						hist[y]++;
-						bhist[y]+=x;
+						int y=Tools.min(max, ((ROUND_BINS ? x+MULT/2 : x))/MULT);
+						readHist[y]++;
+						baseHist[y]+=x;
 						maxFound=Tools.max(maxFound, x);
 					}
 					
@@ -151,38 +156,38 @@ public class MakeLengthHistogram {
 			System.err.println("Processed "+readsProcessed+" reads.");
 		}
 
-		double[] histF=new double[max+1];
-		long[] histC=new long[max+1];
-		double[] histCF=new double[max+1];
+		double[] readHistF=new double[max+1];
+		long[] readHistC=new long[max+1];
+		double[] readHistCF=new double[max+1];
 		
-		double[] bhistF=new double[max+1];
-		long[] bhistC=new long[max+1];
-		double[] bhistCF=new double[max+1];
+		double[] baseHistF=new double[max+1];
+		long[] baseHistC=new long[max+1];
+		double[] baseHistCF=new double[max+1];
 		
 
-		histC[max]=hist[max];
-		bhistC[max]=bhist[max];
+		readHistC[max]=readHist[max];
+		baseHistC[max]=baseHist[max];
 		for(int i=max; i>0; i--){
-			histC[i-1]=histC[i]+hist[i-1];
-			bhistC[i-1]=bhistC[i]+bhist[i-1];
+			readHistC[i-1]=readHistC[i]+readHist[i-1];
+			baseHistC[i-1]=baseHistC[i]+baseHist[i-1];
 		}
 		for(int i=0; i<=max; i++){
-			histCF[i]=histC[i]*100d/histC[0];
-			histF[i]=hist[i]*100d/histC[0];
-			bhistCF[i]=bhistC[i]*100d/bhistC[0];
-			bhistF[i]=bhist[i]*100d/bhistC[0];
+			readHistCF[i]=readHistC[i]*100d/readHistC[0];
+			readHistF[i]=readHist[i]*100d/readHistC[0];
+			baseHistCF[i]=baseHistC[i]*100d/baseHistC[0];
+			baseHistF[i]=baseHist[i]*100d/baseHistC[0];
 		}
 
 		TextStreamWriter tsw=new TextStreamWriter(out==null ? "stdout" : out, true, false, false);
 		tsw.start();
 		tsw.println("#Reads:      \t"+readsProcessed);
-		tsw.println("#Bases:      \t"+bhistC[0]);
-		tsw.println("#Avg Length: \t"+String.format("%.1f",(bhistC[0]*1d/readsProcessed)));
+		tsw.println("#Bases:      \t"+baseHistC[0]);
+		tsw.println("#Avg Length: \t"+String.format("%.1f",(baseHistC[0]*1d/readsProcessed)));
 		tsw.println("#Read Length Histogram:");
 		tsw.println("#Length\treads\tpct_reads\tcum_reads\tcum_pct_reads\tbases\tpct_bases\tcum_bases\tcum_pct_bases");
 		for(int i=0; i<=max; i++){
-			tsw.println((i*MULT)+"\t"+hist[i]+String.format("\t%.3f%%", histF[i])+"\t"+histC[i]+String.format("\t%.3f%%", histCF[i])+
-					"\t"+bhist[i]+String.format("\t%.3f%%", bhistF[i])+"\t"+bhistC[i]+String.format("\t%.3f%%", bhistCF[i]));
+			tsw.println((i*MULT)+"\t"+readHist[i]+String.format("\t%.3f%%", readHistF[i])+"\t"+readHistC[i]+String.format("\t%.3f%%", readHistCF[i])+
+					"\t"+baseHist[i]+String.format("\t%.3f%%", baseHistF[i])+"\t"+baseHistC[i]+String.format("\t%.3f%%", baseHistCF[i]));
 			if(i*MULT>=maxFound){break;}
 		}
 		tsw.poisonAndWait();
@@ -191,5 +196,6 @@ public class MakeLengthHistogram {
 	public static long readsProcessed=0;
 	public static int MAX_LENGTH=4000;
 	public static int MULT=10;
+	public static boolean ROUND_BINS=false;
 	
 }

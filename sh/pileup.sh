@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Calculates per-scaffold coverage information from an unsorted sam file."
 	echo ""
@@ -16,6 +16,7 @@ usage(){
 	echo "in=<sam file>		The input sam; this is the only required parameter."
 	echo "ref=<fasta file>	Scans a reference fasta for per-scaffold GC counts, not otherwise needed."
 	echo "fastaorf=<fasta file>	A fasta file with ORF header information in PRODIGAL's output format.  Must also specify 'outorf'."
+	echo "unpigz=<true>		Decompress with pigz for faster decompression."
 	echo ""
 	echo "Output Parameters:"
 	echo "out=<file>		Prints per-scaffold coverage info to this file."
@@ -28,6 +29,7 @@ usage(){
 	echo "binsize=<1000>		Set the binsize for binned coverage output."
 	echo "keepshortbins=<true>	(ksb) Keep residual bins shorter than binsize."
 	echo "delta=<false>		Only print base coverage lines when the coverage differs from the previous base."
+	echo "nzo=<false>		Only print scaffolds with nonzero coverage."
 	echo ""
 	echo "Other parameters:"
 	echo "32bit=<false>		Set to true if you need per-base coverage over 64k; does not affect per-scaffold coverage precision."
@@ -70,7 +72,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
-
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -94,10 +99,5 @@ pileup() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 pileup "$@"

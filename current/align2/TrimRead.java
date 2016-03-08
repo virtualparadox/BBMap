@@ -159,7 +159,7 @@ public final class TrimRead {
 	
 	/** Trim bases outside of leftLoc and rightLoc, excluding leftLoc and rightLoc */
 	public static int trimToPosition(Read r, int leftLoc, int rightLoc, int minResultingLength){
-		final int len=r.bases==null ? 0 : r.bases.length;
+		final int len=r.length();
 		return trimByAmount(r, leftLoc, len-rightLoc-1, minResultingLength);
 	}
 	
@@ -215,7 +215,7 @@ public final class TrimRead {
 		
 		if(verbose){
 			System.err.println("leftTrimmed="+leftTrimAmount+", rightTrimmed="+rightTrimAmount+
-					", sum="+total+", final length="+(r.bases==null ? 0 : r.bases.length));
+					", sum="+total+", final length="+r.length());
 		}
 		
 		return total;

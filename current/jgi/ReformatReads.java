@@ -60,7 +60,7 @@ public class ReformatReads {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(8, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
 		ReadWrite.ZIP_THREAD_DIVISOR=2;
 		
 		Parser parser=new Parser();
@@ -110,6 +110,8 @@ public class ReformatReads {
 				outstream.println("Set RCOMP to "+reverseCompliment);
 			}else if(a.equals("deleteempty") || a.equals("deletempty") || a.equals("delempty") || a.equals("def")){
 				deleteEmptyFiles=Tools.parseBoolean(b);
+			}else if(a.equals("mappedonly")){
+				mappedOnly=Tools.parseBoolean(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 				if(arg.indexOf('#')>-1 && !new File(arg).exists()){
@@ -138,7 +140,6 @@ public class ReformatReads {
 
 			trimq=parser.trimq;
 			minAvgQuality=parser.minAvgQuality;
-			averageQualityByProbability=parser.averageQualityByProbability;
 			minReadLength=parser.minReadLength;
 			maxReadLength=parser.maxReadLength;
 			minLenFraction=parser.minLenFraction;
@@ -148,7 +149,10 @@ public class ReformatReads {
 			overwrite=ReadStats.overwrite=parser.overwrite;
 			append=ReadStats.append=parser.append;
 			testsize=parser.testsize;
-			
+
+			minGC=parser.minGC;
+			maxGC=parser.maxGC;
+			filterGC=parser.filterGC;
 
 			setInterleaved=parser.setInterleaved;
 			
@@ -230,6 +234,7 @@ public class ReformatReads {
 		if(outsingle!=null && outsingle.equalsIgnoreCase("null")){outsingle=null;}
 		
 		if(!Tools.testOutputFiles(overwrite, append, false, out1, out2, outsingle)){
+			System.err.println((out1==null)+", "+(out2==null)+", "+out1+", "+out2);
 			throw new RuntimeException("\n\noverwrite="+overwrite+"; Can't write to output files "+out1+", "+out2+"\n");
 		}
 		
@@ -340,14 +345,28 @@ public class ReformatReads {
 		long lowqBasesT=0;
 		long lowqReadsT=0;
 		
+		long badGcBasesT=0;
+		long badGcReadsT=0;
+		
 		long readShortDiscardsT=0;
 		long baseShortDiscardsT=0;
+		
+		long unmappedReadsT=0;
+		long unmappedBasesT=0;
 
 		final boolean MAKE_QHIST=ReadStats.COLLECT_QUALITY_STATS;
 		final boolean MAKE_QAHIST=ReadStats.COLLECT_QUALITY_ACCURACY;
 		final boolean MAKE_MHIST=ReadStats.COLLECT_MATCH_STATS;
 		final boolean MAKE_BHIST=ReadStats.COLLECT_BASE_STATS;
-		final ReadStats readstats=(MAKE_QHIST || MAKE_MHIST || MAKE_BHIST) ? new ReadStats() : null;
+		
+		final boolean MAKE_EHIST=ReadStats.COLLECT_ERROR_STATS;
+		final boolean MAKE_INDELHIST=ReadStats.COLLECT_INDEL_STATS;
+		final boolean MAKE_LHIST=ReadStats.COLLECT_LENGTH_STATS;
+		final boolean MAKE_GCHIST=ReadStats.COLLECT_GC_STATS;
+		final boolean MAKE_IDHIST=ReadStats.COLLECT_IDENTITY_STATS;
+		
+		final ReadStats readstats=(MAKE_QHIST || MAKE_MHIST || MAKE_BHIST || MAKE_QAHIST || MAKE_EHIST || MAKE_INDELHIST || MAKE_LHIST || MAKE_GCHIST || MAKE_IDHIST) ? 
+				new ReadStats() : null;
 		
 		{
 			
@@ -372,8 +391,8 @@ public class ReformatReads {
 					final Read r1=reads.get(idx);
 					final Read r2=r1.mate;
 					
-					final int initialLength1=(r1.bases==null ? 0 : r1.bases.length);
-					final int initialLength2=(r2==null ? 0 : r2.bases==null ? 0 : r2.bases.length);
+					final int initialLength1=r1.length();
+					final int initialLength2=(r2==null ? 0 : r2.length());
 
 					final int minlen1=(int)Tools.max(initialLength1*minLenFraction, minReadLength);
 					final int minlen2=(int)Tools.max(initialLength2*minLenFraction, minReadLength);
@@ -383,6 +402,12 @@ public class ReformatReads {
 						if(MAKE_BHIST){readstats.addToBaseHistogram(r1);}
 						if(MAKE_MHIST){readstats.addToMatchHistogram(r1);}
 						if(MAKE_QAHIST){readstats.addToQualityAccuracy(r1);}
+
+						if(MAKE_EHIST){readstats.addToErrorHistogram(r1);}
+						if(MAKE_INDELHIST){readstats.addToIndelHistogram(r1);}
+						if(MAKE_LHIST){readstats.addToLengthHistogram(r1);}
+						if(MAKE_GCHIST){readstats.addToGCHistogram(r1);}
+						if(MAKE_IDHIST){readstats.addToIdentityHistogram(r1);}
 					}
 					
 					{
@@ -419,10 +444,44 @@ public class ReformatReads {
 							readsTrimmedT+=(x>0 ? 1 : 0);
 						}
 					}
+					
+					if(mappedOnly){
+						if(r1!=null && !r1.discarded() && !r1.mapped()){
+							r1.setDiscarded(true);
+							unmappedBasesT+=initialLength1;
+							unmappedReadsT++;
+						}
+						if(r2!=null && !r2.discarded() && !r2.mapped()){
+							r2.setDiscarded(true);
+							unmappedBasesT+=initialLength2;
+							unmappedReadsT++;
+						}
+					}
+					
+					if(filterGC && (initialLength1>0 || initialLength2>0)){
+						final float gc;
+						if(r2==null){
+							gc=r1.gc();
+						}else{
+							gc=(r1.gc()*initialLength1+r2.gc()*initialLength2)/(initialLength1+initialLength2);
+						}
+						if(gc<minGC || gc>maxGC){
+							if(r1!=null && !r1.discarded()){
+								r1.setDiscarded(true);
+								badGcBasesT+=initialLength1;
+								badGcReadsT++;
+							}
+							if(r2!=null && !r2.discarded()){
+								r2.setDiscarded(true);
+								badGcBasesT+=initialLength2;
+								badGcReadsT++;
+							}
+						}
+					}
 
 					if(minAvgQuality>0){
-						final int a=(r1==null ? 99 : averageQualityByProbability ? r1.avgQualityByProbability() : r1.avgQuality());
-						final int b=(r2==null ? 99 : averageQualityByProbability ? r2.avgQualityByProbability() : r2.avgQuality());
+						final int a=(r1==null ? 99 : r1.avgQuality());
+						final int b=(r2==null ? 99 : r2.avgQuality());
 						if((a<minAvgQuality || b<minAvgQuality)){
 							if(r1!=null && a<minAvgQuality && !r1.discarded()){
 								lowqBasesT+=r1.bases.length;
@@ -432,6 +491,7 @@ public class ReformatReads {
 							if(r2!=null && b<minAvgQuality && !r2.discarded()){
 								lowqBasesT+=r2.bases.length;
 								lowqReadsT++;
+								r2.setDiscarded(true);
 							}
 						}
 					}
@@ -465,7 +525,7 @@ public class ReformatReads {
 					if(minlen1>0 || minlen2>0 || maxReadLength>0){
 //						assert(false) : minlen1+", "+minlen2+", "+maxReadLength+", "+r1.bases.length;
 						if(r1!=null && !r1.discarded()){
-							int rlen=(r1.bases==null ? 0 : r1.bases.length);
+							int rlen=r1.length();
 							if(rlen<minlen1 || (maxReadLength>0 && rlen>maxReadLength)){
 								r1.setDiscarded(true);
 								readShortDiscardsT++;
@@ -473,7 +533,7 @@ public class ReformatReads {
 							}
 						}
 						if(r2!=null && !r2.discarded()){
-							int rlen=(r2.bases==null ? 0 : r2.bases.length);
+							int rlen=r2.length();
 							if(rlen<minlen1 || (maxReadLength>0 && rlen>maxReadLength)){
 								r2.setDiscarded(true);
 								readShortDiscardsT++;
@@ -635,6 +695,10 @@ public class ReformatReads {
 		if(minAvgQuality>0){
 			outstream.println("Low quality discards:   \t"+lowqReadsT+" reads ("+String.format("%.2f",lowqReadsT*100.0/readsProcessed)+"%) \t"+
 					lowqBasesT+" bases ("+String.format("%.2f",lowqBasesT*100.0/basesProcessed)+"%)");
+		}
+		if(filterGC){
+			outstream.println("GC content discards:    \t"+badGcReadsT+" reads ("+String.format("%.2f",badGcReadsT*100.0/readsProcessed)+"%) \t"+
+					badGcBasesT+" bases ("+String.format("%.2f",badGcBasesT*100.0/basesProcessed)+"%)");
 		}
 		
 		outstream.println("Time:                         \t"+t);
@@ -829,6 +893,7 @@ public class ReformatReads {
 	private boolean verifyinterleaving=false;
 	private boolean trimBadSequence=false;
 	private boolean deleteEmptyFiles=false;
+	private boolean mappedOnly=false;
 	/** Add /1 and /2 to paired reads */
 	private boolean addslash=false;
 
@@ -844,18 +909,19 @@ public class ReformatReads {
 	private boolean qtrimLeft=false;
 	private int forceTrimLeft=-1;
 	private int forceTrimRight=-1;
-	private byte trimq=4;
+	private byte trimq=6;
 	private byte minAvgQuality=0;
 	private int breakLength=0;
 	private int maxReadLength=0;
 	private int minReadLength=0;
 	private float minLenFraction=0;
+	private float minGC=0;
+	private float maxGC=1;
+	private boolean filterGC=false;
 	/** Toss pair only if both reads are shorter than limit */ 
 	private boolean requireBothBad=false;
 	
 	private boolean useSharedHeader;
-	
-	private boolean averageQualityByProbability=false;
 	
 	/*--------------------------------------------------------------*/
 	

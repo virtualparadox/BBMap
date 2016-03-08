@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Performs quality-trimming and/or kmer-trimming on reads."
 	echo ""
@@ -84,6 +84,10 @@ z2="-Xms200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -110,10 +114,5 @@ bbduk() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbduk "$@"

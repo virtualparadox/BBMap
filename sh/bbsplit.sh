@@ -3,7 +3,7 @@
 function usage(){
 	echo "BBSplit / BBMap v32.x"
 	echo "Written by Brian Bushnell, from Dec. 2010 - present"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Maps reads to multiple references simultaneously."
 	echo "Outputs reads to a file for the reference they best match, with multiple options for dealing with ambiguous mappings."
@@ -114,6 +114,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -137,10 +141,5 @@ function bbsplit() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbsplit "$@"

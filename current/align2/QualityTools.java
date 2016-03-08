@@ -254,7 +254,7 @@ public class QualityTools {
 	}
 
 	public static byte[] makeQualityArray(int length, Random randyQual,
-			int minQual, int maxQual, byte baseQuality, byte slant) {
+			int minQual, int maxQual, byte baseQuality, byte slant, int variance) {
 		byte[] out=new byte[length];
 		
 		for(int i=0; i<length; i++){
@@ -292,6 +292,15 @@ public class QualityTools {
 				out[i]=(byte)Tools.max(out[i]-(y+randyQual.nextInt(y+1))/2, minQual);
 				out[length-i-1]=(byte)Tools.max(out[length-i-1]-(y+randyQual.nextInt(y+1))/2, minQual);
 			}
+		}
+		
+		int delta=0;
+		if(variance>0){
+			delta=(byte)(randyQual.nextInt(variance+1)+randyQual.nextInt(variance+1)-variance);
+		}
+		for(int i=0; i<out.length; i++){
+			int x=Tools.mid(2, out[i]+delta, 41);
+			out[i]=(byte)x;
 		}
 		
 		return out;
@@ -355,12 +364,25 @@ public class QualityTools {
 		return offsets;
 	}
 	
+	public static byte qualsToPhred(byte qa, byte qb){
+		qa=Tools.min(qa, MATRIX_SIZE);
+		qb=Tools.min(qb, MATRIX_SIZE);
+		return (qa<=qb) ? PHRED_MATRIX[qa][qb] : PHRED_MATRIX[qb][qa];
+	}
+	
+	public static float qualsToProbError(byte qa, byte qb){
+		qa=Tools.min(qa, MATRIX_SIZE);
+		qb=Tools.min(qb, MATRIX_SIZE);
+		return (qa<=qb) ? ERROR_MATRIX[qa][qb] : ERROR_MATRIX[qb][qa];
+	}
 
 	/*-------------------- Fields --------------------*/
 
 	/*-------------------- Final Fields --------------------*/
 
 	/*-------------------- Static Fields --------------------*/
+	
+	public static final byte MATRIX_SIZE=50;
 	
 	/** Probability that this base is an error */
 	public static final float[] PROB_ERROR=makeQualityToFloat(96);
@@ -369,6 +391,12 @@ public class QualityTools {
 	
 	public static final float[] PROB_CORRECT=oneMinus(PROB_ERROR);
 	public static final float[] PROB_CORRECT_INVERSE=makeInverse(PROB_CORRECT);
+	
+	/** Probability that at least one base will be incorrect, given two quality scores */
+	public static final float[][] ERROR_MATRIX=makeErrorMatrix(PROB_ERROR, MATRIX_SIZE);
+	
+	/** Combined phred score given two quality scores */
+	public static final byte[][] PHRED_MATRIX=makePhredMatrix(ERROR_MATRIX);
 	
 	/*-------------------- Constants --------------------*/
 
@@ -418,6 +446,29 @@ public class QualityTools {
 		float[] r=new float[prob.length];
 		for(int i=0; i<r.length; i++){r[i]=1-prob[i];}
 		return r;
+	}
+	
+	private static final float[][] makeErrorMatrix(float[] prob, byte maxq){
+		maxq++;
+		float[][] matrix=new float[maxq][maxq];
+		for(int i=0; i<maxq; i++){
+			for(int j=0; j<maxq; j++){
+				float a=prob[i], b=prob[j];
+				matrix[i][j]=1-((1-a)*(1-b));
+			}
+		}
+		return matrix;
+	}
+	
+	private static final byte[][] makePhredMatrix(float[][] error){
+		final int maxq=error.length;
+		byte[][] matrix=new byte[maxq][maxq];
+		for(int i=0; i<maxq; i++){
+			for(int j=0; j<maxq; j++){
+				matrix[i][j]=probCorrectToPhred(1-error[i][j]);
+			}
+		}
+		return matrix;
 	}
 
 	/*-------------------- Notes --------------------*/

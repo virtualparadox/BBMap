@@ -4,7 +4,7 @@
 function usage(){
 	echo "BBMergeGapped v2.0"
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 15, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Merges paired reads into single reads by overlap detection."
 	echo "With sufficient coverage, can also merge nonoverlapping reads using gapped kmers."
@@ -61,6 +61,11 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
+
 calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
@@ -77,10 +82,5 @@ function merge() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 merge "$@"

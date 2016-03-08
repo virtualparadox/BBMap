@@ -23,7 +23,7 @@ import dna.Gene;
 public final class BBMapThread extends AbstractMapThread{
 	
 	static final int ALIGN_COLUMNS=BBIndex.ALIGN_COLUMNS;
-	static final int ALIGN_ROWS=501;
+	static final int ALIGN_ROWS=601;
 	
 	
 
@@ -625,8 +625,8 @@ public final class BBMapThread extends AbstractMapThread{
 		
 		
 		if(r.sites!=null && r.mapScore<=0){//This came from BBMapThreadPacBio; not sure if needed for other modes
-			if(!Shared.anomaly){
-				System.err.println("Note: Read "+r.id+" failed cigar string generation and will be marked as unmapped.\t"+(r.match==null)+"\t"+r.mapScore+"\t"+r.topSite());
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){
+				System.err.println("Note: Read "+r.id+" failed cigar string generation and will be marked as unmapped.\t"+(r.match==null)+"\t"+r.mapScore+"\t"+r.topSite()+"\t"+new String(r.bases));
 				if(MSA.bandwidth>0 || MSA.bandwidthRatio>0){Shared.anomaly=true;}
 			}
 			r.mapScore=0;
@@ -1202,6 +1202,13 @@ public final class BBMapThread extends AbstractMapThread{
 					assert(checkTopSite(r)); // TODO remove this
 					genMatchString(r, basesP1, basesM1, maxImperfectSwScore1, maxSwScore1, false, false);
 					assert(checkTopSite(r)); // TODO remove this
+					
+					if(STRICT_MAX_INDEL && r.mapped()){
+						if(hasLongIndel(r.match, index.MAX_INDEL)){
+							r.clearMapping();
+							r2.setPaired(false);
+						}
+					}
 				}
 			}
 			if(r2.numSites()>0){
@@ -1209,6 +1216,13 @@ public final class BBMapThread extends AbstractMapThread{
 					r2.match=r2.topSite().match;
 				}else{
 					genMatchString(r2, basesP2, basesM2, maxImperfectSwScore2, maxSwScore2, false, false);
+					
+					if(STRICT_MAX_INDEL && r2.mapped()){
+						if(hasLongIndel(r2.match, index.MAX_INDEL)){
+							r2.clearMapping();
+							r.setPaired(false);
+						}
+					}
 				}
 			}
 		}
@@ -1227,7 +1241,7 @@ public final class BBMapThread extends AbstractMapThread{
 			r.clearMapping();
 			r2.setPaired(false);
 		}else if(r.mapScore<=0 && r.sites!=null){
-			if(!Shared.anomaly){System.err.println("Anomaly2: mapScore<=0 and list!=null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly2: mapScore<=0 and list!=null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r.clearMapping();
 			r2.setPaired(false);
@@ -1240,7 +1254,7 @@ public final class BBMapThread extends AbstractMapThread{
 			r2.clearMapping();
 			r.setPaired(false);
 		}else if(r2.mapScore<=0 && r2.sites!=null){
-			if(!Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r2.clearMapping();
 			r.setPaired(false);

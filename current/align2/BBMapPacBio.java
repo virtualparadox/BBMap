@@ -3,7 +3,6 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 
-import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ReadStreamWriter;
 import stream.SamLine;
@@ -211,8 +210,6 @@ public final class BBMapPacBio extends AbstractMapper  {
 		
 		if(ziplevel!=-1){ReadWrite.ZIPLEVEL=ziplevel;}
 		if(reference!=null){RefToIndex.makeIndex(reference, build, sysout, keylen);}
-		ReadWrite.USE_GZIP=gzip;
-		ReadWrite.USE_PIGZ=pigz;
 	}
 	
 

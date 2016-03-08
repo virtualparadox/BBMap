@@ -1,5 +1,5 @@
 ReformatReads readme by Brian Bushnell
-Last updated April 16, 2014.
+Last updated May 12, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 
 This is currently a stub.
@@ -30,3 +30,9 @@ Added mhist, bhist, qhist, and rcomp flags.
 Fixed by in which qual file was being written to same destination as fasta file. Found by Brian Foster.
 Added 'append' flag.
 Added 'outsingle' for reads that have a mate that gets discard (generally because they are too short after trimming).
+Fixed bug of ignoring "out=null" flag.  Probably existed ever since Parser class was added.
+Added "maxlen" flag: discard reads over a certain length.  Old "maxlen" flag became "breaklen" flag.
+Added "mingc" and "maxgc".
+Fixed a bug in which tabs were not allowed in fasta headers.
+Added mappedonly flag.
+Added ehist, idhist, indelhist, lhist, gchist.

@@ -1656,14 +1656,14 @@ public class ErrorCorrectMT extends Thread{
 					if(r!=null){
 						Read r2=r.mate;
 						readsOut++;
-						basesOut+=(r.bases==null ? 0 : r.bases.length);
+						basesOut+=r.length();
 						r.obj=null;
 						assert(r.bases!=null);
 						if(r.sites!=null && r.sites.isEmpty()){r.sites=null;}
 						
 						if(r2!=null){
 							readsOut++;
-							basesOut+=(r2.bases==null ? 0 : r2.bases.length);
+							basesOut+=r2.length();
 							r2.obj=null;
 							assert(r2.bases!=null);
 							if(r2.numSites()==0){r2.sites=null;}

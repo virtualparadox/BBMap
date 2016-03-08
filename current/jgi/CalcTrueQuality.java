@@ -393,7 +393,7 @@ public class CalcTrueQuality {
 	private void process(Read r){
 		if(r==null){return;}
 		readsProcessed++;
-		basesProcessed+=r.bases==null ? 0 : r.bases.length;
+		basesProcessed+=r.length();
 		
 		if(verbose){outstream.println(r+"\n");}
 		

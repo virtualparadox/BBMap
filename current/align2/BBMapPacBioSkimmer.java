@@ -3,7 +3,6 @@ package align2;
 import java.io.File;
 import java.util.ArrayList;
 
-import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ReadStreamWriter;
 import stream.SamLine;
@@ -63,6 +62,8 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 		MAX_SITESCORES_TO_PRINT=500;
 		PRINT_SECONDARY_ALIGNMENTS=true;
 		AbstractIndex.MIN_APPROX_HITS_TO_KEEP=2;
+		
+		ambiguousAll=true;
 	}
 	
 	@Override
@@ -210,8 +211,6 @@ public final class BBMapPacBioSkimmer extends AbstractMapper  {
 		
 		if(ziplevel!=-1){ReadWrite.ZIPLEVEL=ziplevel;}
 		if(reference!=null){RefToIndex.makeIndex(reference, build, sysout, keylen);}
-		ReadWrite.USE_GZIP=gzip;
-		ReadWrite.USE_PIGZ=pigz;
 	}
 	
 

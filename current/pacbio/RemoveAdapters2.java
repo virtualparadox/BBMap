@@ -14,6 +14,7 @@ import align2.ListNum;
 import align2.MultiStateAligner9PacBioAdapter;
 import align2.MultiStateAligner9PacBioAdapter2;
 import align2.ReadStats;
+import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Data;
@@ -48,6 +49,7 @@ public class RemoveAdapters2 {
 		String outname2=null;
 		
 		String query=pacbioAdapter;
+		Shared.READ_BUFFER_LENGTH=Tools.min(Shared.READ_BUFFER_LENGTH, 20);
 		
 		boolean splitReads=false;
 		

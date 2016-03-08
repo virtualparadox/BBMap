@@ -2,9 +2,9 @@
 #merge in=<infile> out=<outfile>
 
 function usage(){
-	echo "BBMerge v3.0"
+	echo "BBMerge v4.0"
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 15, 2014"
+	echo "Last modified May 30, 2014"
 	echo ""
 	echo "Description:  Merges paired reads into single reads by overlap detection."
 	echo "With sufficient coverage, can also merge nonoverlapping reads using gapped kmers."
@@ -36,13 +36,24 @@ function usage(){
 	echo "minlength=20     	(ml) Reads shorter than this after trimming (before merging) will be discarded."
 	echo "           		Pairs will be discarded only if both are shorter."
 	echo "trimonfailure=t     	(tof) If detecting insert size by overlap fails, the reads will be trimmed and this will be re-attempted."
+	echo "tbo=f            	(trimbyoverlap) Trim overlapping reads to remove rightmost (3') non-overlapping portion, instead of joining."
 	echo ""
-	echo "Other parameters:"
+	echo "Processing Parameters:"
 	echo "join=t			Create merged reads.  If set to false, you can still generate an insert histogram."
 	echo "useoverlap=t		Attempt merge based on paired read overlap."
-	echo "minoverlap=12		Minimum number of overlapping bases to merge reads."
-	echo "minoverlapinsert=16	Do not look for insert sizes shorter than this."
-	echo "mininsert=0		Reads with insert sizes less than this (after merging) will be discarded."
+	echo "minoverlap=12		Minimum number of overlapping bases to consider merging reads."
+	echo "minoverlap0=8		Minimum number of overlapping bases to consider for deciding ambiguity."
+	echo "minoverlapinsert=25	Do not look for insert sizes shorter than this."
+	echo "mininsert=35		Reads with insert sizes less than this (after merging) will be discarded."
+	echo "minqo=9    		Ignore bases with quality below this."
+	echo "margin=2    		The best overlap must have at least 'margin' fewer mismatches than the second best."
+	echo ""
+	echo "Processing Modes (these are mutually exclusive macros that set other parameters):"
+	echo "strict=f    		Decrease false positive rate and merging rate."
+	echo "fast=f      		Increase speed and slightly decrease merging rate."
+	echo "normal=t    		Default."
+	echo "loose=f     		Increase false positive rate and merging rate."
+	echo "vloose=f    		Greatly increase false positive rate and merging rate."
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx       		This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -59,6 +70,11 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
+
 calcXmx () {
 	source "$DIR""/calcmem.sh"
 	parseXmx "$@"
@@ -73,10 +89,5 @@ function merge() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 merge "$@"

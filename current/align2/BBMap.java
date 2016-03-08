@@ -236,9 +236,6 @@ public final class BBMap extends AbstractMapper {
 		
 		if(ziplevel!=-1){ReadWrite.ZIPLEVEL=ziplevel;}
 		if(reference!=null){RefToIndex.makeIndex(reference, build, sysout, keylen);}
-		ReadWrite.USE_GZIP=gzip;
-		ReadWrite.USE_PIGZ=pigz;
-		//if(maxReads!=-1){ReadWrite.USE_GUNZIP=ReadWrite.USE_UNPIGZ=false;}
 	}
 	
 

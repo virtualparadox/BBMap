@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified June 11, 2014"
 	echo ""
 	echo "Description:  Separates paired reads into files of 'good' pairs and 'good' singletons by removing 'bad' reads that are shorter than a min length."
 	echo "Designed to handle situations where reads become too short to be useful after trimming.  This program also optionally performs quality trimming."
@@ -26,10 +26,11 @@ usage(){
 	echo "interleaved=auto 	(int) If true, forces fastq input to be paired and interleaved."
 	echo "qtrim=f           	Trim read ends to remove bases with quality below minq."
 	echo "                 	Values: rl (trim both ends), f (neither end), r (right end only), l (left end only)."
-	echo "trimq=4           	Trim quality threshold."
+	echo "trimq=6           	Trim quality threshold."
 	echo "minlen=20         	(ml) Reads shorter than this after trimming will be discarded."
 	echo "ziplevel=2       	(zl) Set to 1 (lowest) through 9 (max) to change compression level; lower compression is faster."
-	echo "fixpairs=f		(fp, fint) Fixes corrupted interleaved files by examining pair names.  Only use on files with broken interleaving."
+	echo "fixinterleaving=f	(fint) Fixes corrupted interleaved files by examining pair names.  Only use on files with broken interleaving."
+	echo "repair=f		(rp) Fixes arbitrarily corrupted paired reads by examining read names.  High memory."
 	echo ""
 	echo "Java Parameters:"
 	echo "-Xmx             	This will be passed to Java to set memory usage, overriding the program's automatic memory detection."
@@ -46,6 +47,10 @@ z="-Xmx120m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -61,10 +66,5 @@ splitpairs() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 splitpairs "$@"

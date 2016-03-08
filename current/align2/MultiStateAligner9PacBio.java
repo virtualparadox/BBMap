@@ -2457,10 +2457,10 @@ public final class MultiStateAligner9PacBio extends MSA{
 	public static final int[] POINTSoff_SUB_ARRAY_C;
 	
 	static{
-		POINTS_INS_ARRAY=new int[504];
-		POINTSoff_INS_ARRAY=new int[504];
-		POINTS_INS_ARRAY_C=new int[504];
-		POINTSoff_INS_ARRAY_C=new int[504];
+		POINTS_INS_ARRAY=new int[604];
+		POINTSoff_INS_ARRAY=new int[604];
+		POINTS_INS_ARRAY_C=new int[604];
+		POINTSoff_INS_ARRAY_C=new int[604];
 		
 		for(int i=1; i<POINTS_INS_ARRAY.length; i++){
 			int pts, ptsoff;
@@ -2484,10 +2484,10 @@ public final class MultiStateAligner9PacBio extends MSA{
 		}
 		
 
-		POINTS_SUB_ARRAY=new int[504];
-		POINTSoff_SUB_ARRAY=new int[504];
-		POINTS_SUB_ARRAY_C=new int[504];
-		POINTSoff_SUB_ARRAY_C=new int[504];
+		POINTS_SUB_ARRAY=new int[604];
+		POINTSoff_SUB_ARRAY=new int[604];
+		POINTS_SUB_ARRAY_C=new int[604];
+		POINTSoff_SUB_ARRAY_C=new int[604];
 		
 		for(int i=1; i<POINTS_SUB_ARRAY.length; i++){
 			int pts, ptsoff;

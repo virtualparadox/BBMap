@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 9, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Calculates EST (expressed sequence tags) capture by an assembly from a sam file."
 	echo "Designed to use BBMap output generated with these flags: k=13 maxindel=100000 customtag ordered"
@@ -22,6 +22,13 @@ function usage(){
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/"
 CP="$DIR""current/"
+EA="-ea"
+set=0
+
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 function bbest() {
 	#module unload oracle-jdk
@@ -29,14 +36,9 @@ function bbest() {
 	#module load oracle-jdk/1.7_64bit
 	#module load samtools
 	#module load pigz
-	local CMD="java -ea -Xmx64m -cp $CP jgi.SamToEst $@"
+	local CMD="java $EA -Xmx64m -cp $CP jgi.SamToEst $@"
 #	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 bbest "$@"

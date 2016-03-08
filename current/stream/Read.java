@@ -76,7 +76,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 		assert(basesOriginal==null || basesOriginal.length<2 || basesOriginal[1]=='N' || basesOriginal[1]=='.' || basesOriginal[1]=='-' || 
 				colorspace()!=Character.isLetter(basesOriginal[1]) || (aa && basesOriginal[1]=='*')) : 
 			"\nAn input file appears to be misformatted.  The character with ASCII code "+basesOriginal[1]+" appeared where a base was expected.\n" +
-					colorspace()+", "+Arrays.toString(basesOriginal);
+					colorspace()+"\n"+Arrays.toString(basesOriginal)/*+"\n"+new String(basesOriginal)*/;
 		
 		if(colorspace()){ //Trim tips of reads that have a primer base attached
 			int x=0, y=basesOriginal.length;
@@ -1320,6 +1320,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 
+	public final float identity() {return identity(match);}
 	
 	/**
 	 * Handles short or long mode.
@@ -1401,6 +1402,12 @@ public final class Read implements Comparable<Read>, Cloneable{
 
 	/** Average based on summing quality scores */
 	public int avgQuality(){
+		return AVERAGE_QUALITY_BY_PROBABILITY ? avgQualityByProbability() : avgQualityByScore();
+	}
+
+	/** Average based on summing quality scores */
+	public int avgQualityByScore(){
+		if(bases==null || bases.length==0){return 0;}
 		if(quality==null){return 40;}
 		int x=0;
 		for(byte b : quality){
@@ -1411,6 +1418,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	
 	/** Average based on summing error probabilities */
 	public int avgQualityByProbability(){
+		if(bases==null || bases.length==0){return 0;}
 		if(quality==null){return 40;}
 		float e=expectedErrors();
 		float p=e/bases.length;
@@ -1418,7 +1426,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public int avgQualityFirstNBases(int n){
-		if(quality==null || n<1){return 30;}
+		if(bases==null || bases.length==0){return 0;}
+		if(quality==null || n<1){return 40;}
 		assert(quality!=null);
 		int x=0;
 		if(n>quality.length){return 0;}
@@ -1430,7 +1439,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public int avgQualityLastNBases(int n){
-		if(quality==null || n<1){return 30;}
+		if(bases==null || bases.length==0){return 0;}
+		if(quality==null || n<1){return 40;}
 		assert(quality!=null);
 		int x=0;
 		if(n>quality.length){return 0;}
@@ -1442,7 +1452,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public byte minQualityFirstNBases(int n){
-		if(quality==null || n<1){return 30;}
+		if(bases==null || bases.length==0){return 0;}
+		if(quality==null || n<1){return 40;}
 		assert(quality!=null && n>0);
 		if(n>quality.length){return 0;}
 		byte x=quality[0];
@@ -1454,7 +1465,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public byte minQualityLastNBases(int n){
-		if(quality==null || n<1){return 30;}
+		if(bases==null || bases.length==0){return 0;}
+		if(quality==null || n<1){return 40;}
 		assert(quality!=null && n>0);
 		if(n>quality.length){return 0;}
 		byte x=quality[bases.length-n];
@@ -1538,6 +1550,16 @@ public final class Read implements Comparable<Read>, Cloneable{
 			if(b=='I' || b=='D' || b=='X' || b=='Y'){return true;}
 		}
 		return false;
+	}
+	
+	public int countSubs(){
+		int x=0;
+		assert(match!=null && valid() && !shortmatch());
+		for(int i=0; i<match.length; i++){
+			byte b=match[i];
+			if(b=='S'){x++;}
+		}
+		return x;
 	}
 	
 	public boolean containsInMatch(char c){
@@ -1703,7 +1725,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 		int streak=0;
 		minSplice=Tools.max(minSplice, 1);
 		
-		for(byte b : match){
+		for(int pos=0; pos<match.length; pos++){
+			final byte b=match[pos];
 			
 			if(b==prev){streak++;}else{streak=1;}
 			
@@ -1711,7 +1734,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 				m++;
 			}else if(b=='N' || b=='C'){
 				n++;
-			}else if(b=='X' || m=='Y'){
+			}else if(b=='X' || b=='Y'){
 				i++;
 			}else if(b=='I'){
 				i++;
@@ -1736,6 +1759,9 @@ public final class Read implements Comparable<Read>, Cloneable{
 			
 			prev=b;
 		}
+		
+//		assert(i==0) : i+"\n"+this+"\n"+new String(match)+"\n"+Arrays.toString(new int[] {m, s, d, i, n, splice});
+		
 		return new int[] {m, s, d, i, n, splice};
 	}
 	
@@ -1872,6 +1898,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 	 */
 	public double rand=-1;
 	
+	public int length(){return bases==null ? 0 : bases.length;}
+	
 	public byte strand(){return (byte)(flags&1);}
 	public boolean mapped(){return (flags&MAPPEDMASK)==MAPPEDMASK;}
 	public boolean paired(){return (flags&PAIREDMASK)==PAIREDMASK;}
@@ -1965,6 +1993,23 @@ public final class Read implements Comparable<Read>, Cloneable{
 		for(int i=0; i<bases.length && flag; i++){flag=(bases[i]!='N');}
 		return flag;
 	}
+
+	/**
+	 * @return
+	 */
+	public float gc() {
+		if(bases==null || bases.length<1){return 0;}
+		int at=0, gc=0;
+		for(byte b : bases){
+			int x=AminoAcid.baseToNumber[b];
+			if(x>-1){
+				if(x==0 || x==3){at++;}
+				else{gc++;}
+			}
+		}
+		if(gc<1){return 0;}
+		return gc*1f/(at+gc);
+	}
 	
 	public int insert(){
 		return insertvalid() ? insert : -1;
@@ -1975,6 +2020,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	}
 	
 	public static int insertSizeMapped(Read r1, Read r2, boolean ignoreStrand){
+//		assert(false) : ignoreStrand+", "+(r2==null)+", "+(r1.mapped())+", "+(r2.mapped())+", "+(r1.strand()==r2.strand())+", "+r1.strand()+", "+r2.strand();
 		if(ignoreStrand || r2==null || !r1.mapped() || !r2.mapped() || r1.strand()==r2.strand()){return insertSizeMapped_Unstranded(r1, r2);}
 		return insertSizeMapped_PlusLeft(r1, r2);
 	}
@@ -1983,13 +2029,12 @@ public final class Read implements Comparable<Read>, Cloneable{
 	public static int insertSizeMapped_PlusLeft(Read r1, Read r2){
 		if(r1.strand()>r2.strand()){return insertSizeMapped_PlusLeft(r2, r1);}
 		if(r1.strand()==r2.strand() || r1.start>r2.stop){return insertSizeMapped_Unstranded(r2, r1);} //So r1 is always on the left.
-		
 //		if(!mapped() || !mate.mapped()){return 0;}
 		if(r1.chrom!=r2.chrom){return 0;}
 		if(r1.start==r1.stop || r2.start==r2.stop){return 0;} //???
 		
-		int a=(r1.bases==null ? 0 : r1.bases.length);
-		int b=(r2.bases==null ? 0 : r2.bases.length);
+		int a=r1.length();
+		int b=r2.length();
 		int mid=r2.start-r1.stop-1;
 		if(-mid>=a+b){return insertSizeMapped_Unstranded(r1, r2);} //Not properly oriented; plus read is to the right of minus read
 		return mid+a+b;
@@ -2004,8 +2049,8 @@ public final class Read implements Comparable<Read>, Cloneable{
 		if(r1.start==r1.stop || r2.start==r2.stop){return 0;} //???
 		
 		if(r1.chrom!=r2.chrom){return 0;}
-		int a=(r1.bases==null ? 0 : r1.bases.length);
-		int b=(r2.bases==null ? 0 : r2.bases.length);
+		int a=r1.length();
+		int b=r2.length();
 		if(false && Tools.overlap(r1.start, r1.stop, r2.start, r2.stop)){
 			//This does not handle very short inserts
 			return Tools.max(r1.stop, r2.stop)-Tools.min(r1.start, r2.start)+1;
@@ -2027,7 +2072,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	public int insertSizeOriginalSite(){
 		if(mate==null){
 //			System.err.println("A: "+(originalSite==null ? "null" : (originalSite.stop-originalSite.start+1)));
-			return (originalSite==null ? 0 : originalSite.stop-originalSite.start+1);
+			return (originalSite==null ? -1 : originalSite.stop-originalSite.start+1);
 		}
 		
 		final SiteScore ssa=originalSite, ssb=mate.originalSite;
@@ -2093,25 +2138,37 @@ public final class Read implements Comparable<Read>, Cloneable{
 		final int overlap=Tools.min(insert, lengthSum-insert);
 		
 		final byte[] bases=new byte[insert];
-		final byte[] quals=new byte[insert];
+		final byte[] quals=(a.quality==null || b.quality==null ? null : new byte[insert]);
 		
 		int mismatches=0;
 		
 		int start, stop;
 		
-		if(overlap<=0){//Simple join
-			for(int i=0; i<a.bases.length; i++){
-				bases[i]=a.bases[i];
-				quals[i]=a.quality[i];
-			}
+		if(overlap<=0){//Simple join in which there is no overlap
 			int lim=insert-b.bases.length;
-			for(int i=a.bases.length; i<lim; i++){
-				bases[i]='N';
-				quals[i]=0;
-			}
-			for(int i=0; i<b.bases.length; i++){
-				bases[i+lim]=b.bases[i];
-				quals[i+lim]=b.quality[i];
+			if(quals==null){
+				for(int i=0; i<a.bases.length; i++){
+					bases[i]=a.bases[i];
+				}
+				for(int i=a.bases.length; i<lim; i++){
+					bases[i]='N';
+				}
+				for(int i=0; i<b.bases.length; i++){
+					bases[i+lim]=b.bases[i];
+				}
+			}else{
+				for(int i=0; i<a.bases.length; i++){
+					bases[i]=a.bases[i];
+					quals[i]=a.quality[i];
+				}
+				for(int i=a.bases.length; i<lim; i++){
+					bases[i]='N';
+					quals[i]=0;
+				}
+				for(int i=0; i<b.bases.length; i++){
+					bases[i+lim]=b.bases[i];
+					quals[i+lim]=b.quality[i];
+				}
 			}
 			
 			start=Tools.min(a.start, b.start);
@@ -2135,22 +2192,40 @@ public final class Read implements Comparable<Read>, Cloneable{
 //				quals[i]=b.quality[j];
 //			}
 		}else{ //reads go off ends of molecule.
-			for(int i=0; i<a.bases.length && i<bases.length; i++){
-				bases[i]=a.bases[i];
-				quals[i]=a.quality[i];
-			}
-			for(int i=bases.length-1, j=b.bases.length-1; i>=0 && j>=0; i--, j--){
-				byte ca=bases[i], cb=b.bases[j];
-				byte qa=quals[i], qb=b.quality[j];
-				if(ca==0 || ca=='N'){
-					bases[i]=cb;
-					quals[i]=qb;
-				}else if(ca==cb){
-					quals[i]=(byte)Tools.min((Tools.max(qa, qb)+Tools.min(qa, qb)/4), 50);
-				}else{
-					bases[i]=(ca>=cb ? ca : cb);
-					quals[i]=(byte)(Tools.max(ca, cb)-Tools.min(ca, cb));
-					if(ca!='N' && cb!='N'){mismatches++;}
+			if(quals==null){
+				for(int i=0; i<a.bases.length && i<bases.length; i++){
+					bases[i]=a.bases[i];
+				}
+				for(int i=bases.length-1, j=b.bases.length-1; i>=0 && j>=0; i--, j--){
+					byte ca=bases[i], cb=b.bases[j];
+					if(ca==0 || ca=='N'){
+						bases[i]=cb;
+					}else if(ca==cb){
+					}else{
+						bases[i]=(ca>=cb ? ca : cb);
+						if(ca!='N' && cb!='N'){mismatches++;}
+					}
+				}
+			}else{
+				for(int i=0; i<a.bases.length && i<bases.length; i++){
+					bases[i]=a.bases[i];
+					quals[i]=a.quality[i];
+				}
+				for(int i=bases.length-1, j=b.bases.length-1; i>=0 && j>=0; i--, j--){
+					byte ca=bases[i], cb=b.bases[j];
+					byte qa=quals[i], qb=b.quality[j];
+					if(ca==0 || ca=='N'){
+						bases[i]=cb;
+						quals[i]=qb;
+					}else if(cb==0 || cb=='N'){
+						//do nothing
+					}else if(ca==cb){
+						quals[i]=(byte)Tools.min((Tools.max(qa, qb)+Tools.min(qa, qb)/4), 41);
+					}else{
+						bases[i]=(qa>qb ? ca : qa<qb ? cb : (byte)'N');
+						quals[i]=(byte)(Tools.max(qa, qb)-Tools.min(qa, qb));
+						if(ca!='N' && cb!='N'){mismatches++;}
+					}
 				}
 			}
 			
@@ -2572,6 +2647,7 @@ public final class Read implements Comparable<Read>, Cloneable{
 	public static boolean TO_UPPER_CASE=false;
 	public static boolean LOWER_CASE_TO_N=false;
 	public static final boolean OTHER_SYMBOLS_TO_N=true;
+	public static boolean AVERAGE_QUALITY_BY_PROBABILITY=true;
 	
 	public static boolean COMPRESS_MATCH_BEFORE_WRITING=true;
 	public static boolean DECOMPRESS_MATCH_ON_LOAD=true; //Set to false for some applications, like sorting, perhaps

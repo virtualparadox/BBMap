@@ -211,8 +211,6 @@ public final class BBMap5 extends AbstractMapper  {
 		
 		if(ziplevel!=-1){ReadWrite.ZIPLEVEL=ziplevel;}
 		if(reference!=null){RefToIndex.makeIndex(reference, build, sysout, keylen);}
-		ReadWrite.USE_GZIP=gzip;
-		ReadWrite.USE_PIGZ=pigz;
 	}
 	
 

@@ -167,16 +167,27 @@ public class Parser {
 			minReadLength=Integer.parseInt(b);
 		}else if(a.equals("maxlength") || a.equals("maxlen")){
 			maxReadLength=Integer.parseInt(b);
+		}else if(a.equals("mingc")){
+			minGC=Float.parseFloat(b);
+			if(minGC>0){filterGC=true;}
+			assert(minGC>=0 && minGC<=1) : "mingc should be a decimal number between 0 and 1, inclusive.";
+		}else if(a.equals("maxgc")){
+			maxGC=Float.parseFloat(b);
+			if(maxGC<1){filterGC=true;}
+			assert(minGC>=0 && minGC<=1) : "maxgc should be a decimal number between 0 and 1, inclusive.";
 		}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 			minLenFraction=Float.parseFloat(b);
 		}else if(a.equals("minavgquality") || a.equals("maq")){
 			minAvgQuality=Byte.parseByte(b);
-			averageQualityByProbability=false;
+			//Read.AVERAGE_QUALITY_BY_PROBABILITY=false;
 		}else if(a.equals("minavgquality2") || a.equals("maq2")){
 			minAvgQuality=Byte.parseByte(b);
-			averageQualityByProbability=true;
-		}else if(a.equals("trimBadSequence") || a.equals("tbs")){
-			trimBadSequence=Tools.parseBoolean(b);
+			Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
+		}else if(a.equals("minavgquality2") || a.equals("maq2")){
+			minAvgQuality=Byte.parseByte(b);
+			Read.AVERAGE_QUALITY_BY_PROBABILITY=true;
+		}else if(a.equals("averagequalitybyprobability") || a.equals("aqbp")){
+			Read.AVERAGE_QUALITY_BY_PROBABILITY=Tools.parseBoolean(b);
 		}else{
 			return false;
 		}
@@ -268,6 +279,26 @@ public class Parser {
 			ReadStats.QUAL_ACCURACY_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
 			ReadStats.COLLECT_QUALITY_ACCURACY=(ReadStats.QUAL_ACCURACY_FILE!=null);
 			if(ReadStats.COLLECT_QUALITY_ACCURACY){System.err.println("Set quality accuracy histogram output to "+ReadStats.QUAL_ACCURACY_FILE);}
+		}else if(a.equals("indelhistogram") || a.equals("indelhist")){
+			ReadStats.INDEL_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_INDEL_STATS=(ReadStats.INDEL_HIST_FILE!=null);
+			if(ReadStats.COLLECT_INDEL_STATS){System.err.println("Set indel histogram output to "+ReadStats.INDEL_HIST_FILE);}
+		}else if(a.equals("errorhistogram") || a.equals("ehist")){
+			ReadStats.ERROR_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_ERROR_STATS=(ReadStats.ERROR_HIST_FILE!=null);
+			if(ReadStats.COLLECT_ERROR_STATS){System.err.println("Set error histogram output to "+ReadStats.ERROR_HIST_FILE);}
+		}else if(a.equals("lengthhistogram") || a.equals("lhist")){
+			ReadStats.LENGTH_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_LENGTH_STATS=(ReadStats.LENGTH_HIST_FILE!=null);
+			if(ReadStats.COLLECT_LENGTH_STATS){System.err.println("Set length histogram output to "+ReadStats.LENGTH_HIST_FILE);}
+		}else if(a.equals("gchistogram") || a.equals("gchist")){
+			ReadStats.GC_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_GC_STATS=(ReadStats.GC_HIST_FILE!=null);
+			if(ReadStats.COLLECT_GC_STATS){System.err.println("Set GC histogram output to "+ReadStats.GC_HIST_FILE);}
+		}else if(a.equals("identityhistogram") || a.equals("idhist")){
+			ReadStats.IDENTITY_HIST_FILE=(b==null || b.equalsIgnoreCase("null") || b.equalsIgnoreCase("none")) ? null : b;
+			ReadStats.COLLECT_IDENTITY_STATS=(ReadStats.IDENTITY_HIST_FILE!=null);
+			if(ReadStats.COLLECT_IDENTITY_STATS){System.err.println("Set identity histogram output to "+ReadStats.IDENTITY_HIST_FILE);}
 		}else{
 			return false;
 		}
@@ -422,6 +453,10 @@ public class Parser {
 	public int minReadLength=0;
 	public int maxReadLength=0;
 	public float minLenFraction=0;
+	public float minGC=0;
+	public float maxGC=1;
+	public boolean filterGC=false;
+	
 	public int breakLength=0;
 	/** Toss pair only if both reads are shorter than limit */ 
 	public boolean requireBothBad=false;
@@ -449,8 +484,6 @@ public class Parser {
 	
 	public String extin=null;
 	public String extout=null;
-	
-	public boolean averageQualityByProbability=false;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/

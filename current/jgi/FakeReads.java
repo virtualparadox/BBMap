@@ -55,8 +55,8 @@ public class FakeReads {
 		Shared.READ_BUFFER_LENGTH=Tools.min(200, Shared.READ_BUFFER_LENGTH);
 		Shared.READ_BUFFER_NUM_BUFFERS=Tools.min(2, Shared.READ_BUFFER_NUM_BUFFERS);
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		for(int i=0; i<args.length; i++){
 			String arg=args[i];
@@ -296,7 +296,7 @@ public class FakeReads {
 					Read r=reads.get(idx);
 					{
 						readsProcessed++;
-						basesProcessed+=r.bases==null ? 0 : r.bases.length;
+						basesProcessed+=r.length();
 					}
 					assert(r.mate==null);
 					

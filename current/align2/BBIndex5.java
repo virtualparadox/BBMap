@@ -2433,7 +2433,7 @@ public final class BBIndex5 extends AbstractIndex {
 	}
 	
 	
-	private final int[][] locArrays=new int[501][];
+	private final int[][] locArrays=new int[601][];
 	private final int[] valueArray=new int[128];
 	private final int[] sizeArray=new int[128];
 	private final int[][] offsetArrays=new int[128][];
@@ -2449,9 +2449,9 @@ public final class BBIndex5 extends AbstractIndex {
 	private final int[] prescoreArray;
 	private final int[] precountArray;
 
-	private final byte[][][] baseScoreArrays=new byte[2][501][];
+	private final byte[][][] baseScoreArrays=new byte[2][601][];
 	private final int[][][] keyScoreArrays=new int[2][128][];
-	final float[] keyProbArray=new float[501];
+	final float[] keyProbArray=new float[601];
 	private final float[][] keyWeightArrays=new float[128][];
 	
 	

@@ -50,9 +50,9 @@ public class CountUniqueness {
 	private void process(Read r1, Read r2){
 		if(r1==null || r2==null){return;}
 		readsProcessed++;
-		basesProcessed+=r1.bases==null ? 0 : r1.bases.length;
+		basesProcessed+=r1.length();
 		readsProcessed++;
-		basesProcessed+=r2.bases==null ? 0 : r2.bases.length;
+		basesProcessed+=r2.length();
 		assert(false) : "TODO";
 	}
 	

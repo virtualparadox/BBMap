@@ -1,5 +1,6 @@
 package jgi;
 
+import java.io.File;
 import java.util.ArrayList;
 
 /**
@@ -25,7 +26,16 @@ public class AssemblyStatsWrapper {
 			}else{
 				String[] split=arg.split("=");
 				if(split[0].equalsIgnoreCase("in") || split[0].equalsIgnoreCase("ref")){
-					ilist.add(arg);
+					if(split.length>1){
+						if(new File(split[1]).exists()){
+							ilist.add(arg);
+						}else{
+							String[] split2=split[1].split(",");
+							for(String s : split2){
+								ilist.add("in="+s);
+							}
+						}
+					}
 				}else{
 					alist.add(arg);
 				}

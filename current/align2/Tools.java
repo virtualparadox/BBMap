@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 
@@ -830,6 +831,16 @@ public final class Tools {
 		}
 	}
 	
+	public static void reverseInPlace(final char[] array){
+		if(array==null){return;}
+		final int max=array.length/2, last=array.length-1;
+		for(int i=0; i<max; i++){
+			char temp=array[i];
+			array[i]=array[last-i];
+			array[last-i]=temp;
+		}
+	}
+	
 	public static void reverseInPlace(final int[] array){
 		if(array==null){return;}
 		final int max=array.length/2, last=array.length-1;
@@ -1533,6 +1544,17 @@ public final class Tools {
 			}
 		}
 		return index;
+	}
+	
+	public static double exponential(Random randy, double lamda){
+//		for(int i=0; i<20; i++){
+//			double p=randy.nextDouble();
+//			double r=-Math.log(1-p)/lamda;
+//			System.err.println(p+", "+lamda+"->"+"\n"+r);
+//		}
+//		assert(false);
+		double p=randy.nextDouble();
+		return -Math.log(1-p)/lamda;
 	}
 	
 	public static double log2(double d){

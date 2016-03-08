@@ -281,11 +281,11 @@ public class ReclusterByKmer {
 					
 					{
 						readsProcessed++;
-						basesProcessed+=r1.bases==null ? 0 : r1.bases.length;
+						basesProcessed+=r1.length();
 					}
 					if(r2!=null){
 						readsProcessed++;
-						basesProcessed+=r2.bases==null ? 0 : r2.bases.length;
+						basesProcessed+=r2.length();
 					}
 					
 					
@@ -470,10 +470,10 @@ public class ReclusterByKmer {
 			if(verbose){System.err.println("Considering read "+r1.id+" "+new String(r1.bases));}
 
 			readsInT++;
-			basesInT+=(r1.bases==null ? 0 : r1.bases.length);
+			basesInT+=r1.length();
 			if(r2!=null){
 				readsInT++;
-				basesInT+=(r2.bases==null ? 0 : r2.bases.length);
+				basesInT+=r2.length();
 			}
 
 			final ReadTag rt1=new ReadTag(r1);

@@ -5,12 +5,58 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
 
+import dna.Parser;
+
 /**
  * @author Brian Bushnell
  * @date Dec 19, 2012
  *
  */
 public final class FileFormat {
+	
+	public static void main(String[] args){
+		stream.FASTQ.warnQualityChange=false;
+		for(int i=0; i<args.length; i++){
+
+			final String arg=args[i];
+			String[] split=arg.split("=");
+			String a=split[0].toLowerCase();
+			String b=split.length>1 ? split[1] : null;
+			if("null".equalsIgnoreCase(b)){b=null;}
+			while(a.charAt(0)=='-' && (a.indexOf('.')<0 || i>1 || !new File(a).exists())){a=a.substring(1);}
+			
+			if(Parser.isJavaFlag(arg)){
+				//jvm argument; do nothing
+			}else if(a!=null && b!=null){
+				assert(a.startsWith("in")) : "Unknown parameter "+arg;
+				test(b);
+			}else{
+				test(arg);
+			}
+		}
+	}
+	
+	private static void test(String fname){
+		FileFormat ff=testInput(fname, FASTQ, null, false, true);
+		if(ff==null){
+			System.out.println("null");
+		}else{
+			int q=33;
+			boolean i=false;
+			if(ff.fastq()){
+				byte qold=stream.FASTQ.ASCII_OFFSET;
+				stream.FASTQ.ASCII_OFFSET=33;
+				byte[] qi=stream.FASTQ.testInterleavedAndQuality(fname);
+				q=qi[0];
+				i=(qi[1]==1);
+				stream.FASTQ.ASCII_OFFSET=qold;
+			}else if(ff.fasta()){
+				i=stream.FASTQ.testInterleavedFasta(fname);
+			}
+			String qs=(q==33 ? "sanger" : q==64 ? "illumina" : ""+q);
+			System.out.println(qs+"\t"+FORMAT_ARRAY[ff.format()]+"\t"+COMPRESSION_ARRAY[ff.compression()]+"\t"+(i ? "interleaved" : "single-ended"));
+		}
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------        Initialization        ----------------*/
@@ -31,12 +77,12 @@ public final class FileFormat {
 				if(a[1]!=RAW){overrideCompression=a[1];}
 			}
 		}
-		return testInput(fname, defaultFormat, overrideFormat, overrideCompression, allowFileRead, allowSubprocess);
+		return testInput(fname, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead);
 	}
 
 	public static FileFormat testInput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean allowFileRead){
 		if(fname==null){return null;}
-		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowFileRead, false, false, allowSubprocess, false);
+		return new FileFormat(fname, READ, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, allowFileRead, false, false, false);
 	}
 	
 	public static FileFormat testOutput(String fname, int defaultFormat, String overrideExtension, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
@@ -55,21 +101,21 @@ public final class FileFormat {
 	
 	public static FileFormat testOutput(String fname, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess, boolean overwrite, boolean append, boolean ordered){
 		if(fname==null){return null;}
-		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, false, overwrite, append, allowSubprocess, ordered);
+		return new FileFormat(fname, WRITE, defaultFormat, overrideFormat, overrideCompression, allowSubprocess, false, overwrite, append, ordered);
 	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------          Constructor         ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	private FileFormat(String fname, int mode_, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowFileRead, 
-			boolean overwrite_, boolean append_, boolean allowSubprocess_, boolean ordered_){
+	private FileFormat(String fname, int mode_, int defaultFormat, int overrideFormat, int overrideCompression, boolean allowSubprocess_, 
+			boolean allowFileRead, boolean overwrite_, boolean append_, boolean ordered_){
 //			, boolean interleaved_, boolean colorspace_, long maxReads_){
 		
 		if(verbose){
 			new Exception().printStackTrace(System.err);
 			System.err.println("FileFormat(fname="+fname+", mode="+mode_+", dFormat="+defaultFormat+", oFormat="+overrideFormat+", oCompression="+overrideCompression+
-					", allowRead="+allowFileRead+", ow="+overwrite_+", append="+append_+", allowSub="+allowSubprocess_+", ordered="+ordered_+")");
+					", allowSub="+allowSubprocess_+", allowRead="+allowFileRead+", ow="+overwrite_+", append="+append_+", ordered="+ordered_+")");
 		}
 		
 //		assert(!overwrite_ || !append_) : "Both overwrite and append may not be set to true.";
@@ -114,13 +160,13 @@ public final class FileFormat {
 //		maxReads=write() ? -1 : maxReads_;
 
 		assert(!unknownFormat()) : "Unknown file format for "+fname+"\n"+
-			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowFileRead+", "+overwrite_+", "+allowSubprocess_;
+			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
 		assert(!unknownCompression()) : "Unknown compression for "+fname+"\n"+
-			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowFileRead+", "+overwrite_+", "+allowSubprocess_;
+			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
 		assert(!unknownType()) : "Unknown stream type for "+fname+"\n"+
-			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowFileRead+", "+overwrite_+", "+allowSubprocess_;
+			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
 		assert(!unknownMode()) : "Unknown I/O mode for "+fname+"\n"+
-			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowFileRead+", "+overwrite_+", "+allowSubprocess_;
+			mode_+", "+defaultFormat+", "+overrideFormat+", "+overrideCompression+", "+allowSubprocess_+", "+allowFileRead+", "+overwrite_;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -134,6 +180,7 @@ public final class FileFormat {
 		sb.append(format+"("+FORMAT_ARRAY[format]+")").append(',');
 		sb.append(compression+"("+COMPRESSION_ARRAY[compression]+")").append(',');
 		sb.append(type+"("+TYPE_ARRAY[type]+")").append(',');
+//		sb.append("ascii"+asciiOffset).append(',');
 		sb.append(mode+"("+MODE_ARRAY[mode]+")").append(',');
 		sb.append("ow="+(overwrite ? "t" : "f")).append(',');
 		sb.append("app="+(append ? "t" : "f")).append(',');
@@ -321,6 +368,7 @@ public final class FileFormat {
 	private final int compression;
 	private final int type;
 	private final int mode;
+//	private final int asciiOffset;
 
 	private final boolean overwrite;
 	private final boolean append;

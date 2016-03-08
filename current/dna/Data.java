@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.Map;
 
 import kmer.Primes;
 
@@ -1327,8 +1328,25 @@ public class Data {
 
 	public static boolean ENV=(System.getenv()!=null);
 	public static boolean WINDOWS=(System.getenv().containsKey("OS") && System.getenv().get("OS").equalsIgnoreCase("Windows_NT"));
-	public static int LOGICAL_PROCESSORS=Runtime.getRuntime().availableProcessors();
+	public static int LOGICAL_PROCESSORS=CALC_LOGICAL_PROCESSORS();
 	private static String HOSTNAME;
+	
+	private static int CALC_LOGICAL_PROCESSORS(){
+		final int procs=Tools.max(1, Runtime.getRuntime().availableProcessors());
+		int slots=procs;
+		Map<String,String> env=System.getenv();
+		String s=env.get("NSLOTS");
+		if(s!=null){
+			try {
+				slots=Tools.max(1, Integer.parseInt(s));
+			} catch (NumberFormatException e) {
+				//ignore
+			}
+		}
+		if(slots>8 && slots*2==procs){return procs;}//hyperthreading
+		return Tools.min(slots, procs);
+	}
+	
 	public static String HOSTNAME(){
 		if(HOSTNAME==null){
 			try {
@@ -1563,7 +1581,7 @@ public class Data {
 		return GZIP>0;
 	}
 	public static boolean PIGZ(){
-		if(PIGZ==0 && !WINDOWS){
+		if(PIGZ==0/* && !WINDOWS*/){
 			synchronized(SUBPROCSYNC){
 				if(PIGZ==0){PIGZ=testExecute("pigz --version");}
 			}

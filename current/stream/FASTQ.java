@@ -88,6 +88,14 @@ public class FASTQ {
 //		return testPairNames(oct[0], oct[4]);
 //	}
 	
+	public static byte[] testInterleavedAndQuality(final String fname){
+		FASTQ.DETECT_QUALITY=true;
+		final String[] oct=getFirstOctet(fname);
+		byte q=testQuality(oct);
+		byte i=(byte)(testInterleaved(oct, fname) ? 1 : 0);
+		return new byte[] {q, i};
+	}
+	
 	public static boolean isInterleaved(final String fname){
 		
 		if(!DETECT_QUALITY && !TEST_INTERLEAVED){return FORCE_INTERLEAVED;}
@@ -122,6 +130,31 @@ public class FASTQ {
 		return oct;
 	}
 	
+	private static String[] getFirstTwoFastaHeaders(String fname){
+		if(fname==null){return null;}
+		if(fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return null;}
+		
+		String[] headers=new String[2];
+		int cntr=0;
+		
+		{
+			InputStream is=ReadWrite.getInputStream(fname, false, false);
+			BufferedReader br=new BufferedReader(new InputStreamReader(is));
+			try {
+				for(String s=br.readLine(); s!=null && cntr<2; s=br.readLine()){
+					if(s.startsWith(">")){
+						headers[cntr]=s;
+						cntr++;
+					}
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		return headers;
+	}
+	
 	public static byte testQuality(String fname){
 		if(fname==null){return ASCII_OFFSET;}
 		if(!DETECT_QUALITY || fname.equalsIgnoreCase("stdin") || fname.toLowerCase().startsWith("stdin.")){return ASCII_OFFSET;}
@@ -147,9 +180,29 @@ public class FASTQ {
 		return testPairNames(oct[0], oct[4]);
 	}
 	
+	public static boolean testInterleavedFasta(String fname){
+		String[] headers=getFirstTwoFastaHeaders(fname);
+		return testInterleavedFasta(headers, fname);
+	}
+	
+	private static boolean testInterleavedFasta(String[] headers, String fname){
+		if(headers==null || headers.length<2){return false;}
+		for(int i=0; i<headers.length; i++){
+			if(headers[i]==null){return false;}
+		}
+
+		assert(headers[0]==null || headers[0].startsWith(">")) : "File "+fname+"\ndoes not appear to be a valid FASTA file:\n"+new String(headers[0]);
+		assert(headers[1]==null || headers[1].startsWith(">")) : "File "+fname+"\ndoes not appear to be a valid FASTA file:\n"+new String(headers[0]);
+		
+		if(FORCE_INTERLEAVED){return true;}
+		if(PARSE_CUSTOM && fname.contains("_interleaved.")){return true;}
+		
+		return testPairNames(headers[0], headers[1]);
+	}
+	
 	private static byte testQuality(String[] oct){
 		if(oct==null || oct[0]==null){return ASCII_OFFSET;}
-		
+		if(verbose){System.err.println("testQuality()");}
 		int qflips=0;
 		for(int k=0; k<2; k++){
 			int a=1+4*k, b=3+4*k;
@@ -157,11 +210,13 @@ public class FASTQ {
 			byte[] bases=oct[a].getBytes();
 			byte[] quals=oct[b].getBytes();
 			//		assert(false) : Arrays.toString(quals);
+			if(verbose){System.err.println(Arrays.toString(quals));}
 			for(int i=0; i<quals.length; i++){
 				quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
+				if(verbose){System.err.println(quals[i]);}
 				if(DETECT_QUALITY){
 					if(ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
-						System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");
+						if(warnQualityChange){System.err.println("Changed from ASCII-33 to ASCII-64 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
 						qflips++;
 						ASCII_OFFSET=64;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=64;}
@@ -169,7 +224,7 @@ public class FASTQ {
 							quals[j]=(byte)(quals[j]-31);
 						}
 					}else if(ASCII_OFFSET==64 && (quals[i]<-5)){
-						System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");
+						if(warnQualityChange){System.err.println("Changed from ASCII-64 to ASCII-33 on input quality "+(quals[i]+ASCII_OFFSET)+" while prescanning.");}
 						ASCII_OFFSET=33;
 						if(DETECT_QUALITY_OUT){ASCII_OFFSET_OUT=33;}
 						qflips++;
@@ -276,7 +331,7 @@ public class FASTQ {
 	private static int fastqLength(Read r){
 		int len=6; //newlines, @, +
 		len+=(r.id==null ? Tools.stringLength(r.numericID) : r.id.length());
-		len+=(r.bases==null ? 0 : r.bases.length);
+		len+=r.length();
 		len+=(r.quality==null ? 0 : r.quality.length);
 		return len;
 	}
@@ -475,12 +530,14 @@ public class FASTQ {
 				for(int i=0; i<quals.length; i++){
 					quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
 					if(DETECT_QUALITY && ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
-						if(numericID<1){
-							System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-						}else{
-							System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-							System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
-							System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
+						if(warnQualityChange){
+							if(numericID<1){
+								System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+							}else{
+								System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+								System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
+								System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
+							}
 						}
 						ASCII_OFFSET=64;
 						for(int j=0; j<=i; j++){
@@ -560,7 +617,7 @@ public class FASTQ {
 				Read r=quadToRead(quad, true, false, colorspace, tf, numericID);
 				cntr=0;
 				
-//				longest=Tools.max(longest, (r.bases==null ? 0 : r.bases.length));
+//				longest=Tools.max(longest, r.length());
 				
 				if(interleaved){
 					if(prev==null){prev=r;}
@@ -642,13 +699,15 @@ public class FASTQ {
 		for(int i=0; i<quals.length; i++){
 			quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
 			if(DETECT_QUALITY && ASCII_OFFSET==33 && (quals[i]>QUAL_THRESH /*|| (bases[i]=='N' && quals[i]>20)*/)){
-				if(numericID<1){
-					System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-				}else{
-					System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
-					System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
-					System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
-					errorState=true;
+				if(warnQualityChange){
+					if(numericID<1){
+						System.err.println("Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+					}else{
+						System.err.println("Warning! Changed from ASCII-33 to ASCII-64 on input "+((char)quals[i])+": "+quals[i]+" -> "+(quals[i]-31));
+						System.err.println("Up to "+numericID+" prior reads may have been generated with incorrect qualities.");
+						System.err.println("If this is a problem you may wish to re-run with the flag 'qin=64'.");
+						errorState=true;
+					}
 				}
 				ASCII_OFFSET=64;
 				for(int j=0; j<=i; j++){
@@ -781,7 +840,9 @@ public class FASTQ {
 	public static final int QUAL_THRESH=54;
 	public static boolean IGNORE_BAD_QUALITY=false;
 	public static boolean verbose=false;
-
+	
+	public static boolean warnQualityChange=true;
+	
 //	public static int minLength=0;
 //	public static int maxLength=0;
 	

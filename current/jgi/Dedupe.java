@@ -60,8 +60,9 @@ public final class Dedupe {
 		outstream.println("Syntax:\n");
 		outstream.println("\njava -ea -Xmx106g -cp <path> jgi.Dedupe <input file> <output file>");
 		outstream.println("\nOptional flags:");
-		outstream.println("in=<file>          \tThe 'in=' flag is needed if the input file is not the first parameter.  'in=stdin' will pipe from standard in.");
-		outstream.println("out=<file>         \tThe 'out=' flag is needed if the output file is not the second parameter.  'out=stdout' will pipe to standard out.");
+		outstream.println("in=<file>          \tInput file.  'in=stdin' will pipe from standard in.");
+		outstream.println("out=<file>         \tOutput file.  'out=stdout' will pipe to standard out.");
+		outstream.println("dot=<file>         \tOutput a dot-format overlap graph to this file.");
 		outstream.println("pattern=<file>     \tClusters will be written to individual files, where the '%' symbol in the pattern is replaced by cluster number.");
 		outstream.println("");
 		outstream.println("threads=auto       \t(t) Set number of threads to use; default is number of logical processors.");
@@ -85,6 +86,7 @@ public final class Dedupe {
 		outstream.println("removecycles=t     \t(rc) Remove all cycles so clusters form trees.");
 		outstream.println("renameclusters=f   \t(rnc) Rename contigs to indicate which cluster they are in.");
 		outstream.println("minclustersize=1   \t(mcs) Don't output clusters smaller than this.");
+		outstream.println("pbr=f              \t(pickbestrepresentative) Only output the single highest-quality read per cluster.");
 		outstream.println("cc=t               \t(canonicizeclusters) Flip contigs so clusters have a single orientation.");
 		outstream.println("fcc=f              \t(fixcanoncontradictions) Truncate graph at nodes with canonization disputes.");
 		outstream.println("foc=f              \t(fixoffsetcontradictions) Truncate graph at nodes with offset disputes.");
@@ -138,6 +140,9 @@ public final class Dedupe {
 			assert(b=true);
 			EA=b;
 		}
+		
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 
 		for(int i=0; i<args.length; i++){
 
@@ -165,9 +170,11 @@ public final class Dedupe {
 				clusterFilePattern=b;
 				assert(clusterFilePattern==null || clusterFilePattern.contains("%")) : "pattern must contain the % symbol.";
 			}else if(a.equals("outd") || a.equals("outduplicate")){
-				outd=b;
+				outdupe=b;
 			}else if(a.equals("csf") || a.equals("clusterstatsfile")){
-				csfOut=b;
+				outcsf=b;
+			}else if(a.equals("dot") || a.equals("graph") || a.equals("outdot") || a.equals("outgraph")){
+				outgraph=b;
 			}else if(a.equals("mcsfs") || a.equals("minclustersizeforstats")){
 				minClusterSizeForStats=Integer.parseInt(b);
 			}else if(a.equals("mcs") || a.equals("minclustersize")){
@@ -219,6 +226,8 @@ public final class Dedupe {
 				fixOffsetContradictions=Tools.parseBoolean(b);
 			}else if(a.equals("pto") || a.equals("preventtransitiveoverlap") || a.equals("preventtransitiveoverlaps")){
 				preventTransitiveOverlaps=Tools.parseBoolean(b);
+			}else if(a.equals("pbr") || a.equals("pickbestrepresentative")){
+				pickBestRepresentativePerCluster=Tools.parseBoolean(b);
 			}else if(a.equals("cc") || a.equals("canonicizecluster") || a.equals("canonicizeclusters")){
 				canonicizeClusters=Tools.parseBoolean(b);
 			}else if(a.equals("pc") || a.equals("processcluster") || a.equals("processclusters")){
@@ -230,6 +239,8 @@ public final class Dedupe {
 				removeCycles=Tools.parseBoolean(b);
 			}else if(a.equals("uo") || a.equals("uniqueonly")){
 				UNIQUE_ONLY=Tools.parseBoolean(b);
+			}else if(a.equals("rmn") || a.equals("requirematchingnames")){
+				REQUIRE_MATCHING_NAMES=Tools.parseBoolean(b);
 			}else if(a.equals("pn") || a.equals("prefixname")){
 //				PREFIX_NAME=Tools.parseBoolean(b);
 			}else if(a.equals("tuc") || a.equals("touppercase")){
@@ -275,7 +286,7 @@ public final class Dedupe {
 				maxNs=Integer.parseInt(b);
 			}else if(a.equals("reads") || a.startsWith("maxreads")){
 				maxReads=Long.parseLong(b);
-			}else if(a.equals("sn") || a.equals("storename") || a.equals("storenames")){
+			}else if(a.equals("sn") || a.equals("storename") || a.equals("storenames") || a.equals("keepnames")){
 				storeName=Tools.parseBoolean(b);
 			}else if(a.equals("ssx") || a.equals("storesuffix") || a.equals("storesuffixes")){
 				storeSuffix=Tools.parseBoolean(b);
@@ -340,8 +351,10 @@ public final class Dedupe {
 		
 		if(bandwidth_>-1){
 			bandwidth=Tools.min(bandwidth_, 2*maxEdits+1);
+			customBandwidth=(bandwidth<2*maxEdits+1);
 		}else{
 			bandwidth=2*maxEdits+1;
+			customBandwidth=false;
 		}
 		maxSubs=Tools.max(maxSubs, maxEdits);
 		if(maxSubs>0 || minIdentity<100 || findOverlaps){storeSuffix=true;}
@@ -371,7 +384,8 @@ public final class Dedupe {
 			assert(!in[i].equalsIgnoreCase(out));
 		}
 //		assert(false) : "\nabsorbContainment="+absorbContainment+", findOverlaps="+findOverlaps+", absorbOverlap="+absorbOverlap+"\n"+
-//			"processClusters="+processClusters+", renameClusters="+renameClusters+", makeClusters="+makeClusters+", uniqueNames="+uniqueNames+", storeName="+storeName;
+//			"processClusters="+processClusters+", renameClusters="+renameClusters+", makeClusters="+makeClusters+", uniqueNames="+uniqueNames+"\n"+
+//			"storeName="+storeName+", DISPLAY_PROGRESS="+DISPLAY_PROGRESS+", removeCycles="+removeCycles;
 		if(absorbContainment || findOverlaps){
 //			assert(false);
 			affixMaps=new HashMap[numAffixMaps];
@@ -383,10 +397,10 @@ public final class Dedupe {
 		}
 //		assert(false) : absorbContainment+", "+(affixMap==null);
 		
-		if(outd==null){
+		if(outdupe==null){
 			dupeWriter=null;
 		}else{
-			FileFormat ff=FileFormat.testOutput(outd, FileFormat.FASTA, null, true, overwrite, append, false);
+			FileFormat ff=FileFormat.testOutput(outdupe, FileFormat.FASTA, null, true, overwrite, append, false);
 			dupeWriter=new TextStreamWriter(ff);
 		}
 	}
@@ -499,8 +513,8 @@ public final class Dedupe {
 		
 		outstream.println("");
 		
-		if(out!=null || clusterFilePattern!=null){
-			writeOutput(csfOut, t);
+		if(out!=null || clusterFilePattern!=null || outgraph!=null || outcsf!=null){
+			writeOutput(outcsf, t);
 		}
 		
 	}
@@ -513,6 +527,7 @@ public final class Dedupe {
 		}
 		affixMap1=null;
 		affixMap2=null;
+		affixMaps=null;
 	}
 	
 	private void processMatches(Timer t){
@@ -662,6 +677,10 @@ public final class Dedupe {
 				if(u.valid() && u.r.pairnum()==0){
 					u.unitID=list.size();
 					list.add(u.r);
+					if(u.r.mate!=null){
+						Unit u2=(Unit)u.r.mate.obj;
+						u2.unitID=u.unitID;
+					}
 				}else{
 					u.unitID=Integer.MAX_VALUE;
 				}
@@ -1224,23 +1243,33 @@ public final class Dedupe {
 	
 	private void writeOutput(String clusterStatsFile, Timer t){
 //		verbose=true;
+//		assert(false) : (processedClusters==null)+", "+(processedClusters.isEmpty())+", "+outgraph+", "+out+", "+clusterFilePattern;
 		if(processedClusters==null || processedClusters.isEmpty()){
-			ArrayList<Read> list=addToArray(codeMap, sort, ascending, true, addedToMain-containments);
-			codeMap=null;
+			
+			if(out!=null || clusterFilePattern!=null){
 
-			if(sort){
-				if(DISPLAY_PROGRESS){
-					t.stop();
-					outstream.println("Sorted output.             Time: "+t);
-					printMemory();
-					outstream.println();
-					t.start();
+				ArrayList<Read> list=addToArray(codeMap, sort, ascending, true, addedToMain-containments);
+				codeMap=null;
+
+				if(sort){
+					if(DISPLAY_PROGRESS){
+						t.stop();
+						outstream.println("Sorted output.             Time: "+t);
+						printMemory();
+						outstream.println();
+						t.start();
+					}
 				}
-			}
 
-			writeOutput(list);
+				writeOutput(list);
+			}
 		}else{
-			writeOutputClusters(clusterStatsFile, processedClusters);
+			if(outgraph!=null){
+				writeGraph(outgraph, processedClusters);
+			}
+			if(out!=null || clusterFilePattern!=null || clusterStatsFile!=null){
+				writeOutputClusters(clusterStatsFile, processedClusters);
+			}
 		}
 
 		if(DISPLAY_PROGRESS){
@@ -1361,6 +1390,10 @@ public final class Dedupe {
 					csf.print(sb.toString());
 					sb.setLength(0);
 				}
+				
+				if(pickBestRepresentativePerCluster){
+					pickBestRepresenative(alu, true);
+				}
 
 				for(int contig=0; contig<alu.size(); contig++){
 					final Unit u0=alu.get(contig);
@@ -1424,6 +1457,104 @@ public final class Dedupe {
 			if(verbose){System.err.println("Shutting down tswCluster "+tswCluster.fname);}
 			if(tswCluster!=null){tswCluster.poisonAndWait();}
 		}
+	}
+	
+
+	private void writeGraph(String graphFile, ArrayList<ArrayList<Unit>> clist){
+		Collections.sort(clist, CLUSTER_LENGTH_COMPARATOR);
+		
+		if(verbose){System.err.println("Writing overlap graph.");}
+		
+		final TextStreamWriter tsw=(graphFile==null ? null : new TextStreamWriter(graphFile, overwrite, append, true));
+		if(tsw!=null){
+			tsw.start();
+			tsw.print("digraph G {\n");
+		}
+
+		for(int cnum=0; cnum<clist.size(); cnum++){
+			final ArrayList<Unit> alu=clist.get(cnum);
+			clist.set(cnum, null);
+//			Collections.sort(alu); //TODO: Remove
+
+			if(alu.size()<minClusterSize){
+				if(verbose){System.err.println("Ignoring small cluster "+cnum+", size "+alu.size());}
+			}else{
+				if(verbose){System.err.println("Processing cluster "+cnum+", size "+alu.size());}
+
+				for(int contig=0; contig<alu.size(); contig++){
+					final Unit u0=alu.get(contig);
+					alu.set(contig, null);
+					Read r=u0.r;
+					if(r.mate!=null && r.pairnum()!=0){r=r.mate;}
+					
+					{
+						for(int i=0; r!=null && i<2; i++){
+							assert(r.pairnum()==i) : i+", "+r.pairnum()+", "+(r.mate==null ? 9 : r.mate.pairnum());
+							Unit u=(Unit)r.obj;
+							if(verbose){System.err.println("Writing read "+r.id);}
+							
+							if(tsw!=null){
+								tsw.print("\t"+r.numericID+"."+(r.pairnum()+1)+"\n");
+								if(r.mate!=null && r.pairnum()==0){
+									Read r2=r.mate;
+									tsw.print(r.numericID+"."+(r.pairnum()+1)+" -> "+r2.numericID+"."+(r2.pairnum()+1)+" [label=mate]");
+								}
+								for(Overlap o : u.overlapList){
+									if(u==o.u1){
+										Read r2=o.u2.r;
+										tsw.print("\t"+r.numericID+"."+(r.pairnum()+1)+" -> "+r2.numericID+"."+(r2.pairnum()+1)+" [label=\""+o.toLabel()+"\"]\n");
+									}
+								}
+							}
+							r=r.mate;
+						}
+					}
+				}
+			}
+		}
+		
+		if(tsw!=null){
+			tsw.print("}\n");
+			if(verbose){System.err.println("Shutting down tswAll "+tsw.fname);}
+			tsw.poisonAndWait();
+		}
+	}
+	
+	private Unit pickBestRepresenative(ArrayList<Unit> alu, boolean clearList){
+		if(alu==null || alu.isEmpty()){return null;}
+		float[] quality=new float[alu.size()];
+		int[] lengths=new int[alu.size()];
+		for(int i=0; i<alu.size(); i++){
+			Unit u=alu.get(i);
+			int len=u.r.bases.length;
+			quality[i]=u.r.expectedErrors()/len;
+			lengths[i]=len;
+		}
+		Arrays.sort(quality);
+		Arrays.sort(lengths);
+		int medianLength=lengths[lengths.length/2];
+		float bestQuality=quality[0];
+		
+		float currentBestQuality=9999999;
+		Unit best=null;
+		for(int i=0; i<alu.size(); i++){
+			Unit u=alu.get(i);
+			int len=u.r.bases.length;
+			float deviation=Tools.absdif(len, medianLength)*1f/(medianLength+1);
+			if(deviation<0.05){
+				float qual=u.r.expectedErrors()/len;
+				qual=(qual+.001f)*(1+10*deviation);
+				if(qual<currentBestQuality || best==null){
+					currentBestQuality=qual;
+					best=u;
+				}
+			}
+		}
+		if(clearList){
+			alu.clear();
+			alu.add(best);
+		}
+		return best;
 	}
 	
 	public static long hash(byte[] bases){
@@ -1528,6 +1659,7 @@ public final class Dedupe {
 			
 //			assert(false) : fixMultiJoinsT+", "+canonicizeT+", "+fixCanonContradictionsT+", "+mergeLeavesT+", "+mergeInnerT;
 			bandy=(maxEdits>0 ? new BandedAligner(bandwidth) : null);
+//			assert(false) : fixMultiJoinsT+", "+canonicizeT+", "+fixCanonContradictionsT+", "+fixOffsetContradictionsT+", "+mergeClustersT+", "+removeCycles_;
 		}
 		
 		public void run(){
@@ -2593,7 +2725,7 @@ public final class Dedupe {
 				readsProcessedT++;
 				//					xx++;
 				//					outstream.println("Processing read "+r.id+", "+xx);
-				basesProcessedT+=r.bases==null ? 0 : r.bases.length;
+				basesProcessedT+=r.length();
 
 //				final long code;
 //				final Unit u;
@@ -2816,7 +2948,7 @@ public final class Dedupe {
 									u1cluster=u.determineCluster();
 									u2cluster=u2.determineCluster();
 								}
-								if(u1cluster!=u2cluster && u!=u2 && !u.equals(u2)){//TODO:  Not sure why identical things are banned...  possibly relates to avoiding inter-pair edges?
+								if(u1cluster!=u2cluster && u!=u2 && !u.equals(u2) && u2.r!=u.r.mate){//TODO:  Not sure why identical things are banned...  possibly relates to avoiding inter-pair edges?
 									if(u2.valid()){
 										hits++;
 										
@@ -3202,6 +3334,15 @@ public final class Dedupe {
 		if(verbose){System.err.println("a1");}
 		if(ua.length()!=ub.length()){return ub.length()-ua.length();}
 		if(verbose){System.err.println("a2");}
+		
+		if(REQUIRE_MATCHING_NAMES){
+			if(ua.name()!=null && ub.name()!=null){
+				int x=ua.name().compareTo(ub.name());
+				if(x!=0){return x;}
+			}
+		}
+		if(verbose){System.err.println("a3");}
+		
 		if(ua.r==null || ub.r==null){
 			if(verbose){System.err.println("b");}
 			if(verbose){System.err.println("b1");}
@@ -3381,7 +3522,8 @@ public final class Dedupe {
 				reverseDirection();
 				if(verbose){System.err.println(this);}
 				
-				if(EA && !test(bandy, edits+maxEdits)){
+				if(EA && !Shared.anomaly && !customBandwidth && !test(bandy, edits+maxEdits)){
+					Shared.anomaly=true;
 					bandy.verbose=true;
 					System.err.println("\n********** Failed test 3, "+bandy.lastEdits+" edits. ***************\n");
 					reverseDirection();
@@ -3469,7 +3611,7 @@ public final class Dedupe {
 			x=u2.compareTo(o.u2);
 			if(x!=0){return -x;}
 			if(type!=o.type){return type-o.type;}
-			if(u1!=o.u1 || u2!=o.u2){
+			if((u1!=o.u1 || u2!=o.u2) && absorbMatch){
 				verbose=true;
 				System.err.println(this);
 				System.err.println(o);
@@ -3489,7 +3631,7 @@ public final class Dedupe {
 				System.err.println("********");
 				verbose=false;
 			}
-			assert(u1==o.u1 && u2==o.u2) : "\n"+u1.r+"\n"+u2.r+"\n"+o.u1.r+"\n"+o.u2.r
+			assert(!absorbMatch || (u1==o.u1 && u2==o.u2)) : "\n"+u1.r+"\n"+u2.r+"\n"+o.u1.r+"\n"+o.u2.r
 				+"\n\n"+u1.r.mate+"\n"+u2.r.mate+"\n"+o.u1.r.mate+"\n"+o.u2.r.mate;
 //			assert(false) : "\n"+this+"\n"+o+"\n>"+u1.name()+"\n"+new String(u1.bases())+"\n>"+u2.name()+"\n"+new String(u2.bases())+"\n";
 			if(start1!=o.start1){return start1-o.start1;}
@@ -3576,6 +3718,29 @@ public final class Dedupe {
 			sb.append(", stop2=");
 			sb.append(stop2);
 			sb.append(")");
+			return sb.toString();
+		}
+		
+		public String toLabel(){
+			StringBuilder sb=new StringBuilder(80);
+			sb.append(OVERLAP_TYPE_ABBREVIATIONS[type]);
+			sb.append(',');
+			sb.append(overlapLen);
+			sb.append(',');
+			sb.append(mismatches);
+			sb.append(',');
+			sb.append(edits);
+
+			sb.append(',');
+			sb.append(start1);
+			sb.append(',');
+			sb.append(stop1);
+
+			sb.append(',');
+			sb.append(start2);
+			sb.append(',');
+			sb.append(stop2);
+			
 			return sb.toString();
 		}
 		
@@ -3928,7 +4093,7 @@ public final class Dedupe {
 		public boolean contains(Unit u2, int loc, LongM key, BandedAligner bandy, int tableNum) {
 			if(verbose){System.err.println("contains: Considering key "+key+", unit "+u2);}
 			if(minLengthPercent>0 && (u2.length()*100f/length())<minLengthPercent){return false;}
-			assert(u2.code1!=code1 || u2.code2!=code2 || u2.length()!=length() || (r!=null && r.mate!=null) || 
+			assert(u2.code1!=code1 || u2.code2!=code2 || u2.length()!=length() || (r!=null && r.mate!=null) || //REQUIRE_MATCHING_NAMES ||
 					(canonical()==u2.canonical() ? (u2.prefix1!=prefix1 && u2.suffix1!=suffix1) : (u2.prefix1!=suffix1 && u2.suffix1!=prefix1))) : 
 						"Collision? \n"+this+"\n"+u2+"\n"+r+"\n"+u2.r;
 			
@@ -5001,8 +5166,9 @@ public final class Dedupe {
 	private String[] in=null;
 	private String clusterFilePattern=null;
 	private String out=null;
-	private String outd=null;
-	private String csfOut=null;
+	private String outdupe=null;
+	private String outcsf=null;
+	private String outgraph=null;
 	private int maxNs=-1;
 	private long maxReads=-1;
 	public boolean errorState=false;
@@ -5041,6 +5207,7 @@ public final class Dedupe {
 	int maxEdits=0;
 	int maxSubs=0;
 	int bandwidth=9;
+	final boolean customBandwidth;
 	float minIdentity=100;
 	float minIdentityMult=0;
 	float minLengthPercent=0;
@@ -5051,6 +5218,7 @@ public final class Dedupe {
 
 	private int minClusterSize=1;
 	private int minClusterSizeForStats=10;
+	private boolean pickBestRepresentativePerCluster=false;
 
 	long readsProcessed=0;
 	long basesProcessed=0;
@@ -5106,6 +5274,7 @@ public final class Dedupe {
 	public static int threadMaxBasesToBuffer=32000000;
 	public static boolean DISPLAY_PROGRESS=true;
 	public static boolean UNIQUE_ONLY=false;
+	public static boolean REQUIRE_MATCHING_NAMES=false;
 	
 	private static int reverseType(int type){return (type+2)%4;}
 	public static final int FORWARD=0;
@@ -5113,6 +5282,7 @@ public final class Dedupe {
 	public static final int REVERSE=2;
 	public static final int REVERSERC=3;
 	public static final String[] OVERLAP_TYPE_NAMES=new String[] {"FORWARD", "FORWARDRC", "REVERSE", "REVERSERC"};
+	public static final String[] OVERLAP_TYPE_ABBREVIATIONS=new String[] {"F", "FRC", "R", "RRC"};
 	
 	static{//All others are 0
 		baseToNumber['A']=baseToNumber['a']=0;

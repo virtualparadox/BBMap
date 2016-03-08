@@ -1,6 +1,25 @@
 BBDuk readme by Brian Bushnell
-Last updated April 7, 2014.
+Last updated June 10, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
+
+Version 15:
+Added ehist, idhist, indelhist, lhist, gchist.
+
+Version 14:
+Added "tbo" (trimbyoverlap) flag.
+Added "tpe" (trimpairsevenly) flag.
+
+Version 13:
+Added findBestMatch function (enabled with 'findbestmatch' or 'fbm' flag).  When a read shares kmers with multiple reference sequences, it picks the one sharing the most kamers, rather than at random.  Slightly slower.  Does not affect read output, only statistics.
+Stats output now has a header indicating #reads and #matched reads.
+Stats now additionally output filename.
+
+Version 12:
+Fixed a bug in BBDuk2 where kmer trimming was sometimes not performed.
+
+Version 11:
+Created BBDuk2, which can kfilter, kmask, ktrimleft, and ktrimright in one pass with 4 different kmer tables.
+Created bbduk2.sh.
 
 TODO:
 Add masking for multiple kmers in a single read.

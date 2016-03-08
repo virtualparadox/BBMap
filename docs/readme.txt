@@ -1,5 +1,5 @@
 BBMap readme by Brian Bushnell
-Last updated April 16, 2014.
+Last updated June 17, 2014.
 Please contact me at bbushnell@lbl.gov if you have any questions or encounter any errors.
 BBMap is free to use for noncommercial purposes, and investigators are free to publish results derived from the program, as long as the source code is not published or modified.
 
@@ -101,8 +101,8 @@ outb=<>			Write only blacklisted reads to this file.  If a pair has one end mapp
 out2=<>			If you set out2, outu2, outm2, or outb2, the second read in each pair will go to this file.  Not currently allowed for SAM format, but OK for others (such as fasta, fastq, bread).
 overwrite=<f>		Or "ow".  Overwrite output file if it exists, instead of aborting.
 append=<f>		Or "app".  Append to output file if it exists, instead of aborting.
-ambiguous=<best>	Or "ambig". Sets how to handle ambiguous reads.  "first" or "best" uses the first encountered best site (fastest).  "all" returns all best sites.  "random" selects a random site from all of the best sites (does not yet work with paired-ends).  "toss" discards all sites and considers the read unmapped (same as discardambiguous=true).  Note that for all options (aside from toss) ambiguous reads in SAM format will have the extra field "XT:A:R" while unambiguous reads will have "XT:A:U".
-ambiguous2=<best>	Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
+ambiguous=<best>		Or "ambig". Sets how to handle ambiguous reads.  "first" or "best" uses the first encountered best site (fastest).  "all" returns all best sites.  "random" selects a random site from all of the best sites (does not yet work with paired-ends).  "toss" discards all sites and considers the read unmapped (same as discardambiguous=true).  Note that for all options (aside from toss) ambiguous reads in SAM format will have the extra field "XT:A:R" while unambiguous reads will have "XT:A:U".
+ambiguous2=<best>		Or "ambig2". Only for splitter mode.  Ambiguous2 strictly refers to any read that maps to more than one reference set, regardless of whether it has multiple mappings within a reference set.  This may be set to "best" (aka "first"), in which case the read will be written only to the first reference to which it has a best mapping; "all", in which case a read will be written to outputs for all references to which it maps; "toss", in which case it will be considered unmapped; or "split", in which case it will be written to a special output file with the prefix "AMBIGUOUS_" (one per reference).
 outputunmapped=<t>	Outputs unmapped reads to primary output stream (otherwise they are dropped).
 outputblacklisted=<t>	Outputs blacklisted reads to primary output stream (otherwise they are dropped).
 cigar=<t>		Generate cigar strings (for bread format, this means match strings).  cigar=false is faster.  "cigar=" is synonymous with "match=".  This must be enabled if match/insertion/deletion/substitution statistics are desired, but the program will run faster with cigar strings disabled.
@@ -111,30 +111,41 @@ mdtag=<f>		Generate MD tags for SAM files.  Requires that cigar=true.  I do not 
 xstag=<f>		Generate XS (strand) tags for Cufflinks.  This should be used with a stranded RNA-seq protocol.
 xmtag=<t>		Generate XM tag.  Indicates number of best alignments.
 intronlen=<999999999>	Set to a lower number like 10 to change 'D' to 'N' in cigar strings for deletions of at least that length.  This is used by Cufflinks; 'N' implies an intron while 'D' implies a deletion, but they are otherwise identical.
-stoptag=<t>		Allows generation of custom SAM tag YS:i:<read stop location>
-idtag=<t>		Allows generation of custom SAM tag YI:f:<percent identity>
+stoptag=<f>		Allows generation of custom SAM tag YS:i:<read stop location>
+idtag=<f>		Allows generation of custom SAM tag YI:f:<percent identity>
 ordered=<f>		Set to true if you want reads to be output in the same order they were input.  This takes more memory, and can be slower, due to buffering in multithreaded execution.  Not needed for singlethreaded execution.
 ziplevel=<2>		Sets output compression level, from 1 (fast) to 9 (slow).  I/O is multithreaded, and thus faster when writing paired reads to two files rather than one interleaved file.
 nodisk=<f>		"true" will not write the index to disk, and may load slightly faster.   Prevents collisions between multiple bbmap instances writing indexes to the same location at the same time.
-usegzip=<t>		If gzip is installed, output file compression is done with a gzip subprocess instead of with Java's native deflate method.  Can be faster when set to true.  The output file must end in a compressed file extension for this to have effect. *Temporarily disabled due to bug in UGE.
-usegunzip=<t>		If gzip is installed, input file decompression is done with a gzip subprocess instead of with Java's native inflate method.  Can be faster when set to true.  *Temporarily disabled due to bug in UGE.
-samversion=<1.3>	SAM specification version. Set to 1.3 for cigar strings with 'M' or 1.4 for cigar strings with '=' and 'X'.  Default is currently 1.3 because samtools 0.1.18 and earlier is incompatible with sam format version 1.4.
+usegzip=<f>		If gzip is installed, output file compression is done with a gzip subprocess instead of with Java's native deflate method.  Can be faster when set to true.  The output file must end in a compressed file extension for this to have effect.
+usegunzip=<f>		If gzip is installed, input file decompression is done with a gzip subprocess instead of with Java's native inflate method.  Can be faster when set to true.
+pigz=<f>          	Spawn a pigz (parallel gzip) process for faster compression than Java or gzip.  Requires pigz to be installed.
+unpigz=<f>        	Spawn a pigz process for faster decompression than Java or gzip.  Requires pigz to be installed.
+samversion=<1.3>  	SAM specification version. Set to 1.3 for cigar strings with 'M' or 1.4 for cigar strings with '=' and 'X'.  Default is currently 1.3 because samtools 0.1.18 and earlier is incompatible with sam format version 1.4.
 bamscript=<filename>	(bs for short) Writes a shell script to <filename> with the command line to translate the sam output of BBMap into a sorted bam file, assuming you have samtools in your path.
 maxsites=<5>		Sets maximum alignments to print per read, if secondary alignments are allowed.  Currently secondary alignments may lack cigar strings.
 secondary=<f>		Print secondary alignments.
+sssr=<0.95>		(secondarysitescoreratio) Print only secondary alignments with score of at least this fraction of primary.
+ssao=<f>			(secondarysiteasambiguousonly) Only print secondary alignments for ambiguously-mapped reads.
 quickmatch=<f>		Generate cigar strings during the initial alignment (before the best site is known).  Currently, this must be enabled to generate cigar strings for secondary alignments.  It increases overall speed but may in some very rare cases yield inferior alignments due to less padding.
 local=<f>          	Output local alignments instead of global alignments.  The mapping will still be based on the best global alignment, but the mapping score, cigar string, and mapping coordinate will reflect a local alignment (using the same affine matrix as the global alignment).
-sortscaffolds=<f>	Sort scaffolds alphabetically in SAM headers to allow easier comparisons with Tophat (in cuffdif, etc).  Default is in same order as source fasta.
+sortscaffolds=<f> 	Sort scaffolds alphabetically in SAM headers to allow easier comparisons with Tophat (in cuffdif, etc).  Default is in same order as source fasta.
 trimreaddescriptions=<f>	(trd) Truncate read names at the first whitespace, assuming that the remaineder is a comment or description.
+saa=<t>           	(secondaryalignmentasterisks) Use asterisks instead of bases for sam secondary alignments.
+machineout=<f>    	Set to true to output statistics in machine-friendly 'key=value' format.
 
 
-Statistics Parameters:
+Statistics and Histogram Parameters:
 showprogress=<f>	Set to true to print out a '.' once per million reads processed.  You can also change the interval with e.g. showprogress=20000.
 qhist=<filename>	Output a per-base average quality histogram to <filename>.
 mhist=<filename>	Output a per-base match histogram to <filename>.  Requires cigar strings to be enabled.  The columns give fraction of bases at each position having each match string operation: match, substitution, deletion, insertion, N, or other.
 qahist=<filename>	Output a per-quality match histogram to <filename>.
 ihist=<filename>	Output a per-read-pair insert size histogram to <filename>.
 bhist=<filename>	Output a per-base composition histogram to <filename>.
+indelhist=<file>  	Output an indel length histogram.
+lhist=<file>      	Output a read length histogram.
+ehist=<file>      	Output an errors-per-read histogram.
+gchist=<file>     	Output a gc content histogram.
+idhist=<file>    	Write a percent identity histogram.
 scafstats=<filename>	Track mapping statistics per scaffold, and output to <filename>.
 refstats=<filename>	For BBSplitter, enable or disable tracking of read mapping statistics on a per-reference-set basis, and output to <filename>.
 verbosestats=<0>	From 0-3; higher numbers will print more information about internal program counters.
@@ -198,6 +209,87 @@ Added insert size median and standard deviation to output stats.  The 'ihist=' f
 Fixed bug in which non-ACGTN IUPAC symbols were not being converted to N. (Noted by Leanne on seqanswers)
 Changed shellscripts from DOS to Unix EOL encoding.
 Added support for "-h" and "--help" in shellscripts (before it was just in java files).
+Created Dedupe2 - faster, and supports 1-cluster-per-file output.
+Created Dedupe3 - supports more than 2 affix tables.  Uses slightly more memory.
+BBMap now generates "sort" shellscripts even if the output is in bam format.
+pileup.sh now prints a coverage summary to standard out.
+Added 'split' flag to BBMask.
+Fixed bug in randomreads allowing paired reads to come from 'nearby' scaffolds.
+Documented randomreads.sh.
+Added gaussian insert size distribution to randomreads.
+Fixed a bug in calcmem.sh that prevented requesting memory that Linux considered 'cached'.
+TODO: Penalize score of sites with errors near read tips, and long deletions.
+Added "Median_fold" column to pileup.  You need to set 'bitset=
+Changed default quality-filtering mode to average probability rather than average quality score.
+Default number of threads now takes the environment variable NSLOTS into consideration.  However, because Mendel nodes have hpyerthreading enabled, if NSLOTS>8 and (# processors)==NSLOTS*2, then #processors will be used instead.  So it is still recommended that you set threads manually if you don't have exclusive access to a node.
+Fixed bbmerge, which was crashing on fasta input.
+Fixed gaussian insert size distribution in randomreads (it was causing a crash).
+Enabled unpigz support in Windows (decompression only).
+TODO:  BBNorm needs in1/in2/out1/out2 support.
+Added mingc and maxgc to reformat.
+TODO: gchist for reformat.
+Added 'passes' flag to BBQC and reduced default passes to 1 if normalization is disabled.
+Swapped FileFormat's method signature "allowFileRead" and "allowSubprocess" parms for some functions, as they were inconsistent.  This may have unknown effects.
+TODO: unclear if fasta files are currently checked for interleaving.  Method added to "FASTQ".
+TODO: FileFormat should perhaps test for quality format and interleaving.
+Fixed reversed variables in "machineout" stats for %mapped and %unambiguous.  Found by Michael Barton.
+Added "testformat.sh".
+Fixed dedupe "csf" output to work even when no other outputs specified.
+Fixed dedupe erroneous assumption that "bandwidth" had not been custom-specified.
+Changed MakeLengthHistogram (readlength.sh) default behavior to place reads in lower bins rather than closest bins.  Toggle with "round" flag.
+Added "repair" flag to SplitPairsAndSingles.  Created "repair.sh".
+Fixed a bug in which tabs were not allowed in fasta headers.
+Improved BBMerge: default minqo 7->8, made margin a parameter, added 'strict' macro that reduces false positive rate.
+Added "samestrand" flag to RandomReads.
+Fixed a dedupe bug with "pto" and paired reads; read2 was not getting a UnitID.
+Fixed a bug in which the BBMap stats for insertion rate was sometimes higher than the true value.
+Fixed bugs in BBMerge; increased speed slightly.
+Created grademerge.sh to grade merged reads.
+Added 'variance' flag to randomreads; used to make qualities less uniform between reads.
+BBDuk now has overwrite=true by default.
+calcmem.sh now sets -Xmx and -Xms from each other if only one was specified.
+Fixed bug with "ambig=all" and "stoptag" flags being used together.  Found by WhatSoEver (seqanswers).
+Added 'findbestmatch'/'fbm' flag to BBDuk; reports the reference sequence sharing the greatest number of kmers with the read.
+Shellscripts no longer try to calculate memory before displaying help (noted by Kjiersten Fagnan).
+-ea and -da are now valid parameters for all shellscripts.
+Improved documentation of Dedupe.
+Added "loose" and "vloose" modes to BBMerge.
+Added novel-kmer-filtering to BBMerge - bans merged reads that create a novel kmer.  Does not seem to help.
+Added entropy-detection to BBMerge - minimum allowed overlap is determined by entropy rather than a constant.  Moderate improvement.
+Fixed bug causing "repair.sh" script to not work.  Noted by SES (seqanswers).
+Added "fast" mode to BBMerge.
+Fixed a rounding problem in RandomReads that caused gaussian distribution to have 2x frequency of intended reads at exactly insert size of double read length.
+Added exponential decay insert size distribution to RandomReads, for use in LMP libraries.
+TODO: Track different paired read orientation rates (innie, outie, same direction, etc) with BBMap.
+Added sssr (secondarysitescoreratio) and ssao (secondarysiteasambiguousonly) flags.  Response to WhatSoEver (seqanswers).
+Ambiguously-mapped reads that print a primary site now print a minimum of 1 secondary site, and all sites with the same score as the top secondary site.
+Improved error message for paired reads with unequal number of read 1 vs read 2.  Response to Salvatore (seqanswers).
+Updated bbcountunique.sh help message.
+Changed AddAdapters default to "arc=f" (no reverse-complement adapters).  Added "addpaired" flag (adds adapter to same location of both reads).
+Added BBDuk/BBDuk2 "tbo" (trimbyoverlap) flag.  Vastly reduces false-negatives with no increase in false-positives.
+Adding "fragadapter" flag to RandomReads.  Also added ability to handle multiple different adapters for both read 1 and read 2.  Adapters are added to paired reads with insert size shorter than read length.
+Added "ordered" flag to BBDuk/BBDuk2.
+Added "tpe" (trimpairsevenly) flag to BBDuk/BBDuk2.  This only works in conjunction with kimer-trimming to the right.  Slightly decreases false negatives and doubles false positives.
+Updated rqcfilter and bbqc with 'tbo' and 'tpe' flags.
+TODO: Migrate RQCFilter to BBDuk2.
+Improved addadapters to better handle reads annotated by renamereads.
+BBMap's fillLimited routine is now affected by 'sssr' flag, if secondary sites are enabled.  This will make things slightly slower when secondary sites are enabled, if sssr uses a low value (default is 0.95).
+statswrapper now allows comma-delimited files.
+Added standard deviation to BBMerge (requested by Bryce F).
+Added "tbo" (trimbyoverlap) flag to BBMerge, as an alternative to joining.
+Updated help for 'ambig' in bbmap.sh to remove the obsolete information that 'ambig=all' did not support sam output.
+Updated BBMapSkimmer and its shellscript to default to 'ambig=all', which is its intended mode.
+BBDuk no longer defaults to "out=stdout.fq" because that was incredibly annoying.  Now it defaults to "out=null".
+Changed BBDuk default mink from 4 to 6.
+Changed BBDuk, Reformat, SplitPairsAndSingles default trimq from 4 to 6.
+Added "ftr"/"ftl" flags to BBDuk.
+Added "bbmapskimmer" to the list of options parsed by BBWrap.  (Noted by JJ Chai)
+Corrected documentation of idtag and stoptag - both default to false, not true. (Noted by JJ Chai)
+Added "mappedonly" flag to reformat. (Requested by Kristen T)
+Added "rmn" (requirematchingnames) flag to Dedupe.
+Added ehist, indelhist, idhist, gchist, lhist flags to BBMap, BBDuk, and Reformat.
+Added removesmartbell.sh wrapper for pacbio.RemoveAdapters2.
+
 
 v31.
 TODO:  Change pipethreads to redirects (where possible), and hash pipethreads by process, not by filename.

@@ -3,7 +3,7 @@
 
 function usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified March 17, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Randomly adds adapters to a file, or grades a trimmed file."
 	echo ""
@@ -35,6 +35,10 @@ z="-Xmx200m"
 EA="-ea"
 set=0
 
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -49,10 +53,5 @@ function rename() {
 	echo $CMD >&2
 	$CMD
 }
-
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
 
 rename "$@"

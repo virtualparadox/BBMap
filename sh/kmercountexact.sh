@@ -3,7 +3,7 @@
 
 usage(){
 	echo "Written by Brian Bushnell"
-	echo "Last modified April 10, 2014"
+	echo "Last modified May 23, 2014"
 	echo ""
 	echo "Description:  Counts the number of unique kmers in a file."
 	echo ""
@@ -55,7 +55,10 @@ z2="-Xms1g"
 EA="-ea"
 set=0
 
-
+if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
+	usage
+	exit
+fi
 
 calcXmx () {
 	source "$DIR""/calcmem.sh"
@@ -73,14 +76,9 @@ kmercountexact() {
 	#module unload oracle-jdk
 	#module load oracle-jdk/1.7_64bit
 	#module load pigz
-	local CMD="java $EA $z -cp $CP jgi.KmerCountExact $@"
+	local CMD="java $EA $z -cp $CP jgi.CountKmersExact $@"
 	echo $CMD >&2
 	$CMD
 }
 
-if [ -z "$1" ] || [[ $1 == -h ]] || [[ $1 == --help ]]; then
-	usage
-	exit
-fi
-
-khist "$@"
+kmercountexact "$@"

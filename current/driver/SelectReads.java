@@ -1,6 +1,7 @@
 package driver;
 
 import stream.SamLine;
+import align2.Shared;
 import align2.Tools;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
@@ -22,8 +23,8 @@ public final class SelectReads {
 		assert(!args[0].equalsIgnoreCase(args[1])) : "File names must be different.";
 		
 		ReadWrite.USE_PIGZ=ReadWrite.USE_UNPIGZ=true;
-		ReadWrite.MAX_ZIP_THREADS=8;
-		ReadWrite.ZIP_THREAD_DIVISOR=2;
+		ReadWrite.MAX_ZIP_THREADS=Shared.THREADS;
+		ReadWrite.ZIP_THREAD_DIVISOR=1;
 		
 		int minlen=1;
 		long reads=Long.MAX_VALUE;

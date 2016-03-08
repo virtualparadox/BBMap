@@ -421,8 +421,8 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		int sizeOfTopGroup=correctness[9];
 		int numTopCorrect=correctness[10];
 
-		final int len1=(r.bases==null ? 0 : r.bases.length);
-		final int len2=(r2==null ? 0 : r.bases==null ? 0 : r.bases.length);
+		final int len1=r.length();
+		final int len2=(r2==null ? 0 : r.length());
 		
 		assert(numSites==numCorrect+numIncorrect) : numSites+", "+numCorrect+", "+numIncorrect+", "+r.numSites();
 		assert(numSites==r.numSites());
@@ -581,7 +581,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		int sizeOfTopGroup=correctness[9];
 		int numTopCorrect=correctness[10];
 
-		final int len=(r.bases==null ? 0 : r.bases.length);
+		final int len=r.length();
 		
 		totalNumCorrect2+=numCorrect;
 		totalNumIncorrect2+=numIncorrect;
@@ -922,7 +922,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 		
 		
 		if(r.sites!=null && r.mapScore<=0){
-			if(!Shared.anomaly){
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){
 				System.err.println("Note: Read "+r.id+" failed cigar string generation and will be marked as unmapped.");
 				if(MSA.bandwidth>0 || MSA.bandwidthRatio>0){Shared.anomaly=true;}
 			}
@@ -1506,6 +1506,13 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 					assert(checkTopSite(r)); // TODO remove this
 					genMatchString(r, basesP1, basesM1, maxImperfectSwScore1, maxSwScore1, false, false);
 					assert(checkTopSite(r)); // TODO remove this
+					
+					if(STRICT_MAX_INDEL && r.mapped()){
+						if(hasLongIndel(r.match, index.MAX_INDEL)){
+							r.clearMapping();
+							r2.setPaired(false);
+						}
+					}
 				}
 			}
 			if(r2.numSites()>0){
@@ -1513,6 +1520,13 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 					r2.match=r2.topSite().match;
 				}else{
 					genMatchString(r2, basesP2, basesM2, maxImperfectSwScore2, maxSwScore2, false, false);
+					
+					if(STRICT_MAX_INDEL && r2.mapped()){
+						if(hasLongIndel(r2.match, index.MAX_INDEL)){
+							r2.clearMapping();
+							r.setPaired(false);
+						}
+					}
 				}
 			}
 		}
@@ -1531,7 +1545,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 			r.clearMapping();
 			r2.setPaired(false);
 		}else if(r.mapScore<=0 && r.sites!=null){
-			if(!Shared.anomaly){System.err.println("Anomaly2: mapScore<=0 and list!=null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly2: mapScore<=0 and list!=null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r.clearMapping();
 			r2.setPaired(false);
@@ -1544,7 +1558,7 @@ public final class BBMapThreadPacBioSkimmer extends AbstractMapThread{
 			r2.clearMapping();
 			r.setPaired(false);
 		}else if(r2.mapScore<=0 && r2.sites!=null){
-			if(!Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
+			if(!STRICT_MAX_INDEL && !Shared.anomaly){System.err.println("Anomaly3: mapScore<=0 and list!=null.\n"+r+"\n");}
 			Shared.anomaly=true;
 			r2.clearMapping();
 			r.setPaired(false);
