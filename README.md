@@ -28,7 +28,7 @@ brew install --with-java open-mpi
 ant -Dmpijar=/usr/local/lib/mpi.jar
 ````
 
-To build Eclipse priject with `ant`, you need to put `ecj-4.5.2.jar` to `/usr/local/Cellar/ant/1.9.6/libexec/lib/`.
+To build Eclipse project with `ant`, you need to put `ecj-4.5.2.jar` to `/usr/local/Cellar/ant/1.9.6/libexec/lib/`.
 
 ## Running
 
