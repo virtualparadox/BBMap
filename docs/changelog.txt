@@ -434,7 +434,20 @@ Fixed an unnecessary assertion for negative values of pairedScore in Tools.remov
 Fixed a bug in SamLine.makeMdTag for handling deletions called off the end of a scaffold.  Noted by Jason S.
 35.85
 Fixed a bug in which BBMap was verifying the presence of the wrong input file.  Noted by Adrian P.
-
+Added a check for a memory environment variable to calcmem.sh (only affects jobs run at JGI on Genepool)
+35.87
+Changed version in shared.java to 35.87, fixed bug in calcmem.sh (was calling itself)
+35.90
+Added ProcessSpeed and ProcessFragMerging for collating output in a BBMerge comparison.
+ByteFile1 had an error related to Windows-formatted (\r\n newline) files.  This was fixed by dropping support for legacy Mac (\r) newlines.  So now, valid newlines are \n (Unix/MaxOS X) or \r\n (Windows) but not very old Mac (\r) which I have never seen anyway.  This change also increased ByteFile1 speed by 10%.
+Added GC-filter mode toggle between individual reads and pair averages for paired reads with the "pairgc" flag.  Requested by Torben.
+GC histogram mode now also obeys the pairgc flag.  Default is true; previously, it was false.  So, now the filter and histogram defaults match.
+35.91
+Fixed an assertion error that fired on fasta files containing blank lines.  Noted by Vasanth S.
+35.92
+Fixed interleaving detection when BBDuk generates calibration matrices.
+Fixed a bug in calcmem that ignored used memory when an SGI flag is set.
+Removed debug code from quality trimming.
 
 
 TODO: Add minprob to LogLog.
@@ -486,7 +499,7 @@ TODO: Locked/managed HashArray expansion.
 TODO: Fractional (1/4) way allocation per build thread.
 *TODO: extendToRight should return an exit code, not just true or false.  May not need to be released.
 *TODO: Tadpole - first, classify all kmers as junction or non-junction (via ownership).
-***TODO: Always verify that left max is yields prev kmer/evicted base.  If not, that is a hidden branch.
+***TODO: Always verify that left max yields prev kmer/evicted base.  If not, that is a hidden branch.
 *TODO: Allocation schedule for HashArrays.
 *TODO: Optional synchronized resize on final schedule slot to minimize memory use.
 
@@ -505,7 +518,6 @@ TODO: Reformat lhist and readlength.sh should have equivalent information. "I pr
 TODO: Tadpole/KCE double-lock and double-buffer with LongLists for loading.
 TODO: xmx=auto or percentage
 TODO: reformat: multithread?
-TODO: bbduk: move read validation to per-thread
 TODO: (write scaffolder)
 TODO: (write polishing/consensus tool)
 TODO: (write breaker)
@@ -1093,11 +1105,9 @@ TODO: Apply Seal refnames upgrade to taxonomy handling, if not already done.
 TODO: BBNorm histout with 1pass/ecc does not seem to generate anything.
 TODO: randomreads does not name reads by origin in fasta format.
 TODO: Hamming distance for demuxbyname.
-TODO: BBMerge has a lower merge rate when r1 and r2 are different lengths. (simple fix - swap them [done]).
 TODO: MultiCros wrapper and hash-based multi-listnum object.
 TODO: Reformat should be able to trim mapped sam files (Aldo J).
 TODO: Mask bases overlapping from Dedupe graph (Shoudan).
-TODO: Seal split capability, or BBSplit for short sequences (Manuel K).
 TODO: RQCFilter - dynamically switch between $TMPDIR or /dev/shm depending on input size and available disk space.
 TODO: BBMerge - trim adapters for unmerged reads (?)
 TODO: Fungal pipeline: FindErrors?
@@ -1108,7 +1118,6 @@ TODO: Batch setting for BBDuk to operate on multiple files and auto-name output.
 TODO: Get data from Chris B, count mismatched pairs, send to E.
 TODO: Stats does not accurately estimate BBMap RAM usage for K=15.
 TODO: Accelerate maxindel=0 mode for BBMap by banning MSA usage.
-*TODO: BBMerge poster.
 TODO: Redo DedupeByMapping so that it can handle sorted input using a heap.
 TODO: MSA Flat - remove states to increase speed.
 TODO: Dedupe does not work with sam input. (Lynn A.)
@@ -1117,7 +1126,6 @@ TODO: Parse extra part of sam lines into a byte array (optionally).
 *TODO: Dedupe crash on input in C:\temp\dd1\bad.fa (Shoudan).
 TODO: Tile-based statistics and filtering for BBMap, BBDuk, etc.
 TODO: Pileup could calculate ref/nonref coverage.
-TODO: Stats needs a fastq mode.
 TODO: Marcel wants a program to essentially sort reads and remove duplicates that are at least X identity.
 TODO: Move parsing of "threads" to parseCommonStatic and adjust all relevant classes.
 TODO: Add 'remap' from Reformat flag to BBMap.
@@ -1529,7 +1537,6 @@ TODO: HashArray resize - grow fast up to a limit, then resize to exactly the max
 TODO: Alicia BBMap PacBio slowdown (try an older version...)
 TODO: BBMerge rename mode with insert sizes.
 TODO: Dump info about Seal kmer copy histogram.
-TODO: rpkm for pileup / BBMap.
 TODO: Dedupe crash bug. (Kurt)
 TODO: CallPeaks minwidth should be a subsumption threshold, not creation threshold.
 TODO: CallPeaks should not subsume peaks with valleys in between that are very low.

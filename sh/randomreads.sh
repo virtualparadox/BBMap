@@ -91,6 +91,7 @@ pbmax=0.17          Maximum rate of PacBio errors for a read.
 
 Other Parameters:
 overlap=1           Require reads to overlap scaffold end by at least this much.
+banns=f             Do not generate reads over reference Ns.
 randomscaffold=f    Choose random scaffolds without respect to length.
 amp=1               Simulate highly-amplified MDA single-cell data by 
                     setting this to a higher number like 1000.

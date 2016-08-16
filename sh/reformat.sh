@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified October 23, 2015
+Last modified May 2, 2016
 
 Description:  Reformats reads to change ASCII quality encoding, interleaving, file format, or compression format.
 Optionally performs additional functions such as quality trimming, subsetting, and subsampling.
@@ -117,6 +117,8 @@ forcetrimright2=0       (ftr2) If positive, trim this many bases on the right en
 forcetrimmod=5          (ftm) If positive, trim length to be equal to zero modulo this number.
 mingc=0                 Discard reads with GC content below this.
 maxgc=1                 Discard reads with GC content above this.
+gcpairs=t               Use average GC of paired reads.
+                        Also affects gchist.
 
 Sam and bam processing options:
 

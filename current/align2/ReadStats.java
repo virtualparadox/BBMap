@@ -410,16 +410,31 @@ public class ReadStats {
 		lengthHist.increment(x, 1);
 	}
 	
-	public void addToGCHistogram(final Read r){
-		if(r==null){return;}
-		addToGCHistogram(r, 0);
-		if(r.mate!=null){addToGCHistogram(r.mate, 1);}
+	public void addToGCHistogram(final Read r1){
+		if(r1==null){return;}
+		final Read r2=r1.mate;
+		final int len1=r1.length(), len2=r1.mateLength();
+		
+		final float gc1=(len1>0 ? r1.gc() : -1);
+		final float gc2=(len2>0 ? r2.gc() : -1);
+		if(usePairGC){
+			final float gc;
+			if(r2==null){
+				gc=gc1;
+			}else{
+				gc=(gc1*len1+gc2*len2)/(len1+len2);
+			}
+			addToGCHistogram(gc, len1+len2);
+		}else{
+			addToGCHistogram(gc1, len1);
+			addToGCHistogram(gc2, len2);
+		}
 	}
 	
-	private void addToGCHistogram(final Read r, int pairnum){
-		if(r==null || r.bases==null){return;}
-		gcHist[Tools.min(GC_BINS, (int)(r.gc()*(GC_BINS+1)))]++;
-		gcMaxReadLen=Tools.max(r.length(), gcMaxReadLen);
+	private void addToGCHistogram(final float gc, final int len){
+		if(gc<0 || len<1){return;}
+		gcHist[Tools.min(GC_BINS, (int)(gc*(GC_BINS+1)))]++;
+		gcMaxReadLen=Tools.max(len, gcMaxReadLen);
 	}
 	
 	public void addToIdentityHistogram(final Read r){
@@ -1277,6 +1292,8 @@ public class ReadStats {
 	public static boolean COLLECT_LENGTH_STATS=false;
 	public static boolean COLLECT_IDENTITY_STATS=false;
 	public static boolean COLLECT_TIME_STATS=false;
+	
+	public static boolean usePairGC=true;
 	
 	public static String AVG_QUAL_HIST_FILE=null;
 	public static String QUAL_HIST_FILE=null;

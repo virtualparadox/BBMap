@@ -146,11 +146,6 @@ public class ConcurrentReadOutputStreamD extends ConcurrentReadOutputStream{
 		unicast(new ListNum<Read>(list, listnum), i);
 	}
 	
-	/**
-	 * @param list
-	 * @param listnum
-	 * @param i
-	 */
 	protected void unicast(ListNum<Read> ln, int i) {
 		if(verbose){System.err.println("crosD "+(master?"master":"slave ")+":    Unicasting reads to "+i+".");}
 		assert(!master);

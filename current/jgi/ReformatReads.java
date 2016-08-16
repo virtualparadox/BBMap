@@ -203,6 +203,7 @@ public class ReformatReads {
 			minGC=parser.minGC;
 			maxGC=parser.maxGC;
 			filterGC=(minGC>0 || maxGC<1);
+			usePairGC=parser.usePairGC;
 			tossJunk=parser.tossJunk;
 			recalibrateQuality=parser.recalibrateQuality;
 
@@ -666,23 +667,27 @@ public class ReformatReads {
 					}
 					
 					if(filterGC && (initialLength1>0 || initialLength2>0)){
-						final float gc;
-						if(r2==null){
-							gc=r1.gc();
-						}else{
-							gc=(r1.gc()*initialLength1+r2.gc()*initialLength2)/(initialLength1+initialLength2);
+						float gc1=(initialLength1>0 ? r1.gc() : -1);
+						float gc2=(initialLength2>0 ? r2.gc() : gc1);
+						if(gc1==-1){gc1=gc2;}
+						if(usePairGC){
+							final float gc;
+							if(r2==null){
+								gc=gc1;
+							}else{
+								gc=(gc1*initialLength1+gc2*initialLength2)/(initialLength1+initialLength2);
+							}
+							gc1=gc2=gc;
 						}
-						if(gc<minGC || gc>maxGC){
-							if(r1!=null && !r1.discarded()){
-								r1.setDiscarded(true);
-								badGcBasesT+=initialLength1;
-								badGcReadsT++;
-							}
-							if(r2!=null && !r2.discarded()){
-								r2.setDiscarded(true);
-								badGcBasesT+=initialLength2;
-								badGcReadsT++;
-							}
+						if(r1!=null && !r1.discarded() && (gc1<minGC || gc1>maxGC)){
+							r1.setDiscarded(true);
+							badGcBasesT+=initialLength1;
+							badGcReadsT++;
+						}
+						if(r2!=null && !r2.discarded() && (gc2<minGC || gc2>maxGC)){
+							r2.setDiscarded(true);
+							badGcBasesT+=initialLength2;
+							badGcReadsT++;
 						}
 					}
 					
@@ -1292,6 +1297,8 @@ public class ReformatReads {
 	private float minGC=0;
 	private float maxGC=1;
 	private boolean filterGC=false;
+	/** Average GC for paired reads. */
+	private boolean usePairGC;
 	private boolean tossJunk=false;
 	/** Toss pair only if both reads are shorter than limit */ 
 	private boolean requireBothBad=false;

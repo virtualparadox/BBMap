@@ -238,6 +238,9 @@ public class Parser {
 			maxGC=Float.parseFloat(b);
 //			if(maxGC<1){filterGC=true;}
 			assert(minGC>=0 && minGC<=1) : "maxgc should be a decimal number between 0 and 1, inclusive.";
+		}else if(a.equals("usepairgc") || a.equals("pairgc")){
+			usePairGC=Tools.parseBoolean(b);
+			ReadStats.usePairGC=usePairGC;
 		}else if(a.equals("mlf") || a.equals("minlenfrac") || a.equals("minlenfraction") || a.equals("minlengthfraction")){
 			minLenFraction=Float.parseFloat(b);
 		}else if(a.equals("maxns")){
@@ -927,6 +930,7 @@ public class Parser {
 	public float minLenFraction=0;
 	public float minGC=0;
 	public float maxGC=1;
+	public boolean usePairGC=true;
 //	public boolean filterGC=false;
 	public boolean untrim=false;
 	public boolean tossJunk=false;

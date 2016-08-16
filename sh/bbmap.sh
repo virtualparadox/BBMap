@@ -5,7 +5,7 @@ usage(){
 echo "
 BBMap v35.x
 Written by Brian Bushnell, from Dec. 2010 - present
-Last modified December 15, 2015
+Last modified May 2, 2016
 
 Description:  Fast and accurate splice-aware read aligner.
 
@@ -247,6 +247,7 @@ mhist=<file>            Histogram of match, sub, del, and ins rates by
                         read location.
 gchist=<file>           Read GC content histogram.
 gcbins=100              Number gchist bins.  Set to 'auto' to use read length.
+gcpairs=t               Use average GC of paired reads.
 idhist=<file>           Histogram of read count versus percent identity.
 idbins=100              Number idhist bins.  Set to 'auto' to use read length.
 statsfile=stderr        Mapping statistics are printed here.

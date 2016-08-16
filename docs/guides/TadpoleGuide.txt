@@ -49,13 +49,13 @@ This will assemble the reads into contigs.  Each contig will consist of unique k
 
 
 Error correction:
-tadpole.sh in=reads.fq out=ecc.fa mode=correct k=50
+tadpole.sh in=reads.fq out=ecc.fq mode=correct k=50
 
 This corrects the reads and outputs corrected reads.  Correction is handled by two algorithms, "pincer" and "tail".  Pincer corrects errors bidirectionally, using kmers on the left and right; therefore, it can only work on bases in the middle of the read, at least K away from either end.  Tail is not as robust, but is able to work on the ends of the read.  So, it's best to leave them both enabled, in which case the middle bases are corrected with pincer, and the end bases are corrected with tail.
 
 
 Error marking:
-tadpole.sh in=reads.fq out=ecc.fa mode=correct k=50 ecc=f mbb=2
+tadpole.sh in=reads.fq out=ecc.fq mode=correct k=50 ecc=f mbb=2
 
 This will not correct bases, but simply mark bases that appear to be errors by replacing them with N.  A base is considered a probable error (in this mode) if it is fully covered by kmers with depth below the value (in this case, 2).  Mbb and ecc can be used together.
 

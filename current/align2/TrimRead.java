@@ -63,22 +63,46 @@ public final class TrimRead implements Serializable {
 	}
 	
 	/**
-	 * Trim until at least 'minlen' consecutive bases exceed 'minq'
 	 * @param r Read to trim
 	 * @param trimLeft Trim left side
 	 * @param trimRight Trim right side
 	 * @param trimq Maximum quality to trim
-	 * @param minlen Minimum consecutive bases over minq before trimming stops 
+	 * @param minResult Ensure trimmed read is at least this long
 	 * @return Number of bases trimmed
 	 */
-	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, int trimq, int minlen){
+	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, int trimq, int minResult){
+		return trimFast(r, trimLeft, trimRight, trimq, minResult, 0);
+	}
+	
+	/**
+	 * This method allows a "discardUnder" parameter, so that qtrim=r will still discard
+	 * reads that if left-trimmed, would be shorter than the desired minimum length.
+	 * It is not presently used.
+	 * @param r Read to trim
+	 * @param trimLeft Trim left side
+	 * @param trimRight Trim right side
+	 * @param trimq Maximum quality to trim
+	 * @param minResult Ensure trimmed read is at least this long
+	 * @param discardUnder Resulting reads shorter than this are not wanted 
+	 * @return Number of bases trimmed
+	 */
+	public static int trimFast(Read r, boolean trimLeft, boolean trimRight, int trimq, int minResult, int discardUnder){
 		final byte[] bases=r.bases, qual=r.quality;
 		if(bases==null || bases.length<1){return 0;}
+		final int len=r.length();
+		final int a0, b0;
 		final int a, b;
 		if(optimalMode){
 			long packed=testOptimal(bases, qual, QualityTools.PROB_ERROR[trimq]);
-			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
-			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
+			a0=(int)((packed>>32)&0xFFFFFFFFL);
+			b0=(int)((packed)&0xFFFFFFFFL);
+			if(trimLeft!=trimRight && discardUnder>0 && len-a0-b0<discardUnder){
+				a=trimLeft ? len : 0;
+				b=trimRight ? len : 0;
+			}else{
+				a=trimLeft ? a0 : 0;
+				b=trimRight ? b0 : 0;
+			}
 		}else if(windowMode){
 			a=0;
 			b=(trimRight ? testRightWindow(bases, qual, (byte)trimq, windowLength) : 0);
@@ -86,7 +110,7 @@ public final class TrimRead implements Serializable {
 			a=(trimLeft ? testLeft(bases, qual, (byte)trimq) : 0);
 			b=(trimRight ? testRight(bases, qual, (byte)trimq) : 0);
 		}
-		return trimByAmount(r, a, b, minlen);
+		return trimByAmount(r, a, b, minResult);
 	}
 	
 	public static boolean untrim(Read r){
@@ -118,19 +142,19 @@ public final class TrimRead implements Serializable {
 		}
 	}
 	
-	/** Trim the left end of the read, from left to right */
-	private int trim(final boolean trimLeft, final boolean trimRight, final int minlen){
-		final int a, b;
-		if(optimalMode){
-			long packed=testOptimal(bases1, qual1, QualityTools.PROB_ERROR[trimq]);
-			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
-			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
-		}else{
-			a=(trimLeft ? testLeft(bases1, qual1, (byte)trimq) : 0);
-			b=(trimRight ? testRight(bases1, qual1, (byte)trimq) : 0);
-		}
-		return trim(a, b, minlen);
-	}
+//	/** Trim the left end of the read, from left to right */
+//	private int trim(final boolean trimLeft, final boolean trimRight, final int minlen){
+//		final int a, b;
+//		if(optimalMode){
+//			long packed=testOptimal(bases1, qual1, QualityTools.PROB_ERROR[trimq]);
+//			a=trimLeft ? (int)((packed>>32)&0xFFFFFFFFL) : 0;
+//			b=trimRight ? (int)((packed)&0xFFFFFFFFL) : 0;
+//		}else{
+//			a=(trimLeft ? testLeft(bases1, qual1, (byte)trimq) : 0);
+//			b=(trimRight ? testRight(bases1, qual1, (byte)trimq) : 0);
+//		}
+//		return trim(a, b, minlen);
+//	}
 	
 	/** Trim the left end of the read, from left to right */
 	private int trim(int trimLeft, int trimRight, final int minlen){

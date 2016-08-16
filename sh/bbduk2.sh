@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified December 10, 2015
+Last modified May 2, 2016
 
 BBDuk2 is like BBDuk but can kfilter, kmask, and ktrim in a single pass.
 It does not replace BBDuk, and is only provided to allow maximally efficient
@@ -211,6 +211,8 @@ restrictright=0     If positive, only look for kmer matches in the
                     rightmost X bases.
 mingc=0             Discard reads with GC content below this.
 maxgc=1             Discard reads with GC content above this.
+gcpairs=t           Use average GC of paired reads.
+                    Also affects gchist.
 
 Entropy/Complexity parameters:
 entropy=-1          Set between 0 and 1 to filter reads with entropy below

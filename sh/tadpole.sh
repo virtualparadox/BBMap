@@ -22,8 +22,8 @@ Input may be fasta or fastq, compressed or uncompressed.
 Input parameters:
 in=<file>           Primary input file for reads to use as kmer data.
 in2=<file>          Second input file for paired data.
-extend=<file>       Primary input file for sequences to extend.
-extend2=<file>      Second input file for paired reads.
+ine=<file>          Primary input file for sequences to extend.
+ine2=<file>         Second input file for paired reads.
 reads=-1            Only process this number of reads, then quit (-1 means all).
 
 Output parameters:

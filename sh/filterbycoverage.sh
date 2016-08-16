@@ -29,7 +29,6 @@ ratio=0          If cov0 is set, contigs will not be removed unless the coverage
 ow=t             (overwrite) Overwrites files that already exist.
 app=f            (append) Append to files that already exist.
 zl=4             (ziplevel) Set compression level, 1 (low) to 9 (max).
-int=f            (interleaved) Determines whether INPUT file is considered interleaved.
 
 Java Parameters:
 -Xmx             This will be passed to Java to set memory usage, overriding the program's automatic memory detection.

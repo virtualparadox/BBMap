@@ -188,6 +188,7 @@ public final class AssemblyStats2 {
 		gcbins=GCBINS_;
 		
 		if(gchistdecimals_<1){
+			gchistdecimals_=3;
 			if(gcbins==2 || gcbins==5 || gcbins==10){
 				gchistdecimals_=1;
 			}else if(gcbins==20 || gcbins==25 || gcbins==50 || gcbins==100){

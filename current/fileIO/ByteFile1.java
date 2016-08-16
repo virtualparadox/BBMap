@@ -124,19 +124,17 @@ public class ByteFile1 extends ByteFile {
 //		System.out.println("\nCalled nextLine() for line "+lineNum);
 //		System.out.println("A: bstart="+bstart+", bstop="+bstop);
 		
-		if(bstart<bstop && lasteol==slashr && buffer[bstart]==slashn){bstart++;}
-		assert(bstart>=bstop || (buffer[bstart]!=slashr || buffer[bstart]!=slashn)/*buffer[bstart]>slashr || buffer[bstart]==slashn*/);
+		//if(bstart<bstop && lasteol==slasher && buffer[bstart]==slashn){bstart++;}
+//		assert(bstart>=bstop || (buffer[bstart]!=slashn)/*buffer[bstart]>slasher || buffer[bstart]==slashn*/);
 		int nlpos=bstart;
 		
 //		System.out.println("B: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos);
-//		while(nlpos<bstop && (buffer[nlpos]>slashr || buffer[nlpos]==tab)){nlpos++;}
-		while(nlpos<bstop && (buffer[nlpos]!=slashr && buffer[nlpos]!=slashn)){nlpos++;}
+//		while(nlpos<bstop && (buffer[nlpos]>slasher || buffer[nlpos]==tab)){nlpos++;}
+		while(nlpos<bstop && buffer[nlpos]!=slashn){nlpos++;}
 //		System.out.println("C: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos);
 		if(nlpos>=bstop){
 			nlpos=fillBuffer();
 //			System.out.println("Filled buffer.");
-		}else{
-			lasteol=buffer[nlpos];
 		}
 //		System.out.println("D: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos);
 		
@@ -146,28 +144,64 @@ public class ByteFile1 extends ByteFile {
 		}
 
 		lineNum++;
-		if(bstart==nlpos){//Empty line.
+		//Limit is the position after the last position to copy.
+		//Limit equals nlpos unless there was a \r before the \n.
+		final int limit=(nlpos>bstart && buffer[nlpos-1]==slashr) ? nlpos-1 : nlpos;
+		if(bstart==limit){//Empty line.
 			bstart=nlpos+1;
+//			System.out.println("E: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos+", returning='"+printNL(blankLine)+"'");
 			return blankLine;
 		}
-		byte[] line=Arrays.copyOfRange(buffer, bstart, nlpos);
-		assert(line.length>0) : bstart+", "+nlpos;
+		byte[] line=Arrays.copyOfRange(buffer, bstart, limit);
+		assert(line.length>0) : bstart+", "+nlpos+", "+limit;
 		bstart=nlpos+1;
-//		System.out.println("E: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos);
+//		System.out.println("F: bstart="+bstart+", bstop="+bstop+", nlpos="+nlpos+", returning='"+printNL(line)+"'");
 		return line;
+	}
+	
+	private final String printNL(byte[] b){
+		StringBuilder sb=new StringBuilder();
+		for(int i=0; i<b.length; i++){
+			char c=(char)b[i];
+			if(c=='\n'){
+				sb.append("\\n");
+			}else if(c==slashr){
+				sb.append("\\r");
+			}else{
+				sb.append(c);
+			}
+		}
+		return sb.toString();
+	}
+	
+	private final void printBuffer(){
+		for(int i=0; i<bstop; i++){
+			char c=(char)buffer[i];
+			if(c=='\n'){
+				System.err.println("\\n");
+			}else if(c==slashr){
+				System.err.print("\\r");
+			}else{
+				System.err.print(c);
+			}
+		}
 	}
 	
 	private int fillBuffer(){
 		if(bstart<bstop){ //Shift end bytes to beginning
+//			System.err.println("Shift: "+bstart+", "+bstop);
 			assert(bstart>0);
 //			assert(bstop==buffer.length);
 			int extra=bstop-bstart;
 			for(int i=0; i<extra; i++, bstart++){
+//				System.err.print((char)buffer[bstart]);
+				//System.err.print('.');
 				buffer[i]=buffer[bstart];
-//				assert(buffer[i]>=slashr || buffer[i]==tab);
-				assert(buffer[i]!=slashr && buffer[i]!=slashn);
+//				assert(buffer[i]>=slasher || buffer[i]==tab);
+				assert(buffer[i]!=slashn);
 			}
 			bstop=extra;
+//			System.err.println();
 		}else{
 			bstop=0;
 		}
@@ -187,17 +221,24 @@ public class ByteFile1 extends ByteFile {
 			}
 			if(r>0){
 				bstop=bstop+r;
-//				while(len<bstop && (buffer[len]>slashr || buffer[len]==tab)){len++;}
-				while(len<bstop && (buffer[len]!=slashr && buffer[len]!=slashn)){len++;}
+//				while(len<bstop && (buffer[len]>slasher || buffer[len]==tab)){len++;}
+				while(len<bstop && buffer[len]!=slashn){len++;}
 			}else{
 				len=bstop;
 				break;
 			}
 		}
 		
+//		System.err.println("After Fill: ");
+//		printBuffer();
+//		System.err.println();
+		
 //		System.out.println("Filled buffer; r="+r+", returning "+len);
-		assert(r==-1 || buffer[len]<=slashr);
-		if(len>0){lasteol=buffer[len];}
+		assert(r==-1 || buffer[len]==slashn);
+		
+//		System.err.println("lasteol="+(lasteol=='\n' ? "\\n" : lasteol==slashr ? "\\r" : ""+(int)lasteol));
+//		System.err.println("First="+(int)buffer[0]+"\nLastEOL="+(int)lasteol);
+		
 		return len;
 	}
 	
@@ -209,7 +250,6 @@ public class ByteFile1 extends ByteFile {
 		is=ReadWrite.getInputStream(name(), false, allowSubprocess());
 		bstart=-1;
 		bstop=-1;
-		lasteol=-1;
 		return is;
 	}
 	
@@ -220,13 +260,11 @@ public class ByteFile1 extends ByteFile {
 	public final long lineNum(){return lineNum;}
 	
 	private boolean open=false;
-	private byte[] buffer=new byte[16384];
+	private byte[] buffer=/*new byte[109];*/new byte[16384];
 	private static final byte[] blankLine=new byte[0];
 	private int bstart=0, bstop=0;
 	public InputStream is;
 	public long lineNum=-1;
-	
-	private byte lasteol=-1;
 	
 	public static boolean verbose=false;
 

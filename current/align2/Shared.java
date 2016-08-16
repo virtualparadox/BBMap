@@ -25,7 +25,7 @@ public class Shared {
 	public static final int GAPCOST=Tools.max(1, GAPLEN/64);
 	public static final byte GAPC='-';
 	
-	public static String BBMAP_VERSION_STRING="35.85";
+	public static String BBMAP_VERSION_STRING="35.92";
 	
 	public static boolean TRIM_READ_COMMENTS=false;
 	

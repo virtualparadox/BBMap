@@ -56,7 +56,7 @@ A new version of the module is created automatically by Jenkins when BBTools is 
 Update files in the local repository copy of the master branch (e.g. /global/projectb/sandbox/gaag/bbtools/jgi-bbtools)
 Ensure everything looks correct: git status
 Add the new files: git add .
-Commit changes: git commit -m ‘changes go here’
+Commit changes: git commit -m 'changes go here'
 Tag the new version: git tag -a v35.75 -m 'Version 35.75'
 Push the changes: git push origin master --tags
 Compiled code (.class files, etc) are ignored in this repo; when Jenkins sees the push, it will recompile everything, using the Eclipse JDK, which produces faster bytecode than Oracle’s.

@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
+import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
 import stream.SamLine;
@@ -41,6 +42,7 @@ public class CalcTrueQuality {
 	
 	public static void main(String[] args){
 		ReadStats.COLLECT_QUALITY_STATS=true;
+		FASTQ.TEST_INTERLEAVED=FASTQ.FORCE_INTERLEAVED=false;
 		CalcTrueQuality ctq=new CalcTrueQuality(args);
 		ReadStats.overwrite=overwrite;
 		ctq.process();
@@ -56,6 +58,8 @@ public class CalcTrueQuality {
 		final int oldZL=ReadWrite.ZIPLEVEL;
 		final boolean oldBF1=ByteFile.FORCE_MODE_BF1;
 		final boolean oldBF2=ByteFile.FORCE_MODE_BF2;
+		final boolean oldTestInterleaved=FASTQ.TEST_INTERLEAVED;
+		final boolean oldForceInterleaved=FASTQ.FORCE_INTERLEAVED;
 		
 		main(args);
 		
@@ -67,6 +71,8 @@ public class CalcTrueQuality {
 		ReadWrite.ZIPLEVEL=oldZL;
 		ByteFile.FORCE_MODE_BF1=oldBF1;
 		ByteFile.FORCE_MODE_BF2=oldBF2;
+		FASTQ.TEST_INTERLEAVED=oldTestInterleaved;
+		FASTQ.FORCE_INTERLEAVED=oldForceInterleaved;
 	}
 	
 	public static void printOptions(){

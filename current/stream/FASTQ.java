@@ -729,8 +729,12 @@ public class FASTQ {
 
 		Read r=null;
 
-		byte[] bases=quad[1];
-		byte[] quals=quad[3];
+		final byte[] bases=quad[1];
+		final byte[] quals=quad[3];
+		
+//		System.err.println("\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n");
+//		assert(false) : numericID;
+		
 		//			assert(false) : Arrays.toString(quals);
 		for(int i=0; i<quals.length; i++){
 			quals[i]-=ASCII_OFFSET; //Convert from ASCII33 to native.
@@ -757,18 +761,21 @@ public class FASTQ {
 					quals[i]=0;
 				}else{
 					if(!negativeFive){
-						for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)33);}
+						for(int j=0; j<quals.length; j++){quals[j]=Tools.max(quals[j], (byte)ASCII_OFFSET);}
 						System.err.println("\nThe ASCII quality encoding offset ("+ASCII_OFFSET+") is not set correctly, or the reads are corrupt; quality value below -5.\n" +
 								"Please re-run with the flag 'qin=33' or 'ignorebadquality'.\nProblematic read number "+numericID+":\n" +
 
 						"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3])+"\n");
+						System.err.println("Offset="+ASCII_OFFSET);
 					}
+					assert(false);
 					errorState=true;
 					negativeFive=true;
 					return null;
 				}
 				
 			}
+//			assert(false);
 			assert(quals[i]>=-5);
 			//				assert(quals[i]>=-5) : "The ASCII quality encoding level is not set correctly.  Quality value below -5:" +
 			//						"\n"+new String(quad[0])+"\n"+new String(quad[1])+"\n"+new String(quad[2])+"\n"+new String(quad[3]);
