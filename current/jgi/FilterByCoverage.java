@@ -12,7 +12,7 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
+import structures.ListNum;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
@@ -22,8 +22,6 @@ import fileIO.ReadWrite;
 import fileIO.FileFormat;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
-
-import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 import align2.TrimRead;
@@ -187,7 +185,10 @@ public class FilterByCoverage {
 			TextFile tf=new TextFile(ffCov0);
 			int i=0;
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
-				if(!s.startsWith("#") && i>0){
+				if(i==0){
+					assert(s.startsWith("#")) : "Expected a header line starting with #";
+					CovStatsLine.initializeHeader(s);
+				}else{
 					CovStatsLine csl=new CovStatsLine(s);
 					CovStatsLine old=cslMap0.put(csl.id, csl);
 					assert(old==null);
@@ -200,7 +201,10 @@ public class FilterByCoverage {
 			TextFile tf=new TextFile(ffCov1);
 			int i=0;
 			for(String s=tf.nextLine(); s!=null; s=tf.nextLine()){
-				if(!s.startsWith("#") && i>0){
+				if(i==0){
+					assert(s.startsWith("#")) : "Expected a header line starting with #";
+					CovStatsLine.initializeHeader(s);
+				}else{
 					CovStatsLine csl=new CovStatsLine(s);
 					CovStatsLine old=cslMap1.put(csl.id, csl);
 					assert(old==null);

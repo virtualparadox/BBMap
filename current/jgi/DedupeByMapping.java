@@ -6,8 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.PriorityQueue;
 
 import dna.Timer;
-
-import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 import stream.ConcurrentReadInputStream;
@@ -15,6 +13,7 @@ import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.ReadStreamWriter;
 import stream.SamLine;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell

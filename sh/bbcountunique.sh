@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified February 17, 2015
+Last modified June 9, 2016
 
 Description:  Generates a kmer uniqueness histogram, binned by file position.
 There are 3 columns for single reads, 6 columns for paired:
@@ -36,6 +36,7 @@ cumulative=f        Show cumulative numbers rather than per-interval numbers.
 percent=t           Show percentages of unique reads.
 count=f             Show raw counts of unique reads.
 printlastbin=f      (plb) Print a line for the final undersized bin.
+minprob=0           Ignore kmers with a probability of correctness below this (based on q-scores).
 
 
 Java Parameters:

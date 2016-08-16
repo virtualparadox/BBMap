@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 4, 2015
+Last modified May 3, 2016
 
 Description:  Filters an assembly by contig coverage.
 

@@ -905,11 +905,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		int start=Integer.parseInt(split[4]);
 		int stop=Integer.parseInt(split[5]);
 		
-//		boolean cs=(Integer.parseInt(split[6])==1);
-//		boolean paired=(Integer.parseInt(split[7])==1);
-		
 		int flags=Integer.parseInt(split[6], 2);
-		boolean cs=((flags&COLORMASK)!=0);
 		
 		int copies=Integer.parseInt(split[7]);
 
@@ -928,16 +924,6 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		
 		byte[] basesOriginal=split[10].getBytes();
 		byte[] qualityOriginal=(split[11].equals(".") ? null : split[11].getBytes());
-		
-		if(cs){
-			for(int i=0; i<basesOriginal.length; i++){
-				byte b=basesOriginal[i];
-				if(b>='0' && b<='3'){
-					b=(byte) (b-'0');
-				}
-				basesOriginal[i]=b;
-			}
-		}
 		
 		if(qualityOriginal!=null){
 			for(int i=0; i<qualityOriginal.length; i++){
@@ -1305,12 +1291,12 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		clearSite();
 		match=null;
 		sites=null;
-		flags=(flags&(SYNTHMASK|COLORMASK|PAIRNUMMASK|SWAPMASK));
+		flags=(flags&(SYNTHMASK|PAIRNUMMASK|SWAPMASK));
 		if(clearMate && mate!=null){
 			mate.clearSite();
 			mate.match=null;
 			mate.sites=null;
-			mate.flags=(mate.flags&(SYNTHMASK|COLORMASK|PAIRNUMMASK|SWAPMASK));
+			mate.flags=(mate.flags&(SYNTHMASK|PAIRNUMMASK|SWAPMASK));
 		}
 //		assert(mate==null || (pairnum()==0 && mate.pairnum()==1)) : pairnum()+", "+mate.pairnum();
 	}
@@ -1491,6 +1477,48 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		}else{
 			return identitySkewed(match);
 		}
+	}
+	
+	public final boolean hasLongInsertion(int maxlen){
+		return hasLongInsertion(match, maxlen);
+	}
+	
+	public final boolean hasLongDeletion(int maxlen){
+		return hasLongDeletion(match, maxlen);
+	}
+	
+	public static final boolean hasLongInsertion(byte[] match, int maxlen){
+		if(match==null || match.length<maxlen){return false;}
+		byte prev='0';
+		int len=0;
+		for(byte b : match){
+			if(b=='I' || b=='X' || b=='Y'){
+				if(b==prev){len++;}
+				else{len=1;}
+				if(len>maxlen){return true;}
+			}else{
+				len=0;
+			}
+			prev=b;
+		}
+		return false;
+	}
+	
+	public static final boolean hasLongDeletion(byte[] match, int maxlen){
+		if(match==null || match.length<maxlen){return false;}
+		byte prev='0';
+		int len=0;
+		for(byte b : match){
+			if(b=='D'){
+				if(b==prev){len++;}
+				else{len=1;}
+				if(len>maxlen){return true;}
+			}else{
+				len=0;
+			}
+			prev=b;
+		}
+		return false;
 	}
 	
 	/**
@@ -2257,6 +2285,12 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 		return r;
 	}
 	
+	public void toLongMatchString(){
+		assert(shortmatch());
+		match=toLongMatchString(match);
+		setShortMatch(false);
+	}
+	
 	public static byte[] toLongMatchString(byte[] shortmatch){
 		if(shortmatch==null){return null;}
 		assert(shortmatch.length>0);
@@ -2401,7 +2435,6 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public boolean mapped(){return (flags&MAPPEDMASK)==MAPPEDMASK;}
 	public boolean paired(){return (flags&PAIREDMASK)==PAIREDMASK;}
 	public boolean synthetic(){return (flags&SYNTHMASK)==SYNTHMASK;}
-//	public boolean colorspace(){return (flags&COLORMASK)==COLORMASK;}
 	public boolean ambiguous(){return (flags&AMBIMASK)==AMBIMASK;}
 	public boolean perfect(){return (flags&PERFECTMASK)==PERFECTMASK;}
 //	public boolean semiperfect(){return perfect() ? true : list!=null && list.size()>0 ? list.get(0).semiperfect : false;} //TODO: This is a hack.  Add a semiperfect flag.
@@ -3349,7 +3382,7 @@ public final class Read implements Comparable<Read>, Cloneable, Serializable{
 	public static final int PERFECTMASK=(1<<3);
 	public static final int AMBIMASK=(1<<4);
 	public static final int RESCUEDMASK=(1<<5);
-	public static final int COLORMASK=(1<<6);
+//	public static final int COLORMASK=(1<<6); //TODO:  Change to semiperfectmask?
 	public static final int SYNTHMASK=(1<<7);
 	public static final int DISCARDMASK=(1<<8);
 	public static final int INVALIDMASK=(1<<9);

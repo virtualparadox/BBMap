@@ -9,9 +9,9 @@ import stream.ByteBuilder;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
-import align2.IntList;
-import align2.ListNum;
-import align2.LongList;
+import structures.IntList;
+import structures.ListNum;
+import structures.LongList;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -82,6 +82,8 @@ public class KmerTableSet extends AbstractKmerTableSet {
 		boolean ecco_=false, merge_=false;
 		boolean rcomp_=true;
 		double minProb_=defaultMinprob;
+		
+//		assert(false) : minProb_;
 		
 		/* Parse arguments */
 		for(int i=0; i<args.length; i++){
@@ -223,7 +225,7 @@ public class KmerTableSet extends AbstractKmerTableSet {
 			long memory=Runtime.getRuntime().maxMemory();
 			double xmsRatio=Shared.xmsRatio();
 //			long tmemory=Runtime.getRuntime().totalMemory();
-			usableMemory=(long)Tools.max(((memory-96000000)*(xmsRatio>0.97 ? 0.82 : 0.75)), memory*0.45);
+			usableMemory=(long)Tools.max(((memory-96000000)*(xmsRatio>0.97 ? 0.82 : 0.72)), memory*0.45);
 			if(prepasses==0 || !prefilter){
 				filterMemory0=filterMemory1=0;
 			}else{
@@ -260,6 +262,7 @@ public class KmerTableSet extends AbstractKmerTableSet {
 		merge=merge_;
 		minProb=(float)minProb_;
 		rcomp=rcomp_;
+//		assert(false) : tableMemory+", "+bytesPerKmer+", "+prealloc+", "+preallocFraction;
 		estimatedKmerCapacity=(long)((tableMemory*1.0/bytesPerKmer)*((prealloc && preallocFraction==1) ? 0.9 : 0.6));
 //		System.err.println("tableMemory="+tableMemory+", bytesPerKmer="+bytesPerKmer+", estimatedKmerCapacity="+estimatedKmerCapacity);
 		KmerCountAbstract.minProb=(minProbPrefilter ? minProb : 0);
@@ -703,6 +706,7 @@ public class KmerTableSet extends AbstractKmerTableSet {
 		/* Loop through the bases, maintaining a forward kmer via bitshifts */
 		for(int i=0; i<blen; i++){
 			final byte b=bases[i];
+			assert(b>=0) : Arrays.toString(bases);
 			final long x=AminoAcid.baseToNumber[b];
 			kmer=((kmer<<2)|x)&mask;
 			if(x<0){
@@ -1063,6 +1067,34 @@ public class KmerTableSet extends AbstractKmerTableSet {
 		return maxPos;
 	}
 	
+	public int fillRightCountsRcompOnly(long kmer, long rkmer, int[] counts, long mask, int shift2){
+		assert(kmer==rcomp(rkmer));
+		if(verbose){outstream.println("fillRightCounts:   "+toText(kmer)+",   "+toText(rkmer));}
+		kmer=(kmer<<2)&mask;
+		rkmer=(rkmer>>>2);
+		int max=-1, maxPos=0;
+		
+		for(int i=0; i<=3; i++){
+			long kmer2=kmer|((long)i);
+			long rkmer2=rkmer|(((long)AminoAcid.numberToComplement[i])<<shift2);
+			if(verbose){outstream.println("kmer:               "+toText(kmer2)+", "+toText(rkmer2));}
+			assert(kmer2==(kmer2&mask));
+			assert(rkmer2==(rkmer2&mask));
+			assert(kmer2==rcomp(rkmer2));
+			long key=rkmer2;
+			int way=(int)(key%ways);
+			int count=tables[way].getValue(key);
+			assert(count==NOT_PRESENT || count>=0);
+			count=Tools.max(count, 0);
+			counts[i]=count;
+			if(count>max){
+				max=count;
+				maxPos=i;
+			}
+		}
+		return maxPos;
+	}
+	
 	public int fillLeftCounts(long kmer, long rkmer, int[] counts, long mask, int shift2){
 		assert(kmer==rcomp(rkmer));
 		if(verbose){outstream.println("fillLeftCounts:    "+toText(kmer)+",   "+toText(rkmer));}
@@ -1154,15 +1186,25 @@ public class KmerTableSet extends AbstractKmerTableSet {
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
 	/*--------------------------------------------------------------*/
-	
+
+	@Override
 	public int kbig(){return k;}
+	@Override
 	public long filterMemory(int pass){return ((pass&1)==0) ? filterMemory0 : filterMemory1;}
+	@Override
 	public boolean ecco(){return ecco;}
+	@Override
 	public boolean qtrimLeft(){return qtrimLeft;}
+	@Override
 	public boolean qtrimRight(){return qtrimRight;}
+	@Override
 	public byte minAvgQuality(){return minAvgQuality;}
+	@Override
 	public long tableMemory(){return tableMemory;}
+	@Override
 	public long estimatedKmerCapacity(){return estimatedKmerCapacity;}
+	@Override
+	public int ways(){return ways;}
 	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in tables[Y] */
 	private AbstractKmerTable[] tables;

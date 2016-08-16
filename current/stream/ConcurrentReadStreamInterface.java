@@ -1,6 +1,6 @@
 package stream;
 
-import align2.ListNum;
+import structures.ListNum;
 
 public interface ConcurrentReadStreamInterface extends Runnable{
 	

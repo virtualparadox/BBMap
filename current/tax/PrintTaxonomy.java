@@ -3,6 +3,7 @@ package tax;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import dna.Parser;
 import dna.Timer;
@@ -204,15 +205,56 @@ public class PrintTaxonomy {
 	/*--------------------------------------------------------------*/
 	
 	void printTaxonomy(String name, final TextStreamWriter tsw){
-		TaxNode tn=null;
-		tn=tree.getNode(name);
-		if(tn==null){tn=tree.getNodeByName(name);}
-		
 		tsw.print("\n");
-		if(tn==null){
-			tsw.println("Could not find node for '"+name+"'");
+		TaxNode tn=tree.getNode(name);
+		if(tn!=null){
+			printTaxonomy(tn, tsw);
 			return;
+		}else{
+			List<TaxNode> list=tree.getNodesByName(name);
+			if(list!=null){
+				for(TaxNode tn2 : list){
+					printTaxonomy(tn2, tsw);
+				}
+				return;
+			}
 		}
+		tsw.println("Could not find node for '"+name+"'");
+		return;
+	}
+	
+	void printTaxLevel(String name, final TextStreamWriter tsw){
+		tsw.print("\n");
+		TaxNode tn=tree.getNode(name);
+		if(tn!=null){
+			printTaxLevel(tn, tsw);
+			return;
+		}else{
+			List<TaxNode> list=tree.getNodesByName(name);
+			if(list!=null){
+				for(TaxNode tn2 : list){
+					printTaxLevel(tn2, tsw);
+				}
+				return;
+			}
+		}
+		tsw.println("Could not find node for '"+name+"'");
+		return;
+	}
+	
+//	void printTaxCounts(String name, final TextStreamWriter tsw){
+//		TaxNode tn=null;
+//		tn=tree.getNode(name);
+//		if(tn==null){tn=tree.getNodeByName(name);}
+//		if(tn==null){tn=unknown;}
+//		while(tn!=null && tn.id!=tn.pid && tn.level<taxLevel){tn=tree.getNode(tn.pid);}
+//		if(tsw!=null)tsw.println(tn.name);
+//		tn.incrementRaw(1);
+//	}
+	
+	void printTaxonomy(TaxNode tn, final TextStreamWriter tsw){
+		assert(tn!=null);
+		tsw.print("\n");
 		do{
 			if(tn.level<=taxLevel){tn.incrementRaw(1);}
 			tsw.println(tn.levelString()+"\t"+tn.id+"\t"+tn.name);
@@ -220,25 +262,19 @@ public class PrintTaxonomy {
 		}while(tn!=null && tn.id!=tn.pid);
 	}
 	
-	void printTaxLevel(String name, final TextStreamWriter tsw){
-		TaxNode tn=null;
-		tn=tree.getNode(name);
-		if(tn==null){tn=tree.getNodeByName(name);}
+	void printTaxLevel(TaxNode tn, final TextStreamWriter tsw){
 		if(tn==null){tn=unknown;}
 		while(tn!=null && tn.id!=tn.pid && tn.level<taxLevel){tn=tree.getNode(tn.pid);}
 		if(tsw!=null)tsw.println(tn.name);
 		tn.incrementRaw(1);
 	}
 	
-	void printTaxCounts(String name, final TextStreamWriter tsw){
-		TaxNode tn=null;
-		tn=tree.getNode(name);
-		if(tn==null){tn=tree.getNodeByName(name);}
-		if(tn==null){tn=unknown;}
-		while(tn!=null && tn.id!=tn.pid && tn.level<taxLevel){tn=tree.getNode(tn.pid);}
-		if(tsw!=null)tsw.println(tn.name);
-		tn.incrementRaw(1);
-	}
+//	void printTaxCounts(TaxNode tn, final TextStreamWriter tsw){
+//		if(tn==null){tn=unknown;}
+//		while(tn!=null && tn.id!=tn.pid && tn.level<taxLevel){tn=tree.getNode(tn.pid);}
+//		if(tsw!=null)tsw.println(tn.name);
+//		tn.incrementRaw(1);
+//	}
 	
 	/** This is called if the program runs with no parameters */
 	private void printOptions(){

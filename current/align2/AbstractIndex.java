@@ -142,13 +142,12 @@ public abstract class AbstractIndex {
 	
 	static boolean PERFECTMODE=false;
 	static boolean SEMIPERFECTMODE=false;
-	static final boolean REMOVE_FREQUENT_GENOME_FRACTION=true; //Default true; false is more accurate
+	
+	static boolean REMOVE_FREQUENT_GENOME_FRACTION=true;//Default true; false is more accurate
+	static boolean TRIM_BY_GREEDY=true;//default: true
 	
 	/** Ignore longest site list(s) when doing a slow walk. */
 	static final boolean TRIM_LONG_HIT_LISTS=false; //Increases speed with tiny loss of accuracy.  Default: true for clean or synthetic, false for noisy real data
-	
-	
-	public static final boolean TRIM_BY_GREEDY=true; //default: true
 	
 	public static int MIN_APPROX_HITS_TO_KEEP=1; //Default 2 for skimmer, 1 otherwise, min 1; lower is more accurate
 	

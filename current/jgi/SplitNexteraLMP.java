@@ -5,8 +5,6 @@ import java.util.ArrayList;
 import kmer.AbstractKmerTable;
 import kmer.TableLoaderLockFree;
 import kmer.TableReader;
-
-import align2.ListNum;
 import align2.Tools;
 import dna.Timer;
 import fileIO.ByteStreamWriter;
@@ -16,6 +14,7 @@ import fileIO.TextStreamWriter;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell
@@ -646,6 +645,15 @@ public class SplitNexteraLMP extends BBTool_ST {
 	private boolean mask;
 	private boolean merge;
 	private double testmerge;
+	
+	public long readsLmp(){return readsLmp;}
+	public long basesLmp(){return basesLmp;}
+	public long readsFrag(){return readsFrag;}
+	public long basesFrag(){return basesFrag;}
+	public long readsUnk(){return readsUnk;}
+	public long basesUnk(){return basesUnk;}
+	public long readsSingle(){return readsSingle;}
+	public long basesSingle(){return basesSingle;}
 	
 	private long readsLmp=0;
 	private long basesLmp=0;

@@ -12,16 +12,14 @@ import stream.FASTQ;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.ReadStreamWriter;
-
+import structures.ListNum;
+import structures.LongList;
 import dna.AminoAcid;
 import dna.Data;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
-
-import align2.ListNum;
-import align2.LongList;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -145,6 +143,7 @@ public class BBMerge {
 				args2.add("ratiominoverlapreduction=4");
 				args2.add("efilter=2");
 				args2.add("pfilter=0.25");
+				args2.add("minsecondratio=0.24");
 			}else if(ustrict){
 				args2.add("ratiomode=t");
 				args2.add("normalmode=t");
@@ -160,6 +159,7 @@ public class BBMerge {
 				args2.add("ratiominoverlapreduction=4");
 				args2.add("efilter=2");
 				args2.add("pfilter=0.03");
+				args2.add("minsecondratio=0.20");
 			}else if(vstrict){
 				args2.add("ratiomode=t");
 				args2.add("normalmode=f");
@@ -174,6 +174,7 @@ public class BBMerge {
 				args2.add("ratiominoverlapreduction=4");
 				args2.add("efilter=2");
 				args2.add("pfilter=0.008");
+				args2.add("minsecondratio=0.16");
 			}else{
 				args2.add("ratiomode=t");
 				args2.add("normalmode=f");
@@ -188,6 +189,7 @@ public class BBMerge {
 				args2.add("ratiominoverlapreduction=4");
 				args2.add("efilter=4");
 				args2.add("pfilter=0.0008");
+				args2.add("minsecondratio=0.12");
 			}
 		}else if(loose || vloose || uloose || xloose){
 			loose=true;
@@ -199,6 +201,7 @@ public class BBMerge {
 			args2.add("margin=2");
 			
 			args2.add("ratiooffset=0.4");
+			args2.add("minsecondratio=0.08");
 			
 			if(xloose){
 				args2.add("owq=t");
@@ -260,6 +263,7 @@ public class BBMerge {
 			args2.add("efilter=8");
 			args2.add("minentropy=39");
 			args2.add("mininsert0=50");
+			args2.add("minsecondratio=0.08");
 		}
 		
 		for(String s : args){
@@ -328,8 +332,10 @@ public class BBMerge {
 			String b=split.length>1 ? split[1] : null;
 			if(b==null || b.equalsIgnoreCase("null")){b=null;}
 			while(a.startsWith("-")){a=a.substring(1);}
-
-			if(Parser.isJavaFlag(arg)){
+			
+			if(a.equals("parsecustom")){
+				parseCustom=Tools.parseBoolean(b);
+			}else if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
@@ -423,8 +429,12 @@ public class BBMerge {
 				outCardinality=b;
 //			}else if(a.equals("outputfailed")){
 //				OUTPUT_FAILED=Tools.parseBoolean(b);outCardinality
+			}else if(a.equals("trimpolya")){
+				trimPolyA=Tools.parseBoolean(b);
 			}else if(a.equals("mix")){
 				MIX_BAD_AND_GOOD=Tools.parseBoolean(b);
+			}else if(a.equals("ooi") || a.equals("onlyoutputincorrect")){
+				ONLY_OUTPUT_INCORRECT=Tools.parseBoolean(b);
 			}else if(a.equals("nzo") || a.equals("nonzeroonly")){
 				NONZERO_ONLY=Tools.parseBoolean(b);
 			}else if(a.equals("showhiststats")){
@@ -480,11 +490,11 @@ public class BBMerge {
 			}else if(a.equals("efilter")){
 				if(b==null || Character.isLetter(b.charAt(0))){
 					boolean x=Tools.parseBoolean(b);
-					if(!x){efilterRatio=0;}
+					if(!x){efilterRatio=-1;}
 				}else{
 					efilterRatio=Float.parseFloat(b);
 				}
-				useEfilter=efilterRatio>0;
+				useEfilter=efilterRatio>=0;
 			}else if(a.equals("pfilter")){
 				if(b==null || Character.isLetter(b.charAt(0))){
 					boolean x=Tools.parseBoolean(b);
@@ -520,6 +530,19 @@ public class BBMerge {
 				Data.setPath(b);
 			}else if(a.equals("iupacton") || a.equals("itn")){
 				iupacToN=Tools.parseBoolean(b);
+			}else if(a.equals("minsecondratio")){
+				MIN_SECOND_RATIO=Float.parseFloat(b);
+			}
+			
+			//Adapter parameters
+			
+			else if(a.equals("adapter") || a.equals("adapters")){
+				ArrayList<byte[]> alb=Tools.toAdapterList(b, maxAdapterLength);
+				adapterList1=adapterList2=alb;
+			}else if(a.equals("adapter1") || a.equals("adapters1")){
+				adapterList1=Tools.toAdapterList(b, maxAdapterLength);
+			}else if(a.equals("adapter2") || a.equals("adapters2")){
+				adapterList2=Tools.toAdapterList(b, maxAdapterLength);
 			}
 			
 			//Extension parameters
@@ -550,10 +573,34 @@ public class BBMerge {
 				minCountExtend=(int)Tools.parseKMG(b);
 			}else if(a.equals("ilb") || a.equals("ignoreleftbranches") || a.equals("ignoreleftjunctions") || a.equals("ibb") || a.equals("ignorebackbranches")){
 				extendThroughLeftJunctions=Tools.parseBoolean(b);
-			}else{
+			}else if(a.equals("rem") || a.equals("requireextensionmatch")){
+				requireExtensionMatch=Tools.parseBoolean(b);
+			}else if(a.equals("rsem") || a.equals("requirestrictextensionmatch")){
+				requireStrictExtensionMatch=Tools.parseBoolean(b);
+			}
+			
+			
+			else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
 		}
+		
+		if(adapterList1!=null || adapterList2!=null){
+			verifyAdapters=true;
+		}
+		
+		if(requireStrictExtensionMatch){
+			requireExtensionMatch=true;
+		}
+
+		if(requireExtensionMatch && extendRight2<1){
+			System.err.println("Extend2 is defaulting to 50 because it was unset but r"+(requireStrictExtensionMatch ? "s" : "")+"em mode is being used.");
+			extendRight2=50;
+		}
+		
+//		assert(!requireExtensionMatch || extendRight2>0) : "The requireExtensionMatch flag requires also setting the extend2 flag.\n"
+//				+ "Suggested values are extend2=50 k=62.";
+		
 //		assert(false) : ecco;
 		minInsert=Tools.max(minInsert, MIN_OVERLAPPING_BASES);
 		if(minInsert0<1){
@@ -592,7 +639,8 @@ public class BBMerge {
 			forceTrimRight=parser.forceTrimRight;
 			forceTrimRight2=parser.forceTrimRight2;
 		}
-		parseCustom=FASTQ.PARSE_CUSTOM;
+//		parseCustom=FASTQ.PARSE_CUSTOM;
+//		if(parseCustom){FASTQ.PARSE_CUSTOM_WARNING=false;}
 		if(verbose){
 //			assert(false) : "verbose flag is static final; recompile to change it.";
 //			BBMergeOverlapper.verbose=true;
@@ -749,7 +797,7 @@ public class BBMerge {
 		System.err.println("No Solution:         \t"+noSolutionCountTotal+String.format((noSolutionCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", noSolutionCountTotal*divp));
 		if(minInsert>0){System.err.println("Too Short:           \t"+tooShortCountTotal+String.format((tooShortCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", tooShortCountTotal*divp));}
 		if(maxReadLength<Integer.MAX_VALUE){System.err.println("Too Long:            \t"+tooLongCountTotal+String.format((tooLongCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", tooLongCountTotal*divp));}
-		
+
 		if(extendRight1>0 || extendRight2>0){
 			double dive=100d/extensionsAttempted;
 			System.err.println("Fully Extended:      \t"+fullyExtendedTotal+String.format((fullyExtendedTotal<10000 ? "       " : "   ")+"\t%.3f%%", fullyExtendedTotal*dive));
@@ -757,10 +805,16 @@ public class BBMerge {
 			System.err.println("Not Extended:        \t"+notExtendedTotal+String.format((notExtendedTotal<10000 ? "       " : "   ")+"\t%.3f%%", notExtendedTotal*dive));
 		}
 		
+		if(adapterList1!=null || adapterList2!=null){
+			double diva=100d/(readsProcessedTotal*2);
+			System.err.println("Adapters Expected:   \t"+adaptersExpected+String.format((adaptersExpected<10000 ? "       " : "   ")+"\t%.3f%%", adaptersExpected*diva));
+			System.err.println("Adapters Found:      \t"+adaptersFound+String.format((adaptersFound<10000 ? "       " : "   ")+"\t%.3f%%", adaptersFound*diva));
+		}
+		
 		if(parseCustom){
 			System.err.println();
-			System.err.println("Correct:             \t"+correctCountTotal+String.format((correctCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", correctCountTotal*divp)+String.format("   \t%.3f%% of merged", correctCountTotal*div2));
-			System.err.println("Incorrect:           \t"+incorrectCountTotal+String.format((incorrectCountTotal<10000 ? "       " : "   ")+"\t%.3f%%", incorrectCountTotal*divp)+String.format("   \t%.3f%% of merged", incorrectCountTotal*div2));
+			System.err.println("Correct:             \t"+correctCountTotal+String.format((correctCountTotal<10000 ? "       " : "   ")+"\t%.4f%%", correctCountTotal*divp)+String.format("  \t%.4f%% of merged", correctCountTotal*div2));
+			System.err.println("Incorrect:           \t"+incorrectCountTotal+String.format((incorrectCountTotal<10000 ? "       " : "   ")+"\t%.5f%%", incorrectCountTotal*divp)+String.format(" \t%.5f%% of merged", incorrectCountTotal*div2));
 			double snr=Tools.max(correctCountTotal, 0.001)/(Tools.max(incorrectCountTotal, 0.001));
 			double snrDB=Tools.mid(-20, 80, 10*Math.log10(snr));
 			System.err.println("SNR:                 \t"+String.format("%.3f dB", snrDB));
@@ -809,85 +863,56 @@ public class BBMerge {
 		ReadWrite.writeStringInThread(sb, fname);
 	}
 	
+	private static String toAdapterSequence(LongList[] lists, boolean trimPolyA){
+		StringBuilder adapter=new StringBuilder();
+		long max=0;
+		int lastBase=-1;
+		for(int i=0; true; i++){
+			long a=lists[0].get(i);
+			long c=lists[1].get(i);
+			long g=lists[2].get(i);
+			long t=lists[3].get(i);
+			long sum=(a+c+g+t);
+			max=Tools.max(max, sum);
+			if(sum==0 || (sum<10 && sum<=max/1000) || (max>100 && sum<8)){break;}
+			long thresh=(max>100 ? 4+(sum*2)/3 : (sum*2)/3);
+			if(a>thresh){
+				adapter.append('A');
+				lastBase=i;
+			}else if(c>thresh){
+				adapter.append('C');
+				lastBase=i;
+			}else if(g>thresh){
+				adapter.append('G');
+				lastBase=i;
+			}else if(t>thresh){
+				adapter.append('T');
+				lastBase=i;
+			}else{
+				adapter.append('N');
+			}
+		}
+		
+		if(lastBase>=0){
+			char A=(trimPolyA ? 'A' : 'N');
+			while(lastBase>=0 && (adapter.charAt(lastBase)=='N' || adapter.charAt(lastBase)==A)){lastBase--;}
+		}
+		
+		if(lastBase<0){return "N";}
+		return adapter.substring(0, lastBase+1);
+	}
+	
 	public static void writeAdapterConsensus(String fname, LongList[][] matrix){
 		StringBuilder sb=new StringBuilder();
 		{
 			sb.append(">Read1_adapter\n");
-			StringBuilder adapter=new StringBuilder();
-			LongList[] lists=matrix[0];
-			long max=0;
-			int lastBase=-1;
-			for(int i=0; true; i++){
-				long a=lists[0].get(i);
-				long c=lists[1].get(i);
-				long g=lists[2].get(i);
-				long t=lists[3].get(i);
-				long sum=(a+c+g+t);
-				max=Tools.max(max, sum);
-				if(sum==0 || (sum<10 && sum<=max/1000) || (max>100 && sum<8)){break;}
-				long thresh=(max>100 ? 4+(sum*2)/3 : (sum*2)/3);
-				if(a>thresh){
-					adapter.append('A');
-					lastBase=i;
-				}else if(c>thresh){
-					adapter.append('C');
-					lastBase=i;
-				}else if(g>thresh){
-					adapter.append('G');
-					lastBase=i;
-				}else if(t>thresh){
-					adapter.append('T');
-					lastBase=i;
-				}else{
-					adapter.append('N');
-				}
-			}
-			if(lastBase<0){sb.append('N');}
-			else{
-				for(int i=0; i<=lastBase; i++){
-					sb.append(adapter.charAt(i));
-				}
-			}
-			sb.append('\n');
+			String adapter=toAdapterSequence(matrix[0], trimPolyA);
+			sb.append(adapter).append('\n');
 		}
 		if(matrix.length>1){
 			sb.append(">Read2_adapter\n");
-			StringBuilder adapter=new StringBuilder();
-			LongList[] lists=matrix[1];
-			long max=0;
-			int lastBase=-1;
-			for(int i=0; true; i++){
-				long a=lists[0].get(i);
-				long c=lists[1].get(i);
-				long g=lists[2].get(i);
-				long t=lists[3].get(i);
-				long sum=(a+c+g+t);
-				max=Tools.max(max, sum);
-				if(sum==0 || (sum<10 && sum<=max/1000) || (max>100 && sum<8)){break;}
-				long thresh=(max>100 ? 5+(sum*2)/3 : (sum*2)/3);
-				if(a>thresh){
-					adapter.append('A');
-					lastBase=i;
-				}else if(c>thresh){
-					adapter.append('C');
-					lastBase=i;
-				}else if(g>thresh){
-					adapter.append('G');
-					lastBase=i;
-				}else if(t>thresh){
-					adapter.append('T');
-					lastBase=i;
-				}else{
-					adapter.append('N');
-				}
-			}
-			if(lastBase<0){sb.append('N');}
-			else{
-				for(int i=0; i<=lastBase; i++){
-					sb.append(adapter.charAt(i));
-				}
-			}
-			sb.append('\n');
+			String adapter=toAdapterSequence(matrix[1], trimPolyA);
+			sb.append(adapter).append('\n');
 		}
 		ReadWrite.writeString(sb, fname);
 	}
@@ -1016,6 +1041,9 @@ public class BBMerge {
 				notExtendedTotal+=ct.notExtendedT;
 				extensionsAttempted+=ct.extensionsAttemptedT;
 
+				adaptersExpected+=ct.adaptersExpectedT;
+				adaptersFound+=ct.adaptersFoundT;
+
 				insertMinTotal=Tools.min(ct.insertMin, insertMinTotal);
 				insertMaxTotal=Tools.max(ct.insertMax, insertMaxTotal);
 				
@@ -1110,10 +1138,11 @@ public class BBMerge {
 		final int minInsert=50;
 		final int minInsert0=35;
 		final int entropy=42;
+		final float minSecondRatio=0.2f;
 		
 		final int x=findOverlap(r1, r2, ecc,
 				minOverlap, minOverlap0, minInsert, minInsert0, entropy,
-				maxRatio, ratioMargin, ratioOffset,
+				maxRatio, minSecondRatio, ratioMargin, ratioOffset,
 				efilterRatio, efilterOffset, pfilterRatio);
 		return x;
 	}
@@ -1134,10 +1163,11 @@ public class BBMerge {
 		final int minInsert=16;
 		final int minInsert0=16;
 		final int entropy=28;
+		final float minSecondRatio=0.2f;
 		
 		final int x=findOverlap(r1, r2, ecc,
 				minOverlap, minOverlap0, minInsert, minInsert0, entropy,
-				maxRatio, ratioMargin, ratioOffset,
+				maxRatio, minSecondRatio, ratioMargin, ratioOffset,
 				efilterRatio, efilterOffset, pfilterRatio);
 		return x;
 	}
@@ -1145,7 +1175,7 @@ public class BBMerge {
 	/** Returns the insert size as calculated by overlap, or -1 */
 	public static final int findOverlap(final Read r1, final Read r2, final boolean ecc,
 			int minOverlap, final int minOverlap0, final int minInsert, final int minInsert0, final int entropy,
-			final float maxRatio, final float ratioMargin, final float ratioOffset,
+			final float maxRatio, final float minSecondRatio, final float ratioMargin, final float ratioOffset,
 			final float efilterRatio, final float efilterOffset, final float pfilterRatio){
 		
 		assert(r1!=null && r2!=null);
@@ -1186,7 +1216,7 @@ public class BBMerge {
 			rvector[4]=0;
 
 			int x=BBMergeOverlapper.mateByOverlapRatio(r1, r2, null, null, rvector, minOverlap0, minOverlap, 
-					minInsert0, minInsert, maxRatio, ratioMargin, ratioOffset, 0.95f, 0.95f, false);
+					minInsert0, minInsert, maxRatio, minSecondRatio, ratioMargin, ratioOffset, 0.95f, 0.95f, false);
 			bestInsert=x;
 			bestBad=rvector[2];
 			ambig=(x>-1 ? rvector[4]==1 : false);
@@ -1348,12 +1378,13 @@ public class BBMerge {
 		private int findOverlapInThread(final Read r1, final byte[][] originals, ArrayList<Read> listg, ArrayList<Read> listb){
 
 			final Read r2=r1.mate;
-			final int trueSize=r1.insert();
+			final int trueSize=parseCustom ? parseInsert(r1, r2) : -1;
 			
 			final int bestInsert=processReadPair(r1, r2);
+			if(verbose){System.err.println("trueSize="+trueSize+", bestInsert="+bestInsert);}
 			
 			if(originals!=null){
-				if(eccTadpole){
+				if(eccTadpole && false){
 					originals[0]=r1.bases;
 					originals[1]=r1.quality;
 					originals[2]=r2.bases;
@@ -1392,11 +1423,12 @@ public class BBMerge {
 			
 			r1.setInsert(bestInsert);
 			
-			if(findAdapterSequence && bestInsert>0){
+			if(findAdapterSequence && bestInsert>0 && bestInsert<r1.length()){
 				storeAdapterSequence(r1, bestInsert);
-				r2.reverseComplement();
+				//r2.reverseComplement();
 				storeAdapterSequence(r2, bestInsert);
-				r2.reverseComplement();
+				//System.err.println(new String(r2.bases));
+				//r2.reverseComplement();
 			}
 			
 			if(originals!=null && (!ecco || bestInsert<1)){
@@ -1420,6 +1452,9 @@ public class BBMerge {
 				}
 			}
 			
+			if(ONLY_OUTPUT_INCORRECT && (bestInsert==trueSize || bestInsert<1)){
+				return bestInsert;
+			}
 			if(bestInsert>0 || MIX_BAD_AND_GOOD){
 				if(listg!=null){
 					if(joined!=null){
@@ -1476,7 +1511,7 @@ public class BBMerge {
 			if(qtrim){qtrim(r1, r2, 0);}
 			
 			if(tadpole!=null && extendRight1>0){
-				extendAndMerge(r1, r2, extendRight1, 1, false);
+				extendAndMerge(r1, r2, extendRight1, 1, false, extendRvec);
 			}
 
 			final int len1=r1.length(), len2=r2.length();
@@ -1505,10 +1540,11 @@ public class BBMerge {
 			return 1;
 		}
 		
-		private final int extendAndMerge(Read r1, Read r2, int amt, int iters, boolean merge){
+		private final int extendAndMerge(Read r1, Read r2, int amt, int iters, boolean merge, int[] extendRvec){
 			assert(iters>0);
 			assert(merge || iters==1);
 			
+			extendRvec[0]=extendRvec[1]=0;
 			
 			int sum1=0, sum2=0, attempted=0;
 			int bestInsert=RET_AMBIG;
@@ -1542,6 +1578,9 @@ public class BBMerge {
 			if(sum2==attempted){fullyExtendedT++;}
 			else if(sum2>0){partlyExtendedT++;}
 			else{notExtendedT++;}
+			
+			extendRvec[0]=sum1;
+			extendRvec[1]=sum2;
 			
 			return bestInsert;
 		}
@@ -1582,17 +1621,18 @@ public class BBMerge {
 
 			float ratioMargin=RATIO_MARGIN;
 			float maxRatio=MAX_RATIO;
+			float minSecondRatio=MIN_SECOND_RATIO;
 
 			boolean overlapped=false;
 			if(overlapUsingQuality && r1.quality!=null && r2.quality!=null){
 				overlapped=true;
 				x=BBMergeOverlapper.mateByOverlapRatio(r1, r2, aprob, bprob, rvector, 
-						min0, min, minInsert0, minInsert, maxRatio, ratioMargin, RATIO_OFFSET, 0.95f, 0.95f, true);
+						min0, min, minInsert0, minInsert, maxRatio, minSecondRatio, ratioMargin, RATIO_OFFSET, 0.95f, 0.95f, true);
 				if(verbose){System.err.println("Result from ratiomode1:  \tinsert="+x+", bad="+rvector[2]+", ambig="+(rvector[4]==1));}
 			}
 			if(!overlapped || (overlapWithoutQuality && (x<0 || rvector[4]==1))){
 				x=BBMergeOverlapper.mateByOverlapRatio(r1, r2, aprob, bprob, rvector, min0, min, 
-						minInsert0, minInsert, maxRatio, ratioMargin, RATIO_OFFSET, 0.95f, 0.95f, false);
+						minInsert0, minInsert, maxRatio, minSecondRatio, ratioMargin, RATIO_OFFSET, 0.95f, 0.95f, false);
 				if(verbose){System.err.println("Result from ratiomode2:  \tinsert="+x+", bad="+rvector[2]+", ambig="+(rvector[4]==1));}
 			}
 			return x;
@@ -1619,8 +1659,8 @@ public class BBMerge {
 					break;
 				}
 			}
-
-
+			
+			
 			if(loose && bestInsertNM<0){//TODO check for estimated number of overlap errors
 				int x=BBMergeOverlapper.mateByOverlap(r1, r2, aprob, bprob, rvector, MIN_OVERLAPPING_BASES_0-1, minOverlap+2, 
 						minInsert0, MISMATCH_MARGIN, MAX_MISMATCHES0+1, MAX_MISMATCHES+1, MIN_QUALITY-1);
@@ -1703,6 +1743,13 @@ public class BBMerge {
 			
 			final int minOverlap=calcMinOverlapFromEntropy(r1, r2);
 			if(verbose){System.err.println("minOverlap: "+minOverlap);}
+			if(TAG_CUSTOM){
+				r1.id+=" mo="+minOverlap;
+				int maxBasesToConsider=Tools.min(Tools.max(len1, len2), len1+len2-minInsert);
+				float r1ee=r1.expectedTipErrors(false, maxBasesToConsider);
+				float r2ee=r2.expectedTipErrors(false, maxBasesToConsider);
+				r1.id+=String.format("_r1ee=%.4f_r2ee=%.4f", r1ee, r2ee);
+			}
 			
 			//TODO: Currently this is not used for anything.
 			final int bestInsertAD;
@@ -1757,29 +1804,95 @@ public class BBMerge {
 				bestInsert=bestInsertNM;
 			}
 			
+			if(TAG_CUSTOM && bestInsert<0){bestInsert=bestInsertRM;}
+			
 			if(bestBad>MAX_MISMATCHES_R){ambig=true;}
 			
-			if(ambig){return RET_AMBIG;}
-			else if(bestInsert<0){return RET_NO_SOLUTION;}
+			if(!TAG_CUSTOM){
+				if(ambig){return RET_AMBIG;}
+				else if(bestInsert<0){return RET_NO_SOLUTION;}
+			}
 
 			//TODO:  Crucial!  This block can vastly reduce merge rate, particularly if quality values are inaccurate.
 			if(useQuality && r1.quality!=null && r2.quality!=null){
-				if(useEfilter && bestInsert>0 && !ambig){
+				if(useEfilter && bestInsert>0 && (!ambig || TAG_CUSTOM)){
 					float bestExpected=BBMergeOverlapper.expectedMismatches(r1, r2, bestInsert);
 					if((bestExpected+efilterOffset)*efilterRatio<bestBad){ambig=true;}
+					
 					if(verbose){System.err.println("Result after efilter:  \tinsert="+bestInsert+", bad="+bestBad+", ambig="+ambig);}
+					if(TAG_CUSTOM){r1.id+=String.format("_be=%.4f", bestExpected);}
 				}
 
-				if(pfilterRatio>0 && bestInsert>0 && !ambig){
+				if(pfilterRatio>0 && bestInsert>0 && (!ambig || TAG_CUSTOM)){
 					float probability=BBMergeOverlapper.probability(r1, r2, bestInsert);
 					if(probability<pfilterRatio){bestInsert=-1;}
 					if(verbose){System.err.println("Result after pfilter:  \tinsert="+bestInsert+", bad="+bestBad+", ambig="+ambig);}
+					if(TAG_CUSTOM){r1.id+=String.format("_pr=%.8f", probability);}
 				}
 			}
 			
 			if(ambig){return RET_AMBIG;}
 			r1.errors=bestBad;
 			return bestInsert>0 ? bestInsert : RET_NO_SOLUTION;
+		}
+		
+		private final int parseInsert(Read r1, Read r2){
+			int trueSize=-1;
+			if(r1.id.startsWith("insert=")){
+				trueSize=GradeMergedReads.parseInsert(r1.id);
+			}else{
+				r1.setMapped(true);
+				r2.setMapped(true);
+				trueSize=Read.insertSizeMapped(r1, r2, ignoreMappingStrand);
+			}
+			if(verbose){System.err.println("True Insert: "+trueSize);}
+//			r1.setInsert(trueSize);
+			return trueSize;
+		}
+		
+		private boolean verifyAdapters(Read r1, Read r2, int bestInsert){
+			
+			final int minAdapterOverlap=3;
+			if(Tools.max(r1.length(), r2.length())-minAdapterOverlap<bestInsert){return true;}
+			
+			int good=0, bad=0, invalid=0;
+			final float minAdapterRatio=0.6f;
+			{
+				int adapterLen=r1.length()-bestInsert;
+				if(adapterList1!=null && good<1 && adapterLen>=minAdapterOverlap){
+					boolean found=false;
+					if(adapterLen>=minAdapterOverlap){adaptersExpectedT++;}
+					for(byte[] adapter : adapterList1){
+						int aiv=adapterIsValid(r1, adapter, bestInsert, minAdapterOverlap, minAdapterRatio);
+						if(aiv==2){good++; break;}
+						else if(aiv==1){invalid++;}
+						else{bad++;}
+					}
+				}
+			}
+			{
+				int adapterLen=r2.length()-bestInsert;
+				if(adapterList2!=null && good<1 && adapterLen>=minAdapterOverlap){
+					if(adapterLen>=minAdapterOverlap){adaptersExpectedT++;}
+					r2.reverseComplement();
+					for(byte[] adapter : adapterList2){
+						int aiv=adapterIsValid(r2, adapter, bestInsert, minAdapterOverlap, minAdapterRatio);
+						if(aiv==2){good++; break;}
+						else if(aiv==1){invalid++;}
+						else{bad++;}
+					}
+					r2.reverseComplement();
+				}
+			}
+			if(good>0){
+				adaptersFoundT+=good;
+				return true;
+			}else if(bad>0){
+				return false;
+			}else if(invalid>0 && strict){
+				return false;
+			}
+			return true;
 		}
 		
 		/**
@@ -1792,20 +1905,7 @@ public class BBMerge {
 			
 			{
 				final int x=preprocess(r1, r2, (qtrim1 && !qtrim2));
-				if(x<0){return x;}
-			}
-			
-			if(parseCustom){
-				int trueSize=-1;
-				if(r1.id.startsWith("insert=")){
-					trueSize=GradeMergedReads.parseInsert(r1.id);
-				}else{
-					r1.setMapped(true);
-					r2.setMapped(true);
-					trueSize=Read.insertSizeMapped(r1, r2, ignoreMappingStrand);
-				}
-				if(verbose){System.err.println("True Insert: "+trueSize);}
-				r1.setInsert(trueSize);
+				if(!TAG_CUSTOM && x<0){return x;}
 			}
 			
 			r2.reverseComplement();
@@ -1833,26 +1933,97 @@ public class BBMerge {
 				}
 			}
 			
+			//assert(false) : bestInsert+", "+r1.length()+", "+r2.length();
+			if(verifyAdapters && bestInsert>0){
+//				
+				boolean ok=verifyAdapters(r1, r2, bestInsert);
+				if(!ok){bestInsert=RET_AMBIG;}
+			}
+			
+			//Kmer processing - correction and extension
 			if(tadpole!=null){
-				if(eccTadpole && (bestInsert==RET_AMBIG || bestInsert==RET_NO_SOLUTION)){
+				
+				//Correction
+				boolean corrected=false;
+				if(eccTadpole && !requireExtensionMatch && (bestInsert==RET_AMBIG || bestInsert==RET_NO_SOLUTION)){
 					int c1=tadpole.errorCorrect(r1);
 					int c2=tadpole.errorCorrect(r2);
+					corrected=true;
 					if(c1>0 || c2>0){
 						bestInsert=processReadPair_inner(r1, r2);
 					}
 				}
-
-				if(extendRight2>0 && (bestInsert==RET_AMBIG || bestInsert==RET_NO_SOLUTION)){
-					bestInsert=extendAndMerge(r1, r2, extendRight2, extendIterations, true);
+				
+				//Extension
+				if(extendRight2>0 && (requireExtensionMatch || bestInsert==RET_AMBIG || bestInsert==RET_NO_SOLUTION) 
+						&& !(requireStrictExtensionMatch && bestInsert<1)){
+					final int lengthSum=r1.length()+r1.mateLength();
+					final int approxMaxOverlappingInsert=lengthSum-20;
+					final int minExt=Tools.min(12, extendRight2*2);
+					int bestInsertE=extendAndMerge(r1, r2, extendRight2, extendIterations, true, extendRvec);
+					int extension1=extendRvec[0], extension2=extendRvec[1];
+					int extension=extension1+extension2;
+					
+//					assert(r1.length()==150+extension1) : extension1+", "+r1.length();
+					
+					//If extension failed, try correction and extend again
+					if(eccTadpole && requireExtensionMatch && !corrected && extension<extendRight2/* *2 */ && 
+							(extension==0 || (!strict && bestInsert<0 && bestInsertE<0) || (bestInsert>0 && bestInsertE==bestInsert))){
+						int c1=0, c2=0;
+						if(extension1==0){c1=tadpole.errorCorrect(r1);}
+						if(extension2==0){c2=tadpole.errorCorrect(r2);}
+						
+						//If there were any corrections
+						if(c1>0 || c2>0){
+//							//Un-extend r1
+//							if(extension1>0){TrimRead.trimToPosition(r1, 0, r1.length()-extension1-1, 1);}
+//							//Un-extend r2
+//							if(extension2>0){TrimRead.trimToPosition(r2, extension2, r2.length()-1, 1);}
+							
+							//Retry extension
+							bestInsertE=extendAndMerge(r1, r2, extendRight2, extendIterations, true, extendRvec);
+							extension1=extendRvec[0];
+							extension2=extendRvec[1];
+							extension=extension1+extension2;
+						}
+					}
+					
+//					if(extension==0 && eccTadpole && !corrected){
+//						int c1=tadpole.errorCorrect(r1);
+//						int c2=tadpole.errorCorrect(r2);
+//						corrected=true;
+//						if(c1>0 || c2>0){
+//							bestInsertE=extendAndMerge(r1, r2, extendRight2, extendIterations, true, extendRvec);
+//							extension=extendRvec[0]+extendRvec[1];
+//						}
+//					}
+					
+					if(requireExtensionMatch && extension>0){
+						if(bestInsert!=bestInsertE){
+							if(bestInsert>0){bestInsert=RET_AMBIG;}//There was an unextended overlap, not matching extended overlap
+							else if(!requireStrictExtensionMatch && bestInsertE>0){//Extended had an overlap, but unextended did not
+								if(bestInsertE>approxMaxOverlappingInsert && extension>=minExt){//Use only if the extended overlap was too long to see before
+									bestInsert=bestInsertE;
+								}
+							}
+						}
+					}else if(bestInsertE>0){
+						assert(bestInsert<0);
+						bestInsert=bestInsertE;
+					}
 				}
 			}
 			
 			if(useKFilter && bestInsert>kmerLength){
 				Read joined=r1.joinRead(bestInsert);
 				if(useKFilter){
-					int cov=BBMergeOverlapper.minCoverage(joined, tadpole, kmerLength, filterCutoff);
-					if(cov<filterCutoff){bestInsert=RET_NO_SOLUTION;}
-					if(verbose){System.err.println("Result after kfilter:  \tinsert="+bestInsert);}
+					int cov1=BBMergeOverlapper.minCoverage(r1, tadpole, kmerLength, filterCutoff+1);
+					int cov2=(cov1>filterCutoff ? BBMergeOverlapper.minCoverage(r2, tadpole, kmerLength, filterCutoff+1) : cov1);
+					if(cov1>filterCutoff && cov2>filterCutoff){
+						int cov=BBMergeOverlapper.minCoverage(joined, tadpole, kmerLength, filterCutoff);
+						if(cov<filterCutoff){bestInsert=RET_NO_SOLUTION;}
+						if(verbose){System.err.println("Result after kfilter:  \tinsert="+bestInsert);}
+					}
 				}
 			}
 			
@@ -1908,6 +2079,57 @@ public class BBMerge {
 			}
 		}
 		
+		/** Returns 0=bad, 1=unknown, 2=good */
+		private int adapterIsValid(final Read r, final byte[] adapter, final int insert, 
+				final int minAdapterOverlap, final float minAdapterRatio){
+//			assert(false) : insert+", "+minAdapterOverlap;
+//			System.err.println("Comparing adapter.");
+			
+			final byte[] bases=r.bases;
+			final int limit=Tools.min(adapter.length, bases.length-insert);
+			final int badLimit=Tools.max(2, limit-(int)(minAdapterRatio*limit));
+			
+//			assert(false) : limit+", "+minAdapterOverlap+", "+insert+", "+bases.length+", "+adapter.length;
+			
+//			int shortBadLimit=1+(int)Math.ceil(minAdapterOverlap*(1-minAdapterRatio));
+//			System.err.println("limit="+limit);
+			if(limit<minAdapterOverlap && limit<=badLimit){
+//				assert(false);
+				return 1;
+			}
+
+//			StringBuilder sb1=new StringBuilder();
+//			StringBuilder sb2=new StringBuilder();
+			
+			int good=0, bad=0, nocall=0;
+			for(int i=0, j=insert; i<limit; i++, j++){
+				byte a=adapter[i], b=bases[j];
+//				sb1.append((char)a);
+//				sb2.append((char)b);
+				if(a=='N' || b=='N'){
+					nocall++;
+				}else if(a==b){
+					good++;
+				}else{
+					bad++;
+					if(bad>badLimit){return 0;}
+				}
+			}
+//			assert(false) : good+", "+bad+", "+nocall;
+			final int overlap=bad+good;
+			if(overlap<minAdapterOverlap){
+				return 1;
+			}
+//			final int minGood=(int)minAdapterRatio*overlap;
+			final int minGood=(int)Math.ceil(minAdapterRatio*overlap);
+			final int ret=(good>=minGood ? 2 : 0);
+//			assert(ret==2) : "\n"+sb1+"\n"+sb2+"\n"
+//					+ "ratio="+ratio+", good="+good+", bad="+bad+", nocall="+nocall+", limit="+limit+", overlap="+overlap+"\n"
+//					+ "(good/overlap)="+good+"/"+overlap+"="+(good/overlap);
+//			System.err.println("Returning "+ret+" for ratio "+ratio);
+			return ret;
+		}
+		
 		
 		/*--------------------------------------------------------------*/
 		
@@ -1916,6 +2138,7 @@ public class BBMerge {
 		final byte qfake=Shared.FAKE_QUAL;
 		
 		private final int[] rvector=new int[5];
+		private final int[] extendRvec=new int[2];
 
 		private final int[] rightCounts=new int[4];
 		private final int[] leftCounts=(extendThroughLeftJunctions ? null : new int[4]);
@@ -1945,6 +2168,9 @@ public class BBMerge {
 		long notExtendedT=0;
 		long extensionsAttemptedT=0;
 		
+		long adaptersExpectedT=0;
+		long adaptersFoundT=0;
+		
 		private final ConcurrentReadInputStream cris;
 		private final ConcurrentReadOutputStream rosgood;
 		private final ConcurrentReadOutputStream rosbad;
@@ -1969,6 +2195,13 @@ public class BBMerge {
 	private String ihist=null;
 	private String outAdapter=null;
 	private String outCardinality=null;
+
+	/** List of R1 adapters to look for to verify a short-insert overlap */
+	private ArrayList<byte[]> adapterList1;
+	/** List of R2 adapters to look for to verify a short-insert overlap */
+	private ArrayList<byte[]> adapterList2;
+	/** Require short inserts to have adapter sequence at the expected location */
+	private boolean verifyAdapters=false;
 	
 	private final LogLog loglog;
 	
@@ -1977,7 +2210,7 @@ public class BBMerge {
 	private boolean ecco=false;
 	private boolean trimByOverlap=false;
 	
-	private float pfilterRatio=0.00002f;
+	private float pfilterRatio=0.00004f;
 	private float efilterRatio=6f;
 	private float efilterOffset=0.05f;
 	private boolean useEfilter=true;
@@ -2011,6 +2244,9 @@ public class BBMerge {
 	private boolean eccTadpole=false;
 	private boolean shave=false;
 	private boolean rinse=false;
+	
+	private boolean requireExtensionMatch=false;
+	private boolean requireStrictExtensionMatch=false;
 	
 	private boolean extendThroughLeftJunctions=true;
 	private int minCountSeed=3, minCountExtend=2;
@@ -2046,6 +2282,10 @@ public class BBMerge {
 	static int TRIM_ON_OVERLAP_FAILURE=1;
 	static int QUAL_ITERS=3;
 	static boolean parseCustom=false;
+	static int maxAdapterLength=21;
+	
+	/** For adapter output */
+	static boolean trimPolyA=true;
 	
 	static int forceTrimLeft;
 	static int forceTrimRight;
@@ -2085,6 +2325,8 @@ public class BBMerge {
 	static long partlyExtendedTotal=0;
 	static long notExtendedTotal=0;
 	static long extensionsAttempted=0;
+	static long adaptersExpected=0;
+	static long adaptersFound=0;
 	
 	static int insertMinTotal=999999999;
 	static int insertMaxTotal=0;
@@ -2101,6 +2343,7 @@ public class BBMerge {
 	static float MAX_RATIO=0.09f;
 	static float RATIO_MARGIN=5.5f;
 	static float RATIO_OFFSET=0.55f;
+	static float MIN_SECOND_RATIO=0.1f;
 	
 	public static int MAX_MISMATCHES=3;
 	public static int MAX_MISMATCHES0=3;
@@ -2120,16 +2363,18 @@ public class BBMerge {
 //	private static boolean SKIP_MATED_READS=false;
 //	private static boolean OUTPUT_FAILED=true;
 	private static boolean MIX_BAD_AND_GOOD=false;
+	private static boolean ONLY_OUTPUT_INCORRECT=false;
 	private static boolean NONZERO_ONLY=true;
 	private static boolean showHistStats=true;
 	
 	private static boolean overwrite=true;
 	private static boolean append=false;
 	private static final boolean verbose=false;
+	static final boolean TAG_CUSTOM=false;
 	
 	private static boolean iupacToN=false;
 	
 	private static int THREADS=-1;
-	private static String version="8.9";
+	private static String version="9.02";
 	
 }

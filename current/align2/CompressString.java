@@ -2,6 +2,7 @@ package align2;
 
 import dna.ChromosomeArray;
 import dna.Data;
+import structures.IntList;
 
 public class CompressString {
 	

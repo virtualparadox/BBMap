@@ -1,4 +1,4 @@
-package align2;
+package structures;
 
 /**
  * A mutable long object

@@ -10,8 +10,7 @@ import stream.Read;
 import stream.SamLine;
 import stream.ScaffoldCoordinates;
 import stream.SiteScore;
-
-import align2.LongList;
+import structures.LongList;
 import align2.ReadStats;
 import align2.Tools;
 
@@ -79,12 +78,10 @@ public class CoveragePileup {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
-//			}else if(Parser.parseCommonStatic(arg, a, b)){//TODO: Enable
-//				//do nothing
+			}else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
 			}else if(Parser.parseZip(arg, a, b)){
 				//do nothing
-			}else if(a.equals("monitor") || a.equals("killswitch")){
-				Parser.parseCommonStatic(arg, a, b);
 			}else if(a.equals("ref") || a.equals("reference") || a.equals("fasta")){
 				reference=b;
 			}else if(a.equals("in") || a.equals("in1")){
@@ -777,7 +774,7 @@ public class CoveragePileup {
 //			assert(false && length==stop-start+1) : length+", "+start+", "+stop+", "+(stop-start+1);
 //			assert(false) : "'"+new String(sl.rname())+"', '"+sl.rnameS()+"'";
 //			assert(false) : "'"+sl.rnameS()+"'";
-			final byte[] match=(INCLUDE_DELETIONS ? null : SamLine.cigarToShortMatch(sl.cigar, true));
+			final byte[] match=(INCLUDE_DELETIONS ? null : sl.toShortMatch(true));
 			return addCoverage(sl.rnameS(), sl.seq, match, start, stop, length, sl.strand(), sl.hasMate() ? 1 : 2);
 		}
 		return false;

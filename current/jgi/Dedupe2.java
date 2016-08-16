@@ -23,10 +23,9 @@ import stream.FastaReadInputStream;
 import stream.FastqReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
+import structures.ListNum;
+import structures.LongM;
 import align2.BandedAligner;
-import align2.ListNum;
-import align2.LongM;
 import align2.ReadLengthComparator;
 import align2.ReadStats;
 import align2.Shared;
@@ -56,8 +55,14 @@ public final class Dedupe2 {
 			printOptions();
 			System.exit(0);
 		}
+
+		int rbl0=Shared.READ_BUFFER_LENGTH;
+		Shared.READ_BUFFER_LENGTH=16;
+		
 		Dedupe2 dd=new Dedupe2(args);
 		dd.process();
+		
+		Shared.READ_BUFFER_LENGTH=rbl0;
 	}
 	
 	private static void printOptions(){
@@ -172,6 +177,8 @@ public final class Dedupe2 {
 				//do nothing
 			}else if(Parser.parseFasta(arg, a, b)){
 				//do nothing
+			}else if(parser.parseQTrim(arg, a, b)){
+				//do nothing
 			}else if(parser.parseInterleaved(arg, a, b)){
 				//do nothing
 			}else if(a.equals("in") || a.equals("in1")){
@@ -263,6 +270,8 @@ public final class Dedupe2 {
 				NUMBER_GRAPH_NODES=Tools.parseBoolean(b);
 			}else if(a.equals("addpairnum")){
 				ADD_PAIRNUM_TO_NAME=Tools.parseBoolean(b);
+			}else if(a.equals("hashns")){
+				HASH_NS=Tools.parseBoolean(b);
 			}else if(a.equals("pn") || a.equals("prefixname")){
 //				PREFIX_NAME=Tools.parseBoolean(b);
 			}else if(a.equals("k")){
@@ -364,6 +373,9 @@ public final class Dedupe2 {
 		
 		{//Process parser fields
 			Parser.processQuality();
+			qTrimLeft=parser.qtrimLeft;
+			qTrimRight=parser.qtrimRight;
+			trimQ=parser.trimq;
 		}
 		
 		if(verbose){
@@ -445,16 +457,11 @@ public final class Dedupe2 {
 		
 		boolean dq0=FASTQ.DETECT_QUALITY;
 		boolean ti0=FASTQ.TEST_INTERLEAVED;
-		int rbl0=Shared.READ_BUFFER_LENGTH;
-//		FASTQ.DETECT_QUALITY=false;
-//		FASTQ.TEST_INTERLEAVED=false;
-		Shared.READ_BUFFER_LENGTH=16;
 		
 		process2();
 		
 		FASTQ.DETECT_QUALITY=dq0;
 		FASTQ.TEST_INTERLEAVED=ti0;
-		Shared.READ_BUFFER_LENGTH=rbl0;
 		
 		t.stop();
 		
@@ -492,6 +499,7 @@ public final class Dedupe2 {
 		processMatches(t);
 		
 		forceTrimLeft=forceTrimRight=-1;
+		qTrimLeft=qTrimRight=false;
 		
 		if(absorbContainment){
 			processContainments(t);
@@ -3092,6 +3100,10 @@ public final class Dedupe2 {
 					TrimRead.trimToPosition(r, forceTrimLeft>0 ? forceTrimLeft : 0, forceTrimRight>0 ? forceTrimRight : r.length(), 1);
 				}
 			}
+			if(qTrimLeft || qTrimRight){
+				TrimRead.trimFast(r, qTrimLeft, qTrimRight, trimQ, 0);
+			}
+			if(r.length()<MINSCAF){return false;}
 
 			readsProcessedT++;
 			basesProcessedT+=r.length();
@@ -3201,7 +3213,6 @@ public final class Dedupe2 {
 		private int findContainments(final Unit u){
 			if(minLengthPercent<=0 && maxSubs<=0 && minIdentity>=100 && !u.valid()){return 0;}
 			final byte[] bases=u.bases();
-			final int minlen=k-1;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -3209,6 +3220,7 @@ public final class Dedupe2 {
 			long rkmer=0;
 			int hits=0;
 			int currentContainments=0;
+			int len=0;
 			
 			if(bases==null || bases.length<k){return -1;}
 			final LongM key=new LongM();
@@ -3219,8 +3231,10 @@ public final class Dedupe2 {
 				long x2=baseToComplementNumber[b];
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(HASH_NS || AminoAcid.isFullyDefined(b)){len++;}
+				else{len=0;}
 //				if(verbose){System.err.println("Scanning i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-				if(i>=minlen){
+				if(len>=k){
 					key.set(Tools.max(kmer, rkmer)); //Canonical
 					for(int am=0; am<affixMaps.length; am++){
 						ArrayList<Unit> list=affixMaps[am].get(key);
@@ -3275,7 +3289,6 @@ public final class Dedupe2 {
 //			if(minLengthPercent<=0 && maxSubs<=0 && minIdentity>=100 && !u.valid()){return 0;}
 //			if(u.overlapList!=null){u.overlapList.clear();}
 			final byte[] bases=u.bases();
-			final int minlen=k-1;
 			final int shift=2*k;
 			final int shift2=shift-2;
 			final long mask=~((-1L)<<shift);
@@ -3283,6 +3296,7 @@ public final class Dedupe2 {
 			long rkmer=0;
 			int hits=0;
 			int currentOverlaps=0;
+			int len=0;
 			
 			if(bases==null || bases.length<k){return -1;}
 			final LongM key=new LongM();
@@ -3295,8 +3309,10 @@ public final class Dedupe2 {
 				long x2=baseToComplementNumber[b];
 				kmer=((kmer<<2)|x)&mask;
 				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(HASH_NS || AminoAcid.isFullyDefined(b)){len++;}
+				else{len=0;}
 //				if(verbose){System.err.println("Scanning i="+i+", kmer="+kmer+", rkmer="+rkmer+", bases="+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
-				if(i>=minlen){//valid key
+				if(len>=k){//valid key
 					key.set(Tools.max(kmer, rkmer)); //Canonical key
 					for(int am=0; am<affixMaps.length; am++){
 						ArrayList<Unit> list=affixMaps[am].get(key);
@@ -5553,6 +5569,10 @@ public final class Dedupe2 {
 	private int forceTrimLeft=-1;
 	/** Trim right bases of the read after this position (exclusive, 0-based) */
 	private int forceTrimRight=-1;
+	
+	private boolean qTrimLeft=false;
+	private boolean qTrimRight=false;
+	private byte trimQ=6;
 
 	int maxEdits=0;
 	int maxSubs=0;
@@ -5632,6 +5652,7 @@ public final class Dedupe2 {
 	public static boolean REQUIRE_MATCHING_NAMES=false;
 	public static boolean NUMBER_GRAPH_NODES=true;
 	public static boolean ADD_PAIRNUM_TO_NAME=true;
+	public static boolean HASH_NS=false;
 	
 	private static int reverseType(int type){return (type+2)%4;}
 	public static final int FORWARD=0;

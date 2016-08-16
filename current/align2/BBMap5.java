@@ -127,6 +127,11 @@ public final class BBMap5 extends AbstractMapper  {
 			maxKeyDensity*=1.2f;
 			minKeyDensity*=1.2f;
 		}
+		
+		if(excludeFraction>=0){
+			BBIndex5.setFractionToExclude(excludeFraction);
+		}
+		
 		return args;
 	}
 	

@@ -7,7 +7,7 @@ import dna.AminoAcid;
 
 import stream.Read;
 import stream.SamLine;
-
+import structures.LongList;
 import fileIO.TextStreamWriter;
 
 
@@ -589,6 +589,55 @@ public class ReadStats {
 		if(x>0){insertHist.increment(x, 1);}
 //		assert(x!=1) : "\n"+r+"\n\n"+r.mate+"\n";
 //		System.out.println("Incrementing "+x);
+	}
+	
+	public void addToInsertHistogram(final SamLine r1, final SamLine r2){
+		if(r1==null){return;}
+		int x=insertSizeMapped(r1, r2);
+		if(verbose){
+			System.err.println(r1.qname+"\t"+x);
+		}
+		x=Tools.min(MAXINSERTLEN, x);
+		if(x>0){insertHist.increment(x, 1);}
+	}
+	
+	/** This is untested and only gives approximate answers when overlapping reads contain indels.
+	 * It may give incorrect answers for same-strange pairs that are shorter than read length. 
+	 * It might give negative answers but that would be a bug. */
+	public static int insertSizeMapped(SamLine r1, SamLine r2){
+		if(r2==null){return r1.length();}
+		if(!r1.mapped() || !r2.mapped() || !r1.pairedOnSameChrom()){
+			return -1;
+		}
+		
+		int a1=r1.start(true, false);
+		int a2=r2.start(true, false);
+		
+		if(r1.strand()!=r2.strand()){
+			if(r1.strand()==1){return insertSizeMapped(r2, r1);}
+		}else if(a1>a2){
+			return insertSizeMapped(r2, r1);
+		}
+		
+		int b1=r1.stop(a1, true, false);
+		int b2=r2.stop(a2, true, false);
+
+		int clen1=r1.calcCigarLength(true, false);
+		int clen2=r2.calcCigarLength(true, false);
+		
+		int mlen1=b1-a1+1;
+		int mlen2=b2-a2+1;
+		
+		int dif1=mlen1-clen1;
+		int dif2=mlen2-clen2;
+		
+		int mlen12=b2-a1+1;
+		
+		if(Tools.overlap(a1, b1, a2, b2)){//hard case
+			return mlen12-Tools.max(dif1, dif2); //Approximate
+		}else{//easy case
+			return mlen12-dif1-dif2;
+		}
 	}
 	
 	public void addToBaseHistogram(final Read r){

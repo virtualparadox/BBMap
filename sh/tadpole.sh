@@ -4,16 +4,16 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 18, 2015
+Last modified June 27, 2016
 
-Description:  Uses kmer counts to assembles contigs, extend sequences, 
+Description:  Uses kmer counts to assemble contigs, extend sequences, 
 or error-correct reads.  Tadpole has no upper bound for kmer length,
 but some values are not supported.  Specifically, it allows 1-31,
 multiples of 2 from 32-62, multiples of 3 from 63-93, etc.
 
 Usage:
 Generation:   tadpole.sh in=<reads> out=<contigs>
-Extension:    tadpole.sh in=<reads> ine=<sequences> oute=<extended> mode=extend
+Extension:    tadpole.sh in=<reads> out=<extended> mode=extend
 Correction:   tadpole.sh in=<reads> out=<corrected> mode=correct
 
 Input may be fasta or fastq, compressed or uncompressed.
@@ -22,14 +22,11 @@ Input may be fasta or fastq, compressed or uncompressed.
 Input parameters:
 in=<file>           Primary input file for reads to use as kmer data.
 in2=<file>          Second input file for paired data.
-ine=<file>          Primary input file for sequences to extend.
-ine2=<file>         Second input file for paired reads.
 reads=-1            Only process this number of reads, then quit (-1 means all).
 
 Output parameters:
-out=<file>          Write contigs (in contig mode).
-oute=<file>         Write extended reads (in extend mode).
-ihist=<file>        Write insert size histogram (in insert mode).
+out=<file>          Write contigs (in contig mode) or corrected/extended reads (in other modes).
+outd=<file>         Write discarded reads, if using junk-removal flags.
 dump=<file>         Write kmers and their counts.
 fastadump=t         Write kmers and counts as fasta versus 2-column tsv.
 mincounttodump=1    Only dump kmers with at least this depth.
@@ -91,7 +88,11 @@ Error-correction parameters:
 ecc=f               Error correct via kmer counts.
 pincer=t            If ecc is enabled, use the pincer algorithm.
 tail=t              If ecc is enabled, use the tail algorithm.
-aggressive=f        (aecc) Correct with bidirectional double-pass.
+eccfull=f           If ecc is enabled, use tail over the entire read.
+aggressive=f        (aecc) Use aggressive error correction settings.
+                    Overrides some other flags like errormult1 and deadzone.
+conservative=f      (cecc) Use conservative error correction settings.
+                    Overrides some other flags like errormult1 and deadzone.
 markbadbases=0      (mbb) Any base fully covered by kmers with count
                     below this will be changed to N.
 markdeltaonly=t     (mdo) Only mark bad bases adjacent to good bases.
@@ -103,9 +104,26 @@ pathsimilarityfraction=0.3 (psf) Max difference ratio considered similar.
                            Controls whether a path appears to be continuous.
 pathsimilarityconstant=3   (psc) Absolute differences below this are ignored.
 errorextensionpincer=5     (eep) Verify this many additional bases after the
-                           correction as matching current bases, for pincer.
-errorextensiontail=9       (eet) Verify this many additional bases after the
-                           correction as matching current bases, for tail.
+                           error as matching current bases, for pincer.
+errorextensiontail=9       (eet) Verify additional bases before and after 
+                           the error as matching current bases, for tail.
+deadzone=5          (dz) Do not try to correct bases within this distance of
+                    the ends. 
+
+
+Junk-removal parameters:
+tossjunk=f          Remove reads that cannot be used for assembly.
+                    This means they have no kmers above depth 1 (2 for paired
+                    reads) and the outermost kmers cannot be extended.
+                    Pairs are removed only if both reads fail.
+tossdepth=-1        Remove reads containing kmers at or below this depth.
+                    Pairs are removed if either read fails.
+lowdepthfraction=0  (ldf) Require at least this fraction of kmers to be
+                    low-depth to discard a read; range 0-1. 0 still
+                    requires at least 1 low-depth kmer.
+requirebothbad=f    (rbb) Only discard pairs if both reads are low-depth.
+tossuncorrectable   (tu) Discard reads containing uncorrectable errors.
+                    Requires error-correction to be enabled.
 
 Shaving parameters:
 shave=f             Remove dead ends (aka hair).

@@ -4,7 +4,7 @@
 function usage(){
 echo "
 Written by Brian Bushnell
-Last modified October 9, 2015
+Last modified July 6, 2016
 
 Description:  Estimates cardinality of unique kmers in sequence data.
 

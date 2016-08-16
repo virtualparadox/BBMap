@@ -3,12 +3,13 @@
 
 function usage(){
 echo "
-BBMerge v8.82
+BBMerge v9.02
 Written by Brian Bushnell and Jonathan Rood
-Last modified October 27, 2015
+Last modified July 14, 2016
 
 Description:  Merges paired reads into single reads by overlap detection.
 With sufficient coverage, can also merge nonoverlapping reads by kmer extension.
+Kmer modes requires much more memory, and should be used with the bbmerge-auto.sh script.
 
 Usage for interleaved files:	bbmerge.sh in=<reads> out=<merged reads> outu=<unmerged reads>
 Usage for paired files:     	bbmerge.sh in1=<read1> in2=<read2> out=<merged reads> outu1=<unmerged1> outu2=<unmerged2>
@@ -67,6 +68,9 @@ forcetrimright=0     (ftr) If nonzero, trim right bases of the read
 forcetrimright2=0    (ftr2) If positive, trim this many bases on the right end.
 forcetrimmod=5       (ftm) If positive, trim length to be equal to 
                      zero modulo this number.
+ooi=f                Output only incorrectly merged reads, for testing.
+trimpolya=t          Trim trailing poly-A tail from adapter output.
+                     Only affects outadapter.
 
 
 Processing Parameters:
@@ -87,18 +91,22 @@ maxq=41              Cap output quality scores at this.
 entropy=t            Increase the minimum overlap requirement for low-
                      complexity reads.
 efilter=6            Ban overlaps with over this many times the expected 
-                     number of errors.  Lower is more strict.
-pfilter=0.00002      Ban improbable overlaps.  Higher is more strict. 0 will
+                     number of errors.  Lower is more strict. -1 disables.
+pfilter=0.00004      Ban improbable overlaps.  Higher is more strict. 0 will
                      disable the filter; 1 will allow only perfect overlaps.
 kfilter=0            Ban overlaps that create kmers with count below
-                     this value (0 disables).  Does not seem to help.
-lowercase=f          Expect lowercase letters to signify adapter sequence.
+                     this value (0 disables).  If this is used minprob should
+                     probably be set to 0.  Requires good coverage.
 ouq=f                Calculate best overlap using quality values.
 owq=t                Calculate best overlap without using quality values.
 usequality=t         If disabled, quality values are completely ignored,
                      both for overlap detection and filtering.  May be useful
                      for data with inaccurate quality values.
 iupacton=f           (itn) Change ambiguous IUPAC symbols to N.
+adapter=             Specify the adapter sequences used for these reads, if
+                     known; this can be a fasta file or a literal sequence.
+                     Read 1 and 2 can have adapters specified independently
+                     with the adapter1 and adapter2 flags. 
 
 
 Normal Mode: 
@@ -122,6 +130,7 @@ ratiooffset=0.55     Lower increases merge rate; min is 0.
 ratiominoverlapreduction=3  This is the difference between minoverlap in 
                      normal mode and minoverlap in ratio mode; generally, 
                      minoverlap should be lower in ratio mode.
+minsecondratio=0.1   Cutoff for second-best overlap ratio.
 
 *** Ratio Mode and Normal Mode may be used alone or simultaneously. ***
 *** Ratio Mode is much more accurate and is now the default mode. ***
@@ -140,9 +149,13 @@ fast=f               Fastest possible mode; less accurate.
 
 
 Tadpole Parameters (for read extension and error-correction):
+k=31                 Kmer length.  31 (or less) is fastest and uses the least
+                     memory, but higher values may be more accurate.  
+                     60 tends to work well for 150bp reads.
 extend=0             Extend reads to the right this much before merging.
                      Requires sufficient (>5x) kmer coverage.
-extend2=0            Extend reads only after a failed merge attempt.
+extend2=0            Extend reads this much only after a failed merge attempt,
+                     or in rem/rsem mode.
 iterations=1         (ei) Iteratively attempt to extend by extend2 distance
                      and merge up to this many times.
 ecctadpole=f         (ecct) If reads fail to merge, error-correct with Tadpole
@@ -157,7 +170,6 @@ branchlower=3        Max value of 2nd-greatest path depth to be considered low.
 ibb=t                Ignore backward branches when extending.
 extra=<file>         A file or comma-delimited list of files of reads to use
                      for kmer counting, but not for merging or output.
-k=31                 Kmer length (1-31 is fastest).
 prealloc=f           Pre-allocate memory rather than dynamically growing; 
                      faster and more memory-efficient for large datasets.  
                      A float fraction (0-1) may be specified, default 1.
@@ -166,7 +178,13 @@ prefilter=0          If set to a positive integer, use a countmin sketch to
                      reduce memory usage.
 minprob=0.5          Ignore kmers with overall probability of correctness 
                      below this, to reduce memory usage.
-
+rem=f                (requireextensionmatch) Do not merge if the predicted
+                     insert size differs before and after extension.
+                     However, if only the extended reads overlap, then that
+                     insert will be used.  Requires setting extend2.
+rsem=f               (requirestrictextensionmatch) Similar to rem but stricter.
+                     Reads will only merge if the predicted insert size before
+                     and after extension match.  Requires setting extend2.
 
 Java Parameters:
 -Xmx                 This will be passed to Java to set memory usage, 

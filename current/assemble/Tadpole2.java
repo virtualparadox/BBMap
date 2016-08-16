@@ -6,19 +6,18 @@ import java.util.BitSet;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jgi.BBMerge;
-import kmer.KmerTableSet;
 import stream.ByteBuilder;
 import stream.ConcurrentReadInputStream;
 import stream.Read;
+import structures.IntList;
+import structures.ListNum;
+import structures.LongList;
 import ukmer.AbstractKmerTableU;
 import ukmer.HashArrayU1D;
 import ukmer.HashForestU;
 import ukmer.Kmer;
 import ukmer.KmerNodeU;
 import ukmer.KmerTableSetU;
-import align2.IntList;
-import align2.ListNum;
-import align2.LongList;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
@@ -27,7 +26,7 @@ import dna.Timer;
 
 
 /**
- * Short-kmer assembler based on KmerCountExact.
+ * Long-kmer assembler based on KmerCountExact.
  * @author Brian Bushnell
  * @date May 15, 2015
  *
@@ -70,13 +69,13 @@ public class Tadpole2 extends Tadpole {
 		{
 			int x=0;
 			if(useOwnership){x+=4;}
-			if(processingMode==correctMode){}
+			if(processingMode==correctMode || processingMode==discardMode){}
 			else if(processingMode==contigMode || processingMode==extendMode){x+=1;}
 			extraBytesPerKmer=x;
 		}
 		
 		tables=new KmerTableSetU(args, extraBytesPerKmer);
-		assert(kbig==tables.kbig);
+		assert(kbig==tables.kbig) : kbig+", "+tables.kbig;
 //		kbig=tables.kbig;
 		ksmall=tables.k;
 //		k2=tables.k2;
@@ -603,7 +602,7 @@ public class Tadpole2 extends Tadpole {
 	 */
 	@Override
 	public int extendRead(Read r, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int distance) {
-		return extendRead(r, bb, leftCounts, rightCounts, distance, localKmer.get());
+		return extendRead(r, bb, leftCounts, rightCounts, distance, getLocalKmer());
 	}
 
 	public int extendRead(Read r, ByteBuilder bb, int[] leftCounts, int[] rightCounts, int distance, final Kmer kmer){
@@ -851,7 +850,7 @@ public class Tadpole2 extends Tadpole {
 	@Override
 	public int extendToRight2(final ByteBuilder bb, final int[] leftCounts, final int[] rightCounts, final int distance, boolean includeJunctionBase){
 		initializeThreadLocals();
-		return extendToRight2(bb, leftCounts, rightCounts, distance, includeJunctionBase, localKmer.get());
+		return extendToRight2(bb, leftCounts, rightCounts, distance, includeJunctionBase, getLocalKmer());
 	}
 	
 	@Override
@@ -990,13 +989,101 @@ public class Tadpole2 extends Tadpole {
 	
 	
 	/*--------------------------------------------------------------*/
+	/*----------------        Junk Detection        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public boolean isJunk(Read r){
+		boolean junk=isJunk(r, localRightCounts.get(), getLocalKmer());
+		return junk;
+	}
+	
+	@Override
+	public boolean isJunk(Read r, final int[] counts, Kmer kmer){
+		final int blen=r.length();
+		if(blen<kbig){return true;}
+		final byte[] bases=r.bases;
+		kmer.clearFast();
+		assert(kmer.len==0);
+
+		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts, to get the leftmost kmer */
+		for(int i=0; i<kbig; i++){
+			kmer.addRight(bases[i]);
+		}
+		
+		if(kmer.len>=kbig){
+			int maxPos=fillLeftCounts(kmer, counts);
+			if(counts[maxPos]>0){return false;}
+		}
+		
+		final boolean paired=(r.mateLength()>=kbig);
+		int maxDepth=0;
+		{
+			for(int i=kbig; i<blen; i++){
+				kmer.addRight(bases[i]);
+				if(kmer.len>=kbig){
+					int depth=getCount(kmer);
+					if(depth>maxDepth){
+						maxDepth=depth;
+						if(maxDepth>1 && (!paired || maxDepth>2)){return false;}
+					}
+				}
+			}
+		}
+
+		if(kmer.len>=kbig && !paired){
+			int maxPos=fillRightCounts(kmer, counts);
+			if(counts[maxPos]>0){return false;}
+		}
+		return true;
+	}
+	
+	@Override
+	public boolean hasKmersAtOrBelow(Read r, int tooLow, final float fraction){
+		return hasKmersAtOrBelow(r, tooLow, fraction, getLocalKmer());
+	}
+	
+	@Override
+	public boolean hasKmersAtOrBelow(Read r, final int tooLow, final float fraction, Kmer kmer){
+		final int blen=r.length();
+		if(blen<kbig){return true;}
+		final byte[] bases=r.bases;
+		kmer.clearFast();
+		assert(kmer.len==0) : kmer.len+", "+kmer;
+		
+//		System.err.println("\n"+new String(r.bases)+":");
+		
+		final int limit=Tools.max(1, Math.round((bases.length-kbig+1)*fraction));
+		int valid=0, invalid=0;
+		{
+			for(int i=0; i<blen; i++){
+				kmer.addRight(bases[i]);
+				if(kmer.len>=kbig){
+					int depth=getCount(kmer);
+//					System.err.println("depth="+depth+", kmer="+kmer);
+					if(depth>tooLow){valid++;}
+					else{
+						invalid++;
+						if(invalid>=limit){return true;}
+					}
+				}
+			}
+		}
+		
+		//Compensate for nocalls changing the expected kmer count
+		final int limit2=Tools.max(1, Math.round((valid+invalid)*fraction));
+		return valid<1 || invalid>=limit2;
+	}
+	
+	
+	/*--------------------------------------------------------------*/
 	/*----------------       Error Correction       ----------------*/
 	/*--------------------------------------------------------------*/
 	
 	@Override
 	public int errorCorrect(Read r){
 		initializeThreadLocals();
-		int corrected=errorCorrect(r, localLeftCounts.get(), localRightCounts.get(), localIntList.get(), localByteBuilder.get(), null, localBitSet.get(), localKmer.get());
+		int corrected=errorCorrect(r, localLeftCounts.get(), localRightCounts.get(), localIntList.get(), localByteBuilder.get(), null, localBitSet.get(), getLocalKmer());
 		return corrected;
 	}
 	
@@ -1030,11 +1117,17 @@ public class Tadpole2 extends Tadpole {
 //			if(ECC_PINCER && detectedArray!=null && detectedArray[0]>correctedPincer){start=start-kbig;}
 			correctedTail+=errorCorrectTail(bases, quals, leftCounts, rightCounts, counts, bb, detectedArray, start, errorExtensionTail, kmer);
 			r.reverseComplement();
+			
 			counts.reverse();
 			correctedTail+=errorCorrectTail(bases, quals, leftCounts, rightCounts, counts, bb, detectedArray, start, errorExtensionTail, kmer);
 			r.reverseComplement();
 			counts.reverse();
 		}
+		
+		
+		
+		
+		
 		
 		if(MARK_BAD_BASES>0){
 			int marked=markBadBases(bases, quals, counts, bs, MARK_BAD_BASES, MARK_DELTA_ONLY);
@@ -1042,9 +1135,7 @@ public class Tadpole2 extends Tadpole {
 		}
 		assert(detectedArray==null || (correctedPincer==detectedArray[1] && correctedTail==detectedArray[2])) : correctedPincer+", "+correctedTail+", "+Arrays.toString(detectedArray);
 //		if(ECC_PINCER && correctedTail>0){
-//			valid=fillKmers(bases, kmers);
-//			counts.reverse();
-//			correctedPincer+=errorCorrectPincer(bases, quals, leftCounts, rightCounts, kmers, counts, bb, detectedArray, errorExtensionPincer);
+//			correctedPincer+=errorCorrectPincer(bases, quals, leftCounts, rightCounts, counts, bb, detectedArray, errorExtensionPincer, kmer);
 //		}
 		
 		return correctedPincer+correctedTail;
@@ -1110,7 +1201,7 @@ public class Tadpole2 extends Tadpole {
 		//a is the index of the left kmer
 		//b is a+1
 		//the base between the kmers is at a+k
-		for(int a=Tools.max(startPos, errorExtension), lim=counts.size-Tools.min(errorExtension, (errorExtension+3)/2); a<lim; a++){//errorExtension-1
+		for(int a=Tools.max(startPos, errorExtension), lim=counts.size-deadZone-1; a<lim; a++){//errorExtension-1
 			final int aCount=counts.get(a);
 			final int bCount=counts.get(a+1);
 			if(isError(aCount, bCount) && isSimilar(aCount, a-errorExtension, a-1, counts) && isError(aCount, a+2, a+kbig, counts)){

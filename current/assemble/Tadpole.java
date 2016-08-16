@@ -20,10 +20,9 @@ import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
-
-import align2.IntList;
-import align2.ListNum;
-import align2.LongList;
+import structures.IntList;
+import structures.ListNum;
+import structures.LongList;
 import align2.ReadLengthComparator;
 import align2.ReadStats;
 import align2.Shared;
@@ -72,6 +71,7 @@ public abstract class Tadpole {
 	
 	public static Tadpole makeTadpole(String[] args, boolean setDefaults){
 		final int k=preparseK(args);
+		
 		if(k<=31){
 			return new Tadpole1(args, true);
 		}else{
@@ -144,18 +144,6 @@ public abstract class Tadpole {
 			
 			if(Parser.isJavaFlag(arg)){
 				//jvm argument; do nothing
-			}else if(Parser.parseCommonStatic(arg, a, b)){
-				//do nothing
-			}else if(Parser.parseZip(arg, a, b)){
-				//do nothing
-			}else if(Parser.parseQuality(arg, a, b)){
-				//do nothing
-			}else if(Parser.parseFasta(arg, a, b)){
-				//do nothing
-			}else if(parser.parseInterleaved(arg, a, b)){
-				//do nothing
-			}else if(parser.parseTrim(arg, a, b)){
-				//do nothing
 			}else if(a.equals("in") || a.equals("in1") || a.equals("ine") || a.equals("ine1")){
 				in1.clear();
 				if(b!=null){
@@ -172,7 +160,7 @@ public abstract class Tadpole {
 						in2.add(ss);
 					}
 				}
-			}else if(a.equals("out") || a.equals("oute") || a.equals("oute1")){
+			}else if(a.equals("out") || a.equals("out1") || a.equals("oute") || a.equals("oute1")){
 				out1.clear();
 				if(b!=null){
 					String[] s=b.split(",");
@@ -186,6 +174,22 @@ public abstract class Tadpole {
 					String[] s=b.split(",");
 					for(String ss : s){
 						out2.add(ss);
+					}
+				}
+			}else if(a.equals("outd") || a.equals("outdiscard") || a.equals("outd1") || a.equals("outdiscard1")){
+				outd1.clear();
+				if(b!=null){
+					String[] s=b.split(",");
+					for(String ss : s){
+						outd1.add(ss);
+					}
+				}
+			}else if(a.equals("outd2") || a.equals("outdiscard2")){
+				outd2.clear();
+				if(b!=null){
+					String[] s=b.split(",");
+					for(String ss : s){
+						outd2.add(ss);
 					}
 				}
 			}else if(a.equals("outkmers") || a.equals("outk") || a.equals("dump")){
@@ -211,6 +215,8 @@ public abstract class Tadpole {
 					processingMode=correctMode;
 				}else if(b.equalsIgnoreCase("insert")){
 					processingMode=insertMode;
+				}else if(b.equalsIgnoreCase("discard")){
+					processingMode=discardMode;
 				}else{
 					assert(false) : "Unknown mode "+b;
 				}
@@ -307,13 +313,39 @@ public abstract class Tadpole {
 				Shaver.printEventCounts=Tools.parseBoolean(b);
 			}
 			
+			
+			//Junk removal
+			else if(a.equals("tossjunk")){
+				tossJunk=Tools.parseBoolean(b);
+			}else if(a.equals("tossdepth") || a.equals("discarddepth")){
+				discardLowDepthReads=Integer.parseInt(b);
+			}else if(a.equals("lowdepthfraction") || a.equals("ldf") || a.equals("lddf")){
+				lowDepthDiscardFraction=Float.parseFloat(b);
+			}else if(a.equals("requirebothbad") || a.equals("rbb")){
+				requireBothBad=Tools.parseBoolean(b);
+			}else if(a.equals("tossuncorrectable") || a.equals("tu")){
+				discardUncorrectable=Tools.parseBoolean(b);
+			}
+			
 			//Error Correction
 			else if(a.equals("ecctail") || a.equals("eccright") || a.equals("tail")){
 				ECC_TAIL=Tools.parseBoolean(b);
 			}else if(a.equals("pincer") || a.equals("eccpincer")){
 				ECC_PINCER=Tools.parseBoolean(b);
-			}else if(a.equals("eccall") || a.equals("eccfull") || a.equals("ecccomplete") || a.equals("aecc") || a.equals("aec") || a.equals("aggressive")){
+			}else if(a.equals("eccall") || a.equals("eccfull") || a.equals("eccdouble")){
 				ECC_ALL=Tools.parseBoolean(b);
+			}else if(a.equals("aecc") || a.equals("aec") || a.equals("aggressive")){
+				ECC_AGGRESSIVE=Tools.parseBoolean(b);
+				if(ECC_AGGRESSIVE){
+					ECC_CONSERVATIVE=false;
+					ecc_=setEcc_=true;
+				}
+			}else if(a.equals("cecc") || a.equals("cec") || a.equals("conservative")){
+				ECC_CONSERVATIVE=Tools.parseBoolean(b);
+				if(ECC_CONSERVATIVE){
+					ECC_AGGRESSIVE=false;
+					ecc_=setEcc_=true;
+				}
 			}else if(a.equals("ecc")){
 				ecc_=Tools.parseBoolean(b);
 				setEcc_=true;
@@ -335,7 +367,11 @@ public abstract class Tadpole {
 				errorExtensionPincer=Integer.parseInt(b);
 			}else if(a.equals("eet") || a.equals("errorextensiontail")){
 				errorExtensionTail=Integer.parseInt(b);
-			}else if(a.equals("mbb") || a.equals("markbad") || a.equals("markbadbases")){
+			}else if(a.equals("dz") || a.equals("deadzone")){
+				deadZone=Integer.parseInt(b);
+			}
+			
+			else if(a.equals("mbb") || a.equals("markbad") || a.equals("markbadbases")){
 				if(b==null){b="1";}
 				MARK_BAD_BASES=Integer.parseInt(b);
 			}else if(a.equals("mdo") || a.equals("markdeltaonly")){
@@ -352,11 +388,42 @@ public abstract class Tadpole {
 				trimEnds=Tools.max(trimEnds, 0);
 			}
 			
+			else if(Parser.parseCommonStatic(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseZip(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseQuality(arg, a, b)){
+				//do nothing
+			}else if(Parser.parseFasta(arg, a, b)){
+				//do nothing
+			}else if(parser.parseInterleaved(arg, a, b)){
+				//do nothing
+			}else if(parser.parseTrim(arg, a, b)){
+				//do nothing
+			}
+			
 			else if(KmerTableSetU.isValidArgument(a)){
 				//Do nothing
 			}else{
 				throw new RuntimeException("Unknown parameter "+args[i]);
 			}
+		}
+		
+		if(ECC_AGGRESSIVE){
+			ECC_PINCER=ECC_ALL=true;
+			errorExtensionPincer=3;
+			errorExtensionTail=4;
+			errorMult1=50;
+			minCountCorrect=3;
+			deadZone=0;
+			pathSimilarityFraction*=1.5f;
+		}else if(ECC_CONSERVATIVE){
+			errorExtensionPincer+=2;
+			errorExtensionTail+=2;
+			errorMult1=(errorMult1*1.2f);
+			minCountCorrect+=1;
+			deadZone+=1;
+			pathSimilarityFraction*=0.8f;
 		}
 		
 		if(trimEnds==-1){
@@ -371,7 +438,23 @@ public abstract class Tadpole {
 		
 		assert(kmerRangeMax>=kmerRangeMin) : "kmerRangeMax must be at least kmerRangeMin: "+kmerRangeMax+", "+kmerRangeMin;
 		
-		if(processingMode==extendMode || processingMode==correctMode){
+		if(processingMode<0){//unset
+			if(ecc_ || discardUncorrectable){
+				processingMode=correctMode;
+				System.err.println("Switching to correct mode because ecc=t.");
+			}else if(extendLeft>0 || extendRight>0){
+				processingMode=extendMode;
+				System.err.println("Switching to extend mode because an extend flag was set.");
+			}else if(tossJunk || discardLowDepthReads>0){
+				processingMode=discardMode;
+				System.err.println("Switching to discard mode because a discard flag was set.");
+			}else{
+				processingMode=contigMode;
+				//System.err.println("Operating in contig mode.");
+			}
+		}
+		
+		if(processingMode==extendMode || processingMode==correctMode || processingMode==discardMode){
 			
 //			{//Use in and out if ine and oute are not specified, in this mode.
 //				if(ine1.isEmpty() && ine2.isEmpty()){
@@ -389,10 +472,14 @@ public abstract class Tadpole {
 			}else if(processingMode==correctMode){
 				extendLeft=extendRight=0;
 				if(!setEcc_){ecc_=true;}
+			}else if(processingMode==discardMode){
+				extendLeft=extendRight=0;
+				if(!setEcc_){ecc_=false;}
 			}
 		}
 		
 		{//Process parser fields
+			Parser.parseQuality("","","");
 			Parser.processQuality();
 		}
 		
@@ -406,7 +493,7 @@ public abstract class Tadpole {
 		{
 			int x=0;
 			if(useOwnership){x+=4;}
-			if(processingMode==correctMode){}
+			if(processingMode==correctMode || processingMode==discardMode){}
 			else if(processingMode==contigMode || processingMode==extendMode){x+=1;}
 			extraBytesPerKmer=x;
 		}
@@ -439,6 +526,17 @@ public abstract class Tadpole {
 				String b=s.substring(pound+1);
 				out1.set(i, a+1+b);
 				out2.add(a+2+b);
+			}
+		}
+		
+		for(int i=0; i<outd1.size(); i++){
+			String s=outd1.get(i);
+			if(s!=null && s.contains("#")){
+				int pound=s.lastIndexOf('#');
+				String a=s.substring(0, pound);
+				String b=s.substring(pound+1);
+				outd1.set(i, a+1+b);
+				outd2.add(a+2+b);
 			}
 		}
 
@@ -529,7 +627,7 @@ public abstract class Tadpole {
 			
 			outstream.println("\nTotal Time:               \t"+t);
 			
-			if(processingMode==extendMode || processingMode==correctMode){
+			if(processingMode==extendMode || processingMode==correctMode || processingMode==discardMode){
 				outstream.println("\nReads Processed:    "+rpstring+" \t"+String.format("%.2fk reads/sec", rpnano*1000000));
 				outstream.println("Bases Processed:    "+bpstring+" \t"+String.format("%.2fm bases/sec", bpnano*1000));
 			}
@@ -581,8 +679,8 @@ public abstract class Tadpole {
 			AbstractRemoveThread.process(THREADS, kmerRangeMin, kmerRangeMax, tables(), true);
 		}
 		
-		if(mode==extendMode || mode==correctMode){
-			outstream.println("\nExtending/error-correcting.\n");
+		if(mode==extendMode || mode==correctMode || mode==discardMode){
+			outstream.println("\nExtending/error-correcting/discarding.\n");
 			
 			final boolean vic=Read.VALIDATE_IN_CONSTRUCTOR;
 			Read.VALIDATE_IN_CONSTRUCTOR=false;
@@ -610,6 +708,10 @@ public abstract class Tadpole {
 				outstream.println("Reads with errors detected: \t"+readsDetected+String.format(" \t(%.2f%%)", readsDetected*100.0/readsIn));
 				outstream.println("Reads fully corrected:      \t"+readsCorrected+String.format(" \t(%.2f%% of detected)", readsFullyCorrected*100.0/readsDetected));
 				outstream.println("Reads partly corrected:     \t"+partial+String.format(" \t(%.2f%% of detected)", partial*100.0/readsDetected));
+			}
+			if(tossJunk || discardLowDepthReads>=0 || discardUncorrectable){
+				outstream.println("Reads discarded:            \t"+readsDiscarded+String.format(" \t(%.2f%%)", readsDiscarded*100.0/readsIn));
+				outstream.println("Bases discarded:            \t"+basesDiscarded+String.format(" \t(%.2f%%)", basesDiscarded*100.0/basesIn));
 			}
 			if(MARK_BAD_BASES>0){
 				outstream.println("Reads marked:               \t"+readsMarked+String.format(" \t(%.2f%%)", readsMarked*100.0/readsIn));
@@ -787,10 +889,13 @@ public abstract class Tadpole {
 
 		/* Create read input stream */
 		final ConcurrentReadOutputStream[] rosa=makeCrosArray(out1, out2);
+
+		/* Create read input stream */
+		final ConcurrentReadOutputStream[] rosda=makeCrosArray(outd1, outd2);
 		
 		/* Create ProcessThreads */
 		ArrayList<ExtendThread> alpt=new ArrayList<ExtendThread>(THREADS);
-		for(int i=0; i<THREADS; i++){alpt.add(new ExtendThread(i, crisa, rosa));}
+		for(int i=0; i<THREADS; i++){alpt.add(new ExtendThread(i, crisa, rosa, rosda));}
 		for(ExtendThread pt : alpt){pt.start();}
 		
 		/* Wait for threads to die, and gather statistics */
@@ -818,6 +923,8 @@ public abstract class Tadpole {
 			basesDetected+=pt.basesDetectedT;
 			readsMarked+=pt.readsMarkedT;
 			basesMarked+=pt.basesMarkedT;
+			readsDiscarded+=pt.readsDiscardedT;
+			basesDiscarded+=pt.basesDiscardedT;
 		}
 		
 		/* Shut down I/O streams; capture error status */
@@ -827,6 +934,11 @@ public abstract class Tadpole {
 		/* Shut down I/O streams; capture error status */
 		if(rosa!=null){
 			for(ConcurrentReadOutputStream ros : rosa){
+				errorState|=ReadWrite.closeStream(ros);
+			}
+		}
+		if(rosda!=null){
+			for(ConcurrentReadOutputStream ros : rosda){
 				errorState|=ReadWrite.closeStream(ros);
 			}
 		}
@@ -891,18 +1003,21 @@ public abstract class Tadpole {
 		 * Constructor
 		 * @param cris_ Read input stream
 		 */
-		public ExtendThread(int id_, ConcurrentReadInputStream[] crisa_, ConcurrentReadOutputStream[] rosa_){
+		public ExtendThread(int id_, ConcurrentReadInputStream[] crisa_, ConcurrentReadOutputStream[] rosa_, ConcurrentReadOutputStream[] rosda_){
 			id=id_;
 			crisa=crisa_;
 			rosa=rosa_;
+			rosda=rosda_;
 			leftCounts=extendThroughLeftJunctions ? null : new int[4];
 		}
 		
 		@Override
 		public void run(){
+			initializeThreadLocals();
 			for(int i=0; i<crisa.length; i++){
 				ConcurrentReadInputStream cris=crisa[i];
 				ConcurrentReadOutputStream ros=(rosa!=null && rosa.length>i ? rosa[i] : null);
+				ConcurrentReadOutputStream rosd=(rosda!=null && rosda.length>i ? rosda[i] : null);
 				synchronized(crisa){
 					if(!cris.started()){
 						cris.start();
@@ -915,19 +1030,27 @@ public abstract class Tadpole {
 						}
 					}
 				}
-				run(cris, ros);
+				if(rosd!=null){
+					synchronized(rosda){
+						if(!rosd.started()){
+							rosd.start();
+						}
+					}
+				}
+				run(cris, ros, rosd);
 			}
 		}
 		
-		private void run(ConcurrentReadInputStream cris, ConcurrentReadOutputStream ros){
+		private void run(ConcurrentReadInputStream cris, ConcurrentReadOutputStream ros, ConcurrentReadOutputStream rosd){
 			
 			ListNum<Read> ln=cris.nextList();
 			ArrayList<Read> reads=(ln!=null ? ln.list : null);
 			
 			//While there are more reads lists...
 			while(reads!=null && reads.size()>0){
-				
+
 				final ArrayList<Read> listOut=new ArrayList<Read>(reads.size());
+				final ArrayList<Read> listOutD=(rosd==null ? null : new ArrayList<Read>(reads.size()));
 				
 				//For each read (or pair) in the list...
 				for(int i=0; i<reads.size(); i++){
@@ -935,9 +1058,16 @@ public abstract class Tadpole {
 					final Read r2=r1.mate;
 					
 					processReadPair(r1, r2);
-					listOut.add(r1);
+					if(r1.discarded() && (r2==null || r2.discarded())){
+						readsDiscardedT+=1+r1.mateCount();
+						basesDiscardedT+=r1.length()+r1.mateLength();
+						if(listOutD!=null){listOutD.add(r1);}
+					}else{
+						listOut.add(r1);
+					}
 				}
 				if(ros!=null){ros.add(listOut, ln.id);}
+				if(rosd!=null){rosd.add(listOutD, ln.id);}
 				
 				//Fetch a new read list
 				cris.returnList(ln.id, ln.list.isEmpty());
@@ -978,6 +1108,10 @@ public abstract class Tadpole {
 				final int correctedTail=detectedArrayT[2];
 				final int marked=detectedArrayT[3];
 				assert(corrected==correctedPincer+correctedTail) : corrected+", "+Arrays.toString(detectedArrayT);
+				if(marked>0){
+					readsMarkedT++;
+					basesMarkedT+=marked;
+				}
 				if(detected>0){
 					readsDetectedT++;
 					basesDetectedT+=detected;
@@ -988,13 +1122,29 @@ public abstract class Tadpole {
 					}
 					if(corrected==detected){
 						readsFullyCorrectedT++;
+					}else if(discardUncorrectable){
+						r.setDiscarded(true);
+						if(r.mate!=null && !requireBothBad){
+							r.mate.setDiscarded(true);
+							return;
+						}else if(r.mate==null){return;}
 					}
 				}
-				if(marked>0){
-					readsMarkedT++;
-					basesMarkedT+=marked;
-				}
 			}
+			
+			if(tossJunk && isJunk(r, rightCounts, kmerT)){
+				r.setDiscarded(true);
+				return;
+			}
+			
+			if(discardLowDepthReads>=0 && hasKmersAtOrBelow(r, discardLowDepthReads, lowDepthDiscardFraction, kmerT)){
+				r.setDiscarded(true);
+				if(r.mate!=null && !requireBothBad){
+					r.mate.setDiscarded(true);
+					return;
+				}else if(r.mate==null){return;}
+			}
+			
 			int extension=0;
 			if(extendRight>0){
 				extension+=extendRead(r, builderT, leftCounts, rightCounts, extendRight, kmerT);
@@ -1013,6 +1163,7 @@ public abstract class Tadpole {
 		/** Input read stream */
 		private final ConcurrentReadInputStream[] crisa;
 		private final ConcurrentReadOutputStream[] rosa;
+		private final ConcurrentReadOutputStream[] rosda;
 
 		private final int[] leftCounts;
 		private final int[] rightCounts=new int[4];
@@ -1037,6 +1188,8 @@ public abstract class Tadpole {
 		private long basesDetectedT=0;
 		private long readsMarkedT=0;
 		private long basesMarkedT=0;
+		private long readsDiscardedT=0;
+		private long basesDiscardedT=0;
 		
 		private final int id;
 		
@@ -1069,6 +1222,21 @@ public abstract class Tadpole {
 		throw new RuntimeException("Must be overridden.");
 	}
 	
+	
+	/*--------------------------------------------------------------*/
+	/*----------------        Junk Detection        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	/** Test a read to see if it could possibly assemble. */
+	public abstract boolean isJunk(Read r);
+	
+	public abstract boolean isJunk(Read r, final int[] localLeftCounts, Kmer kmer);
+	
+	/** True if at least fraction of the reads kmers are at or below count. */
+	public abstract boolean hasKmersAtOrBelow(Read r, int count, float fraction);
+	
+	/** True if at least fraction of the reads kmers are at or below count. */
+	public abstract boolean hasKmersAtOrBelow(Read r, int count, float fraction, Kmer kmer);
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Error Correction       ----------------*/
@@ -1249,7 +1417,7 @@ public abstract class Tadpole {
 	protected int kmerRangeMin=0;
 	protected int kmerRangeMax=Integer.MAX_VALUE;
 	
-	protected int processingMode=contigMode;
+	protected int processingMode=-1;
 
 	private int extendLeft=-1;
 	protected int extendRight=-1;
@@ -1275,10 +1443,12 @@ public abstract class Tadpole {
 	private float errorMult2=3;
 	private int errorLowerConst=3;//3 seems fine
 	private int minCountCorrect=4;//5 is more conservative...
+	int minCountCorrect(){return minCountCorrect;}
 	private int pathSimilarityConstant=3;
 	private float pathSimilarityFraction=0.3f;//0.3
 	protected int errorExtensionPincer=5;//default 5; higher is more conservative
 	protected int errorExtensionTail=9;//default 9; higher is more conservative
+	protected int deadZone=5;
 	
 	public boolean showStats=true;
 	
@@ -1289,7 +1459,8 @@ public abstract class Tadpole {
 	private ArrayList<String> in1=new ArrayList<String>(), in2=new ArrayList<String>();
 	/** Output extended reads */
 	private ArrayList<String> out1=new ArrayList<String>(), out2=new ArrayList<String>();
-	
+	/** Output discarded reads */
+	private ArrayList<String> outd1=new ArrayList<String>(), outd2=new ArrayList<String>();
 	
 //	/** Contig output file */
 //	private String outContigs=null;
@@ -1330,14 +1501,33 @@ public abstract class Tadpole {
 	long basesDetected=0;
 	long readsMarked=0;
 	long basesMarked=0;
+	long readsDiscarded=0;
+	long basesDiscarded=0;
 	
 	protected boolean ECC_PINCER=true;
 	protected boolean ECC_TAIL=true;
 	protected boolean ECC_ALL=false;
+	protected boolean ECC_AGGRESSIVE=false;
+	protected boolean ECC_CONSERVATIVE=false;
 	/** Mark bases as bad if they are completely covered by kmers with a count below this */
 	protected int MARK_BAD_BASES=0;
 	/** Only mark bad bases that are adjacent to good bases */ 
 	protected boolean MARK_DELTA_ONLY=true;
+	
+	/** Discard reads that cannot be assembled */
+	protected boolean tossJunk=false;
+	
+	/** Discard reads with kmers below this depth */
+	protected int discardLowDepthReads=-1;
+	
+	/** Only discard reads in which at least this fraction of kmers are low depth */
+	protected float lowDepthDiscardFraction=0f;
+	
+	/** Only discard reads if both in a pair fail */
+	protected boolean requireBothBad=false;
+	
+	/** Discard reads with uncorrectable errors */
+	protected boolean discardUncorrectable=false;
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       ThreadLocal Temps      ----------------*/
@@ -1360,7 +1550,13 @@ public abstract class Tadpole {
 	protected ThreadLocal<IntList> localIntList=new ThreadLocal<IntList>();
 	protected ThreadLocal<ByteBuilder> localByteBuilder=new ThreadLocal<ByteBuilder>();
 	protected ThreadLocal<BitSet> localBitSet=new ThreadLocal<BitSet>();
-	protected ThreadLocal<Kmer> localKmer=new ThreadLocal<Kmer>();
+	private ThreadLocal<Kmer> localKmer=new ThreadLocal<Kmer>();
+	
+	protected Kmer getLocalKmer(){
+		Kmer local=localKmer.get();
+		local.clearFast();
+		return local;
+	}
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
@@ -1421,6 +1617,7 @@ public abstract class Tadpole {
 	public static final int extendMode=1;
 	public static final int correctMode=2;
 	public static final int insertMode=3;
+	public static final int discardMode=4;
 	
 	/** Explore codes */
 	public static final int KEEP_GOING=0, DEAD_END=1, TOO_SHORT=2, TOO_LONG=3, TOO_DEEP=4, FORWARD_BRANCH=5, BACKWARD_BRANCH=6, LOOP=7;

@@ -3,8 +3,8 @@ package kmer;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import align2.IntList2;
 import align2.Tools;
+import structures.IntList2;
 
 /**
  * Stores kmers in a long[] and counts in an int[], with a victim cache.

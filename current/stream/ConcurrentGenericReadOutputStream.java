@@ -79,7 +79,10 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 //			System.err.print(size+", ");
 			final boolean flag=(size>=HALF_LIMIT);
 			if(listnum>nextListID && size>=ADD_LIMIT){
-				System.err.println("Output buffer became full; key "+listnum+" waiting on "+nextListID+".");
+				if(printBufferNotification){
+					System.err.println("Output buffer became full; key "+listnum+" waiting on "+nextListID+".");
+					printBufferNotification=false;
+				}
 				while(listnum>nextListID && size>=HALF_LIMIT){
 					try {
 						this.wait(20000);
@@ -88,7 +91,9 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 					}
 					size=table.size();
 				}
-				System.err.println("Output buffer became clear for key "+listnum+"; next="+nextListID+", size="+size);
+				if(printBufferNotification){
+					System.err.println("Output buffer became clear for key "+listnum+"; next="+nextListID+", size="+size);
+				}
 			}
 			addOrdered(list, listnum);
 			assert(listnum!=nextListID);
@@ -101,7 +106,11 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 	@Override
 	public synchronized void close(){
 		
-		assert(table==null || table.isEmpty()); //Seems like a race condition.  Probably, I should wait at this point until the condition is true before proceeding.
+		if(table!=null && !table.isEmpty()){
+			errorState=true;
+			System.err.println("Error: An unfinished ReadOutputStream was closed.");
+		}
+		//assert(table==null || table.isEmpty()); //Seems like a race condition.  Probably, I should wait at this point until the condition is true before proceeding.
 		
 //		readstream1.addList(null);
 //		if(readstream2!=null){readstream2.addList(null);}
@@ -234,6 +243,8 @@ public final class ConcurrentGenericReadOutputStream extends ConcurrentReadOutpu
 	/*--------------------------------------------------------------*/
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
+	
+	private boolean printBufferNotification=true;
 	
 	public static boolean verbose=false;
 	

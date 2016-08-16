@@ -3,7 +3,6 @@ package jgi;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import align2.ListNum;
 import align2.MSA;
 import align2.Tools;
 
@@ -12,7 +11,7 @@ import stream.ConcurrentReadInputStream;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
-
+import structures.ListNum;
 import dna.AminoAcid;
 import dna.Gene;
 import dna.Parser;

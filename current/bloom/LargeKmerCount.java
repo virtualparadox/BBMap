@@ -5,8 +5,7 @@ import java.util.ArrayList;
 import stream.ConcurrentGenericReadInputStream;
 import stream.FastqReadInputStream;
 import stream.Read;
-
-import align2.ListNum;
+import structures.ListNum;
 import dna.AminoAcid;
 import dna.Timer;
 import fileIO.ReadWrite;

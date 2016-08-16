@@ -466,6 +466,8 @@ public abstract class HashArray extends AbstractKmerTable {
 	public final boolean TWOD;
 	private final Lock lock=new ReentrantLock();
 	
+	public long[] array(){return array;}
+	
 	public AtomicIntegerArray owners() {return owners;}
 	@Override
 	final Lock getLock(){return lock;}

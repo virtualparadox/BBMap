@@ -12,9 +12,8 @@ import kmer.KmerTableSet;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
+import structures.ListNum;
 import ukmer.Kmer;
-
-import align2.ListNum;
 import align2.Tools;
 import dna.AminoAcid;
 import dna.Parser;

@@ -7,8 +7,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 
-import align2.IntList;
-import align2.LongList;
 import align2.Tools;
 
 import dna.AminoAcid;
@@ -18,6 +16,8 @@ import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
 import fileIO.TextStreamWriter;
+import structures.IntList;
+import structures.LongList;
 
 
 /**

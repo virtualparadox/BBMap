@@ -11,7 +11,7 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-import align2.ListNum;
+import structures.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -26,6 +26,7 @@ import fileIO.ReadWrite;
 import fileIO.TextFile;
 
 /**
+ * Appears to replace read headers with those in a text file.
  * @author Brian Bushnell
  * @date Feb 7, 2014
  *
@@ -269,6 +270,7 @@ public class MergeReadHeaders {
 		}
 		
 		errorState|=ReadWrite.closeStreams(cris, ros);
+		errorState|=tf.close();
 		
 		t.stop();
 

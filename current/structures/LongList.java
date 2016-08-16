@@ -1,6 +1,8 @@
-package align2;
+package structures;
 
 import java.util.Arrays;
+
+import align2.Tools;
 
 
 
@@ -76,7 +78,7 @@ public final class LongList{
 	private final void resize(final long size2){
 		assert(size2>size) : size+", "+size2;
 		final int size3=(int)Tools.min(Integer.MAX_VALUE, size2);
-		assert(size2>size) : "Overflow: "+size+", "+size2+" -> "+size3;
+		assert(size3>size) : "Overflow: "+size+", "+size2+" -> "+size3;
 		array=Arrays.copyOf(array, size3);
 	}
 	
@@ -165,6 +167,7 @@ public final class LongList{
 		return size-1;
 	}
 	
+	//TODO: This could be done in-place.
 	public final void shrinkToUnique(){
 		//Assumes sorted.
 		if(size<=0){
@@ -233,6 +236,10 @@ public final class LongList{
 	
 	public void sort() {
 		if(size>1){Arrays.sort(array, 0, size);}
+	}
+	
+	public void reverse() {
+		if(size>1){Tools.reverseInPlace(array, 0, size);}
 	}
 	
 	public boolean sorted(){

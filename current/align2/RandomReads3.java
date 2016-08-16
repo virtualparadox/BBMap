@@ -268,6 +268,8 @@ public final class RandomReads3 {
 				BELL_DIST=Tools.parseBoolean(b);
 			}else if(a.equals("illuminanames")){
 				ILLUMINA_NAMES=Tools.parseBoolean(b);
+			}else if(a.equals("insertnames") || a.equals("renamebyinsert")){
+				INSERT_NAMES=Tools.parseBoolean(b);
 			}else if(a.startsWith("unique")){
 				USE_UNIQUE_SNPS=Tools.parseBoolean(b);
 			}else if(a.startsWith("adderrors") || a.startsWith("usequality")){
@@ -324,7 +326,6 @@ public final class RandomReads3 {
 //		assert(false) : OUTPUT_INTERLEAVED;
 		assert(build>=0) : "Please specify a genome.";
 		
-		
 		if(minInsert>-1){mateMiddleMin=minInsert-2*maxlen;}
 		if(maxInsert>-1){mateMiddleMax=maxInsert-2*minlen;}
 		if(insertDev>-1){
@@ -367,8 +368,8 @@ public final class RandomReads3 {
 			rr.pbadapter1=rr.pbadapter2; //For PacBio, since adapters never appear in plus configuration
 		}
 		if(fragadapter1!=null){
-			rr.fragadapter1=toAdapters(fragadapter1);
-			rr.fragadapter2=fragadapter2==null ? rr.fragadapter1 : toAdapters(fragadapter2);
+			rr.fragadapter1=Tools.toAdapters(fragadapter1, -1);
+			rr.fragadapter2=fragadapter2==null ? rr.fragadapter1 : Tools.toAdapters(fragadapter2, -1);
 		}
 		
 		if(REPLACE_NOREF){
@@ -455,27 +456,6 @@ public final class RandomReads3 {
 		if(fname2!=null){Data.sysout.println("Wrote "+fname2);}
 		Data.sysout.println("Time: \t"+t);
 		
-	}
-	
-	private static byte[][] toAdapters(String name){
-		String[] split;
-		ArrayList<byte[]> list=new ArrayList<byte[]>();
-		if(new File(name).exists()){
-			split=new String[] {name};
-		}else{
-			split=name.split(",");
-		}
-		for(String s : split){
-			if(new File(s).exists()){
-				ArrayList<Read> reads=FastaReadInputStream.toReads(s);
-				for(Read r : reads){
-					if(r!=null && r.length()>0){list.add(r.bases);}
-				}
-			}else{
-				list.add(s.getBytes());
-			}
-		}
-		return list.toArray(new byte[list.size()][]);
 	}
 	
 	private static ArrayList<ChromosomeArray> writeRef(String reference, int build){
@@ -988,7 +968,7 @@ public final class RandomReads3 {
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
 			int minChrom, int maxChrom,
 			int minQual, int midQual, int maxQual, String fname1, String fname2){
-		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
+		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES && !INSERT_NAMES);
 		
 		TextStreamWriter tsw1=new TextStreamWriter(fname1, overwrite, false, true);
 		tsw1.start();
@@ -1035,7 +1015,7 @@ public final class RandomReads3 {
 
 				byte baseSlant=(byte)(maxQual-minQual+1);
 				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
-				if(randyQual.nextBoolean()){
+				if(Tools.nextBoolean(randyQual)){
 					int range=maxQual-midQual+1;
 					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
 					baseQuality=(byte)(midQual+delta);
@@ -1142,17 +1122,13 @@ public final class RandomReads3 {
 			}
 			if(r1!=null){
 				final Read r2=r1.mate;
-//				assert(false) : r1;
-				if(prefix!=null){r1.id=prefix+"_"+r1.numericID+slash1;}
-				else if(ILLUMINA_NAMES){r1.id=r1.numericID+slash1;}
+				processSpecialNames(r1);
+				
 				tsw1.println(r1);
 				if(r2!=null){
 					r2.setPairnum(1);
-					if(prefix!=null){r2.id=prefix+"_"+r1.numericID+slash2;}
-					else if(ILLUMINA_NAMES){r2.id=r1.numericID+slash2;}
 					if(tsw2!=null){tsw2.println(r2);}
 					else{tsw1.println(r2);}
-						
 				}
 				nextReadID++;
 			}else{
@@ -1177,7 +1153,7 @@ public final class RandomReads3 {
 			int maxInsLen, int maxDelLen, int maxSubLen, int maxNLen, 
 			int minChrom, int maxChrom,
 			int minQual, int midQual, int maxQual){
-		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES);
+		FASTQ.TAG_CUSTOM=(prefix==null && !ILLUMINA_NAMES && !INSERT_NAMES);
 		
 		assert(minQual<=midQual);
 		assert(midQual<=maxQual);
@@ -1216,7 +1192,7 @@ public final class RandomReads3 {
 				
 				byte baseSlant=(byte)(maxQual-minQual+1);
 				slant=(byte)((randyQual.nextInt(baseSlant)+randyQual.nextInt(baseSlant)+1)/2);
-				if(randyQual.nextBoolean()){
+				if(Tools.nextBoolean(randyQual)){
 					int range=maxQual-midQual+1;
 					int delta=Tools.min(randyQual.nextInt(range), randyQual.nextInt(range));
 					baseQuality=(byte)(midQual+delta);
@@ -1236,7 +1212,7 @@ public final class RandomReads3 {
 					
 					int a=ampLength;
 					int b=a*2+1;
-					if(randyAmp.nextBoolean()){
+					if(Tools.nextBoolean(randyAmp)){
 						forceLoc=lastRead.start+a-randyAmp.nextInt(b);
 					}else{
 //						if(randyAmp.nextBoolean()){
@@ -1316,11 +1292,10 @@ public final class RandomReads3 {
 //				Data.sysout.println(r.strand()+"\t"+r.insertSize());
 			}
 			if(r1!=null){
-//				assert(false) : r1;
-				if(ILLUMINA_NAMES){r1.id=r1.numericID+slash1;}
+				processSpecialNames(r1);
+				
 				if(r1.mate!=null){
 					r1.mate.setPairnum(1);
-					if(ILLUMINA_NAMES){r1.mate.id=r1.numericID+slash2;}
 				}
 				list.add(r1);
 				nextReadID++;
@@ -1334,6 +1309,30 @@ public final class RandomReads3 {
 //			System.err.println("Made "+r1.start+" ~ "+r1.stop+" = "+(r1.stop-r1.start));
 		}
 		return list;
+	}
+	
+	private void processSpecialNames(Read r1){
+		if(r1==null){return;}
+		Read r2=r1.mate;
+		
+		if(prefix!=null){
+			r1.id=prefix+"_"+r1.numericID+slash1;
+			if(r2!=null){
+				r2.id=prefix+"_"+r1.numericID+slash2;
+			}
+		}else if(ILLUMINA_NAMES){
+			r1.id=r1.numericID+slash1;
+			if(r2!=null){
+				r2.id=r1.numericID+slash2;
+			}
+		}else if(INSERT_NAMES){
+			int insert=Read.insertSizeMapped(r1, r2, false);
+			String s="insert="+insert;
+			r1.id=s+" 1:"+r1.numericID;
+			if(r2!=null){
+				r2.id=s+" 2:"+r1.numericID;
+			}
+		}
 	}
 	
 	public Read makeRead(Read r0, int minlen, int maxlen, int minChrom, int maxChrom,
@@ -1699,8 +1698,10 @@ public final class RandomReads3 {
 	/*----------------        Static Fields         ----------------*/
 	/*--------------------------------------------------------------*/
 
-	private static String slash1="/1";
-	private static String slash2="/2";
+//	private static String slash1="/1";
+//	private static String slash2="/2";
+	private static String slash1=" 1:";
+	private static String slash2=" 2:";
 	
 	private static int[] randomChrom;
 	
@@ -1732,6 +1733,7 @@ public final class RandomReads3 {
 	public static double EXP_LAMDA=0.8d;
 	public static boolean BIASED_SNPS=false;
 	public static boolean ILLUMINA_NAMES=false;
+	public static boolean INSERT_NAMES=false;
 	public static int midPad=500;
 	
 	public static boolean NODISK=false;

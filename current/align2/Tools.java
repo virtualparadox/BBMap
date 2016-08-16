@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.regex.Pattern;
 
+import stream.FASTQ;
+import stream.FastaReadInputStream;
 import stream.Read;
 import stream.SamLine;
 import stream.SiteScore;
@@ -45,6 +47,12 @@ public final class Tools {
 			}
 		}
 		return maxP2;
+	}
+	
+	public static final boolean nextBoolean(Random randy){
+		return randy.nextBoolean();
+//		int r=randy.nextInt()&0x7FFFFFFF;
+//		return r%294439>=147219;
 	}
 	
 	/**
@@ -121,6 +129,61 @@ public final class Tools {
 			}
 		}
 		return list;
+	}
+	
+	public static ArrayList<byte[]> toAdapterList(String name, int maxLength){
+		if(maxLength<1){maxLength=Integer.MAX_VALUE;}
+		if(name==null){return null;}
+		String[] split;
+		ArrayList<byte[]> list=new ArrayList<byte[]>();
+		if(new File(name).exists()){
+			split=new String[] {name};
+		}else{
+			split=name.split(",");
+		}
+		for(String s : split){
+			if(new File(s).exists()){
+				ArrayList<Read> reads=FastaReadInputStream.toReads(s);
+				for(Read r : reads){
+					if(r!=null && r.length()>0){
+						byte[] array=checkAdapter(r.bases, maxLength);
+						if(array.length>0){list.add(array);}
+					}
+				}
+			}else{
+				byte[] array=checkAdapter(s.getBytes(), maxLength);
+				if(array.length>0){list.add(array);}
+			}
+		}
+		return list==null || list.isEmpty() ? null : list;
+	}
+	
+	private static byte[] checkAdapter(byte[] array, int maxLength){
+		if(array.length>maxLength){array=Arrays.copyOf(array, maxLength);}
+		
+		for(int i=0; i<array.length; i++){
+			byte b=array[i];
+			int x=AminoAcid.baseToNumberExtended[b];
+			if(x<0 || !Character.isLetter(b) || !Character.isUpperCase(b)){
+				throw new RuntimeException("Invalid nucleotide "+(char)b+" in literal sequence "+new String(array)+"\n"
+					+ "If this was supposed to be a filename, the file was not found.");
+			}
+			if(AminoAcid.baseToNumber[b]<0){array[i]='N';}//Degenerate symbols become N
+		}
+		
+		int trailingNs=0;
+		for(int i=array.length-1; i>=0; i--){
+			if(array[i]=='N'){trailingNs++;}
+		}
+		if(trailingNs>0){
+			array=Arrays.copyOf(array, array.length-trailingNs);
+		}
+		return array;
+	}
+	
+	public static byte[][] toAdapters(String name, final int maxLength){
+		ArrayList<byte[]> list=toAdapterList(name, maxLength);
+		return list==null ? null : list.toArray(new byte[list.size()][]);
 	}
 	
 	/** Add names to a collection.
@@ -1153,8 +1216,17 @@ public final class Tools {
 	 * @return True if the array starts with the String.
 	 */
 	public static boolean startsWith(byte[] array, String s) {
+		return startsWith(array, s, 0);
+	}
+	
+	/**
+	 * @param array
+	 * @param s
+	 * @return True if the array starts with the String.
+	 */
+	public static boolean startsWith(byte[] array, String s, int initialPos) {
 		if(array==null || s==null || array.length<s.length()){return false;}
-		for(int i=0; i<s.length(); i++){
+		for(int i=initialPos; i<s.length(); i++){
 			if(array[i]!=s.charAt(i)){return false;}
 		}
 		return true;
@@ -1330,12 +1402,12 @@ public final class Tools {
 	
 	public static void reverseInPlace(final int[] array){
 		if(array==null){return;}
-		final int max=array.length/2, last=array.length-1;
-		for(int i=0; i<max; i++){
-			int temp=array[i];
-			array[i]=array[last-i];
-			array[last-i]=temp;
-		}
+		reverseInPlace(array, 0, array.length);
+	}
+	
+	public static void reverseInPlace(final long[] array){
+		if(array==null){return;}
+		reverseInPlace(array, 0, array.length);
 	}
 	
 	public static void reverseInPlace(final int[] array, final int from, final int to){
@@ -1343,6 +1415,16 @@ public final class Tools {
 		final int max=to/2, last=to-1;
 		for(int i=0; i<max; i++){
 			int temp=array[i];
+			array[i]=array[last-i];
+			array[last-i]=temp;
+		}
+	}
+	
+	public static void reverseInPlace(final long[] array, final int from, final int to){
+		if(array==null){return;}
+		final int max=to/2, last=to-1;
+		for(int i=0; i<max; i++){
+			long temp=array[i];
 			array[i]=array[last-i];
 			array[last-i]=temp;
 		}
@@ -2175,6 +2257,9 @@ public final class Tools {
 	
 	public static final float min(float x, float y){return x<y ? x : y;}
 	public static final float max(float x, float y){return x>y ? x : y;}
+	public static final float min(float x, float y, float z){return x<y ? (x<z ? x : z) : (y<z ? y : z);}
+	public static final float max(float x, float y, float z){return x>y ? (x>z ? x : z) : (y>z ? y : z);}
+	public static final float mid(float x, float y, float z){return x<y ? (x<z ? min(y, z) : x) : (y<z ? min(x, z) : y);}
 	
 	public static final int min(int[] array, int fromIndex, int toIndex){
 		int min=array[fromIndex];

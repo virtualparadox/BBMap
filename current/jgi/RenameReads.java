@@ -15,14 +15,12 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
+import structures.ListNum;
 import fileIO.ByteFile;
 import fileIO.ByteFile1;
 import fileIO.ByteFile2;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
-
-import align2.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -284,10 +282,10 @@ public class RenameReads {
 						r1.id=r1.numericID+"_"+r1.length()+"_"+Tools.min(x, r1.length())+" /1";
 						r2.id=r2.numericID+"_"+r2.length()+"_"+Tools.min(x, r2.length())+" /2";
 					}else{
-						r1.id=prefix+x;
+						String s=prefix+x;
+						r1.id=s+" 1:"+r1.numericID;
 						if(r2!=null){
-							r1.id=r1.id+" /1:"+r1.numericID;
-							r2.id=prefix+x+" /2:"+r1.numericID;
+							r2.id=s+" 2:"+r1.numericID;
 						}
 					}
 					

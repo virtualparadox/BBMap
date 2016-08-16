@@ -4,8 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 import kmer.Primes;
-
-import align2.IntList2;
+import structures.IntList2;
 import align2.Tools;
 
 /**

@@ -3,7 +3,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified September 1, 2015
+Last modified May 26, 2015
 
 Description:  Generates random synthetic reads from a reference genome.  Read names indicate their genomic origin.
 Allows precise customization of things like insert size and synthetic mutation type, sizes, and rates.
@@ -31,6 +31,7 @@ simplenames=f       Set to true to generate read names that clearly indicate
                     genomic origin, without BBMap internal coordinates.
 illuminanames=f     Set to true to have matching names for paired reads, 
                     rather than naming by location.
+renamebyinsert=f    Insert the insert size into the name.
 spaceslash=f        Set true to add a space before slash read pairnum.
 prefix=null         Generated reads will start with this prefix, 
                     rather than naming by location.

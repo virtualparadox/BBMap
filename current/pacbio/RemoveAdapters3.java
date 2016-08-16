@@ -9,8 +9,7 @@ import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
-import align2.ListNum;
+import structures.ListNum;
 import align2.MultiStateAligner9PacBio;
 import align2.MultiStateAligner9PacBioAdapter;
 import align2.ReadStats;

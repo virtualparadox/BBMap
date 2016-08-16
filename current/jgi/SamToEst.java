@@ -8,7 +8,7 @@ import java.util.HashSet;
 
 import stream.Read;
 import stream.SamLine;
-
+import structures.LongList;
 import dna.Data;
 import dna.Parser;
 import dna.Scaffold;
@@ -16,7 +16,6 @@ import fileIO.ByteFile;
 import fileIO.ReadWrite;
 import fileIO.TextFile;
 import fileIO.TextStreamWriter;
-import align2.LongList;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;

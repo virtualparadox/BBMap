@@ -12,15 +12,13 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
+import structures.ListNum;
 import dna.AminoAcid;
 import dna.Data;
 import dna.Parser;
 import dna.Timer;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
-
-import align2.ListNum;
 import align2.ReadStats;
 import align2.Tools;
 

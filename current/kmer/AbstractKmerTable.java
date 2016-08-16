@@ -126,6 +126,7 @@ public abstract class AbstractKmerTable {
 			synchronized(killMessage){
 				e.printStackTrace();
 				System.err.println(killMessage);
+				Shared.printMemory();
 				KillSwitch.killSilent();
 			}
 		}
@@ -140,6 +141,7 @@ public abstract class AbstractKmerTable {
 			synchronized(killMessage){
 				e.printStackTrace();
 				System.err.println(killMessage);
+				Shared.printMemory();
 				KillSwitch.killSilent();
 			}
 		}
@@ -154,6 +156,7 @@ public abstract class AbstractKmerTable {
 			synchronized(killMessage){
 				e.printStackTrace();
 				System.err.println(killMessage);
+				Shared.printMemory();
 				KillSwitch.killSilent();
 			}
 		}
@@ -168,6 +171,7 @@ public abstract class AbstractKmerTable {
 			synchronized(killMessage){
 				e.printStackTrace();
 				System.err.println(killMessage);
+				Shared.printMemory();
 				KillSwitch.killSilent();
 			}
 		}
@@ -182,6 +186,7 @@ public abstract class AbstractKmerTable {
 			synchronized(killMessage){
 				e.printStackTrace();
 				System.err.println(killMessage);
+				Shared.printMemory();
 				KillSwitch.killSilent();
 			}
 		}

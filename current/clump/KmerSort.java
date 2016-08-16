@@ -12,14 +12,12 @@ import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-
+import structures.ListNum;
 import dna.Parser;
 import dna.Timer;
 import fileIO.ByteFile;
 import fileIO.ReadWrite;
 import fileIO.FileFormat;
-
-import align2.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -99,7 +97,7 @@ public class KmerSort {
 //				KmerComparator.useCache=Tools.parseBoolean(b);//Obsolete
 			}else if(a.equals("rcomp") || a.equals("reversecomplement")){
 				rcomp=Tools.parseBoolean(b);
-			}else if(a.equals("condense") || a.equals("consensus")){
+			}else if(a.equals("condense") || a.equals("consensus") || a.equals("concensus")){//Note the last one is intentionally misspelled
 				condense=Tools.parseBoolean(b);
 			}else if(a.equals("prefilter")){
 				KmerReduce.prefilter=Tools.parseBoolean(b);

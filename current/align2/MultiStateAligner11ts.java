@@ -22,12 +22,6 @@ public final class MultiStateAligner11ts extends MSA{
 //		
 //		byte[] original=ref;
 //		
-//		if(args.length>2 && args[2].equalsIgnoreCase("cs")){
-//			colorspace=true;
-//			read=AminoAcid.toColorspace(read);
-//			ref=AminoAcid.toColorspace(ref);
-//		}
-//		
 //		MultiStateAligner11ts msa=new MultiStateAligner11ts(read.length, ref.length);
 //		
 //		System.out.println("Initial: ");
@@ -45,7 +39,6 @@ public final class MultiStateAligner11ts extends MSA{
 //		int[] score=null;
 //		score=msa.score(read, ref,  0, ref.length-1, max[0], max[1], max[2], false);
 //		
-//		if(colorspace){System.out.println(new String(original));}
 //		System.out.println(new String(ref));
 //		System.out.println(new String(read));
 //		System.out.println(new String(out));

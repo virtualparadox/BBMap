@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 16, 2015
+Last modified July 5, 2016
 
 Description:  Sorts sequences to put similar reads near each other.
 This is a wrapper for KmerSplit and KmerSort.

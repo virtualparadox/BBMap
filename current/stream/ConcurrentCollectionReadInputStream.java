@@ -4,9 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import align2.ListNum;
-
 import dna.Data;
+import structures.ListNum;
 
 public class ConcurrentCollectionReadInputStream extends ConcurrentReadInputStream {
 	

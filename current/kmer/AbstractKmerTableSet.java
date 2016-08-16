@@ -95,19 +95,37 @@ public abstract class AbstractKmerTableSet {
 		/* Start phase timer */
 		Timer t=new Timer();
 
-		if(DISPLAY_PROGRESS){
-			outstream.println("Before loading:");
-			Shared.printMemory();
-			outstream.println();
-		}
+//		if(DISPLAY_PROGRESS){
+//			outstream.println("Before loading:");
+//			Shared.printMemory();
+//			outstream.println();
+//		}
 		
-		System.err.println("Estimated kmer capacity: \t"+estimatedKmerCapacity());
 		prefilterArray=makePrefilter(new KCountArray[1], null);
 		if(prefilterArray!=null){
 			prefilterArray.purgeFilter();
 			filterMax2=Tools.min(filterMax, prefilterArray.maxValue-1);
+			
+			/* This is already getting printed in makePrefilter */
+//			if(DISPLAY_PROGRESS){
+//				outstream.println("After prefilter:");
+//				Shared.printMemory();
+//				outstream.println();
+//			}
 		}
 //		assert(false) : prefilterArray.cellBits+", "+prefilterArray.maxValue+", "+filterMax+", "+filterMax2;
+		
+		System.err.println("Estimated kmer capacity: \t"+estimatedKmerCapacity());
+		
+		assert(!allocated);
+		allocateTables();
+		allocated=true;
+		
+		if(DISPLAY_PROGRESS){
+			outstream.println("After table allocation:");
+			Shared.printMemory();
+			outstream.println();
+		}
 		
 		/* Fill tables with kmers */
 		long added=loadKmers();
@@ -242,8 +260,9 @@ public abstract class AbstractKmerTableSet {
 	/*----------------         Inner Methods        ----------------*/
 	/*--------------------------------------------------------------*/
 	
-	public final long loadKmers(){
-		allocateTables();
+	private final long loadKmers(){
+		//allocateTables();
+		assert(allocated);
 		kmersLoaded=0;
 		final boolean vic=Read.VALIDATE_IN_CONSTRUCTOR;
 		Read.VALIDATE_IN_CONSTRUCTOR=false;
@@ -280,6 +299,7 @@ public abstract class AbstractKmerTableSet {
 	
 	public abstract void clearOwnership();
 	
+	public abstract int ways();
 	
 	/*--------------------------------------------------------------*/
 	/*----------------       Printing Methods       ----------------*/
@@ -393,6 +413,7 @@ public abstract class AbstractKmerTableSet {
 	/*--------------------------------------------------------------*/
 	
 	protected abstract void allocateTables();
+	protected boolean allocated=false;
 
 	/** Print messages to this stream */
 	public static PrintStream outstream=System.err;

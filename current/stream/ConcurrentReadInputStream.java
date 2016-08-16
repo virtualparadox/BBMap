@@ -3,12 +3,10 @@ package stream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import stream.mpi.ConcurrentReadInputStreamMPI;
-
+import align2.Shared;
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
-import align2.ListNum;
-import align2.Shared;
+import structures.ListNum;
 
 /**
  * Abstract superclass of all ConcurrentReadStreamInterface implementations.
@@ -39,10 +37,6 @@ public abstract class ConcurrentReadInputStream implements ConcurrentReadStreamI
 
 		final FileFormat ff1=FileFormat.testInput(in1, null, allowSubprocess);
 		final FileFormat ff2=FileFormat.testInput(in2, null, allowSubprocess);
-		
-//		if(verbose){
-//			System.err.println("cris:     getReadInputStream("+maxReads+", "+colorspace+", "+keepSamHeader+", "+allowSubprocess+", "+in1+", "+in2+", "+qf1+", "+qf2+")");
-//		}
 		
 		return getReadInputStream(maxReads, keepSamHeader, ff1, ff2, qf1, qf2);
 	}
@@ -104,16 +98,14 @@ public abstract class ConcurrentReadInputStream implements ConcurrentReadStreamI
 			}
 			final ConcurrentReadInputStream crisD;
 			if(Shared.USE_CRISMPI){
-				crisD=new ConcurrentReadInputStreamMPI(cris0, rank==0, keepAll);
+				assert(false) : "To support MPI, uncomment this.";
+//				crisD=new ConcurrentReadInputStreamMPI(cris0, rank==0, keepAll);
+				crisD=null;
 			}else{
 				crisD=new ConcurrentReadInputStreamD(cris0, rank==0, keepAll);
 			}
 			return crisD;
 		}
-		
-//		if(verbose){
-//			System.err.println("cris:     getReadInputStream("+maxReads+", "+colorspace+", "+keepSamHeader+", "+ff1+", "+ff2+", "+qf1+", "+qf2+")");
-//		}
 		
 		assert(ff1!=null);
 		assert(ff2==null || ff1.name()==null || !ff1.name().equalsIgnoreCase(ff2.name())) : ff1.name()+", "+ff2.name();
@@ -148,16 +140,25 @@ public abstract class ConcurrentReadInputStream implements ConcurrentReadStreamI
 			cris=new ConcurrentGenericReadInputStream(ris1, ris2, maxReads);
 			
 		}else if(ff1.bread()){
-			
+//			assert(false) : ff1;
 			RTextInputStream rtis=new RTextInputStream(ff1, ff2, maxReads);
 			cris=new ConcurrentLegacyReadInputStream(rtis, maxReads); //TODO: Change to generic
 			
+		}else if(ff1.header()){
+			
+			HeaderInputStream ris1=new HeaderInputStream(ff1);
+			HeaderInputStream ris2=(ff2==null ? null : new HeaderInputStream(ff2));
+			cris=new ConcurrentGenericReadInputStream(ris1, ris2, maxReads);
 			
 		}else if(ff1.sequential()){
+			
 			SequentialReadInputStream ris=new SequentialReadInputStream(maxReads, 200, 50, 0, false);
 			cris=new ConcurrentLegacyReadInputStream(ris, maxReads);
+			
 		}else if(ff1.csfasta()){
+			
 			throw new RuntimeException("csfasta is no longer supported.");
+			
 		}else if(ff1.random()){
 			
 			RandomReadInputStream3 ris=new RandomReadInputStream3(maxReads, FASTQ.FORCE_INTERLEAVED);

@@ -6,8 +6,7 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
-
-import align2.ListNum;
+import structures.ListNum;
 import dna.AminoAcid;
 import dna.Timer;
 import fileIO.FileFormat;

@@ -1,8 +1,8 @@
 package ukmer;
 
 import stream.ByteBuilder;
-import align2.IntList;
-import align2.LongList;
+import structures.IntList;
+import structures.LongList;
 
 /**
  * @author Brian Bushnell

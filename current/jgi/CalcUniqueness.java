@@ -15,7 +15,7 @@ import stream.ConcurrentReadInputStream;
 import stream.FASTQ;
 import stream.FastaReadInputStream;
 import stream.Read;
-import align2.ListNum;
+import structures.ListNum;
 import align2.Shared;
 import align2.Tools;
 import dna.Parser;
@@ -93,10 +93,12 @@ public class CalcUniqueness {
 				showPercents=Tools.parseBoolean(b);
 			}else if(a.equals("count") || a.equals("counts")){
 				showCounts=Tools.parseBoolean(b);
+			}else if(a.equals("minprob") || a.equals("percents")){
+				minprob=Float.parseFloat(b);
 			}else if(a.equals("k")){
 				k_=Integer.parseInt(b);
 			}else if(a.equals("bin") || a.equals("interval")){
-				interval=Integer.parseInt(b);
+				interval=Tools.parseKMG(b);
 			}else if(parser.in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
 				parser.in1=arg;
 			}else{
@@ -108,6 +110,8 @@ public class CalcUniqueness {
 		
 		{//Process parser fields
 			Parser.processQuality();
+			minAverageQuality=parser.minAvgQuality;
+			minAverageQualityBases=parser.minAvgQualityBases;
 			
 			maxReads=parser.maxReads;	
 			samplerate=parser.samplerate;
@@ -201,6 +205,7 @@ public class CalcUniqueness {
 		}
 		
 		void increment(final long kmer){
+			if(kmer<0){return;}
 			AbstractKmerTable table=keySets[(int)(kmer%WAYS)];
 			int count=table.getValue(kmer);
 			if(count<1){
@@ -300,81 +305,86 @@ public class CalcUniqueness {
 			
 			/* Process 1 list of reads per loop iteration */
 			while(reads!=null && reads.size()>0){
-				
 				/* Process 1 read per loop iteration */
 				for(Read r1 : reads){
-					final Read r2=r1.mate;
-					final byte[] bases1=(r1==null ? null : r1.bases);
-					final byte[] bases2=(r2==null ? null : r2.bases);
-					final int length1=(bases1==null ? 0 : bases1.length);
-					final int length2=(bases2==null ? 0 : bases2.length);
-					
-					pairsProcessed++;
-					
-					/* Process read 1 */
-					if(r1!=null){
-						
-						readsProcessed++;
-						basesProcessed+=length1;
-						
-						if(length1>=k){
-							{//First kmer
-								final long kmer=toKmer(bases1, 0, k);
-								r1CounterFirst.increment(kmer);
-								bothCounterFirst.increment(kmer);
-							}
-							{//Random kmer
-								final long kmer=toKmer(bases1, randy.nextInt(length1-k2), k);
-								r1CounterRand.increment(kmer);
-								bothCounterRand.increment(kmer);
-							}
-						}
-					}
-					
-					/* Process read 2 */
-					if(r2!=null){
-						
-						readsProcessed++;
-						basesProcessed+=length2;
-						
-						if(length2>=k){
-							{//First kmer
-								final long kmer=toKmer(bases2, 0, k);
-								r2CounterFirst.increment(kmer);
-								bothCounterFirst.increment(kmer);
-							}
-							{//Random kmer
-								final long kmer=toKmer(bases2, randy.nextInt(length2-k2), k);
-								r2CounterRand.increment(kmer);
-								bothCounterRand.increment(kmer);
+					if(minAverageQuality<1 || r1.avgQualityFirstNBases(minAverageQualityBases)>=minAverageQuality){
+						final Read r2=r1.mate;
+						final byte[] bases1=(r1==null ? null : r1.bases);
+						final byte[] bases2=(r2==null ? null : r2.bases);
+						final byte[] quals1=(r1==null ? null : r1.quality);
+						final byte[] quals2=(r2==null ? null : r2.quality);
+						final int length1=(bases1==null ? 0 : bases1.length);
+						final int length2=(bases2==null ? 0 : bases2.length);
+
+						pairsProcessed++;
+
+						/* Process read 1 */
+						if(r1!=null){
+
+							readsProcessed++;
+							basesProcessed+=length1;
+
+							if(length1>=k){
+								{//First kmer
+									final long kmer=toKmer(bases1, quals1, 0, k);
+									r1CounterFirst.increment(kmer);
+									bothCounterFirst.increment(kmer);
+								}
+								{//Random kmer
+									final long kmer=toKmer(bases1, quals1, randy.nextInt(length1-k2), k);
+									r1CounterRand.increment(kmer);
+									bothCounterRand.increment(kmer);
+								}
 							}
 						}
-					}
-					
-					/* Process pair */
-					if(r1!=null && r2!=null){
-						
-						if(length1>k+OFFSET && length2>k+OFFSET){
-							final long kmer1=toKmer(bases1, OFFSET, k);
-							final long kmer2=toKmer(bases2, OFFSET, k);
-							final long kmer=(~((-1L)>>2))|((kmer1<<(2*(31-k)))^(kmer2));
-							assert(kmer>=0) : k+", "+kmer1+", "+kmer2+", "+kmer;
-							{//Pair kmer
-								pairCounter.increment(kmer);
+
+						/* Process read 2 */
+						if(r2!=null){
+
+							readsProcessed++;
+							basesProcessed+=length2;
+
+							if(length2>=k){
+								{//First kmer
+									final long kmer=toKmer(bases2, quals2, 0, k);
+									r2CounterFirst.increment(kmer);
+									bothCounterFirst.increment(kmer);
+								}
+								{//Random kmer
+									final long kmer=toKmer(bases2, quals2, randy.nextInt(length2-k2), k);
+									r2CounterRand.increment(kmer);
+									bothCounterRand.increment(kmer);
+								}
 							}
 						}
-					}
-					
-					remaining--;
-					if(remaining<=0){
-						
-						printCountsToBuffer(sb, pairsProcessed, paired);
-						
-						tsw.print(sb.toString());
-						
-						//Reset things
-						sb.setLength(0);
-						remaining=interval;
+
+						/* Process pair */
+						if(r1!=null && r2!=null){
+
+							if(length1>k+OFFSET && length2>k+OFFSET){
+								final long kmer1=toKmer(bases1, quals1, OFFSET, k);
+								final long kmer2=toKmer(bases2, quals2, OFFSET, k);
+								if(kmer1!=-1 && kmer2!=-1){
+									final long kmer=(~((-1L)>>2))|((kmer1<<(2*(31-k)))^(kmer2));
+									assert(kmer>=0) : k+", "+kmer1+", "+kmer2+", "+kmer;
+									{//Pair kmer
+										pairCounter.increment(kmer);
+									}
+								}
+							}
+						}
+
+						remaining--;
+						if(remaining<=0){
+
+							printCountsToBuffer(sb, pairsProcessed, paired);
+
+							tsw.print(sb.toString());
+
+							//Reset things
+							sb.setLength(0);
+							remaining=interval;
+						}
 					}
 				}
 				
@@ -500,7 +510,11 @@ public class CalcUniqueness {
 	 * @param klen kmer length
 	 * @return kmer
 	 */
-	private final long toKmer(final byte[] bases, final int start, final int klen){
+	private final long toKmer(final byte[] bases, byte[] quals, final int start, final int klen){
+		if(minprob>0 && quals!=null){
+			float prob=toProb(quals, start, klen);
+			if(prob<minprob){return -1;}
+		}
 		final int stop=start+klen;
 		assert(stop<=bases.length);
 		long kmer=0;
@@ -511,6 +525,26 @@ public class CalcUniqueness {
 			kmer=((kmer<<2)|x);
 		}
 		return kmer;
+	}
+	
+	/**
+	 * Generate the probability a kmer is error-free, from specified start location
+	 * @param quals
+	 * @param start
+	 * @param klen kmer length
+	 * @return kmer
+	 */
+	private final float toProb(final byte[] quals, final int start, final int klen){
+		final int stop=start+klen;
+		assert(stop<=quals.length);
+		float prob=1f;
+		
+		for(int i=start; i<stop; i++){
+			final byte q=quals[i];
+			float pq=probCorrect[q];
+			prob*=pq;
+		}
+		return prob;
 	}
 	
 	/*--------------------------------------------------------------*/
@@ -571,6 +605,9 @@ public class CalcUniqueness {
 	private long sampleseed=-1;
 
 	private long interval=25000;
+	private float minprob=0;
+	private int minAverageQuality=0;
+	private int minAverageQualityBases=20;
 	private boolean cumulative=false;
 	private boolean showPercents=true;
 	private boolean showCounts=false;
@@ -606,5 +643,13 @@ public class CalcUniqueness {
 	private static final boolean useForest=false, useTable=false, useArray=true;
 	
 	private java.util.concurrent.ThreadLocalRandom randy;
+	
+	private static final float[] probCorrect=
+		{0.0000f, 0.2501f, 0.3690f, 0.4988f, 0.6019f, 0.6838f, 0.7488f, 0.8005f, 0.8415f, 0.8741f, 0.9000f, 0.9206f, 0.9369f, 0.9499f,
+		 0.9602f, 0.9684f, 0.9749f, 0.9800f, 0.9842f, 0.9874f, 0.9900f, 0.9921f, 0.9937f, 0.9950f, 0.9960f, 0.9968f, 0.9975f, 0.9980f,
+		 0.9984f, 0.9987f, 0.9990f, 0.9992f, 0.9994f, 0.9995f, 0.9996f, 0.9997f, 0.9997f, 0.9998f, 0.9998f, 0.9999f, 0.9999f, 0.9999f,
+		 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f, 0.9999f,
+		 0.9999f, 0.9999f, 0.9999f, 0.9999f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f};
+	
 	
 }

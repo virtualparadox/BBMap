@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified December 15, 2015
+Last modified May 11, 2016
 
 Description:   Prints the full taxonomy of a string.
 String may be a gi number, NCBI taxID, or Latin name.

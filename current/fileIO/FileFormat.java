@@ -267,7 +267,10 @@ public final class FileFormat {
 		else if(ext.equals("info") || ext.equals("attachment")){r[0]=ATTACHMENT;}
 		else if(ext.equals("scarf")){r[0]=SCARF;}
 		else if(ext.equals("phylip")){r[0]=PHYLIP;}
-		else if(ext.equals("header")){r[0]=HEADER;}
+		else if(ext.equals("header") || ext.equals("headers")){r[0]=HEADER;}
+		else if(ext.equals("int1d")){r[0]=INT1D;}
+		else if(ext.equals("long1d")){r[0]=LONG1D;}
+		else if(ext.equals("bitset")){r[0]=BITSET;}
 		
 		if(comp!=null){
 			r[1]=Gene.find3(comp, COMPRESSION_ARRAY);
@@ -359,6 +362,11 @@ public final class FileFormat {
 		return r[0]==FQ;
 	}
 	
+	public static boolean hasFastqOrFastqExtension(String fname){
+		int[] r=testFormat(fname, false, false);
+		return r[0]==FQ || r[0]==FA;
+	}
+	
 	public static boolean hasSamOrBamExtension(String fname){
 		int[] r=testFormat(fname, false, false);
 		return r[0]==SAM || r[0]==BAM;
@@ -426,7 +434,7 @@ public final class FileFormat {
 				else if(b2<0 || b2=='@'){format=SAM;}
 				else{format=UNKNOWN;} //probably a truncated fastq file?
 			}
-			else{format=BREAD;} //or possibly scarf
+//			else{format=BREAD;} //or possibly scarf
 
 			if(format!=FQ){len=-1;}
 		}
@@ -521,6 +529,9 @@ public final class FileFormat {
 	public final boolean bam(){return format==BAM;}
 	public final boolean scarf(){return format==SCARF;}
 	public final boolean text(){return format==TEXT;}
+	public final boolean int1d(){return format==INT1D;}
+	public final boolean long1d(){return format==LONG1D;}
+	public final boolean bitset(){return format==BITSET;}
 
 	public final boolean unknownCompression(){return compression<=UNKNOWN;}
 	public final boolean raw(){return compression==RAW;}
@@ -606,11 +617,15 @@ public final class FileFormat {
 	public static final int TEXT=13, TXT=13;
 	public static final int PHYLIP=14;
 	public static final int HEADER=15;
+	public static final int INT1D=16;
+	public static final int LONG1D=17;
+	public static final int BITSET=18;
 	
 	private static final String[] FORMAT_ARRAY=new String[] {
 		"unknown", "fasta", "fastq", "bread", "sam", "csfasta",
 		"qual", "sequential", "random", "sites", "attachment",
-		"bam", "scarf", "text", "phylip", "header"
+		"bam", "scarf", "text", "phylip", "header", "int1d",
+		"long1d", "bitset"
 	};
 	
 	public static final String[] EXTENSION_LIST=new String[] {
@@ -618,7 +633,9 @@ public final class FileFormat {
 		"ffn", "frn", "seq", "fsa", "faa",
 		"bread", "sam", "csfasta", "qual", "bam",
 		"scarf", "phylip", "txt",
-		"gz", "gzip", "bz2", "zip", "xz", "dsrc", "header"
+		"gz", "gzip", "bz2", "zip", "xz", "dsrc", "header", "headers",
+		"int1d", "long1d", "bitset"
+		
 	};
 	
 	/* Compression */

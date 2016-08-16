@@ -1,4 +1,4 @@
-package align2;
+package structures;
 
 import java.util.Arrays;
 

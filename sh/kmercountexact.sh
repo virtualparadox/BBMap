@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified November 18, 2015
+Last modified July 12, 2016
 
 Description:  Counts the number of unique kmers in a file.
 Generates a kmer frequency histogram and genome size estimate (in peaks output),
@@ -52,7 +52,6 @@ smoothradius=1      Initial radius of progressive smoothing function.
 maxradius=10        Maximum radius of progressive smoothing function.
 progressivemult=2   Increment radius each time depth increases by this factor.
 
-
 Peak calling parameters:
 peaks=<file>        Write the peaks to this file.  Default is stdout. 
                     Also contains the genome size estimate in bp.
@@ -63,6 +62,11 @@ minPeak=2           (minp) Ignore peaks with an X-value below this.
 maxPeak=BIG         (maxp) Ignore peaks with an X-value above this.
 maxPeakCount=12     (maxpc) Print up to this many peaks (prioritizing height).
 ploidy=-1           Specify ploidy; otherwise it will be autodetected.
+
+Sketch parameters:
+sketch=<file>       Write a minhash sketch to this file.
+sketchlen=10000     Output the top 10000 kmers.  Only kmers with at least mincount are included.
+sketchname=         TODO
 
 Quality parameters:
 qtrim=f             Trim read ends to remove bases with quality below minq.

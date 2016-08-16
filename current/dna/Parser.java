@@ -93,7 +93,7 @@ public class Parser {
 			loglogbuckets=Integer.parseInt(b);
 		}else if(a.equals("loglogbits")){
 			loglogbits=Integer.parseInt(b);
-		}else if(a.equals("loglogk")){
+		}else if(a.equals("loglogk") || a.equals("cardinalityk") || a.equals("kcardinality")){
 			loglogk=Integer.parseInt(b);
 		}else if(a.equals("loglogseed")){
 			loglogseed=Long.parseLong(b);
@@ -129,8 +129,7 @@ public class Parser {
 		return true;
 	}
 	
-	public boolean parseTrim(String arg, String a, String b){
-		
+	public boolean parseQTrim(String arg, String a, String b){
 		if(a.equals("qtrim1")){
 			if(b!=null && ("f".equalsIgnoreCase(b) || "false".equalsIgnoreCase(b))){qtrim1=false;}
 			else{
@@ -154,15 +153,7 @@ public class Parser {
 			a="trimq";
 		}
 		
-		if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
-			forceTrimModulo=Integer.parseInt(b);
-		}else if(a.equals("ftl") || a.equals("forcetrimleft")){
-			forceTrimLeft=Integer.parseInt(b);
-		}else if(a.equals("ftr") || a.equals("forcetrimright")){
-			forceTrimRight=Integer.parseInt(b);
-		}else if(a.equals("ftr2") || a.equals("forcetrimright2")){
-			forceTrimRight2=Integer.parseInt(b);
-		}else if(a.equals("qtrim")/* || a.equals("trim")*/){
+		if(a.equals("qtrim")/* || a.equals("trim")*/){
 			if(b==null || b.length()==0){qtrimRight=qtrimLeft=true;}
 			else if(b.equalsIgnoreCase("left") || b.equalsIgnoreCase("l")){qtrimLeft=true;qtrimRight=false;}
 			else if(b.equalsIgnoreCase("right") || b.equalsIgnoreCase("r")){qtrimLeft=false;qtrimRight=true;}
@@ -196,6 +187,24 @@ public class Parser {
 			qtrimLeft=Tools.parseBoolean(b);
 		}else if(a.equals("trimq") || a.equals("trimquality") || a.equals("trimq2")){
 			parseTrimq(a, b);
+		}else{
+			return false;
+		}
+		return true;
+	}
+	
+	public boolean parseTrim(String arg, String a, String b){
+		
+		if(parseQTrim(arg, a, b)){
+			//do nothing
+		}else if(a.equals("forcetrimmod") || a.equals("forcemrimmodulo") || a.equals("ftm")){
+			forceTrimModulo=Integer.parseInt(b);
+		}else if(a.equals("ftl") || a.equals("forcetrimleft")){
+			forceTrimLeft=Integer.parseInt(b);
+		}else if(a.equals("ftr") || a.equals("forcetrimright")){
+			forceTrimRight=Integer.parseInt(b);
+		}else if(a.equals("ftr2") || a.equals("forcetrimright2")){
+			forceTrimRight2=Integer.parseInt(b);
 		}else if(a.equals("trimbadsequence")){
 			trimBadSequence=Tools.parseBoolean(b);
 		}else if(a.equals("chastityfilter") || a.equals("cf")){

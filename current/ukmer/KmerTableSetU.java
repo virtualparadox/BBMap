@@ -12,8 +12,8 @@ import stream.ByteBuilder;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
-import align2.IntList;
-import align2.ListNum;
+import structures.IntList;
+import structures.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -223,7 +223,7 @@ public class KmerTableSetU extends AbstractKmerTableSet {
 			long memory=Runtime.getRuntime().maxMemory();
 			double xmsRatio=Shared.xmsRatio();
 //			long tmemory=Runtime.getRuntime().totalMemory();
-			usableMemory=(long)Tools.max(((memory-96000000)*(xmsRatio>0.97 ? 0.82 : 0.75)), memory*0.45);
+			usableMemory=(long)Tools.max(((memory-96000000)*(xmsRatio>0.97 ? 0.82 : 0.72)), memory*0.45);
 			if(prepasses==0 || !prefilter){
 				filterMemory0=filterMemory1=0;
 			}else{
@@ -1078,15 +1078,26 @@ public class KmerTableSetU extends AbstractKmerTableSet {
 	/*--------------------------------------------------------------*/
 	/*----------------       Final Primitives       ----------------*/
 	/*--------------------------------------------------------------*/
-	
+
+	@Override
 	public int kbig(){return kbig;}
+	@Override
 	public long filterMemory(int pass){return ((pass&1)==0) ? filterMemory0 : filterMemory1;}
+	@Override
 	public boolean ecco(){return ecco;}
+	@Override
 	public boolean qtrimLeft(){return qtrimLeft;}
+	@Override
 	public boolean qtrimRight(){return qtrimRight;}
+	@Override
 	public byte minAvgQuality(){return minAvgQuality;}
+	@Override
 	public long tableMemory(){return tableMemory;}
+	@Override
 	public long estimatedKmerCapacity(){return estimatedKmerCapacity;}
+	@Override
+	public int ways(){return ways;}
+	
 	
 	/** Hold kmers.  A kmer X such that X%WAYS=Y will be stored in tables[Y] */
 	private AbstractKmerTableU[] tables;

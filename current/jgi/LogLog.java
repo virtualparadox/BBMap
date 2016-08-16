@@ -18,9 +18,8 @@ import stream.ConcurrentGenericReadInputStream;
 import stream.ConcurrentReadInputStream;
 import stream.FastaReadInputStream;
 import stream.Read;
+import structures.ListNum;
 import ukmer.Kmer;
-
-import align2.ListNum;
 import align2.ReadStats;
 import align2.Shared;
 import align2.Tools;
@@ -126,11 +125,7 @@ public class LogLog {
 	
 	public void hashBig(byte[] bases){
 		
-		Kmer kmer=localKmer.get();
-		if(kmer==null){
-			localKmer.set(new Kmer(k));
-			kmer=localKmer.get();
-		}
+		Kmer kmer=getLocalKmer();
 		int len=0;
 		
 		for(int i=0; i<bases.length; i++){
@@ -204,6 +199,15 @@ public class LogLog {
 	public int buckets;
 	private final ThreadLocal<Kmer> localKmer=new ThreadLocal<Kmer>();
 	
+	protected Kmer getLocalKmer(){
+		Kmer kmer=localKmer.get();
+		if(kmer==null){
+			localKmer.set(new Kmer(k));
+			kmer=localKmer.get();
+		}
+		kmer.clearFast();
+		return kmer;
+	}
 	
 	private static class LogLogWrapper{
 		
@@ -239,6 +243,8 @@ public class LogLog {
 					verbose=Tools.parseBoolean(b);
 				}else if(a.equals("parse_flag_goes_here")){
 					//Set a variable here
+				}else if(in1==null && i==0 && !arg.contains("=") && (arg.toLowerCase().startsWith("stdin") || new File(arg).exists())){
+					parser.in1=b;
 				}else{
 					outstream.println("Unknown parameter "+args[i]);
 					assert(false) : "Unknown parameter "+args[i];

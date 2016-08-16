@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 
-import align2.ListNum;
 import align2.Tools;
 
 import stream.ConcurrentGenericReadInputStream;
@@ -12,7 +11,7 @@ import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
 import stream.SamLine;
-
+import structures.ListNum;
 import dna.Parser;
 import dna.Timer;
 

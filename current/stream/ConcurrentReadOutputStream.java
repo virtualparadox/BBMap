@@ -2,8 +2,6 @@ package stream;
 
 import java.util.ArrayList;
 
-import stream.mpi.ConcurrentReadOutputStreamMPI;
-
 import align2.Shared;
 
 import fileIO.FileFormat;
@@ -44,7 +42,9 @@ public abstract class ConcurrentReadOutputStream {
 			}
 			final ConcurrentReadOutputStream crosD;
 			if(Shared.USE_CRISMPI){
-				crosD=new ConcurrentReadOutputStreamMPI(cros0, rank==0);
+				assert(false) : "To support MPI, uncomment this.";
+				crosD=null;
+//				crosD=new ConcurrentReadOutputStreamMPI(cros0, rank==0);
 			}else{
 				crosD=new ConcurrentReadOutputStreamD(cros0, rank==0);
 			}

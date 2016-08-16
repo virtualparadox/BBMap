@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 
@@ -14,6 +13,7 @@ import dna.Timer;
 
 import fileIO.FileFormat;
 import fileIO.ReadWrite;
+import structures.ListNum;
 
 /**
  * @author Brian Bushnell

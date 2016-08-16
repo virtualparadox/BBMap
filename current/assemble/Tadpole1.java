@@ -14,10 +14,10 @@ import kmer.KmerTableSet;
 import stream.ByteBuilder;
 import stream.ConcurrentReadInputStream;
 import stream.Read;
+import structures.IntList;
+import structures.ListNum;
+import structures.LongList;
 import ukmer.Kmer;
-import align2.IntList;
-import align2.ListNum;
-import align2.LongList;
 import align2.Shared;
 import align2.Tools;
 import dna.AminoAcid;
@@ -69,7 +69,7 @@ public class Tadpole1 extends Tadpole {
 		{
 			int mult=12;
 			if(useOwnership){mult+=4;}
-			if(processingMode==correctMode){}
+			if(processingMode==correctMode || processingMode==discardMode){}
 			else if(processingMode==contigMode || processingMode==extendMode){mult+=1;}
 			bytesPerKmer=mult;
 		}
@@ -1046,6 +1046,152 @@ public class Tadpole1 extends Tadpole {
 	
 	
 	/*--------------------------------------------------------------*/
+	/*----------------        Junk Detection        ----------------*/
+	/*--------------------------------------------------------------*/
+	
+	@Override
+	public boolean isJunk(Read r){
+		boolean junk=isJunk(r, localRightCounts.get());
+		return junk;
+	}
+	
+	@Override
+	public boolean isJunk(Read r, final int[] counts, Kmer kmer){
+		return isJunk(r, counts);
+	}
+	
+	public boolean isJunk(Read r, final int[] counts){
+		final int blen=r.length();
+		if(blen<k){return true;}
+		final byte[] bases=r.bases;
+		
+		final int shift=2*k;
+		final int shift2=shift-2;
+		final long mask=~((-1L)<<shift);
+		long kmer=0;
+		long rkmer=0;
+		int len=0;
+
+		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts, to get the leftmost kmer */
+		{
+			for(int i=0; i<k; i++){
+				final byte b=bases[i];
+				final long x=AminoAcid.baseToNumber[b];
+				final long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(x<0){
+					len=0;
+					kmer=rkmer=0;
+				}else{len++;}
+				if(verbose){outstream.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			}
+		}
+		
+		if(len>=k){
+			int maxPos=fillLeftCounts(kmer, rkmer, counts, mask, shift2);
+			if(counts[maxPos]>0){
+				//System.err.println("Not junk, left counts[maxPos]="+counts[maxPos]+"; right="+fillRightCounts(kmer, rkmer, counts, mask, shift2));
+				return false;
+			}
+		}
+		
+		final boolean paired=(r.mateLength()>=k);
+		int maxDepth=0;
+		{
+			for(int i=k; i<blen; i++){
+				final byte b=bases[i];
+				final long x=AminoAcid.baseToNumber[b];
+				final long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(x<0){
+					len=0;
+					kmer=rkmer=0;
+				}else{
+					len++;
+					if(len>=k){
+						int depth=getCount(kmer, rkmer);
+						if(depth>maxDepth){
+							maxDepth=depth;
+							if(maxDepth>1 && (!paired || maxDepth>2)){
+								//System.err.println("Not junk, maxDepth="+maxDepth);
+								return false;
+							}
+						}
+					}
+				}
+				if(verbose){outstream.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			}
+		}
+		
+		if(len>=k && !paired){
+			int maxPos=fillRightCounts(kmer, rkmer, counts, mask, shift2);
+			if(counts[maxPos]>0){
+				//System.err.println("Not junk, right counts[maxPos]="+counts[maxPos]);
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	@Override
+	public boolean hasKmersAtOrBelow(Read r, int tooLow, final float fraction, Kmer kmer){
+		return hasKmersAtOrBelow(r, tooLow, fraction);
+	}
+	
+	@Override
+	public boolean hasKmersAtOrBelow(Read r, final int tooLow, final float fraction){
+		final int blen=r.length();
+		if(blen<k){return true;}
+		final byte[] bases=r.bases;
+		
+//		System.err.println("\n"+new String(r.bases)+":");
+		
+		final int shift=2*k;
+		final int shift2=shift-2;
+		final long mask=~((-1L)<<shift);
+		long kmer=0;
+		long rkmer=0;
+		int len=0;
+		
+		final int limit=Tools.max(1, Math.round((bases.length-kbig+1)*fraction));
+		int valid=0, invalid=0;
+
+		/* Loop through the bases, maintaining a forward and reverse kmer via bitshifts, to get the leftmost kmer */
+		{
+			for(int i=0; i<blen; i++){
+				final byte b=bases[i];
+				final long x=AminoAcid.baseToNumber[b];
+				final long x2=AminoAcid.baseToComplementNumber[b];
+				kmer=((kmer<<2)|x)&mask;
+				rkmer=(rkmer>>>2)|(x2<<shift2);
+				if(x<0){
+					len=0;
+					kmer=rkmer=0;
+				}else{
+					len++;
+					if(len>=k){
+						int depth=getCount(kmer, rkmer);
+//						System.err.println("depth="+depth+", kmer="+toText(kmer));
+						if(depth>tooLow){valid++;}
+						else{
+							invalid++;
+							if(invalid>=limit){return true;}
+						}
+					}
+				}
+				if(verbose){outstream.println("Scanning i="+i+", len="+len+", kmer="+kmer+", rkmer="+rkmer+"\t"+new String(bases, Tools.max(0, i-k2), Tools.min(i+1, k)));}
+			}
+		}
+		
+		//Compensate for nocalls changing the expected kmer count
+		final int limit2=Tools.max(1, Math.round((valid+invalid)*fraction));
+		return valid<1 || invalid>=limit2;
+	}
+	
+	
+	/*--------------------------------------------------------------*/
 	/*----------------       Error Correction       ----------------*/
 	/*--------------------------------------------------------------*/
 	
@@ -1077,6 +1223,7 @@ public class Tadpole1 extends Tadpole {
 		tables.fillCounts(kmers, counts);
 		int correctedPincer=0;
 		int correctedTail=0;
+		int correctedBrute=0;
 		
 		if(ECC_PINCER){
 			correctedPincer+=errorCorrectPincer(bases, quals, leftCounts, rightCounts, kmers, counts, bb, detectedArray, errorExtensionPincer);
@@ -1094,6 +1241,11 @@ public class Tadpole1 extends Tadpole {
 			counts.reverse();
 		}
 		
+		//123 For testing.
+		if(false && correctedPincer+correctedTail<detectedArray[0]){
+			correctedBrute+=errorCorrectBruteForce(bases, quals, leftCounts, rightCounts, kmers, counts, bb, detectedArray, errorExtensionPincer);
+		}
+		
 		if(MARK_BAD_BASES>0){
 			int marked=markBadBases(bases, quals, counts, bs, MARK_BAD_BASES, MARK_DELTA_ONLY);
 			detectedArray[3]=marked;
@@ -1105,7 +1257,118 @@ public class Tadpole1 extends Tadpole {
 //			correctedPincer+=errorCorrectPincer(bases, quals, leftCounts, rightCounts, kmers, counts, bb, detectedArray, errorExtensionPincer);
 //		}
 		
-		return correctedPincer+correctedTail;
+		return correctedPincer+correctedTail+correctedBrute;
+	}
+	
+	private int findBestMutant(final byte[] bases, final int a, final LongList kmers, final long[] bestMutant){
+		Arrays.fill(bestMutant, -1);
+		final long kmer0=kmers.get(a);
+		if(kmer0<0){return -1;}
+		long mask=3;
+		int max=0, second=0;
+		for(int i=0; i<k; i++){
+			for(long num=0; num<4; num++){
+				final long kmer=(kmer0&~mask)|(num<<(2*i));
+				if(kmer!=kmer0){
+					final long rkmer=AminoAcid.reverseComplementBinaryFast(kmer, k);
+					int count=getCount(kmer, rkmer);
+					if(count>max){
+						second=max;
+						max=count;
+						bestMutant[0]=kmer;
+						bestMutant[1]=rkmer;
+						bestMutant[2]=i;
+					}else if(count>second){
+						second=count;
+					}
+				}
+			}
+			mask<<=2;
+		}
+		bestMutant[3]=max;
+		bestMutant[4]=second;
+		return max>second ? max : -1;
+	}
+	
+	private boolean fixBestMutant(final byte[] bases, final int a, final LongList kmers, final IntList counts, final int pos, final long kmer){
+		int shift=2*pos;
+		long mask=(3L)<<shift;
+		byte num=(byte)((kmer>>shift)&mask);
+		byte base=AminoAcid.numberToBase[num];
+		byte old=bases[a+pos];
+		bases[a+pos]=base;
+		
+//		long[] copy=counts.toArray();
+		
+//		tables.regenerateKmers(bases, kmers, counts, a);
+		tables.fillKmers(bases, kmers);
+		tables.fillCounts(kmers, counts);
+		
+//		for(int i=0; i<copy.length; i++){
+//			if(counts.get(i)<copy[i]){
+//				bases[a+pos]=old;
+//				tables.fillKmers(bases, kmers);
+//				tables.fillCounts(kmers, counts);
+//				return false;
+//			}
+//		}
+		
+		return true;
+	}
+	
+	public int errorCorrectBruteForce(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
+			final LongList kmers, final IntList counts, final ByteBuilder bb, final int[] detectedArray, final int errorExtension){
+		
+		int detected=0;
+		int corrected=0;
+		
+		final long[] bestMutant=new long[5];
+		final int[] countCopy=counts.toArray();
+		final byte[] basesCopy=bases.clone();
+		
+		final int maxCount=Tools.max(counts.array, 0, counts.size-1);
+		if(maxCount<minCountCorrect()){
+			return 0;
+		}
+		int thresh=Tools.max(3, maxCount/4);
+		
+		for(int a=0, d=k+1; a<counts.size; a++, d++){
+			final int aCount=counts.get(a);
+			if(aCount<thresh){
+				detected++;
+				boolean fixed=false;
+				int mCount=findBestMutant(bases, a, kmers, bestMutant);
+				if(mCount>thresh && mCount>=minCountCorrect() && (isSimilar(mCount, maxCount) || (mCount<maxCount && mCount>(1+aCount)*3))){
+					long kmer=bestMutant[0];
+					long rkmer=bestMutant[1];
+					int pos=(int)bestMutant[2];
+					assert(mCount==bestMutant[3]);
+					int secondBestCount=(int)bestMutant[4];
+					if(mCount>(1+secondBestCount*3) && pos>=errorExtension && pos<=(k-errorExtension)){
+						fixBestMutant(bases, a, kmers, counts, pos, kmer);
+						fixed=true;
+						corrected++;
+					}
+				}
+			}
+		}
+
+		for(int i=0; i<countCopy.length; i++){
+			if(counts.get(i)<countCopy[i]){
+				for(int j=0; j<bases.length; j++){bases[j]=basesCopy[j];}
+				counts.clear();
+				for(int count : countCopy){counts.add(count);}
+				tables.fillKmers(bases, kmers);
+				corrected=0;
+			}
+		}
+		
+		if(detectedArray!=null){
+			detectedArray[0]+=detected;
+			detectedArray[1]+=corrected;
+		}
+		
+		return corrected;
 	}
 
 	public int errorCorrectPincer(final byte[] bases, final byte[] quals, final int[] leftBuffer, final int[] rightBuffer, 
@@ -1115,8 +1378,8 @@ public class Tadpole1 extends Tadpole {
 		int corrected=0;
 		
 		//a is the index of the left kmer
-		//b is a+1
-		//c is d-1
+		//b is a+1 (right-extension of left kmer)
+		//c is d-1 (left-extension of right kmer)
 		//d is the index of the right kmer
 		//the base between the kmers is at a+k
 		for(int a=0, d=k+1; d<counts.size; a++, d++){
@@ -1168,7 +1431,7 @@ public class Tadpole1 extends Tadpole {
 		//a is the index of the left kmer
 		//b is a+1
 		//the base between the kmers is at a+k
-		for(int a=Tools.max(startPos, errorExtension), lim=counts.size-Tools.min(errorExtension, (errorExtension+3)/2); a<lim; a++){//errorExtension-1
+		for(int a=Tools.max(startPos, errorExtension), lim=counts.size-deadZone-1; a<lim; a++){//errorExtension-1
 			final int aCount=counts.get(a);
 			final int bCount=counts.get(a+1);
 			if(isError(aCount, bCount) && isSimilar(aCount, a-errorExtension, a-1, counts) && isError(aCount, a+2, a+k, counts)){

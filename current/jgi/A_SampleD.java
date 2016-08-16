@@ -3,7 +3,6 @@ package jgi;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-import align2.ListNum;
 import align2.Shared;
 import align2.Tools;
 
@@ -11,8 +10,7 @@ import stream.ConcurrentReadInputStream;
 import stream.ConcurrentReadInputStreamD;
 import stream.ConcurrentReadOutputStream;
 import stream.Read;
-import stream.mpi.MPIWrapper;
-
+import structures.ListNum;
 import dna.Parser;
 import dna.Timer;
 
@@ -29,9 +27,10 @@ public class A_SampleD {
 	public static void main(String[] args){
 		Timer t=new Timer();
 		A_SampleD as=new A_SampleD(args);
-		MPIWrapper.mpiInit(args);
+		assert(false) : "To support MPI, uncomment this.";
+//		MPIWrapper.mpiInit(args);
 		as.process(t);
-		MPIWrapper.mpiFinalize();
+//		MPIWrapper.mpiFinalize();
 	}
 	
 	public A_SampleD(String[] args){

@@ -4,7 +4,7 @@
 usage(){
 echo "
 Written by Brian Bushnell
-Last modified August 25, 2015
+Last modified May 27, 2016
 
 Description:  Calculates per-scaffold coverage information from an unsorted sam or bam file.
 

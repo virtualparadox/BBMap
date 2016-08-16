@@ -1,5 +1,6 @@
 package tax;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -73,17 +74,43 @@ public class GiToNcbi {
 		}
 	}
 	
+	public static int parseGiToNcbi(String s){
+		int x=parseGiNumber(s);
+		assert(x>=0);
+		assert(array!=null) : "To use gi numbers, you must load a gi table.";
+//		if(x>=array.length || array[x]<0){x=(int)(Math.random()*array.length);} //Test to make sure array is nonempty.
+		if(x>=0/* && x<array.length*/){return array[x];}
+		return -1;
+	}
+	
+	public static int parseGiToNcbi(byte[] s){
+		int x=parseGiNumber(s);
+		if(x>=0){return array[x];}
+		return -1;
+	}
+	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	private static int parseGiNumber(String s){
+	static int parseGiNumber(String s){
 		if(s==null || s.length()<4){return -1;}
+//		System.err.println("a");
 		if(s.charAt(0)=='>'){return getID(s.substring(1));}
+//		System.err.println("b");
 		if(!s.startsWith("gi")){return -1;}
+//		System.err.println("c");
 		char delimiter='|';
+//		System.err.println("d");
 		int initial=s.indexOf(delimiter);
-		if(initial<0){delimiter='_';}
-		initial=s.indexOf(delimiter);
-		if(initial<0){return -1;}
+//		System.err.println("e");
+		if(initial<0){
+			delimiter='_';
+//			System.err.println("f");
+			initial=s.indexOf(delimiter);
+//			System.err.println("g");
+			if(initial<0){return -1;}
+		}
+//		System.err.println("h");
 		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
+//		System.err.println("i");
 		
 		int number=0;
 		for(int i=initial+1; i<s.length(); i++){
@@ -92,19 +119,22 @@ public class GiToNcbi {
 			assert(Character.isDigit(c));
 			number=(number*10)+(c-'0');
 		}
+//		System.err.println("j: "+number);
 		return number;
 	}
 	
 	/** Parse a ncbi number, or return -1 if formatted incorrectly. */
-	private static int parseNcbiNumber(String s){
+	static int parseNcbiNumber(String s){
 		if(s==null || s.length()<6){return -1;}
 		if(s.charAt(0)=='>'){return getID(s.substring(1));}
 		if(!s.startsWith("ncbi")){return -1;}
 		char delimiter='|';
 		int initial=s.indexOf(delimiter);
-		if(initial<0){delimiter='_';}
-		initial=s.indexOf(delimiter);
-		if(initial<0){return -1;}
+		if(initial<0){
+			delimiter='_';
+			initial=s.indexOf(delimiter);
+			if(initial<0){return -1;}
+		}
 		if(!Character.isDigit(s.charAt(initial+1))){return -1;}
 		
 		int number=0;
@@ -125,14 +155,16 @@ public class GiToNcbi {
 	}
 	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	private static int parseGiNumber(byte[] s){
+	static int parseGiNumber(byte[] s){
 		if(s==null || s.length<4){return -1;}
 		if(!Tools.startsWith(s, "gi") && !Tools.startsWith(s, ">gi")){return -1;}
 		char delimiter='|';
 		int initial=Tools.indexOf(s, (byte)delimiter);
-		if(initial<0){delimiter='_';}
-		initial=Tools.indexOf(s, (byte)delimiter);
-		if(initial<0){return -1;}
+		if(initial<0){
+			delimiter='_';
+			initial=Tools.indexOf(s, (byte)delimiter);
+			if(initial<0){return -1;}
+		}
 		if(!Character.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
@@ -146,14 +178,16 @@ public class GiToNcbi {
 	}
 	
 	/** Parse a gi number, or return -1 if formatted incorrectly. */
-	private static int parseNcbiNumber(byte[] s){
+	static int parseNcbiNumber(byte[] s){
 		if(s==null || s.length<4){return -1;}
 		if(!Tools.startsWith(s, "ncbi") && !Tools.startsWith(s, ">ncbi")){return -1;}
 		char delimiter='|';
 		int initial=Tools.indexOf(s, (byte)delimiter);
-		if(initial<0){delimiter='_';}
-		initial=Tools.indexOf(s, (byte)delimiter);
-		if(initial<0){return -1;}
+		if(initial<0){
+			delimiter='_';
+			initial=Tools.indexOf(s, (byte)delimiter);
+			if(initial<0){return -1;}
+		}
 		if(!Character.isDigit(s[initial+1])){return -1;}
 		
 		int number=0;
@@ -182,10 +216,10 @@ public class GiToNcbi {
 	
 	public static void initialize(String fname){
 		assert(fname!=null);
-		if(file==null || !file.equals(fname)){
+		if(fileString==null || !fileString.equals(fname)){
 			synchronized(GiToNcbi.class){
-				if(!initialized || file==null || !file.equals(fname)){
-					file=fname;
+				if(!initialized || fileString==null || !fileString.equals(fname)){
+					fileString=fname;
 					if(fname.contains(".int1d")){
 						array=ReadWrite.read(int[].class, fname, true);
 					}else{
@@ -201,11 +235,33 @@ public class GiToNcbi {
 	
 	public static synchronized void unload(){
 		array=null;
-		file=null;
+		fileString=null;
 		initialized=false;
 	}
 	
-	private static int[] makeArray(String fname){
+	private static int[] makeArray(String fnames){
+		String[] split;
+		if(new File(fnames).exists()){split=new String[] {fnames};}
+		else{split=fnames.split(",");}
+		
+		long max=0;
+		for(String s : split){
+			max=Tools.max(max, findMaxID(s));
+		}
+		
+		assert(max<Integer.MAX_VALUE) : "Overflow.";
+		int[] x=new int[(int)max+1];
+		Arrays.fill(x, -1);
+		
+		long total=0;
+		for(String s : split){
+			long count=fillArray(s, x);
+			total+=count;
+		}
+		return x;
+	}
+	
+	private static long findMaxID(String fname){
 		ByteFile bf=ByteFile.makeByteFile(fname, false, true);
 		long count=0, max=0;
 		byte[] line=bf.nextLine();
@@ -216,29 +272,30 @@ public class GiToNcbi {
 			max=Tools.max(max, gi);
 			line=bf.nextLine();
 		}
-		assert(max<Integer.MAX_VALUE) : "Overflow.";
-		int[] ret=new int[(int)max+1];
-		Arrays.fill(ret, -1);
-//		bf.close();
-//		bf=ByteFile.makeByteFile(fname, false, true);
-		bf.reset();
-		line=bf.nextLine();
-		long count2=0;
+		bf.close();
+		return max;
+	}
+	
+	private static long fillArray(String fname, int[] x){
+		ByteFile bf=ByteFile.makeByteFile(fname, false, true);
+		long count=0;
+		byte[] line=bf.nextLine();
 		while(line!=null){
-			count2++;
+			count++;
 			int tab=Tools.indexOf(line, (byte)'\t');
 			int gi=Tools.parseInt(line, 0, tab);
 			int ncbi=Tools.parseInt(line, tab+1, line.length);
-			ret[gi]=ncbi;
+			assert(x[gi]==-1 || x[gi]==ncbi) : "Contradictory entries for gi "+gi+": "+x[gi]+" -> "+ncbi;
+			x[gi]=ncbi;
 			line=bf.nextLine();
 		}
-		if(verbose){System.err.println("Count: "+count+", "+count2);}
+		if(verbose){System.err.println("Count: "+count);}
 		bf.close();
-		return ret;
+		return count;
 	}
 	
 	private static int[] array;
-	private static String file;
+	private static String fileString;
 	
 	public static boolean verbose=false;
 	private static boolean initialized=false;
