@@ -1,3 +1,7 @@
+The official source of BBTools is here:
+
+<https://sourceforge.net/projects/bbmap/>.
+
 # BBMap/BBTools
 
 (Not Offical) BBMap short read aligner for DNA/RNAseq, and other bioinformatic tools.  
